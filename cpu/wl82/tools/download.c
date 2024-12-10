@@ -106,8 +106,8 @@ rm isd_config.ini
 
 #else
 
-REM 该版本的uboot.boot与此前一些版本的uboot.boot存在二进制差异，会造成已经生产的产品无法升级到该版本; 因此需要用户自行将该版本的uboot.boot替换为已生产产品的uboot.boot ; 如果你明白到这一点,请删除 cpu/wl82/tools/download.c 的本行和下一行
-exit /b -1
+@REM 该版本的uboot.boot与此前一些版本的uboot.boot存在二进制差异，会造成已经生产的产品无法升级到该版本; 因此需要用户自行将该版本的uboot.boot替换为已生产产品的uboot.boot ; 如果你明白到这一点,请删除 cpu/wl82/tools/download.c 的本行和下一行
+@REM exit /b -1
 
 @echo off
 
