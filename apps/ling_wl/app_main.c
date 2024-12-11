@@ -191,11 +191,11 @@ void app_main()
 {
     struct intent it;
 
-    puts("------------- wifi_story_machine app main-------------\n");
+    puts("------------- ling wl app main-------------\n");
 
     init_intent(&it);
-    it.name = "app_music";
-    it.action = ACTION_MUSIC_PLAY_MAIN;
+    it.name = "app_lingwl";
+    it.action = ACTION_LING_WL_MAIN;
     start_app(&it);
 
 #if defined CONFIG_BT_ENABLE && !defined CONFIG_WIFI_ENABLE

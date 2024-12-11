@@ -838,7 +838,7 @@ void wifi_sta_connect(char *ssid, char *pwd, char save, void *priv)
     }
 
     wifi_enter_sta_mode(ssid, pwd);
-#if defined CONFIG_BT_ENABLE
+#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
     //卸载wifi驱动后需要重新设置一下共存参数才能生效
     void switch_rf_coexistence_config_table(u8 index);
     switch_rf_coexistence_config_table(get_rf_coexistence_config_index());
@@ -887,7 +887,7 @@ static void wifi_app_task(void *priv)  //主要是create wifi 线程的
     wifi_set_event_callback(wifi_event_callback);
     wifi_and_network_on();
 
-#if defined CONFIG_BT_ENABLE
+#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
     extern void bt_ble_module_init(void);
     bt_ble_module_init();
 #endif
