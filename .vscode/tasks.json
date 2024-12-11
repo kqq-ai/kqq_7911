@@ -215,6 +215,16 @@
             "group": "build"
         }
         ,{
+            "label": "ac791n_ling_wl",
+            "type": "shell",
+            "windows": {
+                "command": ".vscode/winmk.bat ac791n_ling_wl"
+            },
+            "command": "make ac791n_ling_wl -j`nproc`",
+            "problemMatcher": [],
+            "group": "build"
+        }
+        ,{
             "label": "ac790n_wifi_ipc",
             "type": "shell",
             "windows": {
@@ -441,6 +451,16 @@
                 "command": ".vscode/winmk.bat clean_ac791n_wifi_story_machine"
             },
             "command": "make clean_ac791n_wifi_story_machine -j`nproc`",
+            "problemMatcher": [],
+            "group": "build"
+        }
+        ,{
+            "label": "clean_ac791n_ling_wl",
+            "type": "shell",
+            "windows": {
+                "command": ".vscode/winmk.bat clean_ac791n_ling_wl"
+            },
+            "command": "make clean_ac791n_ling_wl -j`nproc`",
             "problemMatcher": [],
             "group": "build"
         }
