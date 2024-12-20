@@ -12,7 +12,6 @@
 #include "net_music_play_my.h"
 #include "gpio.h"
 
-
 extern int app_music_bt_event_handler(struct sys_event *event);
 
 static struct app_lingwl_hdl g_lingwl_hdl;
@@ -186,8 +185,8 @@ static int app_lingwl_event_handler(struct application *app, struct sys_event *e
         return app_lingwl_device_event_handler(event);
     case SYS_NET_EVENT:
         return app_music_net_event_handler((struct net_event *)event->payload);
-    // case SYS_BT_EVENT:   // BT_STACK_INIT etc.
-    //     return app_music_bt_event_handler(event);
+    case SYS_BT_EVENT:
+        return ble_demo_bt_event_handler(event);
     default:
         return false;
     }

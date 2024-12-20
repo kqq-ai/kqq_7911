@@ -111,8 +111,8 @@ DEFINES := \
 	-DCONFIG_AUDIO_ENABLE \
 	-DCONFIG_RTOS_AND_MM_LIB_CODE_SECTION_IN_SDRAM \
 	-DCONFIG_VIDEO_ENABLE=1 \
-	-DCONFIG_NET_ENABLE=0 \
-	-DCONFIG_BT_ENABLE=0 \
+	-DCONFIG_NET_ENABLE=1 \
+	-DCONFIG_BT_ENABLE=1 \
 	-DEVENT_HANDLER_NUM_CONFIG=2 \
 	-DEVENT_TOUCH_ENABLE_CONFIG=0 \
 	-DEVENT_POOL_SIZE_CONFIG=256 \
@@ -358,6 +358,8 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/board/wl82/board_7913A.c \
 	../../../../apps/ling_wl/board/wl82/board_7916A.c \
 	../../../../apps/ling_wl/ui/led_ui_gr202.c \
+	../../../../apps/ling_wl/bt_ble/ble.c \
+	../../../../apps/ling_wl/bt_ble/wifimanager/le_wifimgr_server.c \
 	../../../../apps/ling_wl/video/camera_lcd_demo.c \
 	../../../../apps/ling_wl/video/get_yuv_data.c \
 	../../../../apps/ling_wl/video/jpeg2yuv.c \

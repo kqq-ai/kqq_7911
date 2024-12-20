@@ -462,7 +462,7 @@
 #define CONFIG_POWER_ON_ENABLE_BT                 0     //开机自动打开经典蓝牙
 #define CONFIG_POWER_ON_ENABLE_BLE                0     //开机自动打开BLE
 #define TCFG_BD_NUM                               1     //可连接设备数量，可支持同时连接2台设备
-#define TCFG_USER_BT_CLASSIC_ENABLE               1     //经典蓝牙功能
+#define TCFG_USER_BT_CLASSIC_ENABLE               0     //经典蓝牙功能
 #define TCFG_USER_TWS_ENABLE                      0     //tws功能使能
 #define TCFG_USER_BLE_ENABLE                      1     //BLE功能使能
 #define TCFG_USER_EDR_ENABLE                      0     //EDR用户自定义协议功能
@@ -472,9 +472,9 @@
 #else
 #define TCFG_BT_SNIFF_ENABLE                      0
 #endif
-#define BT_SUPPORT_MUSIC_VOL_SYNC                 1     //音量同步
-#define BT_SUPPORT_DISPLAY_BAT                    1     //电池电量同步显示功能
-#define BT_SUPPORT_EMITTER_AUTO_A2DP_START        1     //发射器连上后自动打开A2DP流
+#define BT_SUPPORT_MUSIC_VOL_SYNC                 0     //音量同步
+#define BT_SUPPORT_DISPLAY_BAT                    0     //电池电量同步显示功能
+#define BT_SUPPORT_EMITTER_AUTO_A2DP_START        0     //发射器连上后自动打开A2DP流
 #define BT_SUPPORT_EMITTER_PAGE_SCAN              0     //发射器打开可发现性
 
 #if TCFG_USER_EDR_ENABLE
@@ -519,7 +519,7 @@
 #if BT_NET_CFG_TURING_EN + BT_NET_CFG_DUI_EN + BT_NET_CFG_TENCENT_EN > 0
 #define BT_NET_CFG_EN                             0     //从机 杰理配网专用
 #else
-#define BT_NET_CFG_EN                             1     //从机 杰理配网专用
+#define BT_NET_CFG_EN                             0     //从机 杰理配网专用
 #endif
 
 #define TRANS_DATA_EN                             0     //从机 传输数据
