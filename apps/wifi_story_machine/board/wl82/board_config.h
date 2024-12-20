@@ -370,7 +370,7 @@
 #define TCFG_ADKEY_ENABLE                   1          //AD按键
 #define CONFIG_PRESS_LONG_KEY_POWERON                  //长按开关机功能
 
-#define TCFG_DEBUG_PORT                     IO_PORTC_06
+#define TCFG_DEBUG_PORT                     IO_PORTA_00
 #define TCFG_DAC_MUTE_PORT                  0xff
 #define TCFG_DAC_MUTE_VALUE                 0
 #define TCFG_DAC_MUTE_ENABLE                1

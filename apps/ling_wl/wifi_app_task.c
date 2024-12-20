@@ -263,10 +263,10 @@ static int udp_server_init(int port)
 #define INIT_SSID "GJ1"
 #define INIT_PWD  "8888888899"
 #else
-#define INIT_MODE SMP_CFG_MODE
+#define INIT_MODE STA_MODE
 #define FORCE_DEFAULT_MODE 0 //配置wifi_on之后的模式,0为使用最后记忆的模式, 1为强制默认模式, 3-200为连接超时时间多少秒,如果超时都连接不上就连接最后记忆的或者最优网络
-#define INIT_SSID "GJ1"
-#define INIT_PWD  "8888888899"
+#define INIT_SSID "hello"
+#define INIT_PWD  "88888888"
 #endif
 #define INIT_STORED_SSID (INIT_MODE==STA_MODE)//配置STA模式情况下,把默认配置SSID也存储起来, 以后即使保存过其他SSID,也不会覆盖丢失,使用连接最优信号SSID策略的情况下可以匹配连接
 #define INIT_CONNECT_BEST_SSID 1 //配置如果啟動WIFI后在STA模式下, 是否挑选连接记忆过的信号最优WIFI

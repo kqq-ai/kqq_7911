@@ -1530,7 +1530,7 @@
             "cppStandard": "c++11",
             "defines": [
                 "SUPPORT_MS_EXTENSIONS",
-                "CONFIG_RELEASE_ENABLE",
+                // "CONFIG_RELEASE_ENABLE",
                 "CONFIG_CPU_WL82",
                 "CONFIG_JLFAT_ENABLE",
                 "CONFIG_FREE_RTOS_ENABLE",
@@ -1547,7 +1547,7 @@
                 "CONFIG_RTOS_AND_MM_LIB_CODE_SECTION_IN_SDRAM",
                 "CONFIG_VIDEO_ENABLE=1",
                 "CONFIG_NET_ENABLE=1",
-                "CONFIG_BT_ENABLE=1",
+                "CONFIG_BT_ENABLE=0",
                 "EVENT_HANDLER_NUM_CONFIG=2",
                 "EVENT_TOUCH_ENABLE_CONFIG=0",
                 "EVENT_POOL_SIZE_CONFIG=256",

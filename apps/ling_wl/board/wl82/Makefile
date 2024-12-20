@@ -96,7 +96,6 @@ CXXFLAGS :=
 # 宏定义
 DEFINES := \
 	-DSUPPORT_MS_EXTENSIONS \
-	-DCONFIG_RELEASE_ENABLE \
 	-DCONFIG_CPU_WL82 \
 	-DCONFIG_JLFAT_ENABLE \
 	-DCONFIG_FREE_RTOS_ENABLE \
@@ -352,6 +351,7 @@ c_SRC_FILES := \
 	../../../../apps/common/usb/usb_host_config.c \
 	../../../../apps/ling_wl/app_main.c \
 	../../../../apps/ling_wl/app_lingwl.c \
+	../../../../apps/ling_wl/net_music_play_my.c \
 	../../../../apps/ling_wl/board/wl82/board_7911B.c \
 	../../../../apps/ling_wl/board/wl82/board_7911D.c \
 	../../../../apps/ling_wl/board/wl82/board_7912D.c \
@@ -369,6 +369,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/video/strm_video_rec.c \
 	../../../../apps/ling_wl/video/user_video_rec.c \
 	../../../../apps/ling_wl/wifi_app_task.c \
+	../../../../apps/ling_wl/wifi_app_iis_task.c \
 	../../../../cpu/wl82/debug.c \
 	../../../../cpu/wl82/iic.c \
 	../../../../cpu/wl82/key/adc_api.c \

@@ -246,15 +246,15 @@ const struct adkey_platform_data adkey_data = {
         ADKEY_V_9,
     },
     .key_value = {
-        KEY_POWER, /*0*/
-        KEY_PHOTO, /*1*/
-        KEY_ENC,   /*2*/
-        KEY_F1,    /*3*/
-        KEY_MODE,  /*4*/
-        KEY_CANCLE,/*5*/
-        KEY_OK,    /*6*/
-        KEY_DOWN,  /*7*/
-        KEY_UP,    /*8*/
+        KEY_1, /*0*/
+        KEY_2, /*1*/
+        KEY_3,   /*2*/
+        NO_KEY,    /*3*/
+        NO_KEY,  /*4*/
+        NO_KEY,/*5*/
+        NO_KEY,    /*6*/
+        NO_KEY,  /*7*/
+        NO_KEY,    /*8*/
 		NO_KEY,
     },
 };

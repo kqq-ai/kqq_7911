@@ -466,7 +466,7 @@
 #define TCFG_USER_TWS_ENABLE                      0     //tws功能使能
 #define TCFG_USER_BLE_ENABLE                      1     //BLE功能使能
 #define TCFG_USER_EDR_ENABLE                      0     //EDR用户自定义协议功能
-#define TCFG_USER_EMITTER_ENABLE                  1     //蓝牙发射功能
+#define TCFG_USER_EMITTER_ENABLE                  0     //蓝牙发射功能
 #ifdef CONFIG_LOW_POWER_ENABLE
 #define TCFG_BT_SNIFF_ENABLE                      1
 #else
