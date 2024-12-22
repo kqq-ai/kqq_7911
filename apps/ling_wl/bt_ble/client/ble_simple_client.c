@@ -52,24 +52,12 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 //连接超时
 #define SET_CONN_TIMEOUT    400 //(unit:10ms)
 
-// 仅用于日志打印
-static const char *const phy_result[] = {
-    "None",
-    "1M",
-    "2M",
-    "Coded",
-};
-
-
 //----------------------------------------------------------------------------
 static u8 scan_ctrl_en;
 static u8 ble_work_state = BLE_ST_NULL;
 static void (*app_ble_state_callback)(void *priv, ble_state_e state) = NULL;
-
 static u8 sm_master_pair_redo = 0;//keymiss,是否重新执行配对
 //-------------------------------------------------------------------------------
-
-//记录handle 使用
 
 static void bt_ble_create_connection(u8 *conn_addr, u8 addr_type);
 static int bt_ble_scan_enable(void *priv, u32 en);
@@ -83,6 +71,15 @@ static const struct conn_update_param_t connection_param_table[] = {
     {8,  20, 0, 600},
     {50, 60, 0, 600},
 };
+
+// 仅用于日志打印
+static const char *const phy_result[] = {
+    "None",
+    "1M",
+    "2M",
+    "Coded",
+};
+
 
 static int client_create_connect_api(u8 *addr, u8 addr_type);
 static int client_create_cannel_api(void);
@@ -131,6 +128,7 @@ int l2cap_connection_update_request_just(u8 *packet, hci_con_handle_t handle)
  *  \note      搜索charactc包含descriptor
  */
 /*************************************************************************************************/
+//协议栈内部调用
 void user_client_report_descriptor_result(charact_descriptor_t *result_descriptor)
 {
     log_info("report_descriptor,handle= %04x ,uuid16: %04x\n", result_descriptor->handle, result_descriptor->uuid16);
@@ -177,6 +175,15 @@ void user_client_report_search_result(search_result_t *result_info)
     }
 }
 
+/*************************************************************************************************/
+/*!
+ *  \brief      协议栈回调从机上报数据
+ *
+ *  \param      [in]    数据
+ *
+ *  \return
+ */
+/*************************************************************************************************/
 //协议栈内部调用
 void user_client_report_data_callback(att_data_report_t *report_data)
 {
@@ -333,7 +340,7 @@ static void client_create_connection_cannel(void)
 
 static int client_disconnect()
 {
-    if (client_con_handle) {
+    if (client_con_handle != INVALID_HANDLE) {
         if (BLE_ST_SEND_DISCONN != get_ble_work_state()) {
             log_info(">>>ble send disconnect\n");
             set_ble_work_state(BLE_ST_SEND_DISCONN);
@@ -347,7 +354,7 @@ static int client_disconnect()
     }
 }
 
-void ble_multi_client_disconnect(void)
+static void simple_client_disconnect(void)
 {
     int count = 150;
     if (client_con_handle != INVALID_HANDLE) {
@@ -631,6 +638,9 @@ static int get_buffer_vaild_len(void *priv)
     return vaild_len;
 }
 
+//=ATT send==============================================================================================
+// ATT send
+//=ATT send==============================================================================================
 static int client_operation_send(u16 handle, u8 *data, u16 len, u8 att_op_type)
 {
     int ret = APP_BLE_NO_ERROR;
@@ -691,6 +701,9 @@ static int client_read_long_value_send(void *priv, uint16_t handle)
     return client_operation_send(handle, (u8 *)&tmp_flag, 2, ATT_OP_READ_LONG);
 }
 
+//=BLE SCAN==============================================================================================
+// BLE SCAN
+//=BLE SCAN==============================================================================================
 //扫描数设置
 static void scanning_setup_init(void)
 {
@@ -741,6 +754,9 @@ static int bt_ble_scan_enable(void *priv, u32 en)
     return APP_BLE_NO_ERROR;
 }
 
+//=BLE CONN==============================================================================================
+// BLE CONN
+//=BLE CONN==============================================================================================
 static int client_create_connect_api(u8 *addr, u8 addr_type)
 {
     u8 cur_state =  get_ble_work_state();
@@ -795,7 +811,7 @@ void ble_simple_client_module_enable(u8 en)
     } else {
         scan_ctrl_en = 0;
         bt_ble_scan_enable(0, 0);
-        ble_multi_client_disconnect();
+        simple_client_disconnect();
     }
 }
 
