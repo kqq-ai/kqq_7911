@@ -10,7 +10,6 @@
 #include "le_net_central.h"
 #include "event/bt_event.h"
 #include "syscfg/syscfg_id.h"
-#include "../multi_demo/le_multi_common.h"
 
 void (*lmp_ch_update_resume_hdl)(void *priv) = NULL;
 
@@ -29,12 +28,7 @@ void bt_ble_module_init(void)
     printf("\n-----edr + ble 's address-----");
     put_buf((void *)bt_get_mac_addr(), 6);
     put_buf((void *)tmp_ble_addr, 6);
-#if BT_NET_CENTRAL_EN || TRANS_MULTI_BLE_MASTER_NUMS
-    extern void ble_client_config_init(void);
-    ble_client_config_init();
 #endif
-#endif
-
     btstack_init();
 }
 
@@ -42,9 +36,10 @@ static int bt_connction_status_event_handler(struct bt_event *bt)
 {
     switch (bt->event) {
     case BT_STATUS_INIT_OK:
-
-        void wifimgr_bt_ble_init(void);
-        wifimgr_bt_ble_init();
+        // 主从一体 从机模块初始化
+        ble_simple_server_init();
+        // 主从一体 主机模块初始化
+        ble_simple_client_init();
         break;
     }
 

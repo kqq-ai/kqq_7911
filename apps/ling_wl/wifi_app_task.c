@@ -886,11 +886,6 @@ static void wifi_app_task(void *priv)  //主要是create wifi 线程的
 
     wifi_set_event_callback(wifi_event_callback);
     wifi_and_network_on();
-
-#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
-    extern void bt_ble_module_init(void);
-    bt_ble_module_init();
-#endif
 }
 
 #ifdef CONFIG_WIFI_ENABLE

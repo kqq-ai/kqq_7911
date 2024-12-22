@@ -45,7 +45,7 @@
 #if TCFG_USER_BLE_ENABLE
 //BLE DEMO选择
 #define BT_NET_HID_EN                             0     //从机 hid
-#define TRANS_DATA_EN                             1     //从机 传输数据
+#define TRANS_DATA_EN                             0     //从机 传输数据
 #define BT_NET_CENTRAL_EN                         0     //主机 client角色
 #define TRANS_MULTI_BLE_EN                        0     //多机通讯
 #define CONFIG_BLE_MESH_ENABLE                    0     //mesh测试demo
@@ -57,8 +57,8 @@
 #define TCFG_BLE_SECURITY_EN                      1     //配对加密使能
 
 #if TRANS_MULTI_BLE_EN
-#define TRANS_MULTI_BLE_SLAVE_NUMS                2
-#define TRANS_MULTI_BLE_MASTER_NUMS               2
+#define TRANS_MULTI_BLE_SLAVE_NUMS                1
+#define TRANS_MULTI_BLE_MASTER_NUMS               1
 #endif
 
 #endif

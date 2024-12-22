@@ -537,7 +537,7 @@
 #define XIAOMI_EN                                 0     //从机 mi_server
 #define BT_NET_CENTRAL_EN                         0     //主机 client角色
 #define BT_NET_HID_EN                             0     //从机 hid
-#define TRANS_MULTI_BLE_EN                        0     //多机通讯
+#define TRANS_MULTI_BLE_EN                        1     //多机通讯
 
 #if (TRANS_MULTI_BLE_EN + BT_NET_CFG_TURING_EN + BT_NET_CFG_DUI_EN + BT_NET_CFG_EN + BT_NET_HID_EN + TRANS_DATA_EN + XIAOMI_EN > 1)
 #error "they can not enable at the same time,just select one!!!"

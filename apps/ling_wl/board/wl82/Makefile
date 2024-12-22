@@ -208,28 +208,6 @@ c_SRC_FILES := \
 	../../../../apps/common/audio_music/music_decrypt.c \
 	../../../../apps/common/audio_music/usb_audio_api.c \
 	../../../../apps/common/audio_music/wifi_upload_pcm.c \
-	../../../../apps/common/ble/le_hogp.c \
-	../../../../apps/common/ble/le_net_central.c \
-	../../../../apps/common/ble/le_net_cfg.c \
-	../../../../apps/common/ble/le_net_cfg_dui.c \
-	../../../../apps/common/ble/le_net_cfg_tencent.c \
-	../../../../apps/common/ble/le_net_cfg_turing.c \
-	../../../../apps/common/ble/le_trans_data.c \
-	../../../../apps/common/ble/mesh/examples/AliGenie_fan.c \
-	../../../../apps/common/ble/mesh/examples/AliGenie_light.c \
-	../../../../apps/common/ble/mesh/examples/AliGenie_socket.c \
-	../../../../apps/common/ble/mesh/examples/TUYA_light.c \
-	../../../../apps/common/ble/mesh/examples/generic_onoff_client.c \
-	../../../../apps/common/ble/mesh/examples/generic_onoff_server.c \
-	../../../../apps/common/ble/mesh/examples/provisioner.c \
-	../../../../apps/common/ble/mesh/examples/vendor_client.c \
-	../../../../apps/common/ble/mesh/examples/vendor_server.c \
-	../../../../apps/common/ble/mesh/mesh_config_common.c \
-	../../../../apps/common/ble/mesh/model_api.c \
-	../../../../apps/common/ble/mesh/unix_timestamp.c \
-	../../../../apps/common/ble/multi_demo/le_multi_client.c \
-	../../../../apps/common/ble/multi_demo/le_multi_common.c \
-	../../../../apps/common/ble/multi_demo/le_multi_trans.c \
 	../../../../apps/common/camera/byd20a6/byd20a6.c \
 	../../../../apps/common/camera/byd30a2/byd30a2.c \
 	../../../../apps/common/camera/byd3720/byd3720.c \
@@ -352,14 +330,16 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_main.c \
 	../../../../apps/ling_wl/app_lingwl.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
+	../../../../apps/ling_wl/bt_ble/ble.c \
+	../../../../apps/ling_wl/bt_ble/ble_combined.c \
+	../../../../apps/ling_wl/bt_ble/client/ble_simple_client.c \
+	../../../../apps/ling_wl/bt_ble/server/ble_simple_server.c \
 	../../../../apps/ling_wl/board/wl82/board_7911B.c \
 	../../../../apps/ling_wl/board/wl82/board_7911D.c \
 	../../../../apps/ling_wl/board/wl82/board_7912D.c \
 	../../../../apps/ling_wl/board/wl82/board_7913A.c \
 	../../../../apps/ling_wl/board/wl82/board_7916A.c \
 	../../../../apps/ling_wl/ui/led_ui_gr202.c \
-	../../../../apps/ling_wl/bt_ble/ble.c \
-	../../../../apps/ling_wl/bt_ble/wifimanager/le_wifimgr_server.c \
 	../../../../apps/ling_wl/video/camera_lcd_demo.c \
 	../../../../apps/ling_wl/video/get_yuv_data.c \
 	../../../../apps/ling_wl/video/jpeg2yuv.c \

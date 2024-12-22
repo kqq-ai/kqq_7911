@@ -5,8 +5,8 @@
  * @author --
  * @date 2024/12/20
  */
-#include "le_wifimgr_server.h"
-#include "le_wifimgr_gatt_profile.inl"
+#include "ble_simple_server.h"
+#include "ble_simple_server_gatt_profile.inl"
 
 
 #include "system/app_core.h"
@@ -224,7 +224,7 @@ u8 ble_update_get_ready_jump_flag(void)
  */
 
 /* LISTING_START(packetHandler): Packet Handler */
-static void cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
+static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
 {
     int mtu;
     u32 tmp;
@@ -557,7 +557,7 @@ void bt_ble_adv_enable(u8 enable)
 #define PASSKEY_ENTER_ENABLE      0 //输入passkey使能，可修改passkey
 //重设passkey回调函数，在这里可以重新设置passkey
 //passkey为6个数字组成，十万位、万位。。。。个位 各表示一个数字 高位不够为0
-static void reset_passkey_cb(u32 *key)
+void server_deal_passkey_input(u32 *key)
 {
 #if 1
     u32 newkey = rand32();//获取随机数
@@ -573,7 +573,7 @@ static void reset_passkey_cb(u32 *key)
 #endif
 }
 
-static void cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
+void server_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
 {
     sm_just_event_t *event = (void *)packet;
     u32 tmp32;
@@ -594,7 +594,7 @@ static void cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
 
         case SM_EVENT_PASSKEY_INPUT_NUMBER:
             /*IO_CAPABILITY_KEYBOARD_ONLY 方式*/
-            reset_passkey_cb(&tmp32);
+            server_deal_passkey_input(&tmp32);
             log_info("%04x->Passkey input: %06u.\n", event->con_handle, tmp32);
             sm_passkey_input(event->con_handle, tmp32); /*update passkey*/
             break;
@@ -609,21 +609,6 @@ static void cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
     }
 }
 
-void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_size, u8 security_en)
-{
-    //setup SM: Display only
-    sm_init();
-    sm_set_io_capabilities(io_type);
-    sm_set_authentication_requirements(auth_req);
-    sm_set_encryption_key_size_range(min_key_size, 16);
-    sm_set_request_security(security_en);
-    sm_event_callback_set(&cbk_sm_packet_handler);
-
-    if (io_type == IO_CAPABILITY_DISPLAY_ONLY) {
-        reset_PK_cb_register(reset_passkey_cb);
-    }
-}
-
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -632,28 +617,12 @@ void ble_sm_setup_init(io_capability_t io_type, u8 auth_req, uint8_t min_key_siz
 //=BLE init==============================================================================================
 // BLE init
 //=BLE init==============================================================================================
-void ble_profile_init(void)
+void server_profile_init(void)
 {
     log_info("***** wifimgr ble profile init******\n");
-    le_device_db_init();
-
-    // TODO: Add SM
-#if PASSKEY_ENTER_ENABLE
-    ble_sm_setup_init(IO_CAPABILITY_DISPLAY_ONLY, SM_AUTHREQ_BONDING | SM_AUTHREQ_MITM_PROTECTION, 7, TCFG_BLE_SECURITY_EN);
-#else
-    ble_sm_setup_init(IO_CAPABILITY_NO_INPUT_NO_OUTPUT, SM_AUTHREQ_BONDING | SM_AUTHREQ_MITM_PROTECTION, 7, TCFG_BLE_SECURITY_EN);
-#endif
-
     /* setup ATT server */
     att_server_init(profile_data, att_read_callback, att_write_callback);
-    att_server_register_packet_handler(cbk_packet_handler);
-
-    // register for HCI events
-    hci_event_callback_set(&cbk_packet_handler);
-    le_l2cap_register_packet_handler(&cbk_packet_handler);
-
-    // MTU
-    ble_vendor_set_default_att_mtu(ATT_LOCAL_MTU_SIZE);
+    att_server_register_packet_handler(server_cbk_packet_handler);
 }
 
 static void ble_module_enable(u8 en)
@@ -665,8 +634,8 @@ static void ble_module_enable(u8 en)
         if (1 == get_ble_gatt_role()) {
             ble_stack_gatt_role(0);
             // register for HCI events
-            hci_event_callback_set(&cbk_packet_handler);
-            le_l2cap_register_packet_handler(&cbk_packet_handler);
+            hci_event_callback_set(&server_cbk_packet_handler);
+            le_l2cap_register_packet_handler(&server_cbk_packet_handler);
         }
         adv_ctrl_en = 1;
         bt_ble_adv_enable(1);
@@ -682,7 +651,7 @@ static void ble_module_enable(u8 en)
     os_mutex_post(&mutex);
 }
 
-void wifimgr_bt_ble_init(void)
+void ble_simple_server_init(void)
 {
     log_info("***** wifimgr_ble_init******\n");
     const char *name_p = bt_get_local_name();
@@ -709,7 +678,7 @@ void wifimgr_bt_ble_init(void)
     ble_module_enable(1);
 }
 
-void wifimgr_bt_ble_exit(void)
+void ble_simple_server_exit(void)
 {
     log_info("***** ble_exit******\n");
 
@@ -732,7 +701,7 @@ static int ble_disconnect(void *priv)
     }
 }
 
-void wifimgr_ble_app_disconnect(void)
+void ble_simple_server_app_disconnect(void)
 {
     ble_disconnect(NULL);
 }
