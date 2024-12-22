@@ -24,6 +24,19 @@ static struct app_lingwl_hdl g_lingwl_hdl;
 
 music_player g_music_player;
 
+static void simple_play_prompt(const char *fname) 
+{
+    FILE *file = fopen(fname, "r");
+    if (file) {
+        g_music_player.play_voice_prompt = 1;
+        int err = local_music_dec_file(&g_music_player, file, 0, NULL, 0);
+        if (err) {
+            key_event_enable();
+            g_music_player.play_voice_prompt = 0;
+        }
+    }
+}
+
 static void app_lingwl_main(void)
 {
     log_i("Hello World!\r\n");
@@ -33,6 +46,7 @@ static void app_lingwl_main(void)
 
     music_player_init(&g_music_player);
 
+    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
 }
 
 static int app_music_key_click(struct key_event *key)
@@ -153,6 +167,7 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED:
             log_i("NET_EVENT_CONNECTED");
+            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
             // TODO: 可配置WIFI和BLE共存时的RF共存参数设置
