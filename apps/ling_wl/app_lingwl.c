@@ -12,6 +12,10 @@
 #include "net_music_play_my.h"
 #include "gpio.h"
 
+#include "bt_ble/ble_combined.h"
+#include "bt_ble/server/ble_simple_server.h"
+#include "bt_ble/client/ble_simple_client.h"
+
 extern int app_music_bt_event_handler(struct sys_event *event);
 
 static struct app_lingwl_hdl g_lingwl_hdl;
@@ -28,6 +32,7 @@ static void app_lingwl_main(void)
     gpio_direction_output(IO_PORTB_02, 1);
 
     music_player_init(&g_music_player);
+
 }
 
 static int app_music_key_click(struct key_event *key)

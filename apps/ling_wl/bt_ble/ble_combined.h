@@ -14,4 +14,11 @@
 extern u16 server_con_handle;
 extern u16 client_con_handle;
 
+
+//统一接口，关闭模块
+void ble_module_enable(u8 en);
+void ble_app_disconnect(void);
+void bt_ble_exit(void);
+
+
 #endif

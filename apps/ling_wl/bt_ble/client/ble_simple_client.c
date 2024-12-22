@@ -354,18 +354,6 @@ static int client_disconnect()
     }
 }
 
-static void simple_client_disconnect(void)
-{
-    int count = 150;
-    if (client_con_handle != INVALID_HANDLE) {
-        client_disconnect();
-        while (count-- && (client_con_handle != INVALID_HANDLE)) {
-            os_time_dly(1);
-            putchar('w');
-        }
-    }
-}
-
 static void connection_update_complete_success(u16 conn_handle, u8 *packet)
 {
     int conn_interval, conn_latency, conn_timeout;
@@ -811,7 +799,7 @@ void ble_simple_client_module_enable(u8 en)
     } else {
         scan_ctrl_en = 0;
         bt_ble_scan_enable(0, 0);
-        simple_client_disconnect();
+        ble_simple_client_disconnect();
     }
 }
 
@@ -835,7 +823,19 @@ void ble_simple_client_init(void)
 
 void ble_simple_client_exit(void)
 {
-    ble_client_module_enable(0);
+    ble_simple_client_module_enable(0);
+}
+
+void ble_simple_client_disconnect(void)
+{
+    int count = 150;
+    if (client_con_handle != INVALID_HANDLE) {
+        client_disconnect();
+        while (count-- && (client_con_handle != INVALID_HANDLE)) {
+            os_time_dly(1);
+            putchar('w');
+        }
+    }
 }
 
 //主机请求更新连接参数

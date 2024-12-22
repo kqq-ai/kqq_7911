@@ -24,6 +24,8 @@
 #include "third_party/common/ble_user.h"
 #include "JL_rcsp_api.h"
 
+#include "bt_ble/ble_combined.h"
+
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
 extern void printf_buf(u8 *buf, u32 len);
@@ -54,8 +56,6 @@ static u8 att_ram_buffer[ATT_RAM_BUFSIZE] __attribute__((aligned(4)));
 #define HOLD_LATENCY_CNT_ALL    (0xffff)
 
 static const char ble_ext_name[] = "(BLE)";
-
-static volatile hci_con_handle_t con_handle;
 
 //连接参数更新请求设置
 //是否使能参数请求更新,0--disable, 1--enable
@@ -117,8 +117,8 @@ static void send_request_connect_parameter(u8 table_index)
     struct conn_update_param_t *param = (void *)&connection_param_table[table_index];//static ram
 
     log_info("update_request:-%d-%d-%d-%d-\n", param->interval_min, param->interval_max, param->latency, param->timeout);
-    if (con_handle) {
-        ble_op_conn_param_request(con_handle, param);
+    if (server_con_handle != INVALID_HANDLE) {
+        ble_op_conn_param_request(server_con_handle, param);
     }
 }
 
@@ -171,21 +171,21 @@ static void can_send_now_wakeup(void)
 
 static void set_connection_data_length(u16 tx_octets, u16 tx_time)
 {
-    if (con_handle) {
-        ble_op_set_data_length(con_handle, tx_octets, tx_time);
+    if (server_con_handle != INVALID_HANDLE) {
+        ble_op_set_data_length(server_con_handle, tx_octets, tx_time);
     }
 }
 
 static void set_connection_data_phy(u8 tx_phy, u8 rx_phy)
 {
-    if (0 == con_handle) {
+    if (INVALID_HANDLE == server_con_handle) {
         return;
     }
 
     u8 all_phys = 0;
     u16 phy_options = CONN_SET_PHY_OPTIONS_S8;
 
-    ble_op_set_ext_phy(con_handle, all_phys, tx_phy, rx_phy, phy_options);
+    ble_op_set_ext_phy(server_con_handle, all_phys, tx_phy, rx_phy, phy_options);
 }
 
 static void server_profile_start(u16 con_handle)
@@ -253,19 +253,19 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                     set_ble_work_state(BLE_ST_DISCONN);
                     break;
                 }
-                con_handle = hci_subevent_le_enhanced_connection_complete_get_connection_handle(packet);
-                log_info("HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE : %0x\n", con_handle);
+                server_con_handle = hci_subevent_le_enhanced_connection_complete_get_connection_handle(packet);
+                log_info("HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE : %0x\n", server_con_handle);
                 log_info("conn_interval = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet));
                 log_info("conn_latency = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet));
                 log_info("conn_timeout = %d\n", hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
-                server_profile_start(con_handle);
+                server_profile_start(server_con_handle);
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
-                con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
-                log_info("HCI_SUBEVENT_LE_CONNECTION_COMPLETE: %0x\n", con_handle);
+                server_con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
+                log_info("HCI_SUBEVENT_LE_CONNECTION_COMPLETE: %0x\n", server_con_handle);
                 connection_update_complete_success(packet + 8);
-                server_profile_start(con_handle);
+                server_profile_start(server_con_handle);
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
@@ -289,8 +289,8 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
         case HCI_EVENT_DISCONNECTION_COMPLETE:
             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
-            con_handle = 0;
-            ble_op_att_send_init(con_handle, 0, 0, 0);
+            server_con_handle = 0;
+            ble_op_att_send_init(server_con_handle, 0, 0, 0);
             set_ble_work_state(BLE_ST_DISCONN);
 
             if (!ble_update_get_ready_jump_flag()) {
@@ -415,7 +415,7 @@ static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_typ
 {
     u32 ret = APP_BLE_NO_ERROR;
 
-    if (!con_handle) {
+    if (server_con_handle == INVALID_HANDLE) {
         return APP_BLE_OPERATION_ERROR;
     }
 
@@ -435,9 +435,9 @@ static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_typ
     return ret;
 }
 
-//=======================================================================================================
+//=BLE ADV===============================================================================================
 // BLE ADV
-//=======================================================================================================
+//=BLE ADV===============================================================================================
 static int make_set_adv_data(void)
 {
     u8 offset = 0;
@@ -508,7 +508,7 @@ static int set_adv_enable(void *priv, u32 en)
         return APP_BLE_OPERATION_ERROR;
     }
 
-    if (con_handle) {
+    if (server_con_handle != INVALID_HANDLE) {
         return APP_BLE_OPERATION_ERROR;
     }
 
@@ -549,6 +549,25 @@ static int set_adv_enable(void *priv, u32 en)
 void bt_ble_adv_enable(u8 enable)
 {
     set_adv_enable(0, enable);
+}
+
+//=BLE CONN===============================================================================================
+// BLE CONN
+//=BLE CONN===============================================================================================
+static int server_disconnect()
+{
+    if (server_con_handle != INVALID_HANDLE) {
+        if (BLE_ST_SEND_DISCONN != get_ble_work_state()) {
+            log_info(">>>ble send disconnect\n");
+            set_ble_work_state(BLE_ST_SEND_DISCONN);
+            ble_op_disconnect(server_con_handle);
+        } else {
+            log_info(">>>ble wait disconnect...\n");
+        }
+        return APP_BLE_NO_ERROR;
+    } else {
+        return APP_BLE_OPERATION_ERROR;
+    }
 }
 
 //=SM====================================================================================================
@@ -625,28 +644,29 @@ void server_profile_init(void)
     att_server_register_packet_handler(server_cbk_packet_handler);
 }
 
-static void ble_module_enable(u8 en)
+void ble_simple_server_disconnect(void)
+{
+    int count = 150;
+    if (server_con_handle != INVALID_HANDLE) {
+        server_disconnect();
+        while (count-- && (server_con_handle != INVALID_HANDLE)) {
+            os_time_dly(1);
+            putchar('w');
+        }
+    }
+}
+
+void ble_simple_server_module_enable(u8 en)
 {
     os_mutex_pend(&mutex, 0);
     log_info("mode_en:%d\n", en);
     if (en) {
-        extern u8 get_ble_gatt_role(void);
-        if (1 == get_ble_gatt_role()) {
-            ble_stack_gatt_role(0);
-            // register for HCI events
-            hci_event_callback_set(&server_cbk_packet_handler);
-            le_l2cap_register_packet_handler(&server_cbk_packet_handler);
-        }
         adv_ctrl_en = 1;
         bt_ble_adv_enable(1);
     } else {
-        if (con_handle) {
-            adv_ctrl_en = 0;
-            ble_disconnect(NULL);
-        } else {
-            bt_ble_adv_enable(0);
-            adv_ctrl_en = 0;
-        }
+        adv_ctrl_en = 0;
+        bt_ble_adv_enable(0);
+        ble_simple_server_disconnect();
     }
     os_mutex_post(&mutex);
 }
@@ -675,33 +695,12 @@ void ble_simple_server_init(void)
     log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_module_enable(1);
+    ble_simple_server_module_enable(1);
 }
 
 void ble_simple_server_exit(void)
 {
     log_info("***** ble_exit******\n");
 
-    ble_module_enable(0);
-}
-
-static int ble_disconnect(void *priv)
-{
-    if (con_handle) {
-        if (BLE_ST_SEND_DISCONN != get_ble_work_state()) {
-            log_info(">>>ble send disconnect\n");
-            set_ble_work_state(BLE_ST_SEND_DISCONN);
-            ble_op_disconnect(con_handle);
-        } else {
-            log_info(">>>ble wait disconnect...\n");
-        }
-        return APP_BLE_NO_ERROR;
-    } else {
-        return APP_BLE_OPERATION_ERROR;
-    }
-}
-
-void ble_simple_server_app_disconnect(void)
-{
-    ble_disconnect(NULL);
+    ble_simple_server_module_enable(0);
 }

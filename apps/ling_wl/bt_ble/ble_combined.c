@@ -236,19 +236,19 @@ void ble_profile_init(void)
 void ble_module_enable(u8 en)
 {
     log_info("mode_en:%d\n", en);
-    ble_server_module_enable(en);
-    ble_client_module_enable(en);
+    ble_simple_server_module_enable(en);
+    ble_simple_client_module_enable(en);
 }
 
 void ble_app_disconnect(void)
 {
-    ble_multi_server_disconnect();
-    ble_multi_client_disconnect();
+    ble_simple_server_disconnect();
+    ble_simple_client_disconnect();
 }
 
 void bt_ble_exit(void)
 {
-    bt_multi_server_exit();
-    bt_multi_client_exit();
+    ble_simple_server_exit();
+    ble_simple_client_exit();
 }
 
