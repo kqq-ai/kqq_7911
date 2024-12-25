@@ -203,18 +203,18 @@ const struct touch_key_platform_data ctmkey_data = {
 #if TCFG_ADKEY_ENABLE
 /*-------------ADKEY GROUP 1----------------*/
 
-#define ADKEY_UPLOAD_R  22
+#define ADKEY_UPLOAD_R  220
 
 #define ADC_VDDIO (0x3FF)
-#define ADC_09   (0x3FF * 220 / (220 + ADKEY_UPLOAD_R))
-#define ADC_08   (0x3FF * 100 / (100 + ADKEY_UPLOAD_R))
-#define ADC_07   (0x3FF * 51  / (51  + ADKEY_UPLOAD_R))
-#define ADC_06   (0x3FF * 33  / (33  + ADKEY_UPLOAD_R))
-#define ADC_05   (0x3FF * 22  / (22  + ADKEY_UPLOAD_R))
-#define ADC_04   (0x3FF * 15  / (15  + ADKEY_UPLOAD_R))
-#define ADC_03   (0x3FF * 10  / (10  + ADKEY_UPLOAD_R))
-#define ADC_02   (0x3FF * 51  / (51  + ADKEY_UPLOAD_R * 10))
-#define ADC_01   (0x3FF * 22  / (22  + ADKEY_UPLOAD_R * 10))
+#define ADC_09   (0x3FF)
+#define ADC_08   (0x3FF)
+#define ADC_07   (0x3FF * 1500  / (1500  + ADKEY_UPLOAD_R))
+#define ADC_06   (0x3FF * 620  / (620  + ADKEY_UPLOAD_R))
+#define ADC_05   (0x3FF * 360  / (360  + ADKEY_UPLOAD_R))
+#define ADC_04   (0x3FF * 220  / (220  + ADKEY_UPLOAD_R))
+#define ADC_03   (0x3FF * 130  / (130  + ADKEY_UPLOAD_R))
+#define ADC_02   (0x3FF * 75  / (75  + ADKEY_UPLOAD_R))
+#define ADC_01   (0x3FF * 30  / (30  + ADKEY_UPLOAD_R))
 #define ADC_00   (0)
 
 #define ADKEY_V_9      	((ADC_09 + ADC_VDDIO)/2)
@@ -246,16 +246,14 @@ const struct adkey_platform_data adkey_data = {
         ADKEY_V_9,
     },
     .key_value = {
-        KEY_1, /*0*/
-        KEY_2, /*1*/
-        KEY_3,   /*2*/
-        NO_KEY,    /*3*/
-        NO_KEY,  /*4*/
-        NO_KEY,/*5*/
-        NO_KEY,    /*6*/
-        NO_KEY,  /*7*/
-        NO_KEY,    /*8*/
-		NO_KEY,
+        KEY_4,   /*K8*/
+        KEY_3,   /*K7*/
+        KEY_2,   /*K6*/
+        KEY_MODE,     /*K5*/
+        KEY_DOWN,     /*K4*/
+        KEY_UP,     /*K3*/
+        KEY_OK,     /*K2*/
+		KEY_1,    /*K1*/
     },
 };
 #endif

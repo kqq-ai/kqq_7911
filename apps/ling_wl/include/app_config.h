@@ -104,6 +104,8 @@
 // #define CONFIG_HTTP_SERVER_ENABLE            //HTTP服务器
 // #define CONFIG_FTP_SERVER_ENABLE             //FTP服务器
 
+// #define USE_HTTP_UPGRADE_DEMO1
+
 
 /*************电信云平台配网方式选择*************/
 #ifdef CONFIG_TELECOM_SDK_ENABLE

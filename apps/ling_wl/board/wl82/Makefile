@@ -225,6 +225,7 @@ c_SRC_FILES := \
 	../../../../apps/common/camera/ov7670_dvp/ov7670.c \
 	../../../../apps/common/camera/pr2000k/pr2000k.c \
 	../../../../apps/common/camera/xc7011_dvp/xc7011.c \
+	../../../../apps/common/example/update/http_upgrade/example1/main.c \
 	../../../../apps/common/config/bt_profile_config.c \
 	../../../../apps/common/config/log_config/app_config.c \
 	../../../../apps/common/config/log_config/lib_btctrler_config.c \
