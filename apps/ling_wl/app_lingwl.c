@@ -15,6 +15,7 @@
 #include "bt_ble/ble_combined.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
+#include "uart.h"
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -23,6 +24,18 @@ static struct app_lingwl_hdl g_lingwl_hdl;
 #define __this (&g_lingwl_hdl)
 
 music_player g_music_player;
+
+static void *uart_hdl = NULL;
+uint8_t en_data_0[] = {
+    0xA0, 
+    0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 
+    0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x37, 0x00
+};
+uint8_t en_data_1[] = {
+    0xA0, 
+    0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 
+    0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x38, 0x00
+};
 
 static void simple_play_prompt(const char *fname) 
 {
@@ -39,7 +52,18 @@ static void simple_play_prompt(const char *fname)
 
 static void app_lingwl_main(void)
 {
-    log_i("Hello World!\r\n");
+    log_i("Hello World! %s %s\r\n", __DATE__, __TIME__);
+    
+    log_i("V3\r\n");
+
+    uart_hdl = dev_open("uart0", NULL);
+    if (!uart_hdl) {
+        printf("open uart err !!!\n");
+        return ;
+    }
+
+    /* 使能特殊串口,启动收发数据 */
+    dev_ioctl(uart_hdl, UART_START, 0);
 
     // disable mute 
     gpio_direction_output(IO_PORTB_02, 1);
@@ -49,6 +73,7 @@ static void app_lingwl_main(void)
     simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
 }
 
+static u8 en = 1;
 static int app_music_key_click(struct key_event *key)
 {
     int err = 0;
@@ -70,7 +95,19 @@ static int app_music_key_click(struct key_event *key)
                 g_music_player.play_voice_prompt = 0;
             }
         }
-
+        break;
+    case KEY_3:
+        log_i("KEY 3\n");
+        // 指定设备序列号
+        // 通知C2将序列号设置到广播中
+        // E端设备检查序列号是否与自己匹配，匹配则播放，不匹配则停止播放
+        if (en) {
+            en = 0;
+            dev_write(uart_hdl, en_data_0, sizeof(en_data_0));
+        } else {
+            en = 1;
+            dev_write(uart_hdl, en_data_1, sizeof(en_data_0));
+        }
         break;
     default:
         break;
