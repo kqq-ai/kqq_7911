@@ -14,4 +14,6 @@ void ble_simple_client_init(void);
 void ble_simple_client_exit(void);
 void ble_simple_client_send_conn_param_update(void);
 
+void set_scan_adv_callback(void (*cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void *priv);
+
 #endif

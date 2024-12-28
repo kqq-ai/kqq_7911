@@ -1545,7 +1545,6 @@
                 "CONFIG_SFC_ENABLE",
                 "CONFIG_AUDIO_ENABLE",
                 "CONFIG_RTOS_AND_MM_LIB_CODE_SECTION_IN_SDRAM",
-                "CONFIG_VIDEO_ENABLE=1",
                 "CONFIG_NET_ENABLE=1",
                 "CONFIG_BT_ENABLE=1",
                 "EVENT_HANDLER_NUM_CONFIG=2",

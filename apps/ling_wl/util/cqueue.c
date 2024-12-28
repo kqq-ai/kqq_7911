@@ -1,0 +1,216 @@
+#include "cqueue.h"
+
+#include <os/pthread.h>
+
+/**
+ * @name    my_blocking_queue_init
+ * @brief   Init custom blocking queue
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   elementSize The size (in bytes) of each queue element.
+ * @param   capacity    The maximum capacity of the queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_init(MyBlockingQueue *queue, int elementSize, int capacity)
+{
+    int ret = MYERROR_Success;
+    if (queue == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+
+    queue->data = (void **)malloc(elementSize * capacity);
+    if (queue->data == NULL) {
+        printf("Error: Failed to malloc queue->data, size = %d\n", elementSize * capacity);
+        return MYERROR_Malloc_Failed;
+    }
+
+    if (pthread_mutex_init(&queue->mutex, NULL) != 0) {
+        printf("Error: Failed to init pthread_mutex\n");
+        ret = MYERROR_OS_Api_Error;
+        goto error;
+    }
+    if (pthread_cond_init(&queue->not_empty, NULL) != 0) {
+        printf("Error: Failed to init pthread_cond\n");
+        ret = MYERROR_OS_Api_Error;
+        goto error;
+    }
+    if (pthread_cond_init(&queue->not_full, NULL) != 0) {
+        printf("Error: Failed to init pthread_cond\n");
+        ret = MYERROR_OS_Api_Error;
+        goto error;
+    }
+
+    queue->size = 0;
+    queue->front = 0;
+    queue->rear = 0;
+    queue->capacity = capacity;
+    queue->element_size = elementSize;
+    printf("queue->data: %p, size: %d\n", queue->data, queue->element_size);
+    return ret;
+
+error:
+    if (queue && queue->data) {
+        free(queue->data);
+        queue->data = NULL;
+    }
+    pthread_mutex_destroy(&queue->mutex);
+    pthread_cond_destroy(&queue->not_empty);
+    pthread_cond_destroy(&queue->not_full);
+    return ret;
+}
+
+/**
+ * @name    my_blocking_queue_destroy
+ * @brief   Destroy the custom blocking queue and release all associated resources.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_destroy(MyBlockingQueue *queue)
+{
+    int ret = MYERROR_Success;
+
+    if (queue && queue->data) {
+        free(queue->data);
+        queue->data = NULL;
+    }
+    pthread_mutex_destroy(&queue->mutex);
+    pthread_cond_destroy(&queue->not_empty);
+    pthread_cond_destroy(&queue->not_full);
+
+    return ret;
+}
+
+/**
+ * @name    my_blocking_queue_enqueue
+ * @brief   Enqueue a data element into the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the data element to be inserted into the queue
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_enqueue(MyBlockingQueue *queue, void *data)
+{
+    pthread_mutex_lock(&queue->mutex);
+
+    while (queue->size == queue->capacity) {
+        pthread_cond_wait(&queue->not_full, &queue->mutex);
+    }
+
+    memcpy(&queue->data[queue->rear * queue->element_size], data, queue->element_size);
+    queue->rear = (queue->rear == queue->capacity - 1) ? 0 : queue->rear + 1;
+    queue->size++;
+
+    pthread_cond_signal(&queue->not_empty);
+
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
+ * @name    my_blocking_queue_dequeue
+ * @brief   Dequeue an element from the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the memory location where the dequeued element will be copied.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_dequeue(MyBlockingQueue *queue, void *data)
+{
+    pthread_mutex_lock(&queue->mutex);
+
+    while (queue->size == 0) {
+        pthread_cond_wait(&queue->not_empty, &queue->mutex);
+    }
+
+    memcpy(data, &queue->data[queue->front * queue->element_size], queue->element_size);
+    queue->front = (queue->front == queue->capacity - 1) ? 0 : queue->front + 1;
+    queue->size --;
+
+    pthread_cond_signal(&queue->not_full);
+
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
+ * @name    my_blocking_queue_traverse
+ * @brief   Traverse the custom blocking queue and execute a callback function for each element.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   callback    A pointer to the callback function which will be called for each element in the queue.
+ *                     The callback function should take a pointer to the element as its parameter and return void.
+ * @param   priv        A pointer to user-defined private data.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_traverse(MyBlockingQueue *queue, void (*callback)(void *, void *), void *priv)
+{
+    if (queue == NULL || callback == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+
+    pthread_mutex_lock(&queue->mutex);
+    int index = queue->front;
+    for (int i = 0; i < queue->size; ++i) {
+        callback(&queue->data[index * queue->element_size], priv);
+        index = (index == queue->capacity - 1)? 0 : index + 1;
+    }
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
+ * @name    my_blocking_queue_size
+ * @brief   Get the number of elements in the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  The number of elements in the queue, or MYERROR_Null_Pointer if the queue pointer is NULL.
+ */
+int my_blocking_queue_size(MyBlockingQueue *queue)
+{
+    if (queue == NULL) {
+        return -1;
+    }
+    return queue->size;
+}
+
+/**
+ * @name    my_blocking_queue_is_empty
+ * @brief   Check if the custom blocking queue is empty.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  1 if the queue is full, 0 otherwise. If the queue pointer is NULL, return MYERROR_Null_Pointer.
+ */
+int my_blocking_queue_is_empty(MyBlockingQueue *queue)
+{
+    if (queue == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+    return queue->size == 0;
+}
+
+/**
+ * @name    my_blocking_queue_is_full
+ * @brief   Check if the custom blocking queue is full.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  1 if the queue is full, 0 otherwise. If the queue pointer is NULL, return MYERROR_Null_Pointer.
+ */
+int my_blocking_queue_is_full(MyBlockingQueue *queue)
+{
+    if (queue == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+    return queue->size == queue->capacity;
+}

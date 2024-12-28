@@ -18,11 +18,11 @@
 UART0_PLATFORM_DATA_BEGIN(uart0_data)
     .baudrate = 1000000,
     /* .port = PORTA_5_6, */
-    .port = PORTA_3_4,
+    .port = PORTH_0_1,
     /* .tx_pin = IO_PORTA_05, */
     /* .rx_pin = IO_PORTA_06, */
-    .tx_pin = IO_PORTA_03,
-    .rx_pin = IO_PORTA_04,
+    .tx_pin = IO_PORTH_00,
+    .rx_pin = IO_PORTH_01,
     .max_continue_recv_cnt = 1024,
     .idle_sys_clk_cnt = 500000,
     .clk_src = PLL_48M,
@@ -42,14 +42,9 @@ UART1_PLATFORM_DATA_END();
 
 UART2_PLATFORM_DATA_BEGIN(uart2_data)
     .baudrate = 1000000,
-    .port = PORT_REMAP,
-#if CONFIG_AUDIO_ENC_SAMPLE_SOURCE == AUDIO_ENC_SAMPLE_SOURCE_PLNK0
-    .output_channel = OUTPUT_CHANNEL1,
-#else
-    .output_channel = OUTPUT_CHANNEL0,
-#endif
-    .tx_pin = TCFG_DEBUG_PORT,
-    .rx_pin = -1,
+    .port = PORTH_2_3,
+    .tx_pin = IO_PORTH_02,
+    .rx_pin = IO_PORTH_03,
     .max_continue_recv_cnt = 1024,
     .idle_sys_clk_cnt = 500000,
     .clk_src = PLL_48M,
@@ -96,17 +91,17 @@ SD_PLATFORM_DATA_END()
 /****************SD模块*********************/
 
 
-HW_IIC0_PLATFORM_DATA_BEGIN(hw_iic1_data)
-    .clk_pin = IO_PORTC_01,
-    .dat_pin = IO_PORTC_02,
-    .baudrate = 0x01,
-HW_IIC0_PLATFORM_DATA_END()
+// HW_IIC0_PLATFORM_DATA_BEGIN(hw_iic1_data)
+//     .clk_pin = IO_PORTC_01,
+//     .dat_pin = IO_PORTC_02,
+//     .baudrate = 0x01,
+// HW_IIC0_PLATFORM_DATA_END()
 
-SW_IIC_PLATFORM_DATA_BEGIN(sw_iic0_data)
-    .clk_pin = IO_PORTC_01,
-    .dat_pin = IO_PORTC_02,
-    .sw_iic_delay = 50,
-SW_IIC_PLATFORM_DATA_END()
+// SW_IIC_PLATFORM_DATA_BEGIN(sw_iic0_data)
+//     .clk_pin = IO_PORTC_01,
+//     .dat_pin = IO_PORTC_02,
+//     .sw_iic_delay = 50,
+// SW_IIC_PLATFORM_DATA_END()
 
 
 #if TCFG_IRKEY_ENABLE
@@ -246,14 +241,14 @@ const struct adkey_platform_data adkey_data = {
         ADKEY_V_9,
     },
     .key_value = {
-        KEY_4,   /*K8*/
-        KEY_3,   /*K7*/
-        KEY_2,   /*K6*/
-        KEY_MODE,     /*K5*/
-        KEY_DOWN,     /*K4*/
-        KEY_UP,     /*K3*/
-        KEY_OK,     /*K2*/
-		KEY_1,    /*K1*/
+        KEY_MODE,   /*K8*/
+        KEY_DOWN,   /*K7*/
+        KEY_UP,     /*K6*/
+        KEY_OK,     /*K5*/
+        KEY_4,      /*K4*/
+        KEY_3,      /*K3*/
+        KEY_2,      /*K2*/
+		KEY_1,      /*K1*/
     },
 };
 #endif
@@ -408,21 +403,21 @@ static const struct video_platform_data video0_data = {
 };
 #endif
 
-PWM_PLATFORM_DATA_BEGIN(pwm_data0)
-    .port   = IO_PORTC_01,
-    .pwm_ch = PWM_TIMER3_OPCH3 | PWMCH4_L,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
-    .freq   = 200,//频率
-    .duty   = 90,//占空比
-    .point_bit = 0,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
-PWM_PLATFORM_DATA_END()
+// PWM_PLATFORM_DATA_BEGIN(pwm_data0)
+//     .port   = IO_PORTC_01,
+//     .pwm_ch = PWM_TIMER3_OPCH3 | PWMCH4_L,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
+//     .freq   = 200,//频率
+//     .duty   = 90,//占空比
+//     .point_bit = 0,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
+// PWM_PLATFORM_DATA_END()
 
-PWM_PLATFORM_DATA_BEGIN(pwm_data1)
-    .port   = IO_PORTC_06,//选择定时器的TIMER PWM任意IO，pwm_ch加上PWM_TIMER3_OPCH3或PWM_TIMER2_OPCH2有效,只支持2个PWM,占用output_channel2/3，其他外设使用output_channel需留意
-    .pwm_ch = PWM_TIMER2_OPCH2,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
-    .freq   = 32768,//频率
-    .duty   = 50,//占空比
-    .point_bit = 0,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
-PWM_PLATFORM_DATA_END()
+// PWM_PLATFORM_DATA_BEGIN(pwm_data1)
+//     .port   = IO_PORTC_06,//选择定时器的TIMER PWM任意IO，pwm_ch加上PWM_TIMER3_OPCH3或PWM_TIMER2_OPCH2有效,只支持2个PWM,占用output_channel2/3，其他外设使用output_channel需留意
+//     .pwm_ch = PWM_TIMER2_OPCH2,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
+//     .freq   = 32768,//频率
+//     .duty   = 50,//占空比
+//     .point_bit = 0,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
+// PWM_PLATFORM_DATA_END()
 
 
 #if TCFG_USB_SLAVE_ENABLE || TCFG_USB_HOST_ENABLE
@@ -507,11 +502,11 @@ const struct gpcnt_platform_data gpcnt_data = {
 
 
 REGISTER_DEVICES(device_table) = {
-    { "pwm0",   &pwm_dev_ops,  (void *)&pwm_data0},
-    { "pwm1",   &pwm_dev_ops,  (void *)&pwm_data1},
+    // { "pwm0",   &pwm_dev_ops,  (void *)&pwm_data0},
+    // { "pwm1",   &pwm_dev_ops,  (void *)&pwm_data1},
 
-    { "iic0",  &iic_dev_ops, (void *)&sw_iic0_data },
-    { "iic1",  &iic_dev_ops, (void *)&hw_iic1_data },
+    // { "iic0",  &iic_dev_ops, (void *)&sw_iic0_data },
+    // { "iic1",  &iic_dev_ops, (void *)&hw_iic1_data },
 
 #ifdef CONFIG_AUDIO_ENABLE
     { "audio", &audio_dev_ops, (void *)&audio_data },
@@ -529,8 +524,8 @@ REGISTER_DEVICES(device_table) = {
     { "video0.*",  &video_dev_ops, (void *)&video0_data },
 #endif
 
-    { "spi1", &spi_dev_ops, (void *)&spi1_data },
-    { "spi2", &spi_dev_ops, (void *)&spi2_data },
+    // { "spi1", &spi_dev_ops, (void *)&spi1_data },
+    // { "spi2", &spi_dev_ops, (void *)&spi2_data },
 
     {"rtc", &rtc_dev_ops, NULL},
 
@@ -734,7 +729,7 @@ static void board_power_init(void)
 #ifdef CONFIG_DEBUG_ENABLE
 void debug_uart_init()
 {
-    uart_init(&uart2_data);
+    uart_init(&uart1_data);
 }
 #endif
 

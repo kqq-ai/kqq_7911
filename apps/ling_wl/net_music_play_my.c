@@ -11,15 +11,6 @@
 #include "errno.h"
 #include "netdb.h"
 
-#define CONFIG_PLAY_PROMPT_DISABLE_KEY	1 //播放提示音时屏蔽按键
-#define CONFIG_STORE_VOLUME
-#define VOLUME_STEP 5
-#define MIN_VOLUME_VALUE	5
-#define MAX_VOLUME_VALUE	100
-#define INIT_VOLUME_VALUE   60
-
-#define DEC_BUF_LEN      12 * 1024
-
 static const struct music_dec_ops local_music_dec_ops;
 static const struct music_dec_ops net_music_dec_ops;
 
@@ -265,6 +256,10 @@ static int net_music_dec_end(music_player *player, int save_bp)
 
     net_music_dec_stop(player, save_bp);
 
+    if (player->dec_with_cb && player->dec_end_cb != NULL) {
+        player->dec_end_cb(player->dec_end_cb_priv);
+    }
+
     return 0;
 }
 
@@ -379,7 +374,6 @@ static int net_music_dec_stop(music_player *player, int save_breakpoint)
 static int __net_download_ready(void *priv)
 {
     music_player *player = (music_player *)priv;
-    log_i("wait: %p\n", player);
     player->download_ready = net_download_check_ready(player->net_file);
     if (player->download_ready) {
         return 1;
@@ -498,6 +492,64 @@ __err:
     return -EFAULT;
 }
 
+static int __set_dec_volume(music_player *player, int step)
+{
+    union audio_req req = {0};
+
+    int volume = player->volume + step;
+    if (volume < MIN_VOLUME_VALUE) {
+        volume = MIN_VOLUME_VALUE;
+    } else if (volume > MAX_VOLUME_VALUE) {
+// TODO: play mix file
+// #ifdef CONFIG_VOICE_PROMPT_FILE_PATH
+//         app_music_play_mix_file(CONFIG_VOICE_PROMPT_FILE_PATH"VolumeFull.mp3");
+// #endif
+        volume = MAX_VOLUME_VALUE;
+    }
+    if (volume == player->volume) {
+        return -EINVAL;
+    }
+    player->volume = volume;
+
+#ifdef CONFIG_UI_ENABLE
+    os_taskq_post(POST_TASK_NAME, 2, UI_MSG_SET_VOLUME, volume);
+#endif
+
+    log_d("set_dec_volume: %d\n", volume);
+
+#ifdef CONFIG_DEC_DIGITAL_VOLUME_ENABLE
+#if TCFG_USER_EMITTER_ENABLE
+    if (get_bt_emitter_audio_server() && __this->digital_vol_hdl && __this->dec_server) {
+        return user_audio_digital_volume_set(__this->digital_vol_hdl, volume, 1);
+    }
+#endif
+#if TCFG_USER_VIRTUAL_PLAY_ENABLE
+    if (get_user_virtual_audio_server() && __this->digital_vol_hdl && __this->dec_server) {
+        return user_audio_digital_volume_set(__this->digital_vol_hdl, volume, 1);
+    }
+#endif
+#endif
+
+// TODO: play mix file
+// #ifdef CONFIG_VOICE_PROMPT_FILE_PATH
+//     if (volume == MAX_VOLUME_VALUE) {
+//         app_music_play_mix_file(CONFIG_VOICE_PROMPT_FILE_PATH"VolumeFull.mp3");
+//     } else {
+//         app_music_play_mix_file(CONFIG_VOICE_PROMPT_FILE_PATH"Volume.mp3");
+//     }
+// #endif
+
+    if (!player->dec_server) {
+        return -EFAULT;
+    }
+
+    req.dec.cmd     = AUDIO_DEC_SET_VOLUME;
+    req.dec.volume  = volume;
+    server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+
+    return 0;
+}
+
 static int net_music_dec_file(music_player *player, void *_url, int breakpoint, void *handler, int arg)
 {
     int err;
@@ -600,7 +652,7 @@ static int __play_net_music(music_player *player, const char *url)
     return net_music_dec_file(player, (void *)url, 0, net_music_dec_end, 0);
 }
 
-int app_music_play_net_music(music_player *player, void *url)
+static int __app_music_play_net_music(music_player *player, void *url) 
 {
     if (player->play_voice_prompt) {
         if (player->dec_end_handler != (void *)app_music_shutdown) {
@@ -615,6 +667,31 @@ int app_music_play_net_music(music_player *player, void *url)
     return net_music_dec_file(player, url, 0, net_music_dec_end, 0);
 }
 
+int app_music_play_net_music(music_player *player, void *url)
+{
+    player->dec_end_cb = NULL;
+    player->dec_end_cb_priv = NULL;
+    player->dec_with_cb = 0;
+    __app_music_play_net_music(player, url);
+}
+
+int app_music_play_net_music_with_callback(music_player *player, void *url, app_music_play_end_cb_t cb, void *priv)
+{
+    player->dec_end_cb = cb;
+    player->dec_end_cb_priv = priv;
+    player->dec_with_cb = 1;
+    __app_music_play_net_music(player, url);
+}
+
+int app_music_play_stop(music_player *player)
+{
+    return net_music_dec_end(player, 0);
+}
+
+int set_dec_volume(music_player *player, int step)
+{
+    return __set_dec_volume(player, step);
+}
 
 /*
  * ****************************提示音*************************************

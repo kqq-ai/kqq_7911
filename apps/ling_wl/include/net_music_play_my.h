@@ -4,6 +4,15 @@
 #include "cpu.h"
 #include "server/audio_server.h"
 
+#define CONFIG_PLAY_PROMPT_DISABLE_KEY	1 //播放提示音时屏蔽按键
+#define CONFIG_STORE_VOLUME
+#define VOLUME_STEP 5
+#define MIN_VOLUME_VALUE	5
+#define MAX_VOLUME_VALUE	100
+#define INIT_VOLUME_VALUE   60
+
+#define DEC_BUF_LEN      12 * 1024
+
 typedef struct _music_player music_player;
 extern music_player;
 
@@ -35,6 +44,8 @@ struct local_breakpoint {
     struct audio_dec_breakpoint local_bp;
 };
 
+typedef void (*app_music_play_end_cb_t)(void *priv);
+
 typedef struct _music_player {
     u8 wait_download_suspend : 1;
     int download_ready;
@@ -59,17 +70,21 @@ typedef struct _music_player {
     void *dec_end_handler;
     struct server *dec_server;
     struct local_breakpoint lbp;
+
+    u8 dec_with_cb;
+    app_music_play_end_cb_t dec_end_cb;
+    void *dec_end_cb_priv;
 } music_player;
 
 int music_player_init(music_player *player);
 
-void local_music_dec_local_play(music_player *player, const char *fname);
-
-void net_music_dec_local_play(music_player *player, const char *url);
-
-void net_music_dec_eend_play(music_player *player, const char *url, char *adv_name, u16 adv_name_len);
-
 int app_music_play_net_music(music_player *player, void *url);
+
+int app_music_play_net_music_with_callback(music_player *player, void *url, app_music_play_end_cb_t cb, void *priv);
+
+int app_music_play_stop(music_player *player);
+
+int set_dec_volume(music_player *player, int step);
 
 int local_music_dec_file(music_player *player, void *file, int breakpoint, void *handler, int arg);
 

@@ -16,6 +16,11 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
 #include "uart.h"
+#include "syscfg_id.h"
+#include "audio/recorder.h"
+#include "util/cqueue.h"
+#include "async_msg_loop.h"
+#include "wait.h"
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -24,14 +29,14 @@ static struct app_lingwl_hdl g_lingwl_hdl;
 #define __this (&g_lingwl_hdl)
 
 music_player g_music_player;
-
-static void *uart_hdl = NULL;
-uint8_t en_data_0[] = {
+recorder_hdl g_recorder;
+void *uart0_hdl = NULL;
+uint8_t en_data_0[] = { // 0xA0, "WCCN24H28FEEEF7"
     0xA0, 
     0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 
     0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x37, 0x00
 };
-uint8_t en_data_1[] = {
+uint8_t en_data_1[] = { // 0xA0, "WCCN24H28FEEEF8"
     0xA0, 
     0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 
     0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x38, 0x00
@@ -50,27 +55,65 @@ static void simple_play_prompt(const char *fname)
     }
 }
 
+int g_start_time = 0;
+int condition(void *priv)
+{
+    printf("wait\n");
+    int curr_time = timer_get_ms();
+    if (curr_time - g_start_time > 10000) {
+        return 1;
+    }
+    return 0;
+}
+
+int callback(void *priv)
+{
+    printf("start recoreder\n");
+    /* 开启录音 */
+    recorder_start(&g_recorder);
+}
+
+
+extern void wss_asr_data(void *data, u32 size);
+void recorder_data_cb(void* priv, void *data, u32 size)
+{
+    wss_asr_data(data, size);
+}
+
 static void app_lingwl_main(void)
 {
     log_i("Hello World! %s %s\r\n", __DATE__, __TIME__);
     
-    log_i("V3\r\n");
-
-    uart_hdl = dev_open("uart0", NULL);
-    if (!uart_hdl) {
+    uart0_hdl = dev_open("uart0", NULL);
+    if (!uart0_hdl) { 
         printf("open uart err !!!\n");
         return ;
     }
 
     /* 使能特殊串口,启动收发数据 */
-    dev_ioctl(uart_hdl, UART_START, 0);
+    dev_ioctl(uart0_hdl, UART_START, 0);
 
-    // disable mute 
-    gpio_direction_output(IO_PORTB_02, 1);
+    // 初始化录音
+    recorder_mode_init(&g_recorder);
+    recorder_set_data_cb(&g_recorder, recorder_data_cb, NULL);
+
+    // 取消静音
+    // gpio_direction_output(IO_PORTA_00, 1);   // 
+    gpio_direction_output(IO_PORTB_02, 1);  // 
 
     music_player_init(&g_music_player);
 
     simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+
+    start_async_msg_loop();
+
+    //g_start_time = timer_get_ms();
+    //wait_completion(condition, callback, NULL, NULL);
+}
+
+void play_end_callback(void *priv)
+{
+    log_i("play end\n");
 }
 
 static u8 en = 1;
@@ -86,27 +129,66 @@ static int app_music_key_click(struct key_event *key)
         break;
     case KEY_2:
         log_i("KEY 2\n");
-        FILE *file = fopen(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3", "r");
-        if (file) {
-            g_music_player.play_voice_prompt = 1;
-            err = local_music_dec_file(&g_music_player, file, 0, NULL, 0);
-            if (err) {
-                key_event_enable();
-                g_music_player.play_voice_prompt = 0;
-            }
-        }
+        app_music_play_net_music_with_callback(&g_music_player, "https://www.ihaoge.net/server/1/263523744.mp3", play_end_callback, NULL);
         break;
     case KEY_3:
         log_i("KEY 3\n");
         // 指定设备序列号
         // 通知C2将序列号设置到广播中
         // E端设备检查序列号是否与自己匹配，匹配则播放，不匹配则停止播放
+        log_i("en = %d\n", en);
         if (en) {
             en = 0;
-            dev_write(uart_hdl, en_data_0, sizeof(en_data_0));
+            dev_write(uart0_hdl, en_data_0, sizeof(en_data_0));
         } else {
             en = 1;
-            dev_write(uart_hdl, en_data_1, sizeof(en_data_0));
+            dev_write(uart0_hdl, en_data_1, sizeof(en_data_0));
+        }
+        break;
+    case KEY_4:
+        log_i("KEY 4\n");
+        app_music_play_stop(&g_music_player);
+        break;
+    case KEY_OK:
+        log_i("KEY OK\n");
+        extern int g_playing_audio_message_id;
+        if (recorder_get_play_pause_state(&g_recorder) == 0) {
+            printf("recorder: start record\n");
+            /* 通知WSS线程录音开始 */
+            wss_asr_start();
+
+            /* 停止当前正在进行的播放 */
+            app_music_play_stop(&g_music_player);
+
+            /* 禁用后续相同 message_id 的音频消息 */
+            disable_specific_audio_message(g_playing_audio_message_id);
+
+            /* 开启录音 */
+            recorder_start(&g_recorder);
+        } else {
+            /* 关闭录音 */
+            recorder_stop(&g_recorder);
+
+            /* 通知WSS线程录音结束 */
+            wss_asr_end();
+            printf("recorder: stop record\n");
+        }
+        break;
+        
+    case KEY_VOLUME_DEC:
+    case KEY_UP:
+        if (0 == set_dec_volume(&g_music_player, -VOLUME_STEP)) {
+#ifdef CONFIG_STORE_VOLUME
+            syscfg_write(CFG_MUSIC_VOL, &g_music_player.volume, sizeof(g_music_player.volume));
+#endif
+        }
+        break;
+    case KEY_VOLUME_INC:
+    case KEY_DOWN:
+        if (0 == set_dec_volume(&g_music_player, VOLUME_STEP)) {
+#ifdef CONFIG_STORE_VOLUME
+            syscfg_write(CFG_MUSIC_VOL, &g_music_player.volume, sizeof(g_music_player.volume));
+#endif
         }
         break;
     default:

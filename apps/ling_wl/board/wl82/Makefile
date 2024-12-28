@@ -110,7 +110,6 @@ DEFINES := \
 	-DCONFIG_SFC_ENABLE \
 	-DCONFIG_AUDIO_ENABLE \
 	-DCONFIG_RTOS_AND_MM_LIB_CODE_SECTION_IN_SDRAM \
-	-DCONFIG_VIDEO_ENABLE=1 \
 	-DCONFIG_NET_ENABLE=1 \
 	-DCONFIG_BT_ENABLE=1 \
 	-DEVENT_HANDLER_NUM_CONFIG=2 \
@@ -208,24 +207,6 @@ c_SRC_FILES := \
 	../../../../apps/common/audio_music/music_decrypt.c \
 	../../../../apps/common/audio_music/usb_audio_api.c \
 	../../../../apps/common/audio_music/wifi_upload_pcm.c \
-	../../../../apps/common/camera/byd20a6/byd20a6.c \
-	../../../../apps/common/camera/byd30a2/byd30a2.c \
-	../../../../apps/common/camera/byd3720/byd3720.c \
-	../../../../apps/common/camera/byd3901/byd3901.c \
-	../../../../apps/common/camera/byd3a03/byd3a03.c \
-	../../../../apps/common/camera/gc0307_dvp/gc0307.c \
-	../../../../apps/common/camera/gc0308_dvp/gc0308.c \
-	../../../../apps/common/camera/gc0309_dvp/gc0309.c \
-	../../../../apps/common/camera/gc0310_spi/gc0310.c \
-	../../../../apps/common/camera/gc0312_dvp/gc0312.c \
-	../../../../apps/common/camera/gc0328_dvp/gc0328.c \
-	../../../../apps/common/camera/gc0329_dvp/gc0329.c \
-	../../../../apps/common/camera/gc2145_dvp/gc2145.c \
-	../../../../apps/common/camera/h7375s/h7375s.c \
-	../../../../apps/common/camera/ov7670_dvp/ov7670.c \
-	../../../../apps/common/camera/pr2000k/pr2000k.c \
-	../../../../apps/common/camera/xc7011_dvp/xc7011.c \
-	../../../../apps/common/example/update/http_upgrade/example1/main.c \
 	../../../../apps/common/config/bt_profile_config.c \
 	../../../../apps/common/config/log_config/app_config.c \
 	../../../../apps/common/config/log_config/lib_btctrler_config.c \
@@ -331,6 +312,11 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_main.c \
 	../../../../apps/ling_wl/app_lingwl.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
+	../../../../apps/ling_wl/async_msg_loop.c \
+	../../../../apps/ling_wl/wss_client.c \
+	../../../../apps/ling_wl/audio/recorder.c \
+	../../../../apps/ling_wl/util/cqueue.c \
+	../../../../apps/ling_wl/distance/main_ble_distance.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
 	../../../../apps/ling_wl/bt_ble/ble_combined.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_simple_client.c \

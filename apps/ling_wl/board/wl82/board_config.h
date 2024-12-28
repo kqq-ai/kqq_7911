@@ -366,7 +366,7 @@
 #endif
 
 #ifdef CONFIG_BOARD_DEVELOP
-#define TCFG_SD0_ENABLE                     1
+#define TCFG_SD0_ENABLE                     0
 #define TCFG_ADKEY_ENABLE                   1          //AD按键
 #define CONFIG_PRESS_LONG_KEY_POWERON                  //长按开关机功能
 

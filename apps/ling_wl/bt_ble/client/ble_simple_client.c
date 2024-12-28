@@ -222,6 +222,16 @@ static void client_search_profile_start(u16 conn_handle)
     ble_op_search_profile_all();
 }
 
+
+void (*scan_rssi_record_callback)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi) = NULL;
+void *scan_rssi_record_callback_priv = NULL;
+
+void set_scan_adv_callback(void (*cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void *priv)
+{
+    scan_rssi_record_callback = cb;
+    scan_rssi_record_callback_priv = priv;
+}
+
 //------------------------------------------------------------
 static bool resolve_adv_report(u8 *adv_address, u8 data_length, u8 *data, s8 rssi)
 {
@@ -270,6 +280,11 @@ static bool resolve_adv_report(u8 *adv_address, u8 data_length, u8 *data, s8 rss
             tmp32 = adv_data_pt[lenght - 1];
             adv_data_pt[lenght - 1] = 0;;
             log_info("ble remoter_name: %s,rssi:%d\n", adv_data_pt, rssi);
+
+            if (scan_rssi_record_callback) {
+                scan_rssi_record_callback(NULL, adv_data_pt, lenght - 1, rssi);
+            }
+
             /* log_info_hexdump(adv_address, 6); */
             adv_data_pt[lenght - 1] = tmp32;
             break;
@@ -818,7 +833,7 @@ void ble_simple_client_init(void)
     client_con_handle = INVALID_HANDLE;
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_client_module_enable(1);
+    ble_simple_client_module_enable(0);
 }
 
 void ble_simple_client_exit(void)
