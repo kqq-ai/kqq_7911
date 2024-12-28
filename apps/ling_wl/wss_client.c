@@ -363,7 +363,7 @@ static void communication_message_asr_data(struct websocket_strcut *websockets_i
 
 	send_data = cJSON_PrintUnformatted(cjson_send_root);
 
-    printf("send: %s\n", send_data);
+    // printf("send: %s\n", send_data);
 
     //SSL加密时一次发送数据不能超过16K，用户需要自己分包
     err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
@@ -728,6 +728,11 @@ static void wss_task_message_asr_data_handler(struct websocket_strcut *websocket
 {
     ASSERT(message->msg == WSS_TASK_MESSAGE_ASR_DATA);
     WssMessageAsrData *param = &message->asr_data;
+    
+    // printf_buf(param->data, ASR_DATA_CHUNK_SIZE);
+    if (uart2_hdl) {
+        dev_write(uart2_hdl, param->data, ASR_DATA_CHUNK_SIZE);
+    }
 
     size_t write_len = 0;
     memset(base64_buf, 0, sizeof(base64_buf));
@@ -735,10 +740,6 @@ static void wss_task_message_asr_data_handler(struct websocket_strcut *websocket
     ASSERT(ret == 0);
     ASSERT(write_len == (BASE64_BUF_MAX_SIZE - 1));
     communication_message_asr_data(websockets_info, base64_buf);
-
-    // printf_buf(param->data, ASR_DATA_CHUNK_SIZE);
-    
-    dev_write(uart2_hdl, param->data, ASR_DATA_CHUNK_SIZE);
 
     static int cnt1 = 0;
     cnt1 += ASR_DATA_CHUNK_SIZE;
@@ -847,7 +848,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
             g_communication_app_state = STATE_APP_SCAN_RSSI;
 
             #else 
-            g_communication_app_state = STATE_CREATE_SESSION;
+            g_communication_app_state = STATE_APP_SCAN_RSSI;
 
             #endif
             break;
