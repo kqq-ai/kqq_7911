@@ -21,6 +21,7 @@
 #include "util/cqueue.h"
 #include "async_msg_loop.h"
 #include "wait.h"
+#include "wss_client.h"
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -74,7 +75,6 @@ int callback(void *priv)
 }
 
 
-extern void wss_asr_data(void *data, u32 size);
 void recorder_data_cb(void* priv, void *data, u32 size)
 {
     wss_asr_data(data, size);
@@ -109,6 +109,20 @@ static void app_lingwl_main(void)
 
     //g_start_time = timer_get_ms();
     //wait_completion(condition, callback, NULL, NULL);
+
+    // just for test
+    u32 lfs_addr, lfs_space;
+    FILE *profile_fp = fopen("mnt/sdfile/app/exif", "r");
+    if (profile_fp == NULL) {
+        puts("lfs_mount ERROR!!!\r\n");
+        return ;
+    }
+    struct vfs_attr file_attr;
+    fget_attrs(profile_fp, &file_attr);
+    lfs_addr = sdfile_cpu_addr2flash_addr(file_attr.sclust);
+    lfs_space = file_attr.fsize;
+    fclose(profile_fp);
+    printf("LFS_addr = 0x%x, size = 0x%x \r\n", lfs_addr, lfs_space);
 }
 
 void play_end_callback(void *priv)

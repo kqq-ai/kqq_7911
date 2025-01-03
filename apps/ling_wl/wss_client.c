@@ -14,6 +14,8 @@
 
 #include "distance/main_ble_distance.h"
 
+#include "protocol/lingos/loswssp.h"
+
 #define USE_WEBSOCKET_TEST
 
 #ifdef USE_WEBSOCKET_TEST
@@ -135,297 +137,132 @@ communication_role_t g_role_table[] = {
 };
 static const uint32_t g_role_table_size = sizeof(g_role_table) / sizeof(g_role_table[0]);
 
+static int wss_send(struct websocket_struct *websockets_info, u8 *buf, int size)
+{
+    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
+    //目前没有出现大于16K的数据包
+    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+}
+
 static void communication_talk_message(struct websocket_strcut *websockets_info, char *content)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "message");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root_data,"type", "text");
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-    cJSON *cjson_send_root_data_attributes = cJSON_CreateObject();
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"asr", false);
-	cJSON_AddStringToObject(cjson_send_root_data_attributes,"content", content);
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"needs_tts", true);
-    cJSON_AddItemToObject(cjson_send_root_data, "attributes", cjson_send_root_data_attributes);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_message_text("abcdefg-123456", content, &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void communication_init_role(struct websocket_struct *websockets_info, int role_type)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "session");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-    cJSON *cjson_send_root_data_attributes = cJSON_CreateObject();
-	cJSON_AddNumberToObject(cjson_send_root_data_attributes,"ip_id", g_role_table[role_type].ip_id);
-	cJSON_AddStringToObject(cjson_send_root_data_attributes,"nickname", "esp32-testss");
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"needs_tts", true);
-    cJSON_AddItemToObject(cjson_send_root_data, "attributes", cjson_send_root_data_attributes);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_session("abcdefg-123456", 
+        g_role_table[role_type].ip_id, 
+        "esp32-testss", 
+        true, 
+        &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void wss_2ip_switch(struct websocket_struct *websockets_info, int role_type)
 {
-    u8 full_id[16];
-    strcpy(full_id, "abcdefg-123456");
-#if 1
-    get_random_number(&full_id[8], 6);
-#endif
-
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "session");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-    cJSON *cjson_send_root_data_attributes = cJSON_CreateObject();
-	cJSON_AddNumberToObject(cjson_send_root_data_attributes,"session_id", g_role_table[role_type].session_id);
-	cJSON_AddNumberToObject(cjson_send_root_data_attributes,"ip_id", g_role_table[role_type].ip_id);
-	cJSON_AddStringToObject(cjson_send_root_data_attributes,"nickname", "esp32-testss");
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"needs_tts", true);
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"needs_recovery", true);
-    cJSON_AddItemToObject(cjson_send_root_data, "attributes", cjson_send_root_data_attributes);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_session_switch("abcdefg-123456", 
+        g_role_table[role_type].session_id, 
+        g_role_table[role_type].ip_id, 
+        "esp32-testss", 
+        true, 
+        true, 
+        &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void communication_message_asr(struct websocket_strcut *websockets_info)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "message");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root_data,"type", "text");
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-    cJSON *cjson_send_root_data_attributes = cJSON_CreateObject();
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"asr", true);
-    cJSON_AddItemToObject(cjson_send_root_data, "attributes", cjson_send_root_data_attributes);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_message_asr("abcdefg-123456", &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void communication_message_asr_start(struct websocket_strcut *websockets_info)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "message_asr_start");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-    cJSON *cjson_send_root_data_attributes = cJSON_CreateObject();
-	cJSON_AddBoolToObject(cjson_send_root_data_attributes,"auto", false);
-    cJSON_AddItemToObject(cjson_send_root_data, "attributes", cjson_send_root_data_attributes);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_message_asr_start("abcdefg-123456", &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void communication_message_asr_end(struct websocket_strcut *websockets_info)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "message_asr_end");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_message_asr_end("abcdefg-123456", &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void communication_message_asr_data(struct websocket_strcut *websockets_info, char *data_base64)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "message_asr_data");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-    cJSON *cjson_send_root_data_attributes = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root_data_attributes,"data", data_base64);
-    cJSON_AddItemToObject(cjson_send_root_data, "attributes", cjson_send_root_data_attributes);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    // printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_message_asr_data("abcdefg-123456", data_base64, &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
-
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
-    }
+    loswssp_destroy_message(send_data);
 }
 
 static void communication_message_stop(struct websocket_strcut *websockets_info)
 {
-    int err;
     char *send_data = NULL;
-
-    cJSON *cjson_send_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_send_root,"uuid", "abcdefg-123456");
-	cJSON_AddStringToObject(cjson_send_root,"event", "message_stop");
-
-    cJSON *cjson_send_root_data = cJSON_CreateObject();
-    cJSON_AddItemToObject(cjson_send_root, "data", cjson_send_root_data);
-
-	send_data = cJSON_PrintUnformatted(cjson_send_root);
-
-    printf("send: %s\n", send_data);
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
+    loswssp_create_message_event_message_stop("abcdefg-123456", &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
+    loswssp_destroy_message(send_data);
+}
 
-    free(send_data);
-    if (NULL != cjson_send_root) {
-        cJSON_Delete(cjson_send_root);
+static void wss_ping_send(struct websocket_struct *websockets_info)
+{
+    char *send_data = NULL;
+    loswssp_create_message_event_ping("abcdefg-123456", &send_data);
+    if (FALSE == wss_send(websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %s.", __FILE__, __LINE__);
     }
+    loswssp_destroy_message(send_data);
 }
 
 communication_audio_event_t g_audio_event_param;
 
 static void audio_play_end_callback(void *priv)
 {
-    printf("Audio play over\n");
+    log_i("Audio play over\n");
     g_audio_play_end = true;
     g_audio_play_ongoing_num--;
-    printf("Audio play ongoing num: %d\n", g_audio_play_ongoing_num);
+    log_i("Audio play ongoing num: %d\n", g_audio_play_ongoing_num);
 }
 
 static void switch_end_callback(void *priv)
 {
-    printf("Switch PortE OK\n");
+    log_i("Switch PortE OK\n");
     g_ble_porte_switch_ok = true;
 }
 
 static void record_end_cb(void *priv)
 {
-    printf("Record end\n");
+    log_i("Record end\n");
     g_record_end = true;
 }
 
@@ -434,7 +271,7 @@ static void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8
     for (uint32_t i = 0; i < g_role_table_size; ++i) {
         if (dev_name_len == g_role_table[i].adv_name_len && 
             memcmp(dev_name, g_role_table[i].adv_name, dev_name_len) == 0) {
-            printf("RSSI = %d, len = %d, name: %s", rssi, dev_name_len, dev_name);
+            log_i("RSSI = %d, len = %d, name: %s", rssi, dev_name_len, dev_name);
             g_role_table[i].adv_rssi = rssi;
         }
     }
@@ -442,157 +279,129 @@ static void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8
 
 static void scan_rssi_cb(void *priv)
 {
-    printf("start scan RSSI call over\n");
+    log_i("start scan RSSI call over\n");
 }
-
-static void communication_session_event_handler(const cJSON *nroot)
-{
-    const cJSON *ndata = cJSON_GetObjectItem(nroot, "data");
-    ASSERT(ndata != NULL);
-
-    cJSON *nnew_session = cJSON_GetObjectItem(ndata, "new_session");
-    cJSON *nsession_id = cJSON_GetObjectItem(ndata, "session_id");
-
-    ASSERT(cJSON_IsBool(nnew_session));
-    ASSERT(cJSON_IsNumber(nsession_id));
-
-    if (nnew_session->type == cJSON_True) {
-        int session_id = nsession_id->valueint;
-
-        if (g_communication_app_state == STATE_CREATE_SESSION) {
-            if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_CREATING) {
-                printf("get role1 session id: %d\n", session_id);
-                g_role_table[ROLE1].session_id = session_id;
-                // g_session_role1_create_ok = true;
-            } else if (g_communication_session_create_state == STATE_CREATE_ROLE2_SESSION_CREATING) {
-                printf("get role2 session id: %d\n", session_id);
-                g_role_table[ROLE2].session_id = session_id;
-                // g_session_role2_create_ok = true;
-            }
-        }
-    } else if (nnew_session->type == cJSON_False) {
-        /* 请求后端切换session时，若session已存在，则new_session字段为False */
-        if (g_communication_app_state == STATE_COMMUNICATION) {
-            if (g_communication_state == STATE_COMMUNICATION_SWITCH_ROLE) {
-                g_backend_switch_session_ok = true;
-            }
-        }
-    }
-}
-
-static void communication_message_end_event_handler(const cJSON *nroot)
-{
-    printf("Communication message end.\n");
-
-    if (g_communication_app_state == STATE_COMMUNICATION) {
-        if (g_communication_state == STATE_COMMUNICATION_PLAY_AUDIO) {
-            g_backend_message_end_ok = true;
-        }
-    } else if (g_communication_app_state == STATE_CREATE_SESSION) {
-        if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_CREATING) {
-            g_session_role1_create_ok = true;
-        } else if (g_communication_session_create_state == STATE_CREATE_ROLE2_SESSION_CREATING) {
-            g_session_role2_create_ok = true;
-        } else if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_SAY_HELLO) {
-            g_backend_message_end_ok = true;
-        } else if (g_communication_session_create_state == STATE_CREATE_ROLE2_SESSION_SAY_HELLO) {
-            g_backend_message_end_ok = true;
-        }
-    }
-}
-
-static void communication_message_audio_event_handler(const cJSON *nroot)
-{
-    const cJSON *ndata = cJSON_GetObjectItem(nroot, "data");
-    ASSERT(ndata != NULL);
-    const cJSON *nmessage_id = cJSON_GetObjectItem(ndata, "message_id");
-    ASSERT(cJSON_IsNumber(nmessage_id));
-    const int vmessage_id = nmessage_id->valueint;
-    printf("message id     :%d", vmessage_id);
-    const cJSON *naudios = cJSON_GetObjectItem(ndata, "audios");
-    ASSERT(cJSON_IsArray(naudios));
-    int audio_num = cJSON_GetArraySize(naudios);
-    for (int i = 0; i < audio_num; ++i) {
-        cJSON *naudios_item = cJSON_GetArrayItem(naudios, i);
-
-        cJSON *ncontent = cJSON_GetObjectItem(naudios_item, "content");
-        cJSON *nurl = cJSON_GetObjectItem(naudios_item, "url");
-
-        char* vcontent = cJSON_GetStringValue(ncontent);
-        char* vurl = cJSON_GetStringValue(nurl);
-
-        if (g_communication_app_state == STATE_COMMUNICATION) {
-            if (g_communication_state == STATE_COMMUNICATION_PLAY_AUDIO) {
-                /* 保存对话内容，用于之后和另一个角色对话 */
-                strcpy(g_audio_event_param.content, vcontent);
-                strcpy(g_audio_event_param.url, vurl);
-
-                printf("latest content :%s", g_audio_event_param.content);
-                printf("latest url     :%s", g_audio_event_param.url);
-
-                /* 执行任务播放音乐，并注册回调，播放完成时处理 */
-                my_task_play_one(vmessage_id, vurl, NULL, audio_play_end_callback);
-                g_audio_play_ongoing_num++;
-            }
-        } else if (g_communication_app_state == STATE_CREATE_SESSION) {
-            if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_SAY_HELLO) {
-
-                printf("latest content :%s", g_audio_event_param.content);
-                printf("latest url     :%s", g_audio_event_param.url);
-
-                /* 执行任务播放音乐，并注册回调，播放完成时处理 */
-                my_task_play_one(vmessage_id, vurl, NULL, audio_play_end_callback);
-                g_audio_play_ongoing_num++;
-            }
-        }
-    }
-}
-
-static void communication_message_asr_end_event_handler(const cJSON *nroot)
-{
-    printf("Communication message ASR end.\n");
-
-    if (g_communication_app_state == STATE_COMMUNICATION) {
-        if (g_communication_state == STATE_COMMUNICATION_WAIT_RSP) {
-            g_message_asr_end_ok = true;
-        }
-    }
-}
-
-static void communication_message_stop_event_handler(const cJSON *nroot)
-{
-    const cJSON *ndata = cJSON_GetObjectItem(nroot, "data");
-    ASSERT(ndata != NULL);
-    const cJSON *nmessage_id = cJSON_GetObjectItem(ndata, "message_id");
-    ASSERT(cJSON_IsNumber(nmessage_id));
-    const int vmessage_id = nmessage_id->valueint;
-    printf("stop message id: %d\n", vmessage_id);
-}
-
 
 static void websockets_callback(u8 *buf, u32 len, u8 type)
 {
-    printf("wbs recv msg : %s\n", buf);
+    log_i("wbs recv msg : %s\n", buf);
 
-    const cJSON *nroot = cJSON_Parse(buf);
-    const cJSON *nevent = cJSON_GetObjectItem(nroot, "event");
-    if (nevent != NULL) {
-        const char *vevent = cJSON_GetStringValue(nevent);
-        ASSERT(vevent != NULL);
-        if (strcmp(vevent, "message_audio") == 0) {
-            communication_message_audio_event_handler(nroot);
-        } else if (strcmp(vevent, "session") == 0) {
-            communication_session_event_handler(nroot);
-        } else if (strcmp(vevent, "message_end") == 0) {
-            communication_message_end_event_handler(nroot);
-        } else if (strcmp(vevent, "message_asr_end") == 0) {
-            communication_message_asr_end_event_handler(nroot);
-        } else if (strcmp(vevent, "message_stop") == 0) {
-            communication_message_stop_event_handler(nroot);
-        }
-    }
-    cJSON_Delete(nroot);
+    // loswssp process
+    loswssp_rsp_handler(buf, len);
 }
+
+int loswssp_rsp_cbk(int type, loswssp_package_t *pkg)
+{
+    switch (type) {
+    case LR_SESSION:
+        log_i("LR_SESSION\n");
+        if (pkg->session.new_session) {
+            int session_id = pkg->session.session_id;
+
+            if (g_communication_app_state == STATE_CREATE_SESSION) {
+                if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_CREATING) {
+                    log_i("get role1 session id: %d\n", session_id);
+                    g_role_table[ROLE1].session_id = session_id;
+                    // g_session_role1_create_ok = true;
+                } else if (g_communication_session_create_state == STATE_CREATE_ROLE2_SESSION_CREATING) {
+                    log_i("get role2 session id: %d\n", session_id);
+                    g_role_table[ROLE2].session_id = session_id;
+                    // g_session_role2_create_ok = true;
+                }
+            }
+        } else {
+            /* 请求后端切换session时，若session已存在，则new_session字段为False */
+            if (g_communication_app_state == STATE_COMMUNICATION) {
+                if (g_communication_state == STATE_COMMUNICATION_SWITCH_ROLE) {
+                    g_backend_switch_session_ok = true;
+                }
+            }
+        }
+        break;
+    case LR_MESSAGE_ASR_DATA:
+        log_i("LR_MESSAGE_ASR_DATA\n");
+        break;
+    case LR_MESSAGE_ASR_END:
+        log_i("LR_MESSAGE_ASR_END\n");
+        if (g_communication_app_state == STATE_COMMUNICATION) {
+            if (g_communication_state == STATE_COMMUNICATION_WAIT_RSP) {
+                g_message_asr_end_ok = true;
+            }
+        }
+        break;
+    case LR_MESSAGE_DELTA:
+        log_i("LR_MESSAGE_DELTA\n");
+        break;
+    case LR_MESSAGE_AUDIO: {
+        log_i("LR_MESSAGE_AUDIO\n");
+        int vmessage_id = pkg->message_audio.message_id;
+        log_i("message id     :%d", vmessage_id);
+        int audio_num = pkg->message_audio.audio_num;
+        for (int i = 0; i < audio_num; ++i) {
+            char* vcontent = pkg->message_audio.audios[i].content;
+            char* vurl = pkg->message_audio.audios[i].url;
+
+            if (g_communication_app_state == STATE_COMMUNICATION) {
+                if (g_communication_state == STATE_COMMUNICATION_PLAY_AUDIO) {
+                    /* 保存对话内容，用于之后和另一个角色对话 */
+                    strcpy(g_audio_event_param.content, vcontent);
+                    strcpy(g_audio_event_param.url, vurl);
+
+                    log_i("latest content :%s", g_audio_event_param.content);
+                    log_i("latest url     :%s", g_audio_event_param.url);
+
+                    /* 执行任务播放音乐，并注册回调，播放完成时处理 */
+                    my_task_play_one(vmessage_id, vurl, NULL, audio_play_end_callback);
+                    g_audio_play_ongoing_num++;
+                }
+            } else if (g_communication_app_state == STATE_CREATE_SESSION) {
+                if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_SAY_HELLO) {
+
+                    log_i("latest content :%s", g_audio_event_param.content);
+                    log_i("latest url     :%s", g_audio_event_param.url);
+
+                    /* 执行任务播放音乐，并注册回调，播放完成时处理 */
+                    my_task_play_one(vmessage_id, vurl, NULL, audio_play_end_callback);
+                    g_audio_play_ongoing_num++;
+                }
+            }
+        }
+    }   break;
+    case LR_MESSAGE_FILE:
+        log_i("LR_MESSAGE_FILE\n");
+        break;
+    case LR_MESSAGE_END:
+        log_i("LR_MESSAGE_END\n");
+
+        if (g_communication_app_state == STATE_COMMUNICATION) {
+            if (g_communication_state == STATE_COMMUNICATION_PLAY_AUDIO) {
+                g_backend_message_end_ok = true;
+            }
+        } else if (g_communication_app_state == STATE_CREATE_SESSION) {
+            if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_CREATING) {
+                g_session_role1_create_ok = true;
+            } else if (g_communication_session_create_state == STATE_CREATE_ROLE2_SESSION_CREATING) {
+                g_session_role2_create_ok = true;
+            } else if (g_communication_session_create_state == STATE_CREATE_ROLE1_SESSION_SAY_HELLO) {
+                g_backend_message_end_ok = true;
+            } else if (g_communication_session_create_state == STATE_CREATE_ROLE2_SESSION_SAY_HELLO) {
+                g_backend_message_end_ok = true;
+            }
+        }
+        break;
+    case LR_MESSAGE_STOP:
+        log_i("LR_MESSAGE_END\n");
+        log_i("stop message id: %d\n", pkg->message_stop.message_id);
+        break;
+    case LR_MESSAGE_POINT_DELTA:
+        log_i("LR_MESSAGE_POINT_DELTA\n");
+        break;
+    case LR_PONG:
+        log_i("LR_PONG\n");
+        break;
+    }
+}
+
 
 /*******************************************************************************
 *   Websocket Client api
@@ -646,36 +455,6 @@ static void websockets_client_exit(struct websocket_struct *websockets_info)
     websockets_info->_exit(websockets_info);
 }
 
-static int wss_ping_send(struct websocket_struct *websockets_info)
-{
-    int err;
-
-    cJSON* cjson_ret_root = NULL;
-	//cJSON* cjson_data = NULL;
-	char* send_data = NULL;
-
-	cjson_ret_root = cJSON_CreateObject();
-	cJSON_AddStringToObject(cjson_ret_root,"uuid","abcdefg-123456");
-	cJSON_AddStringToObject(cjson_ret_root,"event","ping");
-
-	send_data = cJSON_PrintUnformatted(cjson_ret_root);
-	///tb_audio_data_send(send_data,strlen(send_data));
-
-
-    //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    err = websockets_client_send(websockets_info, (u8 *)send_data, strlen(send_data), WCT_TXTDATA);
-    if (FALSE == err) {
-        printf("  . ! send ping err !!!\r\n");
-             ///goto exit_ws;
-    }
-	free(send_data);
-    if (NULL != cjson_ret_root) {
-        cJSON_Delete(cjson_ret_root);
-    }
-
-    return 0;
-}
-
 enum {
     WSS_TASK_MESSAGE_ASR_START,
     WSS_TASK_MESSAGE_ASR_DATA,
@@ -693,7 +472,8 @@ typedef struct {
 } WssMessageAsrStart;
 
 typedef struct {
-    u8 data[ASR_DATA_CHUNK_SIZE];
+    u8 *data;
+    u32 size;
 } WssMessageAsrData;
 
 typedef struct {
@@ -743,7 +523,7 @@ static void wss_task_message_asr_data_handler(struct websocket_strcut *websocket
 
     static int cnt1 = 0;
     cnt1 += ASR_DATA_CHUNK_SIZE;
-    printf("cnt1: %d\n", cnt1);
+    log_i("cnt1: %d\n", cnt1);
 }
 
 static void wss_task_message_asr_end_handler(struct websocket_strcut *websockets_info, WssTaskMessage *message)
@@ -756,41 +536,56 @@ static void wss_task_message_asr_end_handler(struct websocket_strcut *websockets
     g_recording = false;
 }
 
-WssTaskMessage message_temp;
-
 void wss_asr_start(void)
 {
+    WssTaskMessage message_temp;
     message_temp.msg = WSS_TASK_MESSAGE_ASR_START;
     my_blocking_queue_enqueue(&g_message_queue, &message_temp);
 }
 
 void wss_asr_data(void *data, u32 size)
 {
+    WssTaskMessage message_temp;
     static int cnt2 = 0;
     cnt2 += ASR_DATA_CHUNK_SIZE;
-    printf("cnt2: %d\n", cnt2);
+    log_i("cnt2: %d\n", cnt2);
     ASSERT(size == ASR_DATA_CHUNK_SIZE);
     message_temp.msg = WSS_TASK_MESSAGE_ASR_DATA;
+    message_temp.asr_data.size = size;
+    message_temp.asr_data.data = malloc(size);
+    ASSERT(message_temp.asr_data.data != NULL);
     memcpy(message_temp.asr_data.data, data, size);
     my_blocking_queue_enqueue(&g_message_queue, &message_temp);
 }
 
+void wss_asr_data_message_free(WssTaskMessage *message)
+{
+    if (message == NULL)
+        return;
+
+    if (message->asr_data.data != NULL) {
+        free(message->asr_data.data);
+        message->asr_data.data = NULL;
+    }
+}
+
 void wss_asr_end(void)
 {
+    WssTaskMessage message_temp;
     message_temp.msg = WSS_TASK_MESSAGE_ASR_END;
     my_blocking_queue_enqueue(&g_message_queue, &message_temp);
 }
 
 void app_function(disatance_info_t *distance_info)
 {
-    printf("notify_function my\n");
+    log_i("notify_function my\n");
 
-    printf("adv name: %s\n", distance_info->adv_name);
-    printf("adv name len: %d\n", distance_info->adv_name_len);
+    log_i("adv name: %s\n", distance_info->adv_name);
+    log_i("adv name len: %d\n", distance_info->adv_name_len);
 
     for (int i = 0; i < g_role_table_size; ++i) {
         if (memcmp(g_role_table[i].adv_name, distance_info->adv_name, g_role_table[i].adv_name_len) == 0) {
-            printf("sn: %s\n", g_role_table[i].sn);
+            log_i("sn: %s\n", g_role_table[i].sn);
 
             // my_task_switch_only(g_role_table[i].sn, NULL, switch_end_callback);
         }
@@ -799,21 +594,21 @@ void app_function(disatance_info_t *distance_info)
 
 void self_function(disatance_info_t *arg, int distance_type)
 {
-    printf("self_function my\n");
+    log_i("self_function my\n");
 }
 
 #include "bt_ble/client/ble_simple_client.h"
 
-WssTaskMessage message;
 static void communication_app_loop(struct websocket_struct *websockets_info)
 {
+    WssTaskMessage message;
     g_curr_time = timer_get_ms();
 
     if (g_message_queue.size > 0) {
         /* 从消息队列取消息，不允许发生阻塞 */
         my_blocking_queue_dequeue(&g_message_queue, &message);
 
-        printf("wss task get message: %d\n", message.msg);
+        log_i("wss task get message: %d\n", message.msg);
 
         switch (message.msg) {
         case WSS_TASK_MESSAGE_ASR_START:
@@ -821,12 +616,13 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
             break;
         case WSS_TASK_MESSAGE_ASR_DATA:
             wss_task_message_asr_data_handler(websockets_info, &message);
+            wss_asr_data_message_free(&message);
             break;
         case WSS_TASK_MESSAGE_ASR_END:
             wss_task_message_asr_end_handler(websockets_info, &message);
             break;
         }
-        printf("Message over\n");
+        log_i("Message over\n");
     }
 
     switch (g_communication_app_state) {
@@ -848,7 +644,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
             g_communication_app_state = STATE_APP_SCAN_RSSI;
 
             #else 
-            g_communication_app_state = STATE_APP_SCAN_RSSI;
+            g_communication_app_state = STATE_CREATE_SESSION;
 
             #endif
             break;
@@ -863,7 +659,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
                     break;
                 case STATE_CREATE_ROLE1_SESSION_CREATING:
                     if (g_session_role1_create_ok) {
-                        printf("role1 session create ok");
+                        log_i("role1 session create ok");
                         g_communication_session_create_state = STATE_CREATE_ROLE1_SESSION_CREATE_OK;
                     }
                     break;
@@ -886,7 +682,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
                     break;
                 case STATE_CREATE_ROLE2_SESSION_CREATING:
                     if (g_session_role2_create_ok) {
-                        printf("role2 session create ok");
+                        log_i("role2 session create ok");
                         g_communication_session_create_state = STATE_CREATE_ROLE2_SESSION_CREATE_OK;
                     }
                     break;
@@ -924,7 +720,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
                     /* BLE switch Port E */
                     my_task_switch_only(g_role_table[g_next_role].sn, NULL, switch_end_callback);
 
-                    printf("IDLE -> SWITCH_ROLE\n");
+                    log_i("IDLE -> SWITCH_ROLE\n");
                     g_communication_state = STATE_COMMUNICATION_SWITCH_ROLE;
                     break;
                 case STATE_COMMUNICATION_SWITCH_ROLE:
@@ -937,27 +733,27 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
                         g_audio_play_end = false;
                         g_backend_message_end_ok = false;
                         g_audio_play_ongoing_num = 0;
-                        printf("SWITCH_ROLE -> PLAY_AUDIO\n");
+                        log_i("SWITCH_ROLE -> PLAY_AUDIO\n");
                         g_communication_state = STATE_COMMUNICATION_PLAY_AUDIO;
                     }
                     break;
                 case STATE_COMMUNICATION_PLAY_AUDIO:
                     if (g_recording == true) {
                         /* 播放期间发生按键录音则进入录音状态 */
-                        printf("PLAY_AUDIO -> RECORDING\n");
+                        log_i("PLAY_AUDIO -> RECORDING\n");
                         g_communication_state = STATE_COMMUNICATION_RECORDING;
                     }
                     if (g_backend_message_end_ok && g_audio_play_ongoing_num == 0) {
                         /* 播放完成等待按键录音 */
                         g_wait_player_talk_timer = g_curr_time;
-                        printf("PLAY_AUDIO -> PLAYER_SPEAK\n");
+                        log_i("PLAY_AUDIO -> PLAYER_SPEAK\n");
                         g_communication_state = STATE_COMMUNICATION_PLAYER_SPEAK;
                     }
                     break;
                 case STATE_COMMUNICATION_PLAYER_SPEAK:
                     if (g_recording == true) {
                         /* 等待按键录音期间发生按键录音则进入录音状态 */
-                        printf("PLAYER_SPEAK -> RECORDING\n");
+                        log_i("PLAYER_SPEAK -> RECORDING\n");
                         g_communication_state = STATE_COMMUNICATION_RECORDING;
                     }
                     if (g_curr_time - g_wait_player_talk_timer >= WAIT_PLAYER_TALK_TIMEOUT) {
@@ -974,8 +770,8 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
                         /* BLE switch Port E */
                         my_task_switch_only(g_role_table[g_next_role].sn, NULL, switch_end_callback);
 
-                        printf("ROLE: %d -> %d, content: %s\n", g_current_role, g_next_role, g_content);
-                        printf("PLAYER_SPEAK -> SWITCH_ROLE\n");
+                        log_i("ROLE: %d -> %d, content: %s\n", g_current_role, g_next_role, g_content);
+                        log_i("PLAYER_SPEAK -> SWITCH_ROLE\n");
                         g_communication_state = STATE_COMMUNICATION_SWITCH_ROLE;
                     }
                     break;
@@ -985,7 +781,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
                         g_audio_play_end = false;
                         g_backend_message_end_ok = false;
                         g_audio_play_ongoing_num = 0;
-                        printf("RECORDING -> PLAY_AUDIO\n");
+                        log_i("RECORDING -> PLAY_AUDIO\n");
                         g_communication_state = STATE_COMMUNICATION_PLAY_AUDIO;
                     }
                     break;
@@ -1016,21 +812,7 @@ static void websockets_client_main_thread(void *priv)
     const char *input_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     const char *origin_str = "myapp://127.0.0.1";
 
-    printf(" . ----------------- Client Websocket ------------------\r\n");
-
-#ifdef WIN32
-    printf(" . Please input the mode for websocket : 1 . websocket , 2 . websockets (ssl)\r\n");
-    scanf("%d", &mode);
-    if (mode == 2) {
-        mode = WEBSOCKETS_MODE;
-        printf(" . Please input the URL , for example: wss://localhost:8888\r\n");
-    } else {
-        mode = WEBSOCKETS_MODE;
-        printf(" . Please input the URL , for example: ws://localhost:8888\r\n");
-    }
-
-    scanf("%d", &url);
-#endif
+    log_i(" . ----------------- Client Websocket ------------------\r\n");
 
     /* 0 . malloc buffer */
     struct websocket_struct *websockets_info = malloc(sizeof(struct websocket_struct));
@@ -1059,23 +841,23 @@ static void websockets_client_main_thread(void *priv)
 //         "f17Y1TADGSbyJbsC0Q9nIrHsPl8YKkvRWvIAqYxXZ7wRwWWmv4TMxFhWRiNY7yZI\n" \
 //         "o2ZUhl02SIDNggIEeg==\n" \
 //         "-----END CERTIFICATE-----\n";
-//     printf("sizeof(ssl_cert) %d\r\n", sizeof(ssl_cert));
+//     log_i("sizeof(ssl_cert) %d\r\n", sizeof(ssl_cert));
 //     websockets_mbtls_client_set_ca(&websockets_info->websockets_mbtls_info, ssl_cert, sizeof(ssl_cert));
 
     /* 2 . init */
     err = websockets_client_init(websockets_info, url, origin_str);
     if (FALSE == err) {
-        printf("  . ! Cilent websocket init error !!!\r\n");
+        log_i("  . ! Cilent websocket init error !!!\r\n");
         goto exit_ws;
     }
 
     /* 3 . hanshack */
     err = websockets_client_handshack(websockets_info);
     if (FALSE == err) {
-        printf("  . ! Handshake error !!!\r\n");
+        log_i("  . ! Handshake error !!!\r\n");
         goto exit_ws;
     }
-    printf(" . Handshake success  %s \r\n",url);
+    log_i(" . Handshake success  %s \r\n",url);
 
     /* 4 . CreateThread */
 #ifdef WIN32
@@ -1093,16 +875,20 @@ static void websockets_client_main_thread(void *priv)
 #endif
     websockets_sleep(1000);
 
+    loswssp_register_rsp_cbk(loswssp_rsp_cbk);
+
     u8 full_id[6];
     get_random_number(full_id, 6);
     printf_buf(full_id, 6);
+    // B4 88 EC 9A DF 0C 
+    // AC 37 37 7A 07 C3 
 
-    printf("Init message queue\n");
+    log_i("Init message queue\n");
     my_blocking_queue_init(&g_message_queue, sizeof(WssTaskMessage), MY_TASK_MESSAGE_QUEUE_CAPACITY);
 
     uart2_hdl = dev_open("uart2", NULL);
     if (!uart2_hdl) { 
-        printf("open uart err !!!\n");
+        log_i("open uart err !!!\n");
         return ;
     }
 
@@ -1115,12 +901,12 @@ static void websockets_client_main_thread(void *priv)
 
         // err = websockets_client_send(websockets_info, (u8 *)input_str, strlen(input_str), WCT_TXTDATA);
         // if (FALSE == err) {
-        //     printf("  . ! send err !!!\r\n");
+        //     log_i("  . ! send err !!!\r\n");
         //     goto exit_ws;
         // }
-        // printf("  . Send massage : %s \r\n", input_str);
+        // log_i("  . Send massage : %s \r\n", input_str);
 #ifdef WIN32
-        printf(" . Please input the send massage\r\n");
+        log_i(" . Please input the send massage\r\n");
         memset(input_str, 0, sizeof(input_str));
         scanf("%s", input_str);
 #endif
@@ -1148,10 +934,10 @@ static void http_websocket_start(void *priv)
 {
     enum wifi_sta_connect_state state;
     while (1) {
-        printf("Connecting to the network...\n");
+        log_i("Connecting to the network...\n");
         state = wifi_get_sta_connect_state();
         if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
-            printf("Network connection is successful!\n");
+            log_i("Network connection is successful!\n");
             break;
         }
         os_time_dly(500);
@@ -1164,7 +950,7 @@ static void http_websocket_start(void *priv)
 void c_main(void *priv)
 {
     if (thread_fork("http_websocket_start", 10, 512, 0, NULL, http_websocket_start, NULL) != OS_NO_ERR) {
-        printf("thread fork fail\n");
+        log_i("thread fork fail\n");
     }
 }
 

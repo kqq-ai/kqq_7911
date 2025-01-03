@@ -317,6 +317,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
 	../../../../apps/ling_wl/distance/main_ble_distance.c \
+	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
 	../../../../apps/ling_wl/bt_ble/ble_combined.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_simple_client.c \
