@@ -56,28 +56,17 @@ static void simple_play_prompt(const char *fname)
     }
 }
 
-int g_start_time = 0;
-int condition(void *priv)
-{
-    printf("wait\n");
-    int curr_time = timer_get_ms();
-    if (curr_time - g_start_time > 10000) {
-        return 1;
-    }
-    return 0;
-}
-
-int callback(void *priv)
-{
-    printf("start recoreder\n");
-    /* 开启录音 */
-    recorder_start(&g_recorder);
-}
-
-
 void recorder_data_cb(void* priv, void *data, u32 size)
 {
     wss_asr_data(data, size);
+}
+
+static void wifi_monitor_thread(void *priv)
+{
+    while (true) {
+        log_i("WIFI U= %d KB/s, D= %d KB/s\r\n", wifi_get_upload_rate() / 1024, wifi_get_download_rate() / 1024);
+        mdelay(1000);
+    }
 }
 
 static void app_lingwl_main(void)
@@ -107,8 +96,7 @@ static void app_lingwl_main(void)
 
     start_async_msg_loop();
 
-    //g_start_time = timer_get_ms();
-    //wait_completion(condition, callback, NULL, NULL);
+    thread_fork("wifi_monitor", 15, 512 * 3, 0, 0, wifi_monitor_thread, NULL);
 
     // just for test
     u32 lfs_addr, lfs_space;
@@ -298,13 +286,19 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_SMP_CFG_FINISH");
             // TODO: 可能在配网时需要断开ble并连接指定wifi
             break;
-        case NET_EVENT_CONNECTED:
+        case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
             simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
             // TODO: 可配置WIFI和BLE共存时的RF共存参数设置
-            break;
+
+            int index_before = get_rf_coexistence_config_index();
+            switch_rf_coexistence_config_table(3);
+            int index_after = get_rf_coexistence_config_index();
+
+            log_i("rf_coexistence_config_index %d -> %d\n", index_before, index_after);
+        }   break;
         case NET_EVENT_DISCONNECTED:
             log_i("NET_EVENT_DISCONNECTED\n");
             // dhcp ready = false

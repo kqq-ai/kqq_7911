@@ -833,7 +833,7 @@ void ble_simple_client_init(void)
     client_con_handle = INVALID_HANDLE;
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_client_module_enable(0);
+    ble_simple_client_module_enable(1);
 }
 
 void ble_simple_client_exit(void)

@@ -110,6 +110,10 @@ int g_message_asr_end_ok = false;
 #define CONTENT_MAX_LEN 512
 char g_content[CONTENT_MAX_LEN];
 
+#define ASR_DATA_CHUNK_SIZE 1280
+#define BASE64_BUF_MAX_SIZE 1709    // ((ASR_DATA_CHUNK_SIZE + 2) / 3) * 4 = 1708
+static char base64_buf[BASE64_BUF_MAX_SIZE];
+
 static const char g_default_content[] = {
     // // 今天森林里有没有下雨？
     // 0xe4, 0xbb, 0x8a, 0xe5, 0xa4, 0xa9, 0xe6, 0xa3, 0xae, 0xe6, 0x9e, 0x97, 0xe9, 0x87, 0x8c, 0xe6, 0x9c, 0x89, 0xe6, 0xb2, 0xa1, 0xe6, 0x9c, 0x89, 0xe4, 0xb8, 0x8b, 0xe9, 0x9b, 0xa8, 0xef, 0xbc, 0x9f,
@@ -463,10 +467,6 @@ enum {
     WSS_TASK_MESSAGE_MAX = 0xFF,
 };
 
-#define ASR_DATA_CHUNK_SIZE 1280
-#define BASE64_BUF_MAX_SIZE 1709    // ((ASR_DATA_CHUNK_SIZE + 2) / 3) * 4 = 1708
-static char base64_buf[BASE64_BUF_MAX_SIZE];
-
 typedef struct {
     int dummy;
 } WssMessageAsrStart;
@@ -627,7 +627,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
 
     switch (g_communication_app_state) {
         case STATE_APP_IDLE:
-            #if 0
+            #if 1
             // 开始检测RSSI
             monitor_init(NULL);
 
@@ -641,7 +641,7 @@ static void communication_app_loop(struct websocket_struct *websockets_info)
 
             monitor_start(NULL);
 
-            g_communication_app_state = STATE_APP_SCAN_RSSI;
+            g_communication_app_state = STATE_CREATE_SESSION;
 
             #else 
             g_communication_app_state = STATE_CREATE_SESSION;

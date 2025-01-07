@@ -695,8 +695,6 @@ static int g_rsp_cb_table_size = sizeof(g_rsp_cb_table) / sizeof(g_rsp_cb_table[
 
 void loswssp_rsp_handler(u8 *buf, u32 len)
 {
-    log_i("wbs recv msg : %s\n", buf);
-
     loswssp_package_t pkg;
     memset(&pkg, 0, sizeof(loswssp_package_t));
 

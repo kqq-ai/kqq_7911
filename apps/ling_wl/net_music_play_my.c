@@ -244,10 +244,33 @@ static const struct music_dec_ops local_music_dec_ops = {
  * net music decoder
  *======================================================================================================================*/
 
+
+int my_net_download_read(void *priv, void *buf, u32 len) 
+{
+    int ret = net_download_read(priv, buf, len);
+    log_i("[DEC] net file read: len = %d, ret = %d\n", len, ret);
+    return ret;
+}
+int my_net_download_seek(void *priv, u32 offset, int orig)
+{
+    int ret = net_download_seek(priv, offset, orig);
+    log_i("[DEC] net file seek: offset = %d, orig = %d, ret = %d\n", offset, orig, ret);
+
+    int tmp_size = net_download_get_tmp_data_size(priv);
+    log_i("[DEC] net file tmp data size: %d\n", tmp_size);
+    return ret;
+}
+int my_net_download_get_file_len(void *priv)
+{
+    int ret = net_download_get_file_len(priv);
+    log_i("[DEC] net file size: %d\n", ret);
+    return ret;
+}
+
 static const struct audio_vfs_ops net_audio_dec_vfs_ops = {
-    .fread = net_download_read,
-    .fseek = net_download_seek,
-    .flen  = net_download_get_file_len,
+    .fread = my_net_download_read,
+    .fseek = my_net_download_seek,
+    .flen  = my_net_download_get_file_len,
 };
 
 static int net_music_dec_end(music_player *player, int save_bp)
@@ -568,12 +591,12 @@ static int net_music_dec_file(music_player *player, void *_url, int breakpoint, 
     memset(&parm, 0, sizeof(struct net_download_parm));
     parm.url                = (const char *)_url;
     parm.prio               = 0;
-    parm.cbuf_size          = 200 * 1024;
+    parm.cbuf_size          = 1000 * 1024;
     parm.timeout_millsec    = 10000;
     parm.seek_high_range    = 0;
     parm.seek_low_range     = breakpoint ? player->net_bp.fptr : 0;
     
-    parm.seek_threshold     = 1024 * 200;	//用户可适当调整
+    parm.seek_threshold     = 1024 * 1000;	//用户可适当调整
     /* parm.no_wait_close      = 1; */
     /* parm.start_play_threshold = 1024 * 4; */
 

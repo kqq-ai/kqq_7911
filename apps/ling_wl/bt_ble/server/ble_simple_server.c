@@ -695,7 +695,7 @@ void ble_simple_server_init(void)
     log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_server_module_enable(0);
+    ble_simple_server_module_enable(1);
 }
 
 void ble_simple_server_exit(void)
