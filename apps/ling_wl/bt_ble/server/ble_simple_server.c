@@ -26,7 +26,7 @@
 
 #include "bt_ble/ble_combined.h"
 
-#include "ble_data.h"
+#include "bt_ble/ble_data.h"
 
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1

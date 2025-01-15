@@ -3,12 +3,11 @@
 #include "string.h"
 #include "cpu.h"
 #include "os/os_api.h"
-#include "wifi_connect.h"
+#include "wifi/wifi_connect.h"
 #include "wifi_app_task.h"
 #include "syscfg_id.h"
 #include "sys_time.h"
 #include "lwip.h"
-#include "endian.h"
 
 char current_connected_ssid[MAX_SSID_LEN] = {0};
 char current_connected_password[MAX_SSID_LEN] = {0};

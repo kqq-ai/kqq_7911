@@ -3,7 +3,7 @@
 
 #include "lfs.h"
 #include "cpu.h"
-#include  "cJSON.h"
+#include "cJSON_common/cJSON.h"
 
 
 #define APP_CONFIG_KEY_LEN 32

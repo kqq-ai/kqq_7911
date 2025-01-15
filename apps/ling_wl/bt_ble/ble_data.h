@@ -2,8 +2,8 @@
 #define __BLE_DATA_H__
 
 #include "cpu.h"
-#include  "cJSON.h"
-#include "wifi_connect.h"
+#include "cJSON_common/cJSON.h"
+#include "wifi/wifi_connect.h"
 
 #define MAX_PACKET_SIZE 20
 #define BUFFER_SIZE 1584  // 假设最大JSON长度为1584字节  : 99 * 16

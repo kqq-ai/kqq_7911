@@ -182,6 +182,7 @@ INCLUDES := \
 	-I../../../../apps/common/usb/host \
 	-I../../../../apps/common/usb/include/host \
 	-I../../../../apps/common/usb/include \
+	-I../../../../apps/common/example/third_party/littlefs \
 	-I../../../../include_lib/driver/device/usb \
 	-I../../../../include_lib/driver/device/usb/device \
 	-I../../../../include_lib/driver/device/usb/host \
@@ -309,6 +310,9 @@ c_SRC_FILES := \
 	../../../../apps/common/usb/usb_config.c \
 	../../../../apps/common/usb/usb_epbuf_manager.c \
 	../../../../apps/common/usb/usb_host_config.c \
+	../../../../apps/common/example/third_party/littlefs/lfs.c \
+	../../../../apps/common/example/third_party/littlefs/lfs_util.c \
+	../../../../apps/common/example/third_party/littlefs/app_lfs.c \
 	../../../../apps/ling_wl/app_main.c \
 	../../../../apps/ling_wl/app_lingwl.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
@@ -319,6 +323,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/distance/main_ble_distance.c \
 	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
+	../../../../apps/ling_wl/bt_ble/ble_data.c \
 	../../../../apps/ling_wl/bt_ble/ble_combined.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_simple_client.c \
 	../../../../apps/ling_wl/bt_ble/server/ble_simple_server.c \

@@ -23,6 +23,8 @@
 #include "wait.h"
 #include "wss_client.h"
 
+#include "app_lfs.h"
+
 extern int app_music_bt_event_handler(struct sys_event *event);
 
 static struct app_lingwl_hdl g_lingwl_hdl;
@@ -69,6 +71,9 @@ static void wifi_monitor_thread(void *priv)
     }
 }
 
+
+
+
 static void app_lingwl_main(void)
 {
     log_i("Hello World! %s %s\r\n", __DATE__, __TIME__);
@@ -98,19 +103,12 @@ static void app_lingwl_main(void)
 
     thread_fork("wifi_monitor", 15, 512 * 3, 0, 0, wifi_monitor_thread, NULL);
 
-    // just for test
-    u32 lfs_addr, lfs_space;
-    FILE *profile_fp = fopen("mnt/sdfile/app/exif", "r");
-    if (profile_fp == NULL) {
-        puts("lfs_mount ERROR!!!\r\n");
-        return ;
-    }
-    struct vfs_attr file_attr;
-    fget_attrs(profile_fp, &file_attr);
-    lfs_addr = sdfile_cpu_addr2flash_addr(file_attr.sclust);
-    lfs_space = file_attr.fsize;
-    fclose(profile_fp);
-    printf("LFS_addr = 0x%x, size = 0x%x \r\n", lfs_addr, lfs_space);
+    // 初始化lfs
+    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
+    ASSERT(lfs_hdl);
+
+    // thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
+
 }
 
 void play_end_callback(void *priv)

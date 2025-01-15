@@ -19,7 +19,7 @@
 #include "syscfg/syscfg_id.h"
 #include "sock_api/sock_api.h"
 #include "asm/rf_coexistence_config.h"
-#include "ble_data.h"
+#include "bt_ble/ble_data.h"
 
 #define CONNECT_TIMEOUT_SEC 60
 
