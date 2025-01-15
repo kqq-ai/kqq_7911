@@ -26,6 +26,8 @@
 
 #include "bt_ble/ble_combined.h"
 
+#include "ble_data.h"
+
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
 extern void printf_buf(u8 *buf, u32 len);
@@ -99,6 +101,7 @@ static void (*app_ble_state_callback)(void *priv, ble_state_e state) = NULL;
 static void (*ble_resume_send_wakeup)(void) = NULL;
 
 static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_type);
+static int send_return_json_data(const uint8_t * return_json_data,u16 handle, u8 handle_type);
 
 // Complete Local Name  默认的蓝牙名字
 
@@ -365,7 +368,7 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t a
         break;
     case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         break;
-
+    
     default:
         break;
     }
@@ -385,21 +388,45 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t a
  */
 
 /* LISTING_START(attWrite): ATT Write */
+#include "bt_ble/ble_data.h"
+
+
+char json_data[BUFFER_SIZE] = {0};
+char return_json_data[BUFFER_SIZE] = {0};
 static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_handle, uint16_t transaction_mode, uint16_t offset, uint8_t *buffer, uint16_t buffer_size)
 {
+    int ret = 0;
     int result = 0;
     u16 tmp16;
-
     u16 handle = att_handle;
 
     log_info("write_callback, handle= 0x%04x,size = %d\n", handle, buffer_size);
+    log_info("write_callback, buffer= %s\n",buffer);
 
     switch (handle) {
     case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         break;
     case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_CLIENT_CONFIGURATION_HANDLE:
+    
+        log_info("\n------write ccc:%04x,%02x\n", handle, buffer[0]);
+        att_set_ccc_config(handle, buffer[0]);
         break;
     case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
+        ret = parse_and_assemble(buffer, buffer_size, json_data);
+        if (0 == ret) {
+            ret = parse_and_dispatch_json(json_data,return_json_data);
+            if (0 == ret)
+            {
+                memset(json_data,0,BUFFER_SIZE);
+            }
+            printf("return_json_data: %s\n",return_json_data);
+            ret = send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
+            if (0 == ret)
+            {
+                memset(return_json_data,0,BUFFER_SIZE);
+            }
+            printf("return_json_data: %s\n",return_json_data);
+        }
         break;
     default:
         break;
@@ -435,6 +462,65 @@ static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_typ
     return ret;
 }
 
+
+static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u8 handle_type)
+{
+
+    if (return_json_data == NULL || return_json_data[0] == '\0' || strnlen((const char *)return_json_data, BUFFER_SIZE + 1) > BUFFER_SIZE) {
+        printf("Error: Empty or NULL return_json_data or return_json_data_size over maxlen\n");
+        return -1;
+    }
+
+    const size_t data_length = strnlen((const char *)return_json_data, BUFFER_SIZE);
+    const size_t payload_size = PAYLOAD_SIZE;
+    const size_t total_packet_size = MAX_PACKET_SIZE;
+    const size_t max_packets = MAX_PACKETS;
+
+    // 计算总分包数
+    size_t num_packets = (data_length + payload_size - 1) / payload_size;
+    if (num_packets > max_packets) {
+        printf("Error: Too much data to fit in %d packets\n", max_packets);
+        return -1;
+    }
+
+    // 构建并发送每个分包
+    for (size_t i = 0; i < num_packets; ++i) {
+        unsigned char packet[total_packet_size] = {0};
+
+        // 设置当前分包号，格式化为两位字符（例如：01, 08, 11）
+        snprintf((char *)packet, 3, "%02d", (int)(i + 1));
+        
+        // 设置总分包数，格式化为两位字符（例如：01, 08, 11）
+        snprintf((char *)&packet[2], 3, "%02d", (int)num_packets);
+
+        // 确保当前分包号和总分包数正确设置
+        if (strlen((const char *)packet) != 4) {
+            printf("Error: Failed to format packet numbers correctly\n");
+            return -1;
+        }
+
+        // 填充真实数据，并确保每次分包的真实数据部分是16字节
+        size_t copy_size = (i == num_packets - 1) ? (data_length - i * payload_size) : payload_size;
+        memcpy(&packet[4], &return_json_data[i * payload_size], copy_size);
+
+        // 如果是最后一包且数据不足16字节，用0x00填充
+        if (i == num_packets - 1 && copy_size < payload_size) {
+            memset(&packet[4 + copy_size], 0x00, payload_size - copy_size);
+        }
+        
+        printf("send_packet: %s\n", packet);
+        if ((i % 15) == 0)
+        {
+            ble_op_att_clear_send_data();   
+        }
+        // 发送完整的分包数据
+        if (app_send_user_data(handle, packet, total_packet_size, handle_type) != 0) {
+            printf("Error: Failed to send packet %zu\n", i + 1);
+            return -1;
+        }
+    }
+    return 0;
+}
 //=BLE ADV===============================================================================================
 // BLE ADV
 //=BLE ADV===============================================================================================
