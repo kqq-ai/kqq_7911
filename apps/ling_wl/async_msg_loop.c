@@ -175,6 +175,8 @@ static void switch_play_sync(MyTaskMessageType *message)
     }
 }
 
+#include "app_mode/lwl_app_core.h"
+
 static void play_one_sync(MyTaskMessageType *message)
 {
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE);

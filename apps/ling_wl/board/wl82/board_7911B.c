@@ -16,21 +16,25 @@
 // *INDENT-OFF*
 
 UART0_PLATFORM_DATA_BEGIN(uart0_data)
-    .baudrate = 1000000,
+    .baudrate = 115200,
+    .port = PORT_REMAP,
+    .output_channel = OUTPUT_CHANNEL1,
+    .input_channel = INPUT_CHANNEL1,
+    .tx_pin = IO_PORTC_06,
+    .rx_pin = IO_PORTC_07,
     /* .port = PORTA_5_6, */
-    .port = PORTH_0_1,
     /* .tx_pin = IO_PORTA_05, */
     /* .rx_pin = IO_PORTA_06, */
-    .tx_pin = IO_PORTH_00,
-    .rx_pin = IO_PORTH_01,
+    // .port = PORTH_0_1,
+    // .tx_pin = IO_PORTH_00,
+    // .rx_pin = IO_PORTH_01,
     .max_continue_recv_cnt = 1024,
     .idle_sys_clk_cnt = 500000,
     .clk_src = PLL_48M,
-    .flags = UART_DEBUG,
 UART0_PLATFORM_DATA_END();
 
 UART1_PLATFORM_DATA_BEGIN(uart1_data)
-    .baudrate = 115200,
+    .baudrate = 1000000,
     .port = PORTUSB_A,
     .tx_pin = IO_PORT_USB_DPA,
     .rx_pin = IO_PORT_USB_DMA,
@@ -337,8 +341,8 @@ static const struct plnk_platform_data plnk0_data = {
 static const struct audio_pf_data audio_pf_d = {
     .adc_pf_data = &adc_data,
     .dac_pf_data = &dac_data,
-    .iis0_pf_data = &iis0_data,
-    .plnk0_pf_data = &plnk0_data,
+    // .iis0_pf_data = &iis0_data,
+    // .plnk0_pf_data = &plnk0_data,
 };
 static const struct audio_platform_data audio_data = {
     .private_data = (void *) &audio_pf_d,

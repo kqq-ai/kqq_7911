@@ -87,6 +87,10 @@ CFLAGS := \
 	-mllvm -pi32v2-large-program=true \
 	-fms-extensions \
 	-w \
+	-lib_dvad \
+	-libjlsp \
+	-libaec \
+	-libens \
 
 
 # C++额外的编译参数
@@ -219,10 +223,6 @@ c_SRC_FILES := \
 	../../../../apps/common/config/user_cfg.c \
 	../../../../apps/common/debug/debug.c \
 	../../../../apps/common/debug/debug_user.c \
-	../../../../apps/common/fm/fm_manage.c \
-	../../../../apps/common/fm/fm_rw.c \
-	../../../../apps/common/fm/qn8035/QN8035.c \
-	../../../../apps/common/fm/rda5807/RDA5807.c \
 	../../../../apps/common/iic/iic.c \
 	../../../../apps/common/iic/software_iic.c \
 	../../../../apps/common/jl_math/flfft_core_pi32v2.c \
@@ -258,58 +258,10 @@ c_SRC_FILES := \
 	../../../../apps/common/system/system_reset_reason.c \
 	../../../../apps/common/system/system_vdd_clock.c \
 	../../../../apps/common/system/version.c \
-	../../../../apps/common/ui/GUI_GIF.c \
-	../../../../apps/common/ui/font/fontinit.c \
-	../../../../apps/common/ui/gif_api.c \
-	../../../../apps/common/ui/lcd/lcd_ui_api.c \
-	../../../../apps/common/ui/lcd_driver/lcd_480x272_8bits.c \
-	../../../../apps/common/ui/lcd_driver/lcd_drive.c \
-	../../../../apps/common/ui/lcd_driver/lcd_hx8357.c \
-	../../../../apps/common/ui/lcd_driver/lcd_ili9341.c \
-	../../../../apps/common/ui/lcd_driver/lcd_ili9481.c \
-	../../../../apps/common/ui/lcd_driver/lcd_ili9488.c \
-	../../../../apps/common/ui/lcd_driver/lcd_st7735s.c \
-	../../../../apps/common/ui/lcd_driver/lcd_st7789s.c \
-	../../../../apps/common/ui/lcd_driver/lcd_st7789v.c \
-	../../../../apps/common/ui/lcd_driver/te_driver/lcd_data_driver.c \
-	../../../../apps/common/ui/lcd_driver/te_driver/lcd_te_driver.c \
-	../../../../apps/common/ui/touch_panel/ft6236.c \
-	../../../../apps/common/ui/touch_panel/gt911.c \
-	../../../../apps/common/ui/ui_action_video.c \
-	../../../../apps/common/ui/ui_driver/interface/ui_platform.c \
 	../../../../apps/common/update/fs_update.c \
 	../../../../apps/common/update/http_update.c \
 	../../../../apps/common/update/net_update.c \
 	../../../../apps/common/update/update.c \
-	../../../../apps/common/usb/device/cdc.c \
-	../../../../apps/common/usb/device/descriptor.c \
-	../../../../apps/common/usb/device/hid.c \
-	../../../../apps/common/usb/device/msd.c \
-	../../../../apps/common/usb/device/msd_upgrade.c \
-	../../../../apps/common/usb/device/printer.c \
-	../../../../apps/common/usb/device/ram_disk_circle.c \
-	../../../../apps/common/usb/device/ram_disk_update.c \
-	../../../../apps/common/usb/device/task_pc.c \
-	../../../../apps/common/usb/device/uac.c \
-	../../../../apps/common/usb/device/uac_stream.c \
-	../../../../apps/common/usb/device/usb_device.c \
-	../../../../apps/common/usb/device/user_setup.c \
-	../../../../apps/common/usb/device/uvc.c \
-	../../../../apps/common/usb/host/adb.c \
-	../../../../apps/common/usb/host/aoa.c \
-	../../../../apps/common/usb/host/audio.c \
-	../../../../apps/common/usb/host/hid.c \
-	../../../../apps/common/usb/host/usb_bulk_transfer.c \
-	../../../../apps/common/usb/host/usb_ctrl_transfer.c \
-	../../../../apps/common/usb/host/usb_host.c \
-	../../../../apps/common/usb/host/usb_storage.c \
-	../../../../apps/common/usb/host/usb_video.c \
-	../../../../apps/common/usb/host/usbnet.c \
-	../../../../apps/common/usb/host/uvc_host.c \
-	../../../../apps/common/usb/host/uvc_jl_upgrade.c \
-	../../../../apps/common/usb/usb_config.c \
-	../../../../apps/common/usb/usb_epbuf_manager.c \
-	../../../../apps/common/usb/usb_host_config.c \
 	../../../../apps/common/example/third_party/littlefs/lfs.c \
 	../../../../apps/common/example/third_party/littlefs/lfs_util.c \
 	../../../../apps/common/example/third_party/littlefs/app_lfs.c \
@@ -317,7 +269,17 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_lingwl.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
 	../../../../apps/ling_wl/async_msg_loop.c \
-	../../../../apps/ling_wl/wss_client.c \
+	../../../../apps/ling_wl/wss/wss_client.c \
+	../../../../apps/ling_wl/ota/http_ota.c \
+	../../../../apps/ling_wl/app_mode/lwl_app_core.c \
+	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
+	../../../../apps/ling_wl/app_mode/default/default.c \
+	../../../../apps/ling_wl/app_mode/net_connected/net_connected.c \
+	../../../../apps/ling_wl/app_mode/net_connecting/net_connecting.c \
+	../../../../apps/ling_wl/app_mode/power_on/power_on.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/wss_application.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/wss_connected.c \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
 	../../../../apps/ling_wl/distance/main_ble_distance.c \
@@ -332,17 +294,6 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/board/wl82/board_7912D.c \
 	../../../../apps/ling_wl/board/wl82/board_7913A.c \
 	../../../../apps/ling_wl/board/wl82/board_7916A.c \
-	../../../../apps/ling_wl/ui/led_ui_gr202.c \
-	../../../../apps/ling_wl/video/camera_lcd_demo.c \
-	../../../../apps/ling_wl/video/get_yuv_data.c \
-	../../../../apps/ling_wl/video/jpeg2yuv.c \
-	../../../../apps/ling_wl/video/network_mssdp.c \
-	../../../../apps/ling_wl/video/spi_data_deal.c \
-	../../../../apps/ling_wl/video/spi_recv.c \
-	../../../../apps/ling_wl/video/stream/video_rt_usr.c \
-	../../../../apps/ling_wl/video/stream_protocol.c \
-	../../../../apps/ling_wl/video/strm_video_rec.c \
-	../../../../apps/ling_wl/video/user_video_rec.c \
 	../../../../apps/ling_wl/wifi_app_task.c \
 	../../../../apps/ling_wl/wifi_app_iis_task.c \
 	../../../../cpu/wl82/debug.c \

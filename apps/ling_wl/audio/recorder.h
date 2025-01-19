@@ -6,6 +6,7 @@
 #include "server/server_core.h"
 
 typedef void (*recorder_data_cb_t)(void* priv, void *data, u32 size);
+typedef void (*recorder_vad_cb_t)(void* priv, int type);
 
 typedef struct recorder_hdl {
     FILE *fp;
@@ -21,6 +22,8 @@ typedef struct recorder_hdl {
     int sample_rate;
     recorder_data_cb_t data_cb;
     void *data_cb_priv;
+    recorder_vad_cb_t vad_cb;
+    void *vad_cb_priv;
 } recorder_hdl;
 
 typedef enum {
@@ -32,6 +35,7 @@ typedef enum {
 
 int recorder_mode_init(recorder_hdl *recorder);
 int recorder_set_data_cb(recorder_hdl *recorder, recorder_data_cb_t cb, void *priv);
+int recorder_set_vad_cbk(recorder_hdl *recorder, recorder_vad_cb_t cb, void *priv);
 int recorder_mode_exit(recorder_hdl *recorder);
 int recorder_start(recorder_hdl *recorder);
 int recorder_stop(recorder_hdl *recorder);

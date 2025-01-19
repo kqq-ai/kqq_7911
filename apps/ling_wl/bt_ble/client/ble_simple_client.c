@@ -279,7 +279,7 @@ static bool resolve_adv_report(u8 *adv_address, u8 data_length, u8 *data, s8 rss
         case HCI_EIR_DATATYPE_SHORTENED_LOCAL_NAME:
             tmp32 = adv_data_pt[lenght - 1];
             adv_data_pt[lenght - 1] = 0;;
-            log_info("ble remoter_name: %s,rssi:%d\n", adv_data_pt, rssi);
+            log_d("ble remoter_name: %s,rssi:%d\n", adv_data_pt, rssi);
 
             if (scan_rssi_record_callback) {
                 scan_rssi_record_callback(NULL, adv_data_pt, lenght - 1, rssi);
@@ -833,7 +833,7 @@ void ble_simple_client_init(void)
     client_con_handle = INVALID_HANDLE;
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_client_module_enable(1);
+    ble_simple_client_module_enable(0);
 }
 
 void ble_simple_client_exit(void)

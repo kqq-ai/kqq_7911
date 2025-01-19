@@ -21,7 +21,10 @@
 #include "util/cqueue.h"
 #include "async_msg_loop.h"
 #include "wait.h"
-#include "wss_client.h"
+
+#include "app_mode/lwl_app_framework.h"
+
+#include "app_mode/lwl_app_core.h"
 
 #include "app_lfs.h"
 
@@ -58,11 +61,6 @@ static void simple_play_prompt(const char *fname)
     }
 }
 
-void recorder_data_cb(void* priv, void *data, u32 size)
-{
-    wss_asr_data(data, size);
-}
-
 static void wifi_monitor_thread(void *priv)
 {
     while (true) {
@@ -71,12 +69,28 @@ static void wifi_monitor_thread(void *priv)
     }
 }
 
+static void lwl_app_task(void *priv)
+{
+    log_i("lwl_app_task");
+    lwl_app_init(APP_POWER_ON_MODE);
 
+    // 初始化录音
+    int ret = recorder_mode_init(&g_recorder);
+    log_i("ret: %d\r\n", ret);
+
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    context->recorder = &g_recorder;
+
+    while (true) {
+        lwl_app_mode_loop();
+    }
+}
 
 
 static void app_lingwl_main(void)
 {
-    log_i("Hello World! %s %s\r\n", __DATE__, __TIME__);
+    log_i("Hello World2!\r\n");
+    log_i("%s %s\r\n", __DATE__, __TIME__)
     
     uart0_hdl = dev_open("uart0", NULL);
     if (!uart0_hdl) { 
@@ -87,13 +101,9 @@ static void app_lingwl_main(void)
     /* 使能特殊串口,启动收发数据 */
     dev_ioctl(uart0_hdl, UART_START, 0);
 
-    // 初始化录音
-    recorder_mode_init(&g_recorder);
-    recorder_set_data_cb(&g_recorder, recorder_data_cb, NULL);
-
     // 取消静音
-    // gpio_direction_output(IO_PORTA_00, 1);   // 
-    gpio_direction_output(IO_PORTB_02, 1);  // 
+    gpio_direction_output(IO_PORTA_00, 1);   // 
+    // gpio_direction_output(IO_PORTB_02, 1);  // 
 
     music_player_init(&g_music_player);
 
@@ -101,14 +111,13 @@ static void app_lingwl_main(void)
 
     start_async_msg_loop();
 
-    thread_fork("wifi_monitor", 15, 512 * 3, 0, 0, wifi_monitor_thread, NULL);
+    // thread_fork("wifi_monitor", 15, 512 * 3, 0, 0, wifi_monitor_thread, NULL);
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
     ASSERT(lfs_hdl);
 
-    // thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
-
+    thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
 }
 
 void play_end_callback(void *priv)
@@ -151,28 +160,6 @@ static int app_music_key_click(struct key_event *key)
         break;
     case KEY_OK:
         log_i("KEY OK\n");
-        extern int g_playing_audio_message_id;
-        if (recorder_get_play_pause_state(&g_recorder) == 0) {
-            printf("recorder: start record\n");
-            /* 通知WSS线程录音开始 */
-            wss_asr_start();
-
-            /* 停止当前正在进行的播放 */
-            app_music_play_stop(&g_music_player);
-
-            /* 禁用后续相同 message_id 的音频消息 */
-            disable_specific_audio_message(g_playing_audio_message_id);
-
-            /* 开启录音 */
-            recorder_start(&g_recorder);
-        } else {
-            /* 关闭录音 */
-            recorder_stop(&g_recorder);
-
-            /* 通知WSS线程录音结束 */
-            wss_asr_end();
-            printf("recorder: stop record\n");
-        }
         break;
         
     case KEY_VOLUME_DEC:
@@ -333,7 +320,7 @@ static int app_lingwl_event_handler(struct application *app, struct sys_event *e
     case SYS_BT_EVENT:
         return ble_demo_bt_event_handler(event);
     default:
-        return false;
+        return lwl_app_event_handler(app, event);
     }
 }
 

@@ -61,6 +61,58 @@ error:
 }
 
 /**
+ * @name    my_blocking_queue_init_static
+ * @brief   Init custom blocking queue(static)
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the data memory(size == elementSize * capacity).
+ * @param   elementSize The size (in bytes) of each queue element.
+ * @param   capacity    The maximum capacity of the queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_init_static(MyBlockingQueue *queue, u8 *data, int elementSize, int capacity)
+{
+    int ret = MYERROR_Success;
+    if (queue == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+    
+
+    if (pthread_mutex_init(&queue->mutex, NULL) != 0) {
+        printf("Error: Failed to init pthread_mutex\n");
+        ret = MYERROR_OS_Api_Error;
+        goto error;
+    }
+    if (pthread_cond_init(&queue->not_empty, NULL) != 0) {
+        printf("Error: Failed to init pthread_cond\n");
+        ret = MYERROR_OS_Api_Error;
+        goto error;
+    }
+    if (pthread_cond_init(&queue->not_full, NULL) != 0) {
+        printf("Error: Failed to init pthread_cond\n");
+        ret = MYERROR_OS_Api_Error;
+        goto error;
+    }
+
+    queue->data = data;
+    queue->size = 0;
+    queue->front = 0;
+    queue->rear = 0;
+    queue->capacity = capacity;
+    queue->element_size = elementSize;
+    printf("queue->data: %p, size: %d\n", queue->data, queue->element_size);
+    return ret;
+
+error:
+    pthread_mutex_destroy(&queue->mutex);
+    pthread_cond_destroy(&queue->not_empty);
+    pthread_cond_destroy(&queue->not_full);
+    return ret;
+}
+
+
+/**
  * @name    my_blocking_queue_destroy
  * @brief   Destroy the custom blocking queue and release all associated resources.
  * 
@@ -76,6 +128,25 @@ int my_blocking_queue_destroy(MyBlockingQueue *queue)
         free(queue->data);
         queue->data = NULL;
     }
+    pthread_mutex_destroy(&queue->mutex);
+    pthread_cond_destroy(&queue->not_empty);
+    pthread_cond_destroy(&queue->not_full);
+
+    return ret;
+}
+
+/**
+ * @name    my_blocking_queue_static_destroy
+ * @brief   Destroy the custom blocking queue and release all associated resources(static).
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_destroy_static(MyBlockingQueue *queue)
+{
+    int ret = MYERROR_Success;
+
     pthread_mutex_destroy(&queue->mutex);
     pthread_cond_destroy(&queue->not_empty);
     pthread_cond_destroy(&queue->not_full);
@@ -162,6 +233,26 @@ int my_blocking_queue_traverse(MyBlockingQueue *queue, void (*callback)(void *, 
         callback(&queue->data[index * queue->element_size], priv);
         index = (index == queue->capacity - 1)? 0 : index + 1;
     }
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
+ * @name my_blocking_queue_clear
+ * @brief Clear the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_clear(MyBlockingQueue *queue)
+{
+    if (queue == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+    pthread_mutex_lock(&queue->mutex);
+    queue->size = queue->front = queue->rear = 0;
     pthread_mutex_unlock(&queue->mutex);
 
     return MYERROR_Success;

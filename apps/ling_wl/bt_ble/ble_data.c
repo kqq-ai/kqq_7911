@@ -856,6 +856,22 @@ cleanup:
     return ret;
 }
 
+char ota_url[512];
+#include "ota/http_ota.h"
+
+int handle_http_ota(const char *cmd, cJSON *args, char *return_json_data)
+{
+    cJSON *nurl = cJSON_GetObjectItemCaseSensitive(args, "url");
+    if (nurl != NULL && nurl->type == cJSON_String) {
+        char *vurl = nurl->valuestring;
+        strcpy(ota_url, vurl);
+        
+        return http_create_download_task(ota_url);
+    } else {
+        return 1;
+    }
+}
+
 // 主解析函数
 int parse_and_dispatch_json(const char *json_data, char *return_json_data)
 {
@@ -1144,6 +1160,37 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_RECONNECTING", strlen("WIFI_INFO_CODE_RECONNECTING"));
+            }
+        }
+        else if (strcmp(cmd_name, "http_ota") == 0)
+        {
+            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            {
+                ret = handle_http_ota(cmd_name, cmd_args_item, return_json_data);
+                if (1 == ret) {
+                    memcpy(return_errstr, "WIFI_INFO_CODE_CMD_ERROR", strlen("WIFI_INFO_CODE_CMD_ERROR"));
+                }
+                printf("http_ota_handled\n"); // 命令处理后
+            }
+            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            {
+                ret = 1;
+                memcpy(return_errstr, "WIFI_CONNECT_CODE_DEFAULT", strlen("WIFI_CONNECT_CODE_DEFAULT"));
+            }
+            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            {
+                ret = 1;
+                memcpy(return_errstr, "WIFI_CONNECT_CODE_SCANNING", strlen("WIFI_CONNECT_CODE_SCANNING"));
+            }
+            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            {
+                ret = 1;
+                memcpy(return_errstr, "WIFI_CONNECT_CODE_CONNECTING", strlen("WIFI_CONNECT_CODE_CONNECTING"));
+            }
+            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            {
+                ret = 1;
+                memcpy(return_errstr, "WIFI_CONNECT_CODE_RECONNECTING", strlen("WIFI_CONNECT_CODE_RECONNECTING"));
             }
         }
         else

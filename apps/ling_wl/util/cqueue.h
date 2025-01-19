@@ -35,6 +35,19 @@ typedef struct {
 int my_blocking_queue_init(MyBlockingQueue *queue, int elementSize, int capacity);
 
 /**
+ * @name    my_blocking_queue_init_static
+ * @brief   Init custom blocking queue(static)
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the data memory(size == elementSize * capacity).
+ * @param   elementSize The size (in bytes) of each queue element.
+ * @param   capacity    The maximum capacity of the queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_init_static(MyBlockingQueue *queue, u8 *data, int elementSize, int capacity);
+
+/**
  * @name    my_blocking_queue_destroy
  * @brief   Destroy the custom blocking queue and release all associated resources.
  * 
@@ -43,6 +56,16 @@ int my_blocking_queue_init(MyBlockingQueue *queue, int elementSize, int capacity
  * @return  0 if success, see MyErrorType
  */
 int my_blocking_queue_destroy(MyBlockingQueue *queue);
+
+/**
+ * @name    my_blocking_queue_static_destroy
+ * @brief   Destroy the custom blocking queue and release all associated resources(static).
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_destroy_static(MyBlockingQueue *queue);
 
 /**
  * @name    my_blocking_queue_enqueue
@@ -79,6 +102,16 @@ int my_blocking_queue_dequeue(MyBlockingQueue *queue, void *data);
  * @return  0 if success, see MyErrorType
  */
 int my_blocking_queue_traverse(MyBlockingQueue *queue, void (*callback)(void *, void *), void *priv);
+
+/**
+ * @name my_blocking_queue_clear
+ * @brief Clear the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_clear(MyBlockingQueue *queue);
 
 /**
  * @name    my_blocking_queue_size

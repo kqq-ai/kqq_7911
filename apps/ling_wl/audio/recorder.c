@@ -16,20 +16,12 @@
 #ifdef CONFIG_RECORDER_MODE_ENABLE
 
 #define CONFIG_AUDIO_ENC_SAMPLE_SOURCE      "mic"                          //录音输入源选择
-#define CONFIG_AUDIO_DEC_PLAY_SOURCE        "dac"                          //播放输出源选择
 #define CONFIG_AUDIO_RECORDER_SAMPLERATE    16000                          //录音采样率
 #define CONFIG_AUDIO_RECORDER_CHANNEL       1                              //录音通道数
 
-#define CONFIG_AUDIO_ADC_CHANNEL_L          1        //左mic/aux通道
-#define CONFIG_AUDIO_ADC_CHANNEL_R          3        //右mic/aux通道
+#define CONFIG_AUDIO_ADC_CHANNEL_L          0        //左mic/aux通道
+#define CONFIG_AUDIO_ADC_CHANNEL_R          2        //右mic/aux通道
 #define CONFIG_AUDIO_ADC_GAIN               100      //mic/aux增益
-
-#define CONFIG_STORE_VOLUME
-#define VOLUME_STEP         5
-#define GAIN_STEP           5
-#define MIN_VOLUME_VALUE	5
-#define MAX_VOLUME_VALUE	100
-#define INIT_VOLUME_VALUE   50
 
 //AUDIO ADC支持的采样率
 static const u16 sample_rate_table[] = {
@@ -50,7 +42,7 @@ static int recorder_vfs_fwrite(void *file, void *data, u32 len)
     recorder_hdl *recorder = (recorder_hdl *)file;
 
     if (recorder->data_cb != NULL) {
-        printf("vfs: %d", len);
+        log_i("vfs: %d", len);
         recorder->data_cb(recorder->data_cb_priv, data, len);
     }
 
@@ -105,18 +97,25 @@ static int recorder_close(recorder_hdl *recorder)
     return 0;
 }
 
-static void enc_server_event_handler(recorder_hdl *recorder, void *priv, int argc, int *argv)
+static void enc_server_event_handler(void *priv, int argc, int *argv)
 {
+    recorder_hdl *recorder = (recorder_hdl *)priv;
     switch (argv[0]) {
     case AUDIO_SERVER_EVENT_ERR:
     case AUDIO_SERVER_EVENT_END:
         recorder_close(recorder);
         break;
     case AUDIO_SERVER_EVENT_SPEAK_START:
-        log_i("speak start ! \n");
+        log_i("[Recorder VAD]Speak start !\n");
+        if (recorder && recorder->vad_cb) {
+            recorder->vad_cb(recorder->data_cb_priv, 1);
+        }
         break;
     case AUDIO_SERVER_EVENT_SPEAK_STOP:
-        log_i("speak stop ! \n");
+        log_i("[Recorder VAD]Speak stop !\n");
+        if (recorder && recorder->vad_cb) {
+            recorder->vad_cb(recorder->data_cb_priv, 0);
+        }
         break;
     default:
         break;
@@ -163,9 +162,21 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
     req.enc.vfs_ops = &recorder_vfs_ops;
     req.enc.file = (FILE *)recorder;
     if (channel == 1 && !strcmp(recorder->sample_source, "mic") && (sample_rate == 8000 || sample_rate == 16000)) {
-        req.enc.use_vad = 0; //打开VAD断句功能
-        req.enc.dns_enable = 0; //打开降噪功能
-        req.enc.vad_auto_refresh = 0; //VAD自动刷新
+        req.enc.use_vad = 1; //打开VAD断句功能
+        req.enc.dns_enable = 1; //打开降噪功能
+        req.enc.vad_auto_refresh = 1; //VAD自动刷新
+    }
+    if (req.enc.use_vad == 1) {
+        req.enc.vad_start_threshold = 500;    //ms
+        req.enc.vad_stop_threshold  = 0;    //ms
+    }
+    if (req.enc.dns_enable == 1) //降噪的配置
+    {
+        // 配置DNS参数
+        struct aec_s_attr parm = {0};
+        parm.DNS_gain_floor = 0.1;      //单麦 建议0.1
+        parm.DNS_over_drive = 2;        //建议 1-3.0  不能太大，太大会吃音(失真)
+        req.enc.aec_attr = &parm;
     }
 
     err = server_request(recorder->enc_server, AUDIO_REQ_ENC, &req);
@@ -247,7 +258,7 @@ int recorder_mode_init(recorder_hdl *recorder)
     recorder->sample_rate = CONFIG_AUDIO_RECORDER_SAMPLERATE;
 
     recorder->enc_server = server_open("audio_server", "enc");
-    server_register_event_handler_to_task(recorder->enc_server, NULL, enc_server_event_handler, "app_core");
+    server_register_event_handler_to_task(recorder->enc_server, recorder, enc_server_event_handler, "app_core");
 
     return RECERROR_Success;
 }
@@ -259,6 +270,17 @@ int recorder_set_data_cb(recorder_hdl *recorder, recorder_data_cb_t cb, void *pr
     }
     recorder->data_cb = cb;
     recorder->data_cb_priv = priv;
+
+    return RECERROR_Success;
+}
+
+int recorder_set_vad_cbk(recorder_hdl *recorder, recorder_vad_cb_t cb, void *priv)
+{
+    if (recorder == NULL) {
+        return RECERROR_Null_Pointer;
+    }
+    recorder->vad_cb = cb;
+    recorder->vad_cb_priv = priv;
 
     return RECERROR_Success;
 }
@@ -308,6 +330,8 @@ int recorder_get_play_pause_state(recorder_hdl *recorder)
     if (recorder == NULL) {
         return RECERROR_Null_Pointer;
     }
+    printf("%d", recorder->running_flag);
+
     return recorder->running_flag;
 }
 #endif

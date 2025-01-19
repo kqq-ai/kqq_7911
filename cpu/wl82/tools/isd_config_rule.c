@@ -312,7 +312,7 @@ LOG_OPT=0;
 
 //#保留客户使用
 EXIF_ADR=AUTO;[保留客户使用 也可自定义名字 参考example文档使用]
-EXIF_LEN=0x1000;
+EXIF_LEN=0x10000;
 EXIF_OPT=1;
 
 #if defined CONFIG_AUDIO_ENABLE && defined CONFIG_VOICE_PROMPT_FILE_SAVE_IN_RESERVED_ZONE
