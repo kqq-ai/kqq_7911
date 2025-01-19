@@ -13,6 +13,7 @@ static lfs_app_config_t g_lfs_app_config = {
     .app_wifi_config = {
         .ssid = "hello",
         .pwd = "20020719",
+        .retry_connect_count = 0,
     },
 };
 
@@ -136,6 +137,7 @@ static void encapsulate_config_app_data(const lfs_app_config_t app_config_data)
     }
     cJSON_AddStringToObject(wifi_config, "ssid", app_config_data.app_wifi_config.ssid);
     cJSON_AddStringToObject(wifi_config, "pwd", app_config_data.app_wifi_config.pwd);
+    cJSON_AddNumberToObject(wifi_config, "retry_connect_count", app_config_data.app_wifi_config.retry_connect_count);
     cJSON_AddItemToObject(root, "app_wifi_config", wifi_config);
 
     // 将 cJSON 对象转换为格式化的字符串
@@ -318,12 +320,23 @@ void get_flash_app_raw_cfg_data(void *pri)
         return;
     }
     printf("pwd = %s\r\n", pwd->valuestring);
+    cJSON *retry_connect_count = cJSON_GetObjectItem(app_wifi_config, "retry_connect_count");
+    if (retry_connect_count == NULL)
+    {
+        printf("cJSON_GetObjectItem fail\r\n");
+        cJSON_Delete(root);
+        free(all_file_data);
+        return;
+    }
+    printf("retry_connect_count = %d\r\n", retry_connect_count->valueint);
     // 将这些数据赋值给g_lfs_app_config
     memset(&g_lfs_app_config, 0, sizeof(g_lfs_app_config));
     memcpy(g_lfs_app_config.app_config_key, app_config_key->valuestring, strlen(app_config_key->valuestring));
     memcpy(g_lfs_app_config.app_config_version, app_config_version->valuestring, strlen(app_config_version->valuestring));
     memcpy(g_lfs_app_config.app_wifi_config.ssid, ssid->valuestring, strlen(ssid->valuestring));
     memcpy(g_lfs_app_config.app_wifi_config.pwd, pwd->valuestring, strlen(pwd->valuestring));
+    g_lfs_app_config.app_wifi_config.retry_connect_count = retry_connect_count;
+    
     cJSON_Delete(root);
     free(all_file_data);
     lfs_file_close(&lfs, &file);
@@ -337,6 +350,13 @@ void change_wifi_config(const char *ssid, const char *pwd)
     memset(&g_lfs_app_config.app_wifi_config, 0, sizeof(g_lfs_app_config.app_wifi_config));
     memcpy(g_lfs_app_config.app_wifi_config.ssid, ssid, strlen(ssid));
     memcpy(g_lfs_app_config.app_wifi_config.pwd, pwd, strlen(pwd));
+    encapsulate_config_app_data(g_lfs_app_config);
+    return;
+}
+void change_wifi_retry_connect_count(int count)
+{
+    get_flash_app_raw_cfg_data(NULL);
+    g_lfs_app_config.app_wifi_config.retry_connect_count = count;
     encapsulate_config_app_data(g_lfs_app_config);
     return;
 }

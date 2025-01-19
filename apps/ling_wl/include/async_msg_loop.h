@@ -2,6 +2,7 @@
 #define __ASYNC_MSG_LOOP_H__
 
 #include "cpu.h"
+#include "wifi_app_task.h"
 
 void start_async_msg_loop();
 
@@ -56,5 +57,40 @@ void my_task_scan_rssi(void *rssi_cb_priv,
  * @param audio_messageId Audio messsage id (LingOS).
  */
 void disable_specific_audio_message(int audio_message_id);
+
+/**
+ * @name my_task_wifi_scan_start
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_wifi_scan_start(void* priv, void* cb);
+
+/**
+ * @name my_task_wifi_connect
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_wifi_connect(
+    char *ssid,
+    char *pwd,
+    int timeout_s,
+    wifi_connect_succ_cb connect_succ_func,
+    wifi_connect_fail_cb connect_fail_func,
+    void *priv,
+    void *cb);
+
+
+    /**
+ * @name my_task_wifi_disconnect
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_wifi_disconnect(wifi_disconnect_cb disconnect_func,void *priv, void *cb);
 
 #endif

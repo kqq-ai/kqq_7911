@@ -14,44 +14,6 @@
 #define MAX_PWD_LEN 33
 
 
-typedef enum{
-    WIFI_SCAN_STOP,
-    WIFI_SCAN_RUNNING,
-    WIFI_SCAN_TIMEOUT,
-}WIFI_SCAN_STATUES;
-
-WIFI_SCAN_STATUES set_wifi_scan_status(WIFI_SCAN_STATUES status);
-WIFI_SCAN_STATUES get_wifi_scan_status(void * pri);
-
-
-typedef enum{
-    WIFI_INFO_IDLE,
-    WIFI_INFO_ONGOING,
-    WIFI_INFO_STA_MODE_IDLE,
-    WIFI_INFO_STA_MODE_SCANNING,
-    WIFI_INFO_STA_MODE_CNNECTING,
-}WIFI_INFO_STATUES;
-
-WIFI_INFO_STATUES set_wifi_info_status(WIFI_INFO_STATUES status);
-WIFI_INFO_STATUES get_wifi_info_status(void * pri);
-
-
-typedef enum {
-    WIFI_CMD_DEFAULT,
-    WIFI_CMD_IDLE,
-    WIFI_CMD_SCANNING,
-    WIFI_CMD_CONNECTING,
-    WIFI_CMD_RECONNECTING,
-}WIFI_CMD_STATUES;
-
-WIFI_CMD_STATUES set_wifi_cmd_status(WIFI_CMD_STATUES status);
-WIFI_CMD_STATUES get_wifi_cmd_status(void * pri);
-
-
-int set_wifi_sta_connect_state(enum wifi_sta_connect_state state);
-
-int get_wifi_sta_connect_state(void *pri);
-
 void set_current_connected_ssid(char *ssid);
 
 void get_current_connected_ssid(char * ssid);
@@ -67,7 +29,7 @@ uint32_t get_wifi_scan_timeout(void * pri);
 uint32_t set_wifi_connect_timeout_ms(uint32_t wifi_connect_timeout_ms);
 uint32_t get_wifi_connect_timeout_ms(void * pri);
 uint32_t set_wifi_connect_start_time_ms(uint32_t wifi_connect_start_time_ms);
-uint32_t get_wifi_connect_end_time_ms(void * pri);
+uint32_t set_wifi_connect_end_time_ms(uint32_t wifi_connect_end_time);
 
 int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info);
 

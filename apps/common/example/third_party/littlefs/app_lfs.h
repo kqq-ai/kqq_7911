@@ -14,6 +14,7 @@ typedef struct
 {
     char ssid[WIFI_SSID_LEN];
     char pwd[WIFI_PWD_LEN];
+    int retry_connect_count;
 } app_wifi_config_t;
 
 typedef struct 
@@ -26,6 +27,7 @@ typedef struct
 lfs_t * app_lfs_init(const char * flash_path);
 
 void change_wifi_config(const char * ssid, const char * pwd);
+void change_wifi_retry_connect_count(int count);
 void get_flash_app_raw_cfg_data(void * pri);
 void app_lfs_cfgfile_init(void *pri);
 

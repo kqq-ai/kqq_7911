@@ -1,5 +1,4 @@
 #include "ble_data.h"
-
 #include "string.h"
 #include "cpu.h"
 #include "os/os_api.h"
@@ -8,6 +7,8 @@
 #include "syscfg_id.h"
 #include "sys_time.h"
 #include "lwip.h"
+#include "app_wifi_manage.h"
+#include "async_msg_loop.h"
 
 char current_connected_ssid[MAX_SSID_LEN] = {0};
 char current_connected_password[MAX_SSID_LEN] = {0};
@@ -21,40 +22,8 @@ uint32_t g_wifi_connect_start_time_ms = 0;
 uint32_t g_wifi_connect_end_time_ms = 0;
 uint32_t g_wifi_connect_timeout_ms = 0;
 
-WIFI_CMD_STATUES g_wifi_cmd_status = WIFI_CMD_DEFAULT;
-WIFI_INFO_STATUES g_wifi_info_status = WIFI_INFO_IDLE;
-WIFI_SCAN_STATUES g_wifi_scan_status = WIFI_SCAN_STOP;
-
 uint32_t g_wifi_scan_timeout = 0;
-
 uint32_t g_wifi_scan_flag = 0;
-enum wifi_sta_connect_state g_wifi_sta_connect_state = WIFI_STA_DISCONNECT;
-
-WIFI_SCAN_STATUES set_wifi_scan_status(WIFI_SCAN_STATUES status)
-{
-    g_wifi_scan_status = status;
-}
-WIFI_SCAN_STATUES get_wifi_scan_status(void *pri)
-{
-    return g_wifi_scan_status;
-}
-
-WIFI_INFO_STATUES set_wifi_info_status(WIFI_INFO_STATUES status)
-{
-    g_wifi_info_status = status;
-}
-WIFI_INFO_STATUES get_wifi_info_status(void *pri)
-{
-    return g_wifi_info_status;
-}
-WIFI_CMD_STATUES set_wifi_cmd_status(WIFI_CMD_STATUES status)
-{
-    g_wifi_cmd_status = status;
-}
-WIFI_CMD_STATUES get_wifi_cmd_status(void *pri)
-{
-    return g_wifi_cmd_status;
-}
 
 void set_current_connected_ssid(char *ssid)
 {
@@ -73,16 +42,6 @@ void set_current_connected_password(char *password)
 void get_current_connected_password(char *get_password)
 {
     memcpy(get_password, current_connected_password, strlen(current_connected_password));
-}
-
-int set_wifi_sta_connect_state(enum wifi_sta_connect_state state)
-{
-    g_wifi_sta_connect_state = state;
-    return 0;
-}
-int get_wifi_sta_connect_state(void *pri)
-{
-    return g_wifi_sta_connect_state;
 }
 
 // 清空缓冲区
@@ -151,42 +110,26 @@ int parse_and_assemble(const uint8_t *data, uint16_t data_length, char *assemble
     return -4;
 }
 
-int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info)
-{
-    printf("wifi_scan_ssid_info\r\n");
-    struct wifi_scan_ssid_info *sta_ssid_info;
-    u32 sta_ssid_num = 0;
-    sta_ssid_info = wifi_get_scan_result(&sta_ssid_num);
-    wifi_clear_scan_result();
-
-    for (u32 i = 0; i < sta_ssid_num; i++)
-    {
-        printf("find scan ssid = [%s]\r\n", sta_ssid_info[i].ssid);
-    }
-
-    *ssid_info = sta_ssid_info;
-    return sta_ssid_num;
-}
-
 int g_scan_start_ms = 0;
 static void wifi_scan_timeout_cb(int timeout_s)
 {
     set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
     printf("scan cmpleted ok !\r\n");
     int time_now = timer_get_ms();
-    if (g_wifi_scan_status == WIFI_SCAN_RUNNING)
+    if (get_wifi_cmd_status(NULL) == WIFI_SCAN_RUNNING)
     {
         if (time_now - g_scan_start_ms < timeout_s * 1000)
         {
             printf("wifi scan once \r\n");
             wifi_scan_req();
-            g_wifi_scan_status = WIFI_SCAN_RUNNING;
+            set_wifi_scan_status(WIFI_SCAN_RUNNING);
             set_wifi_info_status(WIFI_INFO_STA_MODE_SCANNING);
         }
         else
         {
-            g_wifi_scan_status = WIFI_SCAN_STOP;
+            set_wifi_scan_status(WIFI_SCAN_STOP);
             set_wifi_cmd_status(WIFI_CMD_IDLE);
+            wifi_enter_smp_cfg_mode();
         }
     }
 }
@@ -195,7 +138,7 @@ static void wifi_scan_timeout_cb(int timeout_s)
 int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
 {
     int ret = 0;
-    char return_errstr[64] = {0};
+    char return_errstr[32] = {0};
 
     // 检查 args 是否为 NULL
     if (args == NULL)
@@ -236,25 +179,25 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
     register_wifi_scan_func(wifi_scan_timeout_cb, timeout_s);
     set_wifi_cmd_status(WIFI_CMD_SCANNING);
 
-    ret = wifi_scan_req();
-    // g_wifi_scan_flag = 1;
-    // set_wifi_scan_status(WIFI_SCAN_RUNNING);
+    // 开始扫描
+    printf("----------------------wifi_scan_start--------------------------------\r\n");
+    // ret = wifi_scan_start(NULL);
+    my_task_wifi_scan_start(NULL, NULL);
 
     if (ret == 0)
     {
         printf("Scan request initiated successfully.\n");
         memcpy(return_errstr, "WIFI_SCAN_CODE_SUCCESS", strlen("WIFI_SCAN_CODE_SUCCESS"));
-        g_wifi_scan_flag = 1;
+        g_wifi_scan_flag = 1; /*只有扫描成功后，才能获取wifi list 的标志位*/
         set_wifi_scan_status(WIFI_SCAN_RUNNING);
         // 等待扫描完成事件或定时查询结果
     }
     else if (ret == -1)
     {
+        /*前面的状态排查中 可以排除 WiFi off 和 connecting 状态*/
         printf("Scan request failed: WIFI is off, scanning, or connecting.\n");
         // 可以选择等待一段时间后重试
-        memcpy(return_errstr, "WIFI_SCAN_CODE_SUCCESS", strlen("WIFI_SCAN_CODE_SUCCESS"));
-        g_wifi_scan_flag = 1;
-        set_wifi_scan_status(WIFI_SCAN_RUNNING);
+        memcpy(return_errstr, "WIFI_SCAN_CODE_SCANNING", strlen("WIFI_SCAN_CODE_SCANNING"));
         ret = 0;
     }
     else
@@ -314,10 +257,8 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     printf(" ================ in wifi_get_list ====================\r\n");
     int ret = 0;
     char return_errstr[32] = {0};
-    struct wifi_scan_ssid_info *all_wifi_info = NULL;
+    struct wifi_scan_ssid_info *temp_all_wifi_info = NULL;
     int all_wifi_count = 0;
-
-    // printf("&ret = %p\n", &ret);
 
     // 检查 args 是否为 NULL
     if (args == NULL)
@@ -326,7 +267,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
         ret = 1;
         goto cleanup;
     }
-    
+
     // 获取 "details" 项
     cJSON *details_item = cJSON_GetObjectItemCaseSensitive(args, "details");
 
@@ -361,11 +302,12 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     // 打印调试信息
     printf("Handling %s with details level: %d\n", cmd, details);
 
-    all_wifi_count = get_wifi_scan_ssid_info(&all_wifi_info);
+    get_wifi_scan_result(&temp_all_wifi_info,&all_wifi_count);
+
     if (all_wifi_count == 0)
     {
         printf("the wifi list info is empty\n");
-        ret = 1;
+        ret = 0;
         memcpy(return_errstr, "WIFI_GET_LIAT_CODE_EMPTY", strlen("WIFI_GET_LIAT_CODE_EMPTY"));
     }
     else
@@ -373,6 +315,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
         ret = 0;
         memcpy(return_errstr, "WIFI_GET_LIAT_CODE_SUCCESS", strlen("WIFI_GET_LIAT_CODE_SUCCESS"));
     }
+    g_wifi_scan_flag = 0; /*此次获取完wifi list 之后还需要再扫描才能拿到新的 wifi list*/
 
     // 创建根 JSON 对象
     cJSON *root = cJSON_CreateObject();
@@ -397,27 +340,35 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     }
 
     // 根据 details 的值执行不同的处理逻辑
-    for (int i = 0; i < all_wifi_count; ++i)
+    if (all_wifi_count > 0)
     {
-        cJSON *wifi_item = cJSON_CreateObject();
-        if (wifi_item == NULL)
+        for (int i = 0; i < all_wifi_count; ++i)
         {
-            printf("Error: Failed to create cJSON object for WiFi item\n");
-            cJSON_Delete(root);
-            cJSON_Delete(wifi_list);
-            ret = 1;
-            goto cleanup;
+            cJSON *wifi_item = cJSON_CreateObject();
+            if (wifi_item == NULL)
+            {
+                printf("Error: Failed to create cJSON object for WiFi item\n");
+                cJSON_Delete(root);
+                cJSON_Delete(wifi_list);
+                ret = 1;
+                goto cleanup;
+            }
+
+            cJSON_AddStringToObject(wifi_item, "ssid", temp_all_wifi_info[i].ssid);
+            cJSON_AddNumberToObject(wifi_item, "rssi", temp_all_wifi_info[i].rssi);
+
+            if (details == DETAILS_FULL)
+            {
+                cJSON_AddNumberToObject(wifi_item, "channel", temp_all_wifi_info[i].channel_number);
+            }
+
+            cJSON_AddItemToArray(wifi_list, wifi_item);
         }
-
-        cJSON_AddStringToObject(wifi_item, "ssid", all_wifi_info[i].ssid);
-        cJSON_AddNumberToObject(wifi_item, "rssi", all_wifi_info[i].rssi);
-
-        if (details == DETAILS_FULL)
-        {
-            cJSON_AddNumberToObject(wifi_item, "channel", all_wifi_info[i].channel_number);
-        }
-
-        cJSON_AddItemToArray(wifi_list, wifi_item);
+    }
+    else
+    {
+        cJSON_AddStringToObject(wifi_list, "ssid", "");
+        cJSON_AddNumberToObject(wifi_list, "rssi", 0);
     }
 
     cJSON_AddItemToObject(root, "wifi_list", wifi_list);
@@ -466,7 +417,7 @@ int handle_wifi_stop_scan(const char *cmd, cJSON *args, char *return_json_data)
     }
     // 在这里添加实际的处理逻辑
 
-    if (g_wifi_scan_status == WIFI_SCAN_STOP)
+    if (WIFI_SCAN_STOP == get_wifi_scan_status(NULL))
     {
         printf("the wifi scan timeout is already stop\r\n");
         ret = 1;
@@ -475,10 +426,11 @@ int handle_wifi_stop_scan(const char *cmd, cJSON *args, char *return_json_data)
     else
     {
         printf("the wifi scan timeout is not end\r\n");
-        g_wifi_scan_status = WIFI_SCAN_STOP;
+        set_wifi_cmd_status(WIFI_SCAN_STOP);
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
+        wifi_enter_smp_cfg_mode();
 
-        if (g_wifi_scan_status == WIFI_SCAN_STOP)
+        if (WIFI_SCAN_STOP == get_wifi_cmd_status(NULL))
         {
             printf("the wifi scan timeout is really ok\r\n");
             ret = 0;
@@ -526,8 +478,9 @@ uint32_t set_wifi_connect_start_time_ms(uint32_t wifi_connect_start_time_ms)
 {
     g_wifi_connect_start_time_ms = wifi_connect_start_time_ms;
 }
-uint32_t get_wifi_connect_end_time_ms(void *pri)
+uint32_t set_wifi_connect_end_time_ms(uint32_t wifi_connect_end_time)
 {
+    g_wifi_connect_end_time_ms = wifi_connect_end_time;
     return g_wifi_connect_end_time_ms;
 }
 
@@ -545,15 +498,17 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     printf("Handling %s with ssid: %s, password: %s, timeout: %d\n", cmd, ssid, password, connect_timeout_s);
     // 在这里添加实际的处理逻辑
 
-    wifi_set_sta_connect_timeout(connect_timeout_s);
-    wifi_enter_sta_mode(ssid, password);
+    /*后面两个参数，需要实际需求的时候加上 两个callback函数*/
+    my_task_wifi_connect(ssid, password, connect_timeout_s, NULL, NULL,NULL,NULL);
+    //wifi_sta_mode_connect(ssid, password, connect_timeout_s, NULL, NULL);
     set_wifi_connect_start_time_ms(timer_get_ms());
+
     memcpy(return_errstr, "WIFI_CONNECT_CODE_SUCCESS", strlen("WIFI_CONNECT_CODE_SUCCESS"));
-    // memcpy(return_status, "WL_CONNECTED", strlen("WL_CONNECTED"));
 
     set_wifi_cmd_status(WIFI_CMD_CONNECTING);
-    // 保存连接信息
-    wifi_store_mode_info(STA_MODE, ssid, password);
+
+    // // 保存连接信息
+    // wifi_store_mode_info(STA_MODE, ssid, password);
     // 封装return_json_data
     cJSON *root = cJSON_CreateObject(); // 创建根节点
     if (!root)
@@ -599,7 +554,9 @@ int handle_wifi_disconnect(const char *cmd, cJSON *args, char *return_json_data)
     }
     // 在这里添加实际的处理逻辑
 
-    wifi_enter_sta_mode(ssid, "");
+    /*第一个参数为 callback函数,需要传入的时候申明之后再传入*/
+    my_task_wifi_disconnect(NULL, NULL,NULL);
+    // wifi_sta_mode_disconnect(NULL);
 
     memcpy(return_errstr, "WIFI_DISCONNECT_CODE_SUCCESS", strlen("WIFI_DISCONNECT_CODE_SUCCESS"));
     // 封装return_json_data
@@ -649,6 +606,7 @@ int handle_wifi_reconnect(const char *cmd, cJSON *args, char *return_json_data)
     int retry = cJSON_GetObjectItemCaseSensitive(args, "retry")->valueint;
 
     printf("Handling %s with enable: %d, retry: %d\n", cmd, enable, retry);
+
     // 在这里添加实际的处理逻辑
     if (true == enable)
     {
@@ -665,7 +623,8 @@ int handle_wifi_reconnect(const char *cmd, cJSON *args, char *return_json_data)
         }
         while (retry--)
         {
-            wifi_enter_sta_mode(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd);
+            // wifi_enter_sta_mode(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd);
+            my_task_wifi_connect(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd, 10, NULL, NULL,NULL,NULL);
         }
         ret = 0;
         memcpy(return_errstr, "WIFI_RECONNECT_CODE_SUCCESS", strlen("WIFI_RECONNECT_CODE_SUCCESS"));
@@ -729,16 +688,16 @@ int handle_wifi_get_status(const char *cmd, cJSON *args, char *return_json_data)
         memcpy(temp_ssid, ssid->valuestring, strlen(ssid->valuestring));
     }
 
-    temp_connect_state = get_wifi_sta_connect_state(NULL);
-    if (temp_connect_state == WIFI_STA_DISCONNECT)
+    temp_connect_state = get_wifi_connect_status(NULL);
+    if (temp_connect_state == WIFI_CONNECT_FAIL)
     {
         memcpy(connect_status, "WIFI_STA_DISCONNECT", strlen("WIFI_STA_DISCONNECT"));
     }
-    else if (temp_connect_state == WIFI_STA_CONNECT_SUCC)
+    else if (temp_connect_state == WIFI_CONNECT_SUCC)
     {
         memcpy(connect_status, "WIFI_STA_CONNECT_SUCC", strlen("WIFI_STA_CONNECT_SUCC"));
     }
-    else if (temp_connect_state == WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID)
+    else if (temp_connect_state == WIFI_CONNECT_TIMEOUT_OR_NO_SSID)
     {
         memcpy(connect_status, "WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID", strlen("WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID"));
     }
@@ -856,29 +815,13 @@ cleanup:
     return ret;
 }
 
-char ota_url[512];
-#include "ota/http_ota.h"
-
-int handle_http_ota(const char *cmd, cJSON *args, char *return_json_data)
-{
-    cJSON *nurl = cJSON_GetObjectItemCaseSensitive(args, "url");
-    if (nurl != NULL && nurl->type == cJSON_String) {
-        char *vurl = nurl->valuestring;
-        strcpy(ota_url, vurl);
-        
-        return http_create_download_task(ota_url);
-    } else {
-        return 1;
-    }
-}
-
 // 主解析函数
 int parse_and_dispatch_json(const char *json_data, char *return_json_data)
 {
     printf("Entering parse_and_dispatch_json\n");  // 函数入口
     printf("JSON data to parse: %s\n", json_data); // JSON解析前
     int ret = 0;
-    char return_errstr[32] = {0};
+    char return_errstr[64] = {0};
 
     cJSON *root = cJSON_Parse(json_data);
     if (!root)
@@ -902,12 +845,13 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
 
     if (cJSON_IsString(cmd_name_item) && cmd_name_item->valuestring != NULL && cJSON_IsObject(cmd_args_item))
     {
+        printf("the current wifi_cmd_status is %d\r\n", get_wifi_cmd_status(NULL));
         char *cmd_name = cmd_name_item->valuestring;
-
         printf("Command name: %s\n", cmd_name); // 命令处理前
         if (strcmp(cmd_name, "wifi_get_list") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            // printf("the current wifi_cmd_status is %d\r\n",get_wifi_cmd_status(NULL));
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
                 if (1 == g_wifi_scan_flag)
                 {
@@ -924,22 +868,22 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                     memcpy(return_errstr, "WIFI_GET_LIST_CODE_NO_WIFI_SCAN", strlen("WIFI_GET_LIST_CODE_NO_WIFI_SCAN"));
                 }
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_SCAN_CODE_DEFAULT", strlen("WIFI_SCAN_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_SCANNING", strlen("WIFI_INFO_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_CONNECTING", strlen("WIFI_INFO_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_RECONNECTING", strlen("WIFI_INFO_CODE_RECONNECTING"));
@@ -947,7 +891,8 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_scan") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            /* 只有WIFI_SMP_CFG_MODE模式下才能扫描*/
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL) && WIFI_SMP_CFG_MODE == get_wifi_manager_mode(NULL))
             {
                 ret = handle_wifi_scan(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -956,22 +901,22 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 }
                 printf("wifi_scan_handled\n"); // 命令处理后
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_SCAN_CODE_DEFAULT", strlen("WIFI_SCAN_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_SCAN_CODE_SCANNING", strlen("WIFI_SCAN_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_SCAN_CODE_CONNECTING", strlen("WIFI_SCAN_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_SCAN_CODE_RECONNECTING", strlen("WIFI_SCAN_CODE_RECONNECTING"));
@@ -979,7 +924,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_stop_scan") == 0)
         {
-            if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_stop_scan(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -996,7 +941,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_connect") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_connect(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -1005,22 +950,22 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 }
                 printf("wifi_connect_handled\n"); // 命令处理后
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_CONNECT_CODE_DEFAULT", strlen("WIFI_CONNECT_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_CONNECT_CODE_SCANNING", strlen("WIFI_CONNECT_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_CONNECT_CODE_CONNECTING", strlen("WIFI_CONNECT_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_CONNECT_CODE_RECONNECTING", strlen("WIFI_CONNECT_CODE_RECONNECTING"));
@@ -1028,9 +973,9 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_disconnect") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
-                if (WIFI_STA_CONNECT_SUCC == g_wifi_sta_connect_state)
+                if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL))
                 {
                     ret = handle_wifi_disconnect(cmd_name, cmd_args_item, return_json_data);
                     if (1 == ret)
@@ -1045,22 +990,22 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                     memcpy(return_errstr, "WIFI_DISCONNECT_CODE_NOT_CONNECTED", strlen("WIFI_DISCONNECT_CODE_NOT_CONNECTED"));
                 }
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_DISCONNECT_CODE_DEFAULT", strlen("WIFI_DISCONNECT_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_DISCONNECT_CODE_SCANNING", strlen("WIFI_DISCONNECT_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_DISCONNECT_CODE_CONNECTING", strlen("WIFI_DISCONNECT_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_DISCONNECT_CODE_RECONNECTING", strlen("WIFI_DISCONNECT_CODE_RECONNECTING"));
@@ -1068,7 +1013,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_reconnect") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_reconnect(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -1077,22 +1022,22 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 }
                 printf("wifi_reconnect_handled\n"); // 命令处理后
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_RECONNECT_CODE_DEFAULT", strlen("WIFI_RECONNECT_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_RECONNECT_CODE_SCANNING", strlen("WIFI_RECONNECT_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_RECONNECT_CODE_CONNECTING", strlen("WIFI_RECONNECT_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_RECONNECT_CODE_RECONNECTING", strlen("WIFI_RECONNECT_CODE_RECONNECTING"));
@@ -1100,7 +1045,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_get_status") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_get_status(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -1109,22 +1054,22 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 }
                 printf("wifi_get_status_handled\n"); // 命令处理后
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_GET_STATUS_CODE_DEFAULT", strlen("WIFI_GET_STATUS_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_GET_STATUS_CODE_SCANNING", strlen("WIFI_GET_STATUS_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_GET_STATUS_CODE_CONNECTING", strlen("WIFI_GET_STATUS_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_GET_STATUS_CODE_RECONNECTING", strlen("WIFI_GET_STATUS_CODE_RECONNECTING"));
@@ -1132,7 +1077,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_info") == 0)
         {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_info(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -1141,56 +1086,25 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 }
                 printf("wifi_info_handled\n"); // 命令处理后
             }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
+            else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_DEFAULT", strlen("WIFI_INFO_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
+            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_SCANNING", strlen("WIFI_INFO_CODE_SCANNING"));
             }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_CONNECTING", strlen("WIFI_INFO_CODE_CONNECTING"));
             }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
+            else if (WIFI_CMD_RECONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
                 memcpy(return_errstr, "WIFI_INFO_CODE_RECONNECTING", strlen("WIFI_INFO_CODE_RECONNECTING"));
-            }
-        }
-        else if (strcmp(cmd_name, "http_ota") == 0)
-        {
-            if (WIFI_CMD_IDLE == g_wifi_cmd_status)
-            {
-                ret = handle_http_ota(cmd_name, cmd_args_item, return_json_data);
-                if (1 == ret) {
-                    memcpy(return_errstr, "WIFI_INFO_CODE_CMD_ERROR", strlen("WIFI_INFO_CODE_CMD_ERROR"));
-                }
-                printf("http_ota_handled\n"); // 命令处理后
-            }
-            else if (WIFI_CMD_DEFAULT == g_wifi_cmd_status)
-            {
-                ret = 1;
-                memcpy(return_errstr, "WIFI_CONNECT_CODE_DEFAULT", strlen("WIFI_CONNECT_CODE_DEFAULT"));
-            }
-            else if (WIFI_CMD_SCANNING == g_wifi_cmd_status)
-            {
-                ret = 1;
-                memcpy(return_errstr, "WIFI_CONNECT_CODE_SCANNING", strlen("WIFI_CONNECT_CODE_SCANNING"));
-            }
-            else if (WIFI_CMD_CONNECTING == g_wifi_cmd_status)
-            {
-                ret = 1;
-                memcpy(return_errstr, "WIFI_CONNECT_CODE_CONNECTING", strlen("WIFI_CONNECT_CODE_CONNECTING"));
-            }
-            else if (WIFI_CMD_RECONNECTING == g_wifi_cmd_status)
-            {
-                ret = 1;
-                memcpy(return_errstr, "WIFI_CONNECT_CODE_RECONNECTING", strlen("WIFI_CONNECT_CODE_RECONNECTING"));
             }
         }
         else

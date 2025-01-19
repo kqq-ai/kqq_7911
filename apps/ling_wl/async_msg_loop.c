@@ -4,12 +4,17 @@
 #include "net_music_play_my.h"
 #include "os/os_api.h"
 #include "cpu.h"
+#include "bt_ble/app_wifi_manage.h"
 
-enum {
+enum
+{
     MY_TASK_MESSAGE_SWITCH_PLAY,
     MY_TASK_MESSAGE_SWITCH_ONLY,
     MY_TASK_MESSAGE_PLAY_ONE,
     MY_TASK_MESSAGE_MONITER_RSSI,
+    MY_TASK_MESSAGE_WIFI_SCAN_START,
+    MY_TASK_MESSAGE_WIFI_CONNECCT,
+    MY_TASK_MESSAGE_WIFI_DISCONNECT,
 
     MY_TASK_MESSAGE_MAX = 0xFF,
 };
@@ -17,44 +22,76 @@ enum {
 #define SN_MAX_SIZE 16
 #define AUDIO_URL_MAX_LEN 256
 
-typedef struct {
+typedef struct
+{
     char sn[SN_MAX_SIZE];
     char audio_url[AUDIO_URL_MAX_LEN];
     void *priv;
     void *cb;
 } MyMessageSwitchPlay;
 
-typedef struct {
+typedef struct
+{
     char sn[SN_MAX_SIZE];
     void *priv;
     void *cb;
 } MyMessageSwitchOnly;
 
-typedef struct {
+typedef struct
+{
     char audio_url[AUDIO_URL_MAX_LEN];
-    u8   audio_enable;
-    int  audio_message_id;
+    u8 audio_enable;
+    int audio_message_id;
     void *priv;
     void *cb;
 } MyMessagePlayOne;
 
-typedef struct {
+typedef struct
+{
     void *rssi_cb_priv;
     void (*rssi_cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi);
     void *priv;
     void *cb;
 } MyMessageMoniterRSSI;
 
-typedef struct {
+typedef struct
+{
+    void *priv;
+    void *cb;
+} MyMessageWIFIScanStart;
+
+typedef struct
+{
+    char ssid[32];
+    char pwd[32];
+    int timeout_s;
+    wifi_connect_succ_cb connect_succ_func;
+    wifi_connect_fail_cb connect_fail_func;
+    void *priv;
+    void *cb;
+} MyMessageWIFIConnect;
+
+typedef struct
+{
+    wifi_disconnect_cb disconnect_func;
+    void *priv;
+    void *cb;
+} MyMessageWIFIDisconnect;
+
+typedef struct
+{
     int msg;
-    union {
+    union
+    {
         MyMessageSwitchPlay switch_play;
         MyMessageSwitchOnly switch_only;
         MyMessagePlayOne play_one;
         MyMessageMoniterRSSI moniter_rssi;
+        MyMessageWIFIScanStart wifi_scan_start;
+        MyMessageWIFIConnect wifi_connect;
+        MyMessageWIFIDisconnect wifi_disconnect;
     };
 } MyTaskMessageType;
-
 
 int g_playing_audio_message_id = 0;
 
@@ -72,11 +109,14 @@ static void switch_only_sync(MyTaskMessageType *message);
 static void switch_play_sync(MyTaskMessageType *message);
 static void play_one_sync(MyTaskMessageType *message);
 static void moniter_rssi_sync(MyTaskMessageType *message);
+static void wifi_scan_start_sync(MyTaskMessageType *message);
+static void wifi_connect_sync(MyTaskMessageType *message);
+static void wifi_disconnect_sync(MyTaskMessageType *message);
 
 static void my_task(void *priv)
 {
     MyTaskMessageType message;
-    
+
     os_sem_create(&sem_net_music_dec_end, 0);
 
     printf("Init message queue\n");
@@ -89,7 +129,8 @@ static void my_task(void *priv)
 
         printf("My task get message: %d\n", message.msg);
 
-        switch (message.msg) {
+        switch (message.msg)
+        {
         case MY_TASK_MESSAGE_SWITCH_PLAY:
             switch_play_sync(&message);
             break;
@@ -101,6 +142,15 @@ static void my_task(void *priv)
             break;
         case MY_TASK_MESSAGE_MONITER_RSSI:
             moniter_rssi_sync(&message);
+            break;
+        case MY_TASK_MESSAGE_WIFI_SCAN_START:
+            wifi_scan_start_sync(&message);
+            break;
+        case MY_TASK_MESSAGE_WIFI_CONNECCT:
+            wifi_connect_sync(&message);
+            break;
+        case MY_TASK_MESSAGE_WIFI_DISCONNECT:
+            wifi_disconnect_sync(&message);
             break;
         }
     }
@@ -138,8 +188,9 @@ static void switch_only_sync(MyTaskMessageType *message)
     switch_only(param->sn);
 
     /* 执行任务完成回调 */
-    if (param->cb != NULL) {
-        ((void (*)(void* priv))param->cb)(param->priv);
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
     }
 }
 
@@ -148,7 +199,6 @@ static void play_end_callback(void *priv)
     log_i("play end\n");
     os_sem_post(&sem_net_music_dec_end);
 }
-
 
 static void switch_play_sync(MyTaskMessageType *message)
 {
@@ -170,19 +220,19 @@ static void switch_play_sync(MyTaskMessageType *message)
 
     log_i("E");
     /* 执行任务完成回调 */
-    if (param->cb != NULL) {
-        ((void (*)(void* priv))param->cb)(param->priv);
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
     }
 }
-
-#include "app_mode/lwl_app_core.h"
 
 static void play_one_sync(MyTaskMessageType *message)
 {
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE);
     MyMessagePlayOne *param = &message->play_one;
 
-    if (param->audio_enable) {
+    if (param->audio_enable)
+    {
         /* 记录当前播放的音频message_id */
         g_playing_audio_message_id = param->audio_message_id;
 
@@ -194,8 +244,9 @@ static void play_one_sync(MyTaskMessageType *message)
     }
 
     /* 执行任务完成回调 */
-    if (param->cb != NULL) {
-        ((void (*)(void* priv))param->cb)(param->priv);
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
     }
 }
 
@@ -208,16 +259,59 @@ static void moniter_rssi_sync(MyTaskMessageType *message)
     ble_start_scan_rssi(param->rssi_cb_priv, param->rssi_cb);
 
     /* 执行任务完成回调 */
-    if (param->cb != NULL) {
-        ((void (*)(void* priv))param->cb)(param->priv);
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
+    }
+}
+static void wifi_scan_start_sync(MyTaskMessageType *message)
+{
+    ASSERT(message->msg == MY_TASK_MESSAGE_WIFI_SCAN_START);
+    MyMessageWIFIScanStart *param = &message->wifi_scan_start;
+
+    /* 调用wifi_scan_start() */
+    wifi_scan_start(NULL);
+
+    /* 执行任务完成回调 */
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
+    }
+}
+static void wifi_connect_sync(MyTaskMessageType *message)
+{
+    ASSERT(message->msg == MY_TASK_MESSAGE_WIFI_CONNECCT);
+    MyMessageWIFIConnect *param = &message->wifi_connect;
+    wifi_connect(param->ssid, param->pwd, param->timeout_s, param->connect_succ_func, param->connect_fail_func);
+
+    /* 执行任务完成回调 */
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
+    }
+}
+
+
+static void wifi_disconnect_sync(MyTaskMessageType *message)
+{
+    ASSERT(message->msg == MY_TASK_MESSAGE_WIFI_DISCONNECT);
+    MyMessageWIFIDisconnect *param = &message->wifi_disconnect;
+    wifi_disconnect(param->disconnect_func);
+
+    /* 执行任务完成回调 */
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
     }
 }
 
 /**
  * 打印字符串，蓝牙广播名可能包含\0字符（...）
  */
-void printf_dev_name(char *name, u16 len) {
-    for (int i = 0; i< len; ++i) {
+void printf_dev_name(char *name, u16 len)
+{
+    for (int i = 0; i < len; ++i)
+    {
         printf("%c", name[i]);
     }
 }
@@ -231,7 +325,7 @@ void printf_dev_name(char *name, u16 len) {
  * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
  */
-void my_task_switch_play(char *sn, char* audio_url, void* priv, void* cb)
+void my_task_switch_play(char *sn, char *audio_url, void *priv, void *cb)
 {
     /* 创建消息 */
     MyTaskMessageType message;
@@ -241,7 +335,9 @@ void my_task_switch_play(char *sn, char* audio_url, void* priv, void* cb)
     message.switch_play.priv = priv;
     message.switch_play.cb = cb;
     printf("Put message: %d\n", message.msg);
-    printf("sn         : ");    printf_dev_name(message.switch_only.sn, SN_MAX_SIZE); printf("\n");
+    printf("sn         : ");
+    printf_dev_name(message.switch_only.sn, SN_MAX_SIZE);
+    printf("\n");
     printf("audio_url  : %s\n", message.switch_play.audio_url);
     /* 消息入队 */
     my_blocking_queue_enqueue(&g_message_queue, &message);
@@ -255,7 +351,7 @@ void my_task_switch_play(char *sn, char* audio_url, void* priv, void* cb)
  * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
  */
-void my_task_switch_only(char *sn, void* priv, void* cb)
+void my_task_switch_only(char *sn, void *priv, void *cb)
 {
     /* 创建消息 */
     MyTaskMessageType message;
@@ -264,7 +360,9 @@ void my_task_switch_only(char *sn, void* priv, void* cb)
     message.switch_only.priv = priv;
     message.switch_only.cb = cb;
     printf("Put message: %d\n", message.msg);
-    printf("sn         : ");    printf_dev_name(message.switch_only.sn, SN_MAX_SIZE); printf("\n");
+    printf("sn         : ");
+    printf_dev_name(message.switch_only.sn, SN_MAX_SIZE);
+    printf("\n");
     /* 消息入队 */
     my_blocking_queue_enqueue(&g_message_queue, &message);
 }
@@ -278,7 +376,7 @@ void my_task_switch_only(char *sn, void* priv, void* cb)
  * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
  */
-void my_task_play_one(int audio_message_id, char* audio_url, void* priv, void* cb)
+void my_task_play_one(int audio_message_id, char *audio_url, void *priv, void *cb)
 {
     /* 创建消息 */
     MyTaskMessageType message;
@@ -294,7 +392,6 @@ void my_task_play_one(int audio_message_id, char* audio_url, void* priv, void* c
     my_blocking_queue_enqueue(&g_message_queue, &message);
 }
 
-
 /**
  * @name my_task_play_one
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
@@ -304,8 +401,8 @@ void my_task_play_one(int audio_message_id, char* audio_url, void* priv, void* c
  * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
  */
-void my_task_scan_rssi(void *rssi_cb_priv, 
-        void (*rssi_cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void* priv, void* cb)
+void my_task_scan_rssi(void *rssi_cb_priv,
+                       void (*rssi_cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void *priv, void *cb)
 {
     /* 创建消息 */
     MyTaskMessageType message;
@@ -320,13 +417,87 @@ void my_task_scan_rssi(void *rssi_cb_priv,
     printf("Put message: %d over\n", message.msg);
 }
 
+/**
+ * @name my_task_wifi_scan_start
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_wifi_scan_start(void *priv, void *cb)
+{
+    /* 创建消息 */
+    MyTaskMessageType message;
+    message.msg = MY_TASK_MESSAGE_WIFI_SCAN_START;
+    message.wifi_scan_start.priv = priv;
+    message.wifi_scan_start.cb = cb;
+    printf("Put message: %d\n", message.msg);
+    /* 消息入队 */
+    my_blocking_queue_enqueue(&g_message_queue, &message);
+}
+/**
+ * @name my_task_wifi_connect
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_wifi_connect(
+    char *ssid,
+    char *pwd,
+    int timeout_s,
+    wifi_connect_succ_cb connect_succ_func,
+    wifi_connect_fail_cb connect_fail_func,
+    void *priv,
+    void *cb)
+{
+    /* 创建消息 */
+    MyTaskMessageType message;
+    memset(&message, 0, sizeof(message));
+    message.msg = MY_TASK_MESSAGE_WIFI_CONNECCT;
+    memcpy(message.wifi_connect.ssid, ssid, strlen(ssid));
+    memcpy(message.wifi_connect.pwd, pwd, strlen(pwd));
+    message.wifi_connect.timeout_s = timeout_s;
+    message.wifi_connect.connect_succ_func = connect_succ_func;
+    message.wifi_connect.connect_fail_func = connect_fail_func;
+    message.wifi_connect.priv = priv;
+    message.wifi_connect.cb = cb;
+    printf("Put message: %d\n", message.msg);
+    /* 消息入队 */
+    my_blocking_queue_enqueue(&g_message_queue, &message);
+}
+
+/**
+ * @name my_task_wifi_disconnect
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_wifi_disconnect(wifi_disconnect_cb disconnect_func,void *priv, void *cb)
+{
+    /* 创建消息 */
+    MyTaskMessageType message;
+    message.msg = MY_TASK_MESSAGE_WIFI_DISCONNECT;
+    message.wifi_disconnect.disconnect_func = disconnect_func;
+    message.wifi_disconnect.priv = priv;
+    message.wifi_disconnect.cb = cb;
+    printf("Put message: %d\n", message.msg);
+    /* 消息入队 */
+    my_blocking_queue_enqueue(&g_message_queue, &message);
+}
+
+
+
 static void audio_message_cancellation_cb(void *data, void *priv)
 {
     /* 取消特定audio_only消息的播放 */
     int audio_message_id = (int)priv;
     MyTaskMessageType *pMessage = (MyTaskMessageType *)data;
-    if (pMessage->msg == MY_TASK_MESSAGE_PLAY_ONE) {
-        if (pMessage->play_one.audio_message_id == audio_message_id) {
+    if (pMessage->msg == MY_TASK_MESSAGE_PLAY_ONE)
+    {
+        if (pMessage->play_one.audio_message_id == audio_message_id)
+        {
             pMessage->play_one.audio_enable = false;
         }
     }
@@ -335,7 +506,7 @@ static void audio_message_cancellation_cb(void *data, void *priv)
 /**
  * @name disable_specific_audio_message
  * @brief Cancel the audio message with a specific audio message ID.
- * 
+ *
  * @param audio_messageId Audio messsage id (LingOS).
  */
 void disable_specific_audio_message(int audio_message_id)
@@ -346,7 +517,8 @@ void disable_specific_audio_message(int audio_message_id)
 void start_async_msg_loop()
 {
     printf("create my_task\n");
-    if (thread_fork("my_task", 10, 1024, 0, NULL, my_task, NULL) != OS_NO_ERR) {
+    if (thread_fork("my_task", 10, 1024, 0, NULL, my_task, NULL) != OS_NO_ERR)
+    {
         printf("thread fork fail\n");
     }
 }

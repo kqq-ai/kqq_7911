@@ -20,6 +20,39 @@
 #include "sock_api/sock_api.h"
 #include "asm/rf_coexistence_config.h"
 
+#include "bt_ble/app_wifi_manage.h"
+
+static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
+static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
+
+void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
+{
+    if (NULL != wifi_connect_succ_cb_func_pri)
+    {
+        wifi_connect_succ_cb_func_pri = callback;
+    }
+}
+
+void register_wifi_connect_fail_func(wifi_connect_fail_cb callback, void *pri)
+{
+    if (NULL != wifi_connect_fail_cb_func_pri)
+    {
+        wifi_connect_fail_cb_func_pri = callback;
+    }
+}
+
+int func_param = 0;
+wifi_scan_timeout_clallback func_ptr = NULL;
+
+void register_wifi_scan_func(wifi_scan_timeout_clallback callback, int timeout_s)
+{
+    if (callback != NULL)
+    {
+        func_ptr = callback;
+        func_param = timeout_s;
+    }
+}
+
 static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 {
     int ret = 0;
@@ -27,7 +60,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     switch (event)
     {
-
     case WIFI_EVENT_MODULE_INIT:
         puts("|network_user_callback->WIFI_EVENT_MODULE_INIT\n");
 
@@ -35,6 +67,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         memset(&wifi_default_mode_parm, 0, sizeof(struct wifi_store_info));
         wifi_default_mode_parm.mode = SMP_CFG_MODE;
         wifi_set_default_mode(&wifi_default_mode_parm, 1, 0);
+
+        /*wifi manager 所需要的一些初始化*/
+        wifi_manage_init(NULL);
         break;
 
     case WIFI_EVENT_MODULE_START:
@@ -62,6 +97,11 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
             | BIT(19)             // 19:MCS7/72.2M
             ;
         wifi_set_tx_rate_control_tab(tx_rate_control_tab);
+
+        /*hzx add*/
+        set_wifi_manager_mode(WIFI_IDLE_MODE);
+        set_wifi_info_status(WIFI_INFO_IDLE);
+
         break;
 
     case WIFI_EVENT_MODULE_STOP:
@@ -78,6 +118,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_STA_START:
         puts("|network_user_callback->WIFI_EVENT_STA_START\n");
+
+        /*hzx add*/
+        
+        set_wifi_manager_mode(WIFI_STA_MODE);
+        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
         break;
 
     case WIFI_EVENT_MODULE_START_ERR:
@@ -85,15 +131,21 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_STA_STOP:
-        puts("|network_user_callback->WIFI_EVENT_STA_STOP\n");
+        puts("|netwk_user_callback->WIFI_EVENT_STA_STOP\n");
         break;
 
     case WIFI_EVENT_STA_SCAN_COMPLETED:
         puts("|network_user_callback->WIFI_STA_SCAN_COMPLETED\n");
+        store_wifi_scan_result(NULL);
+        // 处理cmd发过来的scan
+        if (func_ptr != NULL)
+        {
+            func_ptr(func_param);
+        }
         break;
 
     case WIFI_EVENT_STA_CONNECT_SUCC:
-        printf("|network_user_callback->WIFI_STA_CONNECT_SUCC,CH=%d\r\n", wifi_get_channel());
+        printf("|network_user_callback->WIFI_STA_CONNECT_SUCC\n");
         break;
 
     case WIFI_EVENT_MP_TEST_START:
@@ -101,7 +153,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_MP_TEST_STOP:
-        puts("|network_user_callback->WIFI_EVENT_MP_TEST_STOP\n");
+        puts("|network_user_callback->WIFI_EVENorT_MP_TEST_STOP\n");
         break;
 
     case WIFI_EVENT_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID:
@@ -109,6 +161,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net.arg = "net";
         net.event = NET_CONNECT_TIMEOUT_NOT_FOUND_SSID;
         net_event_notify(NET_EVENT_FROM_USER, &net);
+
+        /*hzx add*/
+        // set_wifi_connect_timeout_ms(timer_get_ms());
+        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_TIMEOUT_OR_NO_SSID);
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -116,6 +174,13 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net.arg = "net";
         net.event = NET_CONNECT_ASSOCIAT_FAIL;
         net_event_notify(NET_EVENT_FROM_USER, &net);
+
+        /*hzx 添加部分*/
+        set_wifi_connect_status(WIFI_CONNECT_FAIL);
+        if (NULL != wifi_connect_fail_cb_func_pri)
+        {
+            wifi_connect_fail_cb_func_pri(NULL);
+        }
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
@@ -127,10 +192,36 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net.arg = "net";
         net.event = NET_EVENT_CONNECTED;
         net_event_notify(NET_EVENT_FROM_USER, &net);
+
+        /*hzx add*/
+        set_wifi_manager_mode(WIFI_STA_MODE);
+        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_SUCC);
+        set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
+
+        /*保存当前连接的模式和ssid 为了reconnect*/
+        struct wifi_mode_info g_temp_info;
+        g_temp_info.mode = STA_MODE;
+        wifi_get_mode_cur_info(&g_temp_info);
+        set_current_connected_ssid(g_temp_info.ssid);
+        wifi_store_mode_info(g_temp_info.mode, g_temp_info.ssid, g_temp_info.pwd);
+        printf("the event callback store the current connected ssid: %s  pwd: %s\n", g_temp_info.ssid, g_temp_info.pwd);
+
+        if (NULL != wifi_connect_succ_cb_func_pri)
+        {
+            wifi_connect_succ_cb_func_pri(NULL);
+        }
         break;
 
     case WIFI_EVENT_STA_DISCONNECT:
         puts("|network_user_callback->WIFI_STA_DISCONNECT\n");
+        net.arg = "net";
+        net.event = NET_EVENT_DISCONNECTED;
+        net_event_notify(NET_EVENT_FROM_USER, &net);
+
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_FAIL);
         break;
 
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT:
@@ -159,6 +250,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_SMP_CFG_START:
         puts("|network_user_callback->WIFI_EVENT_SMP_CFG_START\n");
+
+        /*hzx add*/
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_manager_mode(WIFI_SMP_CFG_MODE); // 设置当前模式为smp配置模式
+        set_wifi_info_status(WIFI_INFO_SMP_CFG_MODE);
+        set_wifi_connect_status(WIFI_CONNECT_FAIL);
         break;
 
     case WIFI_EVENT_SMP_CFG_STOP:
@@ -206,12 +303,11 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     return ret;
 }
 
-
 static void wifi_app_task(void *priv) // 主要是create wifi 线程的
 {
     wifi_set_store_ssid_cnt(NETWORK_SSID_INFO_CNT);
     wifi_set_smp_cfg_just_monitor_mode(true);
-
+    wifi_set_sta_connect_best_ssid(0);
     wifi_set_event_callback(wifi_event_callback);
     wifi_on();
 }

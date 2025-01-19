@@ -63,7 +63,7 @@ static int net_connecting_init(void)
 {
     lwl_app_context_t *pcontext = lwl_app_core_context_get_instance();
 
-    connect_wifi("hello", "88888888", connect_success, connect_failed);
+    connect_wifi("vivo", "h116741927", connect_success, connect_failed);
 
     return 0;
 }

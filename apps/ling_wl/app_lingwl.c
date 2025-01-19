@@ -310,6 +310,7 @@ static int app_music_net_event_handler(struct net_event *event)
 
 static int app_lingwl_event_handler(struct application *app, struct sys_event *event)
 {
+    lwl_app_event_handler(app, event);
     switch (event->type) {
     case SYS_KEY_EVENT:
         return app_lingwl_key_event_handler((struct key_event *)event->payload);
@@ -320,7 +321,7 @@ static int app_lingwl_event_handler(struct application *app, struct sys_event *e
     case SYS_BT_EVENT:
         return ble_demo_bt_event_handler(event);
     default:
-        return lwl_app_event_handler(app, event);
+        return false;
     }
 }
 

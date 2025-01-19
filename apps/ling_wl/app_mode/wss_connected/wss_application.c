@@ -303,6 +303,14 @@ static void wss_application_switch_test_mode();
 static void on_key_triple_click(void)
 {
     log_i("[KEY SCAN]Triple press");
+}
+
+/**
+ * @brief 当发生按键四击的回调
+ */
+static void on_key_quadruple_click(void)
+{
+    log_i("[KEY SCAN]Quadruple press");
     wss_application_switch_test_mode();
 }
 
@@ -378,6 +386,8 @@ static void key_scan_loop(void)
                         on_key_double_click();
                     } else if (g_key_click_counter == 3) {
                         on_key_triple_click();
+                    } else if (g_key_click_counter == 4) {
+                        on_key_quadruple_click();
                     }
                     g_key_action_start = false;     // 结束
                 }
@@ -1169,6 +1179,8 @@ void wss_application_loop(struct websocket_struct *websockets_info)
 
     if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
         wss_ping_send(websockets_info);
+
+        log_i("%d %d", g_test_mode, g_recorder_trigger_mode);
         g_heat_timer = g_curr_time;
     }
 }
