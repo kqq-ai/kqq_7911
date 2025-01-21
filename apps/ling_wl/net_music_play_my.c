@@ -764,7 +764,7 @@ int music_player_init(music_player *player)
     memset(player, 0, sizeof(music_player));
     player->net_bp.url = malloc(512);
     player->net_bp.url_len = 512;
-    player->dec_ops = &net_music_dec_ops;
+    player->dec_ops = &local_music_dec_ops;
 
 #ifdef CONFIG_STORE_VOLUME
     if (syscfg_read(CFG_MUSIC_VOL, &player->volume, sizeof(player->volume)) < 0 ||
