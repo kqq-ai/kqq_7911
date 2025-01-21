@@ -24,6 +24,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "os/os_api.h"
 #include "net/wifi/wifi_connect.h"
+#include "bt_ble/app_wifi_manage.h"
 #include "log.h"
 
 int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
@@ -31,39 +32,13 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
     return false;
 }
 
-static void connect_success()
-{
-    lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-}
-
-static void connect_failed()
-{
-    lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-}
-
-static void connect_wifi(char *ssid, char *passwd, void *success_cb, void *failed_cb) 
-{
-    enum wifi_sta_connect_state state;
-
-    wifi_enter_sta_mode(ssid, passwd);
-
-    while (1) {
-        log_i("Connecting to the network...\n");
-        state = wifi_get_sta_connect_state();
-        if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
-            log_i("Network connection is successful!\n");
-            connect_success();
-            break;
-        }
-        os_time_dly(500);
-    }
-}
-
 static int net_connecting_init(void)
 {
-    lwl_app_context_t *pcontext = lwl_app_core_context_get_instance();
-
-    connect_wifi("vivo", "h116741927", connect_success, connect_failed);
+    if (wifi_connect_block("vivo", "h116741927", 10) == WIFI_CONNECT_SUCC) {
+        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+    } else {
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    }
 
     return 0;
 }

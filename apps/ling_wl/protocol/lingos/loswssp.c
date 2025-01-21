@@ -703,32 +703,46 @@ void loswssp_rsp_handler(u8 *buf, u32 len)
         goto error_ret;
     }
 
-    const char *vevent = cjson_get_string_value(nroot, "event");
-    if (vevent == NULL) {
+    if (cjson_get_integer_value(nroot, "errno", &pkg.errno)) {
+        // errno not exists
+    }
+    pkg.errmsg = cjson_get_string_value(nroot, "errmsg");
+    pkg.event  = cjson_get_string_value(nroot, "event");
+    pkg.uuid   = cjson_get_string_value(nroot, "uuid");
+    pkg.debug  = cjson_get_string_value(nroot, "debug");
+    if (pkg.event == NULL) {
         goto error_ret;
     }
-
+    
     struct loswssp_rsp_cb_entry_t *entry = NULL;
     for (int i = 0; i < g_rsp_cb_table_size; ++i) {
-        if (strcmp(vevent, g_rsp_cb_table[i].event_name) == 0) {
+        if (strcmp(pkg.event, g_rsp_cb_table[i].event_name) == 0) {
             entry = &g_rsp_cb_table[i];
             break;
         }
     }
+
     if (entry == NULL) {
-        log_i("Error: can't find event handler: %s", vevent);
+        log_i("Error: can't find event handler: %s", pkg.event);
         goto error_ret;
     }
 
-    if (entry->handler != NULL) {
-        int ret = entry->handler(nroot, &pkg);
-        if (ret == PARSE_Success && g_loswssp_cbk != NULL) {
+    if (pkg.errno == 0) {
+        /* LingOS Successful */
+        if (entry->handler != NULL) {
+            int ret = entry->handler(nroot, &pkg);
+            if (ret == PARSE_Success && g_loswssp_cbk != NULL) {
+                g_loswssp_cbk(entry->type, &pkg);
+            }
+        }
+        if (entry->release != NULL) {
+            entry->release(&pkg);
+        }
+    } else {
+        /* LingOS Error */
+        if (g_loswssp_cbk != NULL) {
             g_loswssp_cbk(entry->type, &pkg);
         }
-    }
-
-    if (entry->release != NULL) {
-        entry->release(&pkg);
     }
 
 error_ret:

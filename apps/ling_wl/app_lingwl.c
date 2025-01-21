@@ -47,6 +47,11 @@ uint8_t en_data_1[] = { // 0xA0, "WCCN24H28FEEEF8"
     0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 
     0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x38, 0x00
 };
+uint8_t en_data_2[] = { // 0xA0, "WCCN24H28FEEEF9"
+    0xA0, 
+    0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 
+    0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x39, 0x00
+};
 
 static void simple_play_prompt(const char *fname) 
 {
@@ -80,6 +85,7 @@ static void lwl_app_task(void *priv)
 
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     context->recorder = &g_recorder;
+    context->uartdev = uart0_hdl;
 
     while (true) {
         lwl_app_mode_loop();
@@ -90,7 +96,7 @@ static void lwl_app_task(void *priv)
 static void app_lingwl_main(void)
 {
     log_i("Hello World2!\r\n");
-    log_i("%s %s\r\n", __DATE__, __TIME__)
+    log_i("%s %s\r\n", __DATE__, __TIME__);
     
     uart0_hdl = dev_open("uart0", NULL);
     if (!uart0_hdl) { 
@@ -146,12 +152,18 @@ static int app_music_key_click(struct key_event *key)
         // 通知C2将序列号设置到广播中
         // E端设备检查序列号是否与自己匹配，匹配则播放，不匹配则停止播放
         log_i("en = %d\n", en);
-        if (en) {
+
+        en++;
+        if (en == 3) {
             en = 0;
+        }
+
+        if (en == 0) {
             dev_write(uart0_hdl, en_data_0, sizeof(en_data_0));
-        } else {
-            en = 1;
-            dev_write(uart0_hdl, en_data_1, sizeof(en_data_0));
+        } else if (en == 1) {
+            dev_write(uart0_hdl, en_data_1, sizeof(en_data_1));
+        } else if (en == 2) {
+            dev_write(uart0_hdl, en_data_2, sizeof(en_data_2));
         }
         break;
     case KEY_4:

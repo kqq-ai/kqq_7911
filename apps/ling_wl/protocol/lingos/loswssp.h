@@ -95,10 +95,10 @@ typedef struct {
 
 typedef struct {
     u8 type;
-    char *errno;
+    int errno;
     char *uuid;
     char *event;
-    char *arrmsg;
+    char *errmsg;
     char *debug;
     union {
         loswssp_pkg_session_t session;

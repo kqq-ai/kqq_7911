@@ -8,8 +8,10 @@
 typedef struct {
     char wifi_ssid[33];
     char wifi_passwd[64];
+    char *wss_url;
     struct websocket_struct *websockets_info;
     recorder_hdl *recorder;
+    void *uartdev;
 } lwl_app_context_t;
 
 /**

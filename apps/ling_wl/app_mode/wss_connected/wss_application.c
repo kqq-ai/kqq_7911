@@ -8,7 +8,7 @@
 #include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
-
+#include "device.h"
 
 static void wss_asr_data(void *data, u32 size);
 static void app_record_task_start();
@@ -159,7 +159,7 @@ static const char g_hello_content[] = {
 static int g_edev_closest_idx = 0;  // 当前距离更近的设备索引
 static communication_edev_t g_edev_table[] = {
     [0] = {
-        .sn = "WCCN24H28FEEEF7",
+        .sn = "WCCN24H28FEEEF9",
         .adv_name = "FR8010H_AT0\0",
         .ip_id = 45,
         .session_id = 0,
@@ -172,7 +172,7 @@ static communication_edev_t g_edev_table[] = {
         },
     },
     [1] = {
-        .sn = "WCCN24H28FEEEF8",
+        .sn = "WCCN24H28FEEEF7",
         .adv_name = "FR8010H_AT\0",
         .ip_id = 5,
         .session_id = 0,
@@ -270,6 +270,12 @@ static void on_key_up(void)
 static void on_key_short_press(void)
 {
     log_i("[KEY SCAN]Short press");
+    static int idx = 0;
+    idx++;
+    if (idx == get_edev_count()) {
+        idx = 0;
+    }
+    my_task_switch_only(g_edev_table[idx].sn, NULL, NULL);
 }
 
 /**
@@ -499,6 +505,17 @@ static int loswssp_rsp_cbk(int type, loswssp_package_t *pkg)
     case LR_MESSAGE_END:
         log_i("LR_MESSAGE_END\n");
 
+        if (pkg->errno != 0) {
+            
+            lwl_app_context_t *context = lwl_app_core_context_get_instance();
+            log_i("url: %s", context->wss_url);
+
+            log_i("Errno: %d", pkg->errno);
+            if (pkg->errmsg) {
+                log_i("Error message: %s", pkg->errmsg);
+            }
+        }
+
         if (g_task_state == STATE_TASK_SWITCH_SAY_HELLO) {
             if (g_switch_say_hello_state == STATE_SWITCH_SAY_HELLO_PLAY_AUDIO) {
                 g_backend_message_end_ok = true;
@@ -536,11 +553,18 @@ static void recorder_data_cb(void* priv, void *data, u32 size) {
 
 static void recorder_vad_cb(void* priv, int type)
 {
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    
+    uint8_t data_1[] = {0xA1, 0x01};
+    uint8_t data_2[] = {0xA1, 0x00};
+
     if (g_task_state == STATE_TASK_IDLE || g_task_state == STATE_TASK_RECORD) {
         if (type == 1) {
             g_vad_state_curr = 1;
+            dev_write(context->uartdev, data_1, 2);
         } else {
             g_vad_state_curr = 0;
+            dev_write(context->uartdev, data_2, 2);
         }
     }
 }
@@ -663,10 +687,10 @@ static void wss_asr_data_to_server(struct websocket_strcut *websockets_info, Asr
 
 static void wss_asr_data_to_console(AsrData *asr_data)
 {
-    #define AUDIO_DATA_BUF_SIZE (32000 * 10)
+    #define AUDIO_DATA_BUF_SIZE (32000 * 10)    //5s
     static uint8_t *audio_data_buf = NULL;
     if (audio_data_buf == NULL) {
-        audio_data_buf = malloc(AUDIO_DATA_BUF_SIZE);    //5s
+        audio_data_buf = malloc(AUDIO_DATA_BUF_SIZE);
     }
     static int audio_data_count = 0;
 
@@ -679,6 +703,7 @@ static void wss_asr_data_to_console(AsrData *asr_data)
         printf_buf(audio_data_buf, AUDIO_DATA_BUF_SIZE);
         local_irq_enable();
         wdt_enable();
+        cpu_reset();
     }
 }
 
@@ -819,8 +844,13 @@ static bool app_create_session_task_loop(struct websocket_struct *websockets_inf
     switch (g_session_create_state) {
     case STATE_CREATE_ROLE_SESSION_STARTUP:
         /* wss 发起创建会话 */
-        g_edev_table[g_session_create_idx].session_create_ok = false;
-        communication_init_role(websockets_info, g_edev_table[g_session_create_idx].ip_id);
+        for (;g_session_create_idx < get_edev_count(); g_session_create_idx++) {
+            if (g_edev_table[g_session_create_idx].session_create_ok == false && 
+                g_edev_table[g_session_create_idx].ip_id != -1) {
+                communication_init_role(websockets_info, g_edev_table[g_session_create_idx].ip_id);
+                break;
+            }
+        }
         
         log_i("[Create session %d] STARTUP -> CREATING\n", g_session_create_idx);
         g_session_create_state = STATE_CREATE_ROLE_SESSION_CREATING;
@@ -1004,6 +1034,10 @@ void wss_application_init()
     my_blocking_queue_init_static(&g_message_queue, g_message_queue_buffer, sizeof(WssTaskMessage), MY_TASK_MESSAGE_QUEUE_CAPACITY);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
     
+    for (int i; i < get_edev_count(); ++i) {
+        g_edev_table[i].session_create_ok = false;
+    }
+
     /* 注册loswssp事件回调 */
     loswssp_register_rsp_cbk(loswssp_rsp_cbk);
 
@@ -1033,6 +1067,9 @@ void wss_application_init()
 
     /* 开启按键扫描 */
     start_key_scan();
+
+    /* 默认执行创建会话任务 */
+    app_create_session_task_start();
 }
 
 void wss_application_uninit()
@@ -1081,8 +1118,8 @@ static void wss_application_switch_test_mode()
 
 static void wss_application_test_loop(struct websocket_struct *websockets_info)
 {
-    WssTaskMessage message;
-    if (g_message_queue.size > 0) {
+    WssTaskMessage message; 
+    if (!my_blocking_queue_is_empty(&g_message_queue)) {
         /* 从消息队列取消息，不允许发生阻塞 */
         my_blocking_queue_dequeue(&g_message_queue, &message);
         log_d("wss task get message: %d\n", message.msg);
@@ -1100,13 +1137,7 @@ static void wss_application_test_loop(struct websocket_struct *websockets_info)
 static void wss_application_normal_loop(struct websocket_struct *websockets_info)
 {
     WssTaskMessage message;
-    static int start_up = 1;
-    if (start_up == 1) {
-        start_up = 0;
-        /* 默认创建会话 */
-        app_create_session_task_start();
-
-    } else if (g_task_state == STATE_TASK_IDLE && g_message_queue.size > 0) {
+    if (g_task_state == STATE_TASK_IDLE && !my_blocking_queue_is_empty(&g_message_queue)) {
         /* 从消息队列取消息，不允许发生阻塞 */
         my_blocking_queue_dequeue(&g_message_queue, &message);
 
@@ -1180,7 +1211,14 @@ void wss_application_loop(struct websocket_struct *websockets_info)
     if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
         wss_ping_send(websockets_info);
 
-        log_i("%d %d", g_test_mode, g_recorder_trigger_mode);
+        int pp = 2;
+        lwl_app_context_t *context = lwl_app_core_context_get_instance();
+        if (context && context->recorder) {
+            pp = recorder_get_play_pause_state(context->recorder);
+        }
+        log_i("%d %d %d %d %d %d %d", g_test_mode, g_recorder_trigger_mode, 
+            g_task_state, g_session_create_state, g_switch_say_hello_state, g_record_state, pp);
+
         g_heat_timer = g_curr_time;
     }
 }
