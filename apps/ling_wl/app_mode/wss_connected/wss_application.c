@@ -70,6 +70,7 @@ typedef struct {
     char adv_name[ADV_MAX_LEN];
     u16 adv_name_len;
     char sn[SN_MAX_SIZE];
+    int hello_flag; //表示已经打过招呼了
     s8 adv_rssi;
     distance_type_history_t distance_history;
 } communication_edev_t;
@@ -160,11 +161,12 @@ static int g_edev_closest_idx = 0;  // 当前距离更近的设备索引
 static communication_edev_t g_edev_table[] = {
     [0] = {
         .sn = "WCCN24H28FEEEF9",
-        .adv_name = "FR8010H_AT0\0",
+        .adv_name = "FR8000_AT1\0",
         .ip_id = 45,
         .session_id = 0,
-        .adv_name_len = 12,
+        .adv_name_len = 11,
         .adv_rssi = -127,
+        .hello_flag = 0,
         .distance_history = {
             .rp = 0,
             .wp = 0,
@@ -172,12 +174,13 @@ static communication_edev_t g_edev_table[] = {
         },
     },
     [1] = {
-        .sn = "WCCN24H28FEEEF7",
-        .adv_name = "FR8010H_AT\0",
+        .sn = "WCCN24H28FEEEF:",
+        .adv_name = "FR8000_AT2\0",
         .ip_id = 5,
         .session_id = 0,
         .adv_name_len = 11,
         .adv_rssi = -127,
+        .hello_flag = 0,
         .distance_history = {
             .rp = 0,
             .wp = 0,
@@ -780,7 +783,7 @@ void app_function(disatance_info_t *distance_info)
     g_edev_closest_idx = idx;
 }
 
-#define DISTANCE_KEEP_TIME 4
+#define DISTANCE_KEEP_TIME 5
 void self_function(disatance_info_t *distance_info, int distance_type)
 {
     log_i("self_function my\n");
@@ -788,6 +791,7 @@ void self_function(disatance_info_t *distance_info, int distance_type)
     log_i("adv name: %s\n", distance_info->adv_name);
     log_i("adv name len: %d\n", distance_info->adv_name_len);
     log_i("distance_type: %d\n", distance_type);
+    log_i("RSSI avg: %d\n", distance_info->average_rssi);
 
     int idx = find_edev_idx(distance_info->adv_name, distance_info->adv_name_len);
     ASSERT(idx != -1);
@@ -814,7 +818,8 @@ void self_function(disatance_info_t *distance_info, int distance_type)
                 break;
             }
         }
-        if (is_approach) {
+        if (is_approach && g_edev_table[idx].hello_flag == 0) {
+            g_edev_table[idx].hello_flag = 1;
             wss_dev_distance(idx);
         }
     }

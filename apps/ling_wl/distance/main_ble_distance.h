@@ -5,21 +5,25 @@
 #include "cpu.h"
 
 // 三个距离的宏定义
-#define BLUE_DISTANCE_HALF_METER (-40)
-#define BLUE_DISTANCE_THREE_METER (-52)
+#define BLUE_DISTANCE_TWO_METER (-60)
+#define BLUE_DISTANCE_FIVE_METER (-85)
 
+/*
+    @distance_info_t : ble device information
+    @distance_ble_type : ble device number
+*/
 #define ADV_MAX_LEN 16
-#define MAX_SAMPLES 12
+#define MAX_SAMPLES 1000
 #define MAX_BLE_NUM 10
 
-#define NOTIFY_APP_TIME 1000 // 10s
+#define NOTIFY_APP_TIME 2000 // 2s
 
-#define NOTIFY_SELF_TIME 5000 // 0.5S
+#define NOTIFY_SELF_TIME 10000 // 10S
 
 enum distance_type {
-    DISTANCE_0, // 小于0.5米
-    DISTANCE_1, // 0.5米到3米
-    DISTANCE_2, // 大于3米
+    DISTANCE_0, // 小于2米
+    DISTANCE_1, // 2米到5米
+    DISTANCE_2, // 大于5米
 };
 
 typedef struct

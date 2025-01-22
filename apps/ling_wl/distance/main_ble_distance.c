@@ -27,6 +27,8 @@ int argc = 2;
 int argv[30] = {0};
 int recv_argv[30] = {0};
 
+OS_MUTEX g_mutex;
+
 disatance_info_t moniter_ble_numbers[MAX_BLE_NUM];
 
 monitor_ble_ops g_monitor_ble_ops;
@@ -49,11 +51,11 @@ extern u32 timer_get_ms(void);
 extern int os_taskq_pend(const char *fmt, int *argv, int argc);
 
 // uint32_t distance_ble_count = sizeof(moniter_ble_numbers) / sizeof(moniter_ble_numbers[0]) -1;
-static void distance_info_init(disatance_info_t *info)
+void distance_info_init(disatance_info_t *info)
 {
     memset(info->adv_name, 0, sizeof(info->adv_name));
     info->adv_name_len = ADV_MAX_LEN;
-    info->adv_rssi = -127;
+    info->adv_rssi = -128;
     info->adv_test_max_size = -128;
     info->average_rssi = -128;
     info->functions_rssi = -128;
@@ -62,12 +64,110 @@ static void distance_info_init(disatance_info_t *info)
     info->sample_count = 0;
 }
 
+// 计算平均RSSI并过滤掉低于平均值一半的数据点
+static void process_rssi(disatance_info_t *info)
+{
+
+    printf("===process_rssi======\r\n");
+    if (info->sample_count <= 0)
+        return;
+    printf("===process_rssi   %s  sample_count : %d          ======\r\n",info->adv_name,info->sample_count);
+    // 计算原始平均RSSI
+    int sum = 0;
+    for (int i = 0; i < info->sample_count; ++i)
+    {
+        sum += info->rssi_samples[i];
+    }
+    int original_average = sum / info->sample_count;
+    printf("original_average : %d\n",original_average);
+
+    // 过滤数据点，创建临时数组存储符合条件的数据点
+    s8 filtered_samples[MAX_SAMPLES];
+    int filtered_count = 0;
+    for (int i = 0; i < info->sample_count; ++i)
+    {
+        if (info->rssi_samples[i] >= original_average)
+        {
+            filtered_samples[filtered_count++] = info->rssi_samples[i];
+        }
+    }
+
+    // 如果没有数据点满足条件，则保留原始数据
+    if (filtered_count == 0)
+    {
+        printf("No valid samples found, using original average\n");
+        info->average_rssi = -128;
+        info->functions_rssi = -128; // 或者使用其他逻辑来决定最大RSSI
+        return;
+    }
+
+    // 重新计算平均RSSI
+    sum = 0;
+    for (int i = 0; i < filtered_count; ++i)
+    {
+        sum += filtered_samples[i];
+    }
+    info->average_rssi = sum ? (s8)(sum / filtered_count) : -128;
+    info->functions_rssi = info->average_rssi;
+
+
+    // 找到最大RSSI
+    // info->functions_rssi = filtered_samples[0];
+    // for (int i = 1; i < filtered_count; ++i)
+    // {
+    //     if (filtered_samples[i] > info->functions_rssi)
+    //     {
+    //         info->functions_rssi = filtered_samples[i];
+    //     }
+    // }
+    printf("%s  Average RSSI: %d, Function RSSI: %d\n", info->adv_name, info->average_rssi, info->functions_rssi);
+}
+
+static void clear_rssi_samples(disatance_info_t *info, size_t current_ble_num)
+{
+    for (size_t i = 0; i < current_ble_num; i++)
+    {
+        memset(info[i].rssi_samples, 0, sizeof(info[i].rssi_samples));
+        info[i].sample_count = 0;
+        info[i].average_rssi = -128;
+        info[i].functions_rssi = -128;
+    }
+}
+
+// 处理整个数组
+static void process_distance_info_array(disatance_info_t *array, size_t current_ble_num)
+{
+    int ret = 0;
+    ret = os_mutex_pend(&g_mutex, 0);
+    if (0 != ret)
+    {
+        printf("scan_rssi_record_cb : os_mutex_pend failed\n");
+    }
+    printf("===process_distance_info_array======\r\n");
+    for (size_t i = 0; i < current_ble_num; ++i)
+    {
+        printf("===process_distance_info_array    %d======\r\n", i);
+        process_rssi(&array[i]);
+    }
+    ret = os_mutex_post(&g_mutex);
+    if (0 != ret)
+    {
+        printf("scan_rssi_record_cb : os_mutex_post failed\n");
+    }
+}
+
 void monitor_init(void *priv)
 {
     int ret = 0;
     for (int i = 0; i < MAX_BLE_NUM; i++)
     {
         distance_info_init(&moniter_ble_numbers[i]);
+    }
+    // 创建互斥锁
+    ret = os_mutex_create(&g_mutex);
+    if (0 != ret)
+    {
+        printf("create mutex failed\n");
     }
 
     argv[0] = MESSAGE_INIT;
@@ -161,9 +261,15 @@ void monitor_register_device(char *adv_name, u16 adv_name_len)
         printf("monitor_register_device : The ble number has reached its limit! \n");
 }
 
-void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8 rssi)
+static void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8 rssi)
 {
-    //printf("scan_rssi_record_cb : %s, %d, %d\n", dev_name, dev_name_len, rssi);
+    int ret = 0;
+    ret = os_mutex_pend(&g_mutex, 0);
+    if (0 != ret)
+    {
+        printf("scan_rssi_record_cb : os_mutex_pend failed\n");
+    }
+    printf("scan_rssi_record_cb : %s, %d, %d\n", dev_name, dev_name_len, rssi);
     for (uint32_t i = 0; i < current_ble_num; ++i)
     {
         if (dev_name_len == moniter_ble_numbers[i].adv_name_len &&
@@ -179,45 +285,15 @@ void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8 rssi)
             }
             moniter_ble_numbers[i].sample_count++;
 
-            // 计算最大的rssi值，然后存在adv_test_max_size字段中
-            moniter_ble_numbers[i].adv_test_max_size = moniter_ble_numbers[i].adv_test_max_size > rssi ? moniter_ble_numbers[i].adv_test_max_size : rssi;
 
-            // 测试平均值
-            if (moniter_ble_numbers[i].sample_count >= 3)
-            {
-                int sum = 0;
-                int max_value = moniter_ble_numbers[i].rssi_samples[0];
-                int min_value = moniter_ble_numbers[i].rssi_samples[0];
-                int valid_samples = 0;
+            //rocess_rssi(&moniter_ble_numbers[i]);
 
-                // 计算总和，同时找出最大值和最小值
-                for (int j = 0; j < moniter_ble_numbers[i].sample_count; j++)
-                {
-                    s8 sample = moniter_ble_numbers[i].rssi_samples[j];
-                    sum += sample;
-                    valid_samples++;
-                    if (sample > max_value)
-                    {
-                        max_value = sample;
-                    }
-                    if (sample < min_value)
-                    {
-                        min_value = sample;
-                    }
-                }
-                if (valid_samples >= 3)
-                {
-                    // 去掉最大值和最小值
-                    sum -= max_value;
-                    sum -= min_value;
-
-                    // 计算平均值
-                    moniter_ble_numbers[i].average_rssi = sum / (valid_samples - 2);
-                    moniter_ble_numbers[i].functions_rssi = moniter_ble_numbers[i].average_rssi;
-                    printf("Average RSSI for %s after removing max and min: %d\n", moniter_ble_numbers[i].adv_name, moniter_ble_numbers[i].average_rssi);
-                }
-            }
         }
+    }
+    ret = os_mutex_post(&g_mutex);
+    if (0 != ret)
+    {
+        printf("scan_rssi_record_cb : os_mutex_post failed\n");
     }
 }
 static void scan_rssi_cb(void *priv)
@@ -235,7 +311,7 @@ __attribute__((weak)) void self_function(disatance_info_t *arg, int distance_typ
     printf("self_function\n");
 }
 
-void blue_distance_notify_app()
+static void blue_distance_notify_app()
 {
     int max_rssi = -128;
     int max_rssi_index = 0;
@@ -248,48 +324,43 @@ void blue_distance_notify_app()
             max_rssi_index = i;
         }
     }
-
-    // printf("name0: ");
-    // printf_buf(moniter_ble_numbers[max_rssi_index].adv_name, ADV_MAX_LEN);
-    // printf("\n");
-
     for (int j = 0; j < current_ble_num; j++)
     {
         if (j == max_rssi_index)
         {
             app_function(&moniter_ble_numbers[max_rssi_index]);
-            printf("ble index : %d --- ble name  : %s closer ! =========================\n", max_rssi_index, moniter_ble_numbers[max_rssi_index].adv_name);
+            printf("ble index : %d --- ble name  : %s closer ! %d=========================\n", max_rssi_index, moniter_ble_numbers[max_rssi_index].adv_name, moniter_ble_numbers[max_rssi_index].functions_rssi);
         }
     }
 }
 
-void blue_distance_notify_self()
+static void blue_distance_notify_self()
 {
     for (int i = 0; i < current_ble_num; i++)
     {
 
-        if (moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_HALF_METER && moniter_ble_numbers[i].average_rssi != -128)
+        if (moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_TWO_METER && moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_0);
-            printf(" distance < 0.5m : do things1 here --- %s\r\n", moniter_ble_numbers[i].adv_name);
+            printf(" distance < 2m : do things1 here --- %s\r\n", moniter_ble_numbers[i].adv_name);
         }
-        else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_HALF_METER &&
-                 moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_THREE_METER &&
+        else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_TWO_METER &&
+                 moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_FIVE_METER &&
                  moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_1);
-            printf("distance > 0.5m  < 3m do things2 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
+            printf("distance > 2m  < 5m do things2 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
         }
-        else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_THREE_METER && moniter_ble_numbers[i].average_rssi != -128)
+        else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_FIVE_METER && moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_2);
-            printf("distance > 3m do things3 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
+            printf("distance > 5m do things3 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
         }
     }
 }
 
 // 把这个单独用一个任务来完成
-void distance_main(void *priv)
+static void distance_main(void *priv)
 {
     printf("=======================================distance_main task ================================\r\n");
     int ret = 0;
@@ -332,16 +403,22 @@ void distance_main(void *priv)
         else if (current_task_state == DISTANCE_TASK_START)
         {
             current_time = timer_get_ms();
-            // printf("-------------------start measure ble rssi distance---------------\n");
+            // printf("------------------start measure ble rssi distance---------------\n");
             if (current_time - notify_app_time > NOTIFY_APP_TIME)
             {
+                process_distance_info_array(moniter_ble_numbers, current_ble_num);
+                printf("----------------the funtions_rssi is measured !-----------------\r\n");
                 blue_distance_notify_app();
+                blue_distance_notify_self();
+                clear_rssi_samples(moniter_ble_numbers, current_ble_num);
+                printf("-------------------end measure ble rssi distance---------------\n");
                 notify_app_time = current_time;
             }
 
             if (current_time - notify_self_time > NOTIFY_SELF_TIME)
             {
-                blue_distance_notify_self();
+                // process_distance_info_array(moniter_ble_numbers,current_ble_num);
+                //  blue_distance_notify_self(self_function);
                 notify_self_time = current_time;
             }
             ret = __os_taskq_pend(recv_argv, ARRAY_SIZE(recv_argv), 100);
