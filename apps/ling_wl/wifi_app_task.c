@@ -164,6 +164,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         /*hzx add*/
         // set_wifi_connect_timeout_ms(timer_get_ms());
+        block_connect_sem_post(NULL);
+
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_TIMEOUT_OR_NO_SSID);
@@ -176,6 +178,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net_event_notify(NET_EVENT_FROM_USER, &net);
 
         /*hzx 添加部分*/
+        block_connect_sem_post(NULL);
+
         set_wifi_connect_status(WIFI_CONNECT_FAIL);
         if (NULL != wifi_connect_fail_cb_func_pri)
         {
@@ -194,24 +198,26 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net_event_notify(NET_EVENT_FROM_USER, &net);
 
         /*hzx add*/
+        block_connect_sem_post(NULL);
+
         set_wifi_manager_mode(WIFI_STA_MODE);
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_SUCC);
         set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
 
-        /*保存当前连接的模式和ssid 为了reconnect*/
-        struct wifi_mode_info g_temp_info;
-        g_temp_info.mode = STA_MODE;
-        wifi_get_mode_cur_info(&g_temp_info);
-        set_current_connected_ssid(g_temp_info.ssid);
-        wifi_store_mode_info(g_temp_info.mode, g_temp_info.ssid, g_temp_info.pwd);
-        printf("the event callback store the current connected ssid: %s  pwd: %s\n", g_temp_info.ssid, g_temp_info.pwd);
+        // /*保存当前连接的模式和ssid 为了reconnect*/
+        // struct wifi_mode_info g_temp_info;
+        // g_temp_info.mode = STA_MODE;
+        // wifi_get_mode_cur_info(&g_temp_info);
+        // set_current_connected_ssid(g_temp_info.ssid);
+        // wifi_store_mode_info(g_temp_info.mode, g_temp_info.ssid, g_temp_info.pwd);
+        // printf("the event callback store the current connected ssid: %s  pwd: %s\n", g_temp_info.ssid, g_temp_info.pwd);
 
-        if (NULL != wifi_connect_succ_cb_func_pri)
-        {
-            wifi_connect_succ_cb_func_pri(NULL);
-        }
+        // if (NULL != wifi_connect_succ_cb_func_pri)
+        // {
+        //     wifi_connect_succ_cb_func_pri(NULL);
+        // }
         break;
 
     case WIFI_EVENT_STA_DISCONNECT:

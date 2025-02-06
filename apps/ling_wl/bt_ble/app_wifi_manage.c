@@ -5,6 +5,7 @@
 
 /*-------------------------------------------------本文件的 变量及其 所有函数的定义-----------------------------------*/
 static OS_SEM g_disconnect_sem;                                                     // 断连函数(阻塞方式)所用到的sem
+static OS_SEM g_block_connect_sem;                                                  // 连接函数(阻塞方式)所用到的sem
 static CONNECT_FUNC_FLAG g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;          // 连接函数(阻塞方式)的flag
 static DISCONNECT_FUNC_FLAG g_disconnect_func_flag = DISCONNECT_FUNC_BLOCK_DEFAULT; // 断连函数(阻塞方式)的flag
 
@@ -82,37 +83,64 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
     int ret = 0;
     if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
     {
-
+        g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
         wifi_set_sta_connect_timeout(timeout_s);
-        wifi_set_connect_sta_block(1);
         ret = wifi_enter_sta_mode(ssid, pwd);
+        ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
+        printf("the ret = ---------------------------------------------------------------------%d\r\n",ret);
         if (0 == ret)
         {
-            printf("the sta_mode_connect_block success connect\r\n");
+            printf("the sta_mode_connect_block success connect----------------------------------\r\n");
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            return get_wifi_connect_status(NULL);
         }
         else if (-1 == ret)
         {
-            printf("the sta_mode_connect_block fail conncet\r\n");
+            printf("the sta_mode_connect_block fail conncet-------------------------------------\r\n");
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            return -1;
         }
-        enum wifi_sta_connect_state state_flag = wifi_get_sta_connect_state();
-        printf("the sta_mode_connect_state is %d    !!!!!!!!!!!!!!!!\r\n", state_flag);
-        if ((state_flag == WIFI_STA_CONNECT_SUCC) && (ret == 0))
-        {
-            ret = WIFI_CONNECT_SUCC;
-        }
-        else if ((state_flag == WIFI_STA_CONNECT_ASSOCIAT_FAIL) && (ret == 1))
-        {
-            ret = WIFI_CONNECT_FAIL;
-        }
-        wifi_set_connect_sta_block(0); // 恢复连接为非阻塞方式
-
-        return ret;
     }
     else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
     {
         printf("the wifi_sta_mode_connect_block is running\r\n");
         return -5;
     }
+
+    // int ret = 0;
+    // if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
+    // {
+    //     g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
+    //     wifi_set_connect_sta_block(1);
+    //     wifi_set_sta_connect_timeout(timeout_s);
+    //     ret = wifi_enter_sta_mode(ssid, pwd);
+    //     if (0 == ret)
+    //     {
+    //         printf("the sta_mode_connect_block success connect\r\n");
+    //     }
+    //     else if (-1 == ret)
+    //     {
+    //         printf("the sta_mode_connect_block fail conncet\r\n");
+    //     }
+    //     enum wifi_sta_connect_state state_flag = wifi_get_sta_connect_state();
+    //     printf("the sta_mode_connect_state is %d    !!!!!!!!!!!!!!!!\r\n", state_flag);
+    //     if ((state_flag == WIFI_STA_CONNECT_SUCC) && (ret == 0))
+    //     {
+    //         ret = WIFI_CONNECT_SUCC;
+    //     }
+    //     else if ((state_flag == WIFI_STA_CONNECT_ASSOCIAT_FAIL) && (ret == 1))
+    //     {
+    //         ret = WIFI_CONNECT_FAIL;
+    //     }
+    //     wifi_set_connect_sta_block(0); // 恢复连接为非阻塞方式
+    //     g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT; // 恢复connect_func_flag为默认值
+    //     return ret;
+    // }
+    // else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
+    // {
+    //     printf("the wifi_sta_mode_connect_block is running\r\n");
+    //     return -5;
+    // }
 }
 WIFI_connect_STATUES wifi_connect(
     char *ssid,
@@ -165,7 +193,38 @@ WIFI_connect_STATUES wifi_reconnect_config(int count)
     return 0;
 }
 
+/* block connect 所需要的sem 相关的函数*/
 
+int block_connect_sem_creat(void *pri)
+{
+    int ret = 0;
+    ret = os_sem_create(&g_block_connect_sem, 0);
+    if (0 != ret)
+    {
+        printf("the block_connect_sem_creat fail\r\n");
+    }
+    return ret;
+}
+int block_connect_sem_pend(void *pri)
+{
+    int ret = 0;
+    ret = os_sem_pend(&g_block_connect_sem, 0);
+    if (0 != ret)
+    {
+        printf("the block_connect_sem_pend fail\r\n");
+    }
+    return ret;
+}
+int block_connect_sem_post(void *pri)
+{
+    int ret = 0;
+    ret = os_sem_post(&g_block_connect_sem);
+    if (0 != ret)
+    {
+        printf("the block_connect_sem_post fail\r\n");
+    }
+    return ret;
+}
 
 /* disconnect 所需要的sem 相关的函数 */
 int disconnect_sem_creat(void *pri)
@@ -231,7 +290,7 @@ int store_wifi_scan_result(void *pri)
     g_all_wifi_info_num = ret;
     return ret;
 }
-void get_wifi_scan_result(struct wifi_scan_ssid_info **ssid_info,int *num)
+void get_wifi_scan_result(struct wifi_scan_ssid_info **ssid_info, int *num)
 {
     *ssid_info = g_all_wifi_info;
     *num = g_all_wifi_info_num;
@@ -242,6 +301,11 @@ int wifi_manage_init(void *pri)
 {
     int ret = 0;
     ret = disconnect_sem_creat(NULL);
+    if (0 != ret)
+    {
+        printf("the wifi_manage_init fail\r\n");
+    }
+    ret = block_connect_sem_creat(NULL);
     if (0 != ret)
     {
         printf("the wifi_manage_init fail\r\n");

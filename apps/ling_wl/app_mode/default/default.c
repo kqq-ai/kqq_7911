@@ -30,8 +30,6 @@ int app_default_app_event_handler(struct application *app, struct sys_event *eve
 
 static int default_init(void)
 {
-    lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
-
     return 0;
 }
 

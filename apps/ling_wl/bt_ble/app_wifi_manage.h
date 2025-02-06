@@ -35,7 +35,7 @@ WIFI_SCAN_STATUES get_wifi_scan_status(void *pri);
 /* WiFi 连接状态 : 用来处理wifi 连接的逻辑状态*/
 typedef enum
 {
-    WIFI_CONNECT_SUCC,
+    WIFI_CONNECT_SUCC = 0x03,
     WIFI_CONNECT_FAIL,
     WIFI_CONNECT_TIMEOUT_OR_NO_SSID,
 } WIFI_connect_STATUES;
@@ -98,6 +98,12 @@ WIFI_connect_STATUES wifi_disconnect(wifi_disconnect_cb disconnect_func);
 WIFI_connect_STATUES wifi_disconnect_block(void *pri);
 
 WIFI_connect_STATUES wifi_reconnect_config(int count);
+
+/* block connect 所需要的sem 相关的函数*/
+
+int block_connect_sem_creat(void *pri);
+int block_connect_sem_pend(void *pri);
+int block_connect_sem_post(void *pri);
 
 /*disconnect 所需要的sem 相关的函数*/
 int disconnect_sem_creat(void *pri);
