@@ -68,10 +68,10 @@ void distance_info_init(disatance_info_t *info)
 static void process_rssi(disatance_info_t *info)
 {
 
-    printf("===process_rssi======\r\n");
+    log_i("===process_rssi======\r\n");
     if (info->sample_count <= 0)
         return;
-    printf("===process_rssi   %s  sample_count : %d          ======\r\n",info->adv_name,info->sample_count);
+    log_i("===process_rssi   %s  sample_count : %d          ======\r\n",info->adv_name,info->sample_count);
     // 计算原始平均RSSI
     int sum = 0;
     for (int i = 0; i < info->sample_count; ++i)
@@ -79,7 +79,7 @@ static void process_rssi(disatance_info_t *info)
         sum += info->rssi_samples[i];
     }
     int original_average = sum / info->sample_count;
-    printf("original_average : %d\n",original_average);
+    log_i("original_average : %d\n",original_average);
 
     // 过滤数据点，创建临时数组存储符合条件的数据点
     s8 filtered_samples[MAX_SAMPLES];
@@ -95,7 +95,7 @@ static void process_rssi(disatance_info_t *info)
     // 如果没有数据点满足条件，则保留原始数据
     if (filtered_count == 0)
     {
-        printf("No valid samples found, using original average\n");
+        log_i("No valid samples found, using original average\n");
         info->average_rssi = -128;
         info->functions_rssi = -128; // 或者使用其他逻辑来决定最大RSSI
         return;
@@ -120,7 +120,7 @@ static void process_rssi(disatance_info_t *info)
     //         info->functions_rssi = filtered_samples[i];
     //     }
     // }
-    printf("%s  Average RSSI: %d, Function RSSI: %d\n", info->adv_name, info->average_rssi, info->functions_rssi);
+    log_i("%s  Average RSSI: %d, Function RSSI: %d\n", info->adv_name, info->average_rssi, info->functions_rssi);
 }
 
 static void clear_rssi_samples(disatance_info_t *info, size_t current_ble_num)
@@ -141,18 +141,18 @@ static void process_distance_info_array(disatance_info_t *array, size_t current_
     ret = os_mutex_pend(&g_mutex, 0);
     if (0 != ret)
     {
-        printf("scan_rssi_record_cb : os_mutex_pend failed\n");
+        log_i("scan_rssi_record_cb : os_mutex_pend failed\n");
     }
-    printf("===process_distance_info_array======\r\n");
+    log_i("===process_distance_info_array======\r\n");
     for (size_t i = 0; i < current_ble_num; ++i)
     {
-        printf("===process_distance_info_array    %d======\r\n", i);
+        log_i("===process_distance_info_array    %d======\r\n", i);
         process_rssi(&array[i]);
     }
     ret = os_mutex_post(&g_mutex);
     if (0 != ret)
     {
-        printf("scan_rssi_record_cb : os_mutex_post failed\n");
+        log_i("scan_rssi_record_cb : os_mutex_post failed\n");
     }
 }
 
@@ -167,7 +167,7 @@ void monitor_init(void *priv)
     ret = os_mutex_create(&g_mutex);
     if (0 != ret)
     {
-        printf("create mutex failed\n");
+        log_i("create mutex failed\n");
     }
 
     argv[0] = MESSAGE_INIT;
@@ -176,17 +176,17 @@ void monitor_init(void *priv)
     ret = __os_taskq_post("distance_main", Q_USER, argc, argv);
     if (ret == OS_TASK_NOT_EXIST)
     {
-        printf("the task is not exist\n");
+        log_i("the task is not exist\n");
     }
     else if (ret == OS_ERR_POST_NULL_PTR)
     {
-        printf("the message queue is not exist\n");
+        log_i("the message queue is not exist\n");
     }
     else
     {
-        printf("post success\n");
+        log_i("post success\n");
     }
-    printf("monitor_init\n");
+    log_i("monitor_init\n");
 }
 
 void monitor_start(void *priv)
@@ -199,17 +199,17 @@ void monitor_start(void *priv)
     ret = __os_taskq_post("distance_main", Q_USER, argc, argv);
     if (ret == OS_TASK_NOT_EXIST)
     {
-        printf("the task is not exist\n");
+        log_i("the task is not exist\n");
     }
     else if (ret == OS_ERR_POST_NULL_PTR)
     {
-        printf("the message queue is not exist\n");
+        log_i("the message queue is not exist\n");
     }
     else
     {
-        printf("post success\n");
+        log_i("post success\n");
     }
-    printf("monitor_start : start measure the blue distance\n");
+    log_i("monitor_start : start measure the blue distance\n");
 }
 
 void monitor_stop(void *priv)
@@ -221,17 +221,17 @@ void monitor_stop(void *priv)
     ret = __os_taskq_post("distance_main", Q_USER, argc, argv);
     if (ret == OS_TASK_NOT_EXIST)
     {
-        printf("the task is not exist\n");
+        log_i("the task is not exist\n");
     }
     else if (ret == OS_ERR_POST_NULL_PTR)
     {
-        printf("the message queue is not exist\n");
+        log_i("the message queue is not exist\n");
     }
     else
     {
-        printf("post success\n");
+        log_i("post success\n");
     }
-    printf("monitor_stop : stop measure the blue distance\n");
+    log_i("monitor_stop : stop measure the blue distance\n");
 }
 
 void monitor_register_ble_ops(monitor_ble_ops ops)
@@ -252,13 +252,13 @@ void monitor_register_device(char *adv_name, u16 adv_name_len)
                 moniter_ble_numbers[current_ble_num - 1].adv_name_len = adv_name_len;
             }
             else
-                printf("monitor_register_device : The adv_name_len is error! \n");
+                log_i("monitor_register_device : The adv_name_len is error! \n");
         }
         else
-            printf("monitor_register_device : The adv_name is NULL! \n");
+            log_i("monitor_register_device : The adv_name is NULL! \n");
     }
     else
-        printf("monitor_register_device : The ble number has reached its limit! \n");
+        log_i("monitor_register_device : The ble number has reached its limit! \n");
 }
 
 static void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8 rssi)
@@ -267,15 +267,15 @@ static void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8
     ret = os_mutex_pend(&g_mutex, 0);
     if (0 != ret)
     {
-        printf("scan_rssi_record_cb : os_mutex_pend failed\n");
+        log_i("scan_rssi_record_cb : os_mutex_pend failed\n");
     }
-    printf("scan_rssi_record_cb : %s, %d, %d\n", dev_name, dev_name_len, rssi);
+    log_d("scan_rssi_record_cb : %s, %d, %d\n", dev_name, dev_name_len, rssi);
     for (uint32_t i = 0; i < current_ble_num; ++i)
     {
         if (dev_name_len == moniter_ble_numbers[i].adv_name_len &&
             memcmp(dev_name, moniter_ble_numbers[i].adv_name, dev_name_len) == 0)
         {
-            printf("RSSI = %d, len = %d, name: %s", rssi, dev_name_len, dev_name);
+            log_d("RSSI = %d, len = %d, name: %s", rssi, dev_name_len, dev_name);
 
             // Store the RSSI value
             moniter_ble_numbers[i].rssi_samples[moniter_ble_numbers[i].sample_count % MAX_SAMPLES] = rssi;
@@ -293,22 +293,22 @@ static void scan_rssi_record_cb(void *priv, char *dev_name, u16 dev_name_len, s8
     ret = os_mutex_post(&g_mutex);
     if (0 != ret)
     {
-        printf("scan_rssi_record_cb : os_mutex_post failed\n");
+        log_i("scan_rssi_record_cb : os_mutex_post failed\n");
     }
 }
 static void scan_rssi_cb(void *priv)
 {
-    printf("start scan RSSI call over\n");
+    log_i("start scan RSSI call over\n");
 }
 
 __attribute__((weak)) void app_function(disatance_info_t *arg)
 {
-    printf("notify_function\n");
+    log_i("notify_function\n");
 }
 
 __attribute__((weak)) void self_function(disatance_info_t *arg, int distance_type)
 {
-    printf("self_function\n");
+    log_i("self_function\n");
 }
 
 static void blue_distance_notify_app()
@@ -329,7 +329,7 @@ static void blue_distance_notify_app()
         if (j == max_rssi_index)
         {
             app_function(&moniter_ble_numbers[max_rssi_index]);
-            printf("ble index : %d --- ble name  : %s closer ! %d=========================\n", max_rssi_index, moniter_ble_numbers[max_rssi_index].adv_name, moniter_ble_numbers[max_rssi_index].functions_rssi);
+            log_i("ble index : %d --- ble name  : %s closer ! %d=========================\n", max_rssi_index, moniter_ble_numbers[max_rssi_index].adv_name, moniter_ble_numbers[max_rssi_index].functions_rssi);
         }
     }
 }
@@ -342,19 +342,19 @@ static void blue_distance_notify_self()
         if (moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_TWO_METER && moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_0);
-            printf(" distance < 2m : do things1 here --- %s\r\n", moniter_ble_numbers[i].adv_name);
+            log_i(" distance < 2m : do things1 here --- %s\r\n", moniter_ble_numbers[i].adv_name);
         }
         else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_TWO_METER &&
                  moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_FIVE_METER &&
                  moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_1);
-            printf("distance > 2m  < 5m do things2 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
+            log_i("distance > 2m  < 5m do things2 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
         }
         else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_FIVE_METER && moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_2);
-            printf("distance > 5m do things3 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
+            log_i("distance > 5m do things3 here ---%s\r\n", moniter_ble_numbers[i].adv_name);
         }
     }
 }
@@ -362,7 +362,7 @@ static void blue_distance_notify_self()
 // 把这个单独用一个任务来完成
 static void distance_main(void *priv)
 {
-    printf("=======================================distance_main task ================================\r\n");
+    log_i("=======================================distance_main task ================================\r\n");
     int ret = 0;
     int current_time = 0;
     int notify_app_time = 0;
@@ -403,15 +403,15 @@ static void distance_main(void *priv)
         else if (current_task_state == DISTANCE_TASK_START)
         {
             current_time = timer_get_ms();
-            // printf("------------------start measure ble rssi distance---------------\n");
+            // log_i("------------------start measure ble rssi distance---------------\n");
             if (current_time - notify_app_time > NOTIFY_APP_TIME)
             {
                 process_distance_info_array(moniter_ble_numbers, current_ble_num);
-                printf("----------------the funtions_rssi is measured !-----------------\r\n");
+                log_i("----------------the funtions_rssi is measured !-----------------\r\n");
                 blue_distance_notify_app();
                 blue_distance_notify_self();
                 clear_rssi_samples(moniter_ble_numbers, current_ble_num);
-                printf("-------------------end measure ble rssi distance---------------\n");
+                log_i("-------------------end measure ble rssi distance---------------\n");
                 notify_app_time = current_time;
             }
 
@@ -442,7 +442,7 @@ static int creat_task_distance(void)
     ret = os_task_create(distance_main, NULL, 10, 1024, 256, "distance_main");
     if (ret != 0)
     {
-        printf("distance_main task create failed\n");
+        log_i("distance_main task create failed\n");
         return -1;
     }
     return 0;

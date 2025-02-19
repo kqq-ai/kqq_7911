@@ -161,10 +161,11 @@ static int g_edev_closest_idx = 0;  // 当前距离更近的设备索引
 static communication_edev_t g_edev_table[] = {
     [0] = {
         .sn = "WCCN24H28FEEEF9",
-        .adv_name = "FR8000_AT1\0",
+        // .adv_name = "FR8000_AT1\0",
+        .adv_name = "LWL_E1",
         .ip_id = 45,
         .session_id = 0,
-        .adv_name_len = 11,
+        .adv_name_len = 6,
         .adv_rssi = -127,
         .hello_flag = 0,
         .distance_history = {
@@ -668,7 +669,7 @@ static void wss_asr_data(void *data, u32 size)
     my_blocking_queue_enqueue(&g_asr_data_queue, asr_data);
 }
 
-static void wss_asr_data_to_server(struct websocket_strcut *websockets_info, AsrData *asr_data)
+static void wss_asr_data_to_server(struct websocket_struct *websockets_info, AsrData *asr_data)
 {
     /* 调试输出数据量 */
     static int cnt1 = 0;
@@ -1038,7 +1039,7 @@ void wss_application_init()
     log_i("Init WSS application\n");
     my_blocking_queue_init_static(&g_message_queue, g_message_queue_buffer, sizeof(WssTaskMessage), MY_TASK_MESSAGE_QUEUE_CAPACITY);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
-    
+
     for (int i; i < get_edev_count(); ++i) {
         g_edev_table[i].session_create_ok = false;
     }
@@ -1062,7 +1063,7 @@ void wss_application_init()
 
     /* 开始RSSI测距 */
     monitor_start(NULL);
-    
+
     /* 设置VAD回调 */
     wss_app_set_vad_callback(ENABLE);
     /* 默认不设置录音上传回调 */
