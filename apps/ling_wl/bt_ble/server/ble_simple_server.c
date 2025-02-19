@@ -362,11 +362,11 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle, uint16_t a
     log_info("read_callback, handle= 0x%04x,buffer= %08x\n", handle, (u32)buffer);
 
     switch (handle) {
-    case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
-        break;
-    case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_CLIENT_CONFIGURATION_HANDLE:
-        break;
     case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
+        break;
+    case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_CLIENT_CONFIGURATION_HANDLE:
+        break;
+    case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         break;
     
     default:
@@ -404,14 +404,14 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
     log_info("write_callback, buffer= %s\n",buffer);
 
     switch (handle) {
-    case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
+    case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         break;
-    case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_CLIENT_CONFIGURATION_HANDLE:
+    case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_CLIENT_CONFIGURATION_HANDLE:
     
         log_info("\n------write ccc:%04x,%02x\n", handle, buffer[0]);
         att_set_ccc_config(handle, buffer[0]);
         break;
-    case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
+    case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         ret = parse_and_assemble(buffer, buffer_size, json_data);
         if (0 == ret) {
             ret = parse_and_dispatch_json(json_data,return_json_data);
@@ -420,7 +420,7 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
                 memset(json_data,0,BUFFER_SIZE);
             }
             printf("return_json_data: %s\n",return_json_data);
-            ret = send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
+            ret = send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
             if (0 == ret)
             {
                 memset(return_json_data,0,BUFFER_SIZE);

@@ -137,6 +137,7 @@ static void wifi_scan_timeout_cb(int timeout_s)
 // 定义处理不同命令的函数
 int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
 {
+    printf("=============================in handle_wifi_scan =========================================\r\n");
     int ret = 0;
     char return_errstr[32] = {0};
 
@@ -891,8 +892,10 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_scan") == 0)
         {
+            printf("=====================the current wifi_manager_mode : %d========================\r\n",get_wifi_manager_mode(NULL));
             /* 只有WIFI_SMP_CFG_MODE模式下才能扫描*/
-            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL) && WIFI_SMP_CFG_MODE == get_wifi_manager_mode(NULL))
+            // if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL) && WIFI_SMP_CFG_MODE == get_wifi_manager_mode(NULL))
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_scan(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
