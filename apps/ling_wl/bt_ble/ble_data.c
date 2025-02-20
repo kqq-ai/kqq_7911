@@ -932,7 +932,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         if (strcmp(cmd_name, "wifi_get_list") == 0)
         {
             // printf("the current wifi_cmd_status is %d\r\n",get_wifi_cmd_status(NULL));
-            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL) || WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 if (1 == g_wifi_scan_flag)
                 {
@@ -954,11 +954,11 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 ret = 1;
                 memcpy(return_errstr, "WIFI_SCAN_CODE_DEFAULT", strlen("WIFI_SCAN_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
-            {
-                ret = 1;
-                memcpy(return_errstr, "WIFI_INFO_CODE_SCANNING", strlen("WIFI_INFO_CODE_SCANNING"));
-            }
+            // else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
+            // {
+            //     ret = 1;
+            //     memcpy(return_errstr, "WIFI_INFO_CODE_SCANNING", strlen("WIFI_INFO_CODE_SCANNING"));
+            // }
             else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;
