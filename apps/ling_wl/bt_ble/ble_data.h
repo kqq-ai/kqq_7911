@@ -39,6 +39,7 @@ int parse_and_assemble(const uint8_t *data, uint16_t data_length, char *assemble
 
 // 声明处理不同命令的函数
 int handle_wifi_scan(const char *cmd, cJSON *args, char * return_json_data);
+int handle_wifi_list_ready(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_get_list(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_stop_scan(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_connect(const char *cmd, cJSON *args, char * return_json_data);
