@@ -8,6 +8,8 @@ typedef enum {
     MYERROR_Null_Pointer = -1,
     MYERROR_Malloc_Failed = -2,
     MYERROR_OS_Api_Error = -3,
+    MYERROR_Is_Full = -4,
+    MYERROR_Is_Empty = -5,
 } MyErrorType;
 
 typedef struct {
@@ -79,6 +81,17 @@ int my_blocking_queue_destroy_static(MyBlockingQueue *queue);
 int my_blocking_queue_enqueue(MyBlockingQueue *queue, void *data);
 
 /**
+ * @name    my_blocking_queue_try_enqueue
+ * @brief   Enqueue a data element into the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the data element to be inserted into the queue
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_try_enqueue(MyBlockingQueue *queue, void *data);
+
+/**
  * @name    my_blocking_queue_dequeue
  * @brief   Dequeue an element from the custom blocking queue.
  * 
@@ -89,6 +102,27 @@ int my_blocking_queue_enqueue(MyBlockingQueue *queue, void *data);
  */
 int my_blocking_queue_dequeue(MyBlockingQueue *queue, void *data);
 
+/**
+ * @name    my_blocking_queue_try_dequeue
+ * @brief   Dequeue an element from the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the memory location where the dequeued element will be copied.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_try_dequeue(MyBlockingQueue *queue, void *data);
+
+/**
+ * @name    my_blocking_queue_try_peek
+ * @brief   Peek an element from the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the memory location where the dequeued element will be copied.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_try_peek(MyBlockingQueue *queue, void *data);
 
 /**
  * @name    my_blocking_queue_traverse

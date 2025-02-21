@@ -183,6 +183,35 @@ int my_blocking_queue_enqueue(MyBlockingQueue *queue, void *data)
 }
 
 /**
+ * @name    my_blocking_queue_try_enqueue
+ * @brief   Enqueue a data element into the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the data element to be inserted into the queue
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_try_enqueue(MyBlockingQueue *queue, void *data)
+{
+    pthread_mutex_lock(&queue->mutex);
+
+    if (queue->size == queue->capacity) {
+        pthread_mutex_unlock(&queue->mutex);
+        return MYERROR_Is_Full;
+    }
+
+    memcpy(&queue->data[queue->rear * queue->element_size], data, queue->element_size);
+    queue->rear = (queue->rear == queue->capacity - 1) ? 0 : queue->rear + 1;
+    queue->size++;
+
+    pthread_cond_signal(&queue->not_empty);
+
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
  * @name    my_blocking_queue_dequeue
  * @brief   Dequeue an element from the custom blocking queue.
  * 
@@ -204,6 +233,60 @@ int my_blocking_queue_dequeue(MyBlockingQueue *queue, void *data)
     queue->size --;
 
     pthread_cond_signal(&queue->not_full);
+
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
+ * @name    my_blocking_queue_try_dequeue
+ * @brief   Dequeue an element from the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the memory location where the dequeued element will be copied.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_try_dequeue(MyBlockingQueue *queue, void *data)
+{
+    pthread_mutex_lock(&queue->mutex);
+
+    if (queue->size == 0) {
+        pthread_mutex_unlock(&queue->mutex);
+        return MYERROR_Is_Empty;
+    }
+
+    memcpy(data, &queue->data[queue->front * queue->element_size], queue->element_size);
+    queue->front = (queue->front == queue->capacity - 1) ? 0 : queue->front + 1;
+    queue->size --;
+
+    pthread_cond_signal(&queue->not_full);
+
+    pthread_mutex_unlock(&queue->mutex);
+
+    return MYERROR_Success;
+}
+
+/**
+ * @name    my_blocking_queue_try_peek
+ * @brief   Peek an element from the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure which represents the blocking queue.
+ * @param   data        A pointer to the memory location where the dequeued element will be copied.
+ * 
+ * @return  0 if success, see MyErrorType
+ */
+int my_blocking_queue_try_peek(MyBlockingQueue *queue, void *data)
+{
+    pthread_mutex_lock(&queue->mutex);
+
+    if (queue->size == 0) {
+        pthread_mutex_unlock(&queue->mutex);
+        return MYERROR_Is_Empty;
+    }
+
+    memcpy(data, &queue->data[queue->front * queue->element_size], queue->element_size);
 
     pthread_mutex_unlock(&queue->mutex);
 
