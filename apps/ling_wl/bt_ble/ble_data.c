@@ -127,6 +127,7 @@ static void wifi_scan_timeout_cb(int timeout_s)
 
             wifi_scan_req();
             set_wifi_scan_status(WIFI_SCAN_RUNNING);
+            set_wifi_cmd_status(WIFI_CMD_SCANNING); //需要验证的地方
             set_wifi_info_status(WIFI_INFO_STA_MODE_SCANNING);
         }
         else
@@ -184,10 +185,16 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
     register_wifi_scan_func(wifi_scan_timeout_cb, timeout_s);
     set_wifi_cmd_status(WIFI_CMD_SCANNING);
 
+
     // 开始扫描
     printf("----------------------wifi_scan_start--------------------------------\r\n");
     // ret = wifi_scan_start(NULL);
     my_task_wifi_scan_start(NULL, NULL);
+
+
+    // 清楚 WiFi list 
+    clean_wifi_scan_result(NULL);
+    
 
     if (ret == 0)
     {
@@ -339,7 +346,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     int ret = 0;
     char return_errstr[32] = {0};
     struct wifi_scan_ssid_info *temp_all_wifi_info = NULL;
-    int all_wifi_count = 0;
+    int temp_all_wifi_count = 0;
 
     // 检查 args 是否为 NULL
     if (args == NULL)
@@ -383,9 +390,9 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     // 打印调试信息
     printf("Handling %s with details level: %d\n", cmd, details);
 
-    get_wifi_scan_result(&temp_all_wifi_info, &all_wifi_count);
+    get_wifi_scan_result(&temp_all_wifi_info, &temp_all_wifi_count);
 
-    if (all_wifi_count == 0)
+    if (temp_all_wifi_count == 0)
     {
         printf("the wifi list info is empty\n");
         ret = 0;
@@ -393,6 +400,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     }
     else
     {
+        printf("the wifi list info num is %d\r\n",temp_all_wifi_count);
         ret = 0;
         memcpy(return_errstr, "WIFI_GET_LIST_CODE_SUCCESS", strlen("WIFI_GET_LIST_CODE_SUCCESS"));
     }
@@ -421,9 +429,9 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     }
 
     // 根据 details 的值执行不同的处理逻辑
-    if (all_wifi_count > 0)
+    if (temp_all_wifi_count > 0)
     {
-        for (int i = 0; i < all_wifi_count; ++i)
+        for (int i = 0; i < temp_all_wifi_count; ++i)
         {
             cJSON *wifi_item = cJSON_CreateObject();
             if (wifi_item == NULL)
@@ -820,7 +828,7 @@ int handle_wifi_info(const char *cmd, cJSON *args, char *return_json_data)
 {
     int ret = 0;
     char return_errstr[32] = {0};
-    char sta_localip[32] = {0};
+    char sta_localip[WIFI_IP_LEN] = {0};
     u8 mac[6] = {0};
     char mac_str[32] = {0};
     char hostname[32] = {0};
@@ -835,33 +843,34 @@ int handle_wifi_info(const char *cmd, cJSON *args, char *return_json_data)
     if (cJSON_GetObjectItemCaseSensitive(args, "sta_localip")->type == cJSON_True)
     {
         bool_sta_localip = true;
-        lwip_get_netif_info(1, &temp_netif_info);
-        u32 temp_ip = htonl(temp_netif_info.ip);
-        snprintf(sta_localip, 32, "%d.%d.%d.%d",
-                 (temp_ip >> 24) & 0xFF, // 第一字节
-                 (temp_ip >> 16) & 0xFF, // 第二字节
-                 (temp_ip >> 8) & 0xFF,  // 第三字节
-                 temp_ip & 0xFF          // 第四字节
-        );
+        // lwip_get_netif_info(1, &temp_netif_info);
+        // u32 temp_ip = htonl(temp_netif_info.ip);
+        // snprintf(sta_localip, 32, "%d.%d.%d.%d",
+        //          (temp_ip >> 24) & 0xFF, // 第一字节
+        //          (temp_ip >> 16) & 0xFF, // 第二字节
+        //          (temp_ip >> 8) & 0xFF,  // 第三字节
+        //          temp_ip & 0xFF          // 第四字节
+        // );
+        get_wifi_ip_info(sta_localip);
         printf("sta_localip : %s\n", sta_localip);
     }
     else if (cJSON_GetObjectItemCaseSensitive(args, "sta_localip")->type == cJSON_False)
         bool_sta_localip = false;
     if (cJSON_GetObjectItemCaseSensitive(args, "mac")->type == cJSON_True)
     {
-        bool_sta_localip = true;
+        bool_mac = true;
         wifi_get_mac(mac);
         snprintf(mac_str, 32, "%02X:%02X:%02X:%02X:%02X:%02X",
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
     else if (cJSON_GetObjectItemCaseSensitive(args, "mac")->type == cJSON_False)
-        bool_sta_localip = false;
+        bool_mac = false;
     if (cJSON_GetObjectItemCaseSensitive(args, "hostname")->type == cJSON_True)
     {
-        bool_sta_localip = true;
+        bool_hostname = true;
     }
     else if (cJSON_GetObjectItemCaseSensitive(args, "hostname")->type == cJSON_False)
-        bool_sta_localip = false;
+        bool_hostname = false;
 
     // 封装return_json_data
     cJSON *root = cJSON_CreateObject();
@@ -876,9 +885,30 @@ int handle_wifi_info(const char *cmd, cJSON *args, char *return_json_data)
     cJSON_AddStringToObject(root, "cmd_name", cmd);
     cJSON_AddNumberToObject(root, "return_code", ret);
     cJSON_AddStringToObject(root, "return_errstr", return_errstr);
-    cJSON_AddStringToObject(root, "sta_localip", sta_localip);
-    cJSON_AddStringToObject(root, "mac", mac_str);
-    cJSON_AddStringToObject(root, "hostname", hostname);
+    if (true == bool_sta_localip)
+    {
+        cJSON_AddStringToObject(root, "sta_localip", sta_localip);
+    }
+    else
+    {
+        cJSON_AddStringToObject(root, "sta_localip", "");
+    }
+    if (true == bool_mac)
+    {
+        cJSON_AddStringToObject(root, "mac", mac_str);
+    }
+    else
+    {
+        cJSON_AddStringToObject(root, "mac", "");
+    }
+    if (true == bool_hostname)
+    {
+        cJSON_AddStringToObject(root, "hostname", hostname);
+    }
+    else
+    {
+        cJSON_AddStringToObject(root, "hostname", "");
+    }
     char *json_str = cJSON_PrintUnformatted(root);
     if (json_str == NULL)
     {
@@ -1202,12 +1232,21 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         {
             if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
             {
-                ret = handle_wifi_info(cmd_name, cmd_args_item, return_json_data);
-                if (1 == ret)
+                if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL))
                 {
-                    memcpy(return_errstr, "WIFI_INFO_CODE_CMD_ERROR", strlen("WIFI_INFO_CODE_CMD_ERROR"));
+                    ret = handle_wifi_info(cmd_name, cmd_args_item, return_json_data);
+                    if (1 == ret)
+                    {
+                        memcpy(return_errstr, "WIFI_INFO_CODE_CMD_ERROR", strlen("WIFI_INFO_CODE_CMD_ERROR"));
+                    }
+                    printf("wifi_info_handled\n"); // 命令处理后
                 }
-                printf("wifi_info_handled\n"); // 命令处理后
+                else
+                {
+                    ret = 1;
+                    memcpy(return_errstr, "WIFI_INFO_CODE_WIFI_NOT_CONNECTED", strlen("WIFI_INFO_CODE_WIFI_NOT_CONNECTED"));
+                }
+
             }
             else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {

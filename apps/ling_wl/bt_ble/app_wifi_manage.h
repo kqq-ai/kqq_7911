@@ -4,6 +4,9 @@
 #include "wifi_app_task.h"
 #include "wifi/wifi_connect.h"
 
+#define STORE_WIFI_NUM_MAX 50
+#define WIFI_IP_LEN 16
+
 /*-------------------------------------------------整体的 初始化相关   start-----------------------------------------*/
 
 /* wifi 模式*/
@@ -124,16 +127,17 @@ void wifi_scan_stop(void *pri);
 
 /*返回值为 wifi 的个数*/
 int store_wifi_scan_result(void *pri); /*保存SCAN到的 WiFi info*/
+int clean_wifi_scan_result(void *pri); /*清空SCAN到的 WiFi info*/
 void get_wifi_scan_result(struct wifi_scan_ssid_info **ssid_info,int *num);/*获取SCAN到的 WiFi info*/
 
+
+
+/*存储 wifi ip 信息*/
+void store_wifi_ip_info( void *pri);
+
+/*获取 wifi ip 信息*/
+void get_wifi_ip_info(char *ip);
 /*-------------------------------------------------WiFi 扫描相关   end----------------------------------------------*/
-
-
-
-
-
-
-
 
 
 

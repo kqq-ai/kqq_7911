@@ -42,7 +42,7 @@ extern void printf_buf(u8 *buf, u32 len);
 //ATT发送的包长,    note: 20 <=need >= MTU
 #define ATT_LOCAL_MTU_SIZE      (200)                   //
 //ATT缓存的buffer大小,  note: need >= 20,可修改
-#define ATT_SEND_CBUF_SIZE      (512)                   //
+#define ATT_SEND_CBUF_SIZE      (2000)                   //
 
 //共配置的RAM
 #define ATT_RAM_BUFSIZE         (ATT_CTRL_BLOCK_SIZE + ATT_LOCAL_MTU_SIZE + ATT_SEND_CBUF_SIZE)                   //note:
@@ -167,6 +167,7 @@ static ble_state_e get_ble_work_state(void)
 static void can_send_now_wakeup(void)
 {
     /* putchar('E'); */
+    printf("-------------------------now can send datas -----------------------------\r\n");
     if (ble_resume_send_wakeup) {
         ble_resume_send_wakeup();
     }
@@ -462,6 +463,36 @@ static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_typ
     return ret;
 }
 
+/*
+    !!!!!!! 这两个参数需根据实际应用场景设置 !!!!!!!
+    根据 send_return_json_data 这个函数调用的地方，来参照
+    handle:      ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE
+    handle_type: ATT_OP_AUTO_READ_CCC
+*/
+int app_send_user_data_external(u16 handle, u8 *data, u16 len, u8 handle_type)
+{
+    u32 ret = APP_BLE_NO_ERROR;
+
+    if (server_con_handle == INVALID_HANDLE) {
+        return APP_BLE_OPERATION_ERROR;
+    }
+
+    if (!att_get_ccc_config(handle + 1)) {
+        log_info("fail,no write ccc!!!,%04x\n", handle + 1);
+        return APP_BLE_NO_WRITE_CCC;
+    }
+
+    ret = ble_op_att_send_data(handle, data, len, handle_type);
+    if (ret == BLE_BUFFER_FULL) {
+        ret = APP_BLE_BUFF_FULL;
+    }
+
+    if (ret) {
+        log_info("app_send_fail:%d !!!!!!\n", ret);
+    }
+    return ret;
+}
+
 
 static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u8 handle_type)
 {
@@ -508,11 +539,11 @@ static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u
             memset(&packet[4 + copy_size], 0x00, payload_size - copy_size);
         }
         
-        printf("send_packet: %s\n", packet);
-        if ((i % 15) == 0)
-        {
-            ble_op_att_clear_send_data();   
-        }
+        printf("send_packet: %s\r\n", packet);
+        // if ((i % 15) == 0)
+        // {
+        //     ble_op_att_clear_send_data();   
+        // }
         // 发送完整的分包数据
         if (app_send_user_data(handle, packet, total_packet_size, handle_type) != 0) {
             printf("Error: Failed to send packet %zu\n", i + 1);
@@ -789,4 +820,101 @@ void ble_simple_server_exit(void)
     log_info("***** ble_exit******\n");
 
     ble_simple_server_module_enable(0);
+}
+
+
+
+
+
+
+
+
+
+
+/* 通知 APP（小程序） 相关 函数*/
+int notify_app_wifi_ip_succ(void *pri)
+{
+    int ret = 0;
+    char cmd_name[32] = {0};
+    char sta_localip[WIFI_IP_LEN] = {0};
+    char return_errstr[32] = {0};
+    char return_json_data[BUFFER_SIZE] = {0};
+
+    get_wifi_ip_info(sta_localip);
+
+    memcpy(return_errstr, "MCU_GET_IP_SUCC", strlen("MCU_GET_IP_SUCC"));
+    memcpy(cmd_name, "mcu_notify_app_ip", strlen("mcu_notify_app_ip"));
+
+
+    // 封装return_json_data
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL)
+    {
+        ret = 1;
+        printf("Error: Failed to create cJSON object\n");
+        goto cleanup;
+    }
+
+    cJSON_AddStringToObject(root, "cmd_name", cmd_name);
+    cJSON_AddStringToObject(root, "sta_localip", sta_localip);
+    cJSON_AddStringToObject(root, "return_errstr", return_errstr);
+
+    char *return_json_str = cJSON_PrintUnformatted(root);
+    if (return_json_str == NULL)
+    {
+        ret = 1;
+        printf("Error: Failed to print cJSON object\n");
+        cJSON_Delete(root);
+        goto cleanup;
+    }
+
+    memcpy(return_json_data, return_json_str, strlen(return_json_str));
+    send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
+    //app_send_user_data_external(ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE,return_json_str,strlen(return_json_str),ATT_OP_AUTO_READ_CCC);
+
+    free(return_json_str);
+    printf("=========notify  app  the wifi ip is ok   return_json_str:%s=====\r\n",return_json_str);
+cleanup:
+    return ret;
+}
+
+int notify_app_wifi_mqtt_succ(void *pri)
+{
+    int ret = 0;
+    char cmd_name[32] = {0};
+    char return_errstr[32] = {0};
+    char return_json_data[BUFFER_SIZE] = {0};
+
+    memcpy(return_errstr, "MCU_GET_IP_SUCC", strlen("MCU_GET_IP_SUCC"));
+    memcpy(cmd_name, "mcu_notify_app_ip", strlen("mcu_notify_app_ip"));
+
+
+    // 封装return_json_data
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL)
+    {
+        ret = 1;
+        printf("Error: Failed to create cJSON object\n");
+        goto cleanup;
+    }
+
+    cJSON_AddStringToObject(root, "cmd_name", cmd_name);
+    cJSON_AddStringToObject(root, "return_errstr", return_errstr);
+
+    char *return_json_str = cJSON_PrintUnformatted(root);
+    if (return_json_str == NULL)
+    {
+        ret = 1;
+        printf("Error: Failed to print cJSON object\n");
+        cJSON_Delete(root);
+        goto cleanup;
+    }
+    memcpy(return_json_data, return_json_str, strlen(return_json_str));
+    send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
+    //app_send_user_data_external(ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE,return_json_str,strlen(return_json_str),ATT_OP_AUTO_READ_CCC);
+
+    free(return_json_str);
+    printf("======notify app the wifi task ok ---- return_json_str:%s======\r\n",return_json_str);
+cleanup:
+    return ret;
 }

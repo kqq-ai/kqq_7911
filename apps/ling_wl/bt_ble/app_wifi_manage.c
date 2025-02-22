@@ -2,6 +2,8 @@
 #include "wifi/wifi_connect.h"
 #include "os/os_api.h"
 #include "app_lfs.h"
+#include "lwip.h"
+#include "le/att.h"
 
 /*-------------------------------------------------本文件的 变量及其 所有函数的定义-----------------------------------*/
 static OS_SEM g_disconnect_sem;                                                     // 断连函数(阻塞方式)所用到的sem
@@ -15,8 +17,11 @@ static WIFI_INFO_STATUES g_wifi_info_state = WIFI_INFO_IDLE;          // 当前w
 static WIFI_SCAN_STATUES g_wifi_scan_state = WIFI_SCAN_STOP;          // 当前wifi 扫描状态
 static WIFI_CMD_STATUES g_wifi_cmd_state = WIFI_CMD_DEFAULT;          // 当前命令状态
 
-static struct wifi_scan_ssid_info *g_all_wifi_info = NULL;
+static struct wifi_scan_ssid_info g_all_wifi_info[STORE_WIFI_NUM_MAX] = {0};
 static int g_all_wifi_info_num = 0;
+
+static struct netif_info g_netip_info = {0};
+static char *g_wifi_ip[WIFI_IP_LEN] = {0};
 
 // 申明
 int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info);
@@ -87,7 +92,7 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
         wifi_set_sta_connect_timeout(timeout_s);
         ret = wifi_enter_sta_mode(ssid, pwd);
         ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
-        printf("the ret = ---------------------------------------------------------------------%d\r\n",ret);
+        printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
         if (0 == ret)
         {
             printf("the sta_mode_connect_block success connect----------------------------------\r\n");
@@ -286,10 +291,75 @@ int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info)
 int store_wifi_scan_result(void *pri)
 {
     int ret = 0;
-    ret = get_wifi_scan_ssid_info(&g_all_wifi_info);
-    g_all_wifi_info_num = ret;
+    struct wifi_scan_ssid_info *temp_all_wifi_info = NULL;
+    ret = get_wifi_scan_ssid_info(&temp_all_wifi_info);
+
+    /*
+        将temp_all_wifi_info 拷贝到g_all_wifi_info
+        并更新，如果temp_all_wifi_info有g_all_wifi_info没有的ssid，则添加到g_all_wifi_info
+    */
+    for (int i = 0; i < ret; i++)
+    {
+        bool found = false;
+        for (int j = 0; j < g_all_wifi_info_num; j++)
+        {
+            if (strcmp(temp_all_wifi_info[i].ssid, g_all_wifi_info[j].ssid) == 0)
+            {
+                // 如果ssid已经存在，更新信息
+                memcpy(&g_all_wifi_info[j], &temp_all_wifi_info[i], sizeof(struct wifi_scan_ssid_info));
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+        {
+            // 如果ssid不存在且数组未满，添加到g_all_wifi_info
+            if (g_all_wifi_info_num < STORE_WIFI_NUM_MAX)
+            {
+                memcpy(&g_all_wifi_info[g_all_wifi_info_num], &temp_all_wifi_info[i], sizeof(struct wifi_scan_ssid_info));
+                g_all_wifi_info_num++; // 只增加新添加的SSID数量
+            }
+            else
+            {
+                // 处理数组已满的情况
+                printf("Warning: g_all_wifi_info is full, cannot add new SSID: %s\n", temp_all_wifi_info[i].ssid);
+            }
+        }
+    }
+    ret = g_all_wifi_info_num;
     return ret;
 }
+
+/*清空SCAN到的 WiFi info*/
+int clean_wifi_scan_result(void *pri)
+{
+    memset(g_all_wifi_info, 0, sizeof(g_all_wifi_info));
+    g_all_wifi_info_num = 0;
+    printf("WiFi scan result cleared.\r\n"); /* 清楚 计数器*/
+    return 0;
+}
+
+/*存储 wifi ip 信息*/
+void store_wifi_ip_info(void *pri)
+{
+    memset(&g_netip_info, 0, sizeof(g_netip_info));
+    lwip_get_netif_info(1, &g_netip_info);
+    u32 temp_ip = htonl(g_netip_info.ip);
+    snprintf(g_wifi_ip, 32, "%d.%d.%d.%d",
+             (temp_ip >> 24) & 0xFF, // 第一字节
+             (temp_ip >> 16) & 0xFF, // 第二字节
+             (temp_ip >> 8) & 0xFF,  // 第三字节
+             temp_ip & 0xFF          // 第四字节
+    );
+    printf("====================current get wifi ip:%s ===============================\n", g_wifi_ip);
+}
+
+/*获取 wifi ip 信息*/
+void get_wifi_ip_info(char *ip)
+{
+    memcpy(ip, g_wifi_ip, strlen(g_wifi_ip));
+}
+
 void get_wifi_scan_result(struct wifi_scan_ssid_info **ssid_info, int *num)
 {
     *ssid_info = g_all_wifi_info;
@@ -313,3 +383,4 @@ int wifi_manage_init(void *pri)
 
     return ret;
 }
+
