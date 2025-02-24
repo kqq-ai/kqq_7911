@@ -4,6 +4,7 @@
 
 #include "btstack/btstack_task.h"
 #include "btstack/bluetooth.h"
+#include "btstack/le/le_user.h"
 #include "bt_common.h"
 
 #include "le_common.h"
@@ -17,6 +18,8 @@
 #define SUPPORT_TEST_BOX_BLE_MASTER_TEST_EN	1
 #define SHOW_RX_DATA_RATE           0
 #define EXT_ADV_MODE_EN             0
+
+#define USER_EVENT_CALLBACK_MAX_NUM 10
 
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
@@ -81,6 +84,20 @@ static const char *const phy_result[] = {
 };
 
 
+//------------------------------------------------------------
+static int ble_conn_event_user_handler_cnt = 0;
+static int ble_disconn_event_user_handler_cnt = 0;
+static int ble_adv_report_event_user_handler_cnt = 0;
+static void *ble_conn_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
+static void *ble_disconn_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
+static void *ble_adv_report_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
+static void (*ble_conn_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(uint8_t *packet, void *priv);
+static void (*ble_disconn_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(uint8_t *packet, void *priv);
+static void (*ble_adv_report_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(adv_report_t *report_pt, u16 len, void *priv);
+static void ble_conn_user_handler(uint8_t *packet);
+static void ble_disconn_user_handler(uint8_t *packet);
+static void ble_adv_report_user_handler(adv_report_t *report_pt, u16 len);
+
 static int client_create_connect_api(u8 *addr, u8 addr_type);
 static int client_create_cannel_api(void);
 
@@ -88,7 +105,7 @@ static int client_create_cannel_api(void);
 static void set_ble_work_state(ble_state_e state)
 {
     if (state != ble_work_state) {
-        log_info("ble_client_work_st:%x->%x\n", ble_work_state, state);
+        log_d("ble_client_work_st:%x->%x\n", ble_work_state, state);
         ble_work_state = state;
         if (app_ble_state_callback) {
             app_ble_state_callback(NULL, state);
@@ -155,7 +172,7 @@ void user_client_report_search_result(search_result_t *result_info)
     if (result_info == (void *) -1) {
         log_info("client_report_search_result finish!!!\n");
         return;
-    }
+    } 
 
     log_info("\n*** services, uuid16:%04x,index=%d ***\n", result_info->services.uuid16, result_info->service_index);
     log_info("{charactc, uuid16:%04x,index=%d,handle:%04x~%04x,value_handle=%04x}\n",
@@ -281,6 +298,10 @@ static bool resolve_adv_report(u8 *adv_address, u8 data_length, u8 *data, s8 rss
             adv_data_pt[lenght - 1] = 0;;
             log_d("ble remoter_name: %s,rssi:%d\n", adv_data_pt, rssi);
 
+            if (strncmp("FR8010H_AT0", adv_data_pt, 10) == 0) {
+                find_remoter = 1;
+            }
+
             if (scan_rssi_record_callback) {
                 scan_rssi_record_callback(NULL, adv_data_pt, lenght - 1, rssi);
             }
@@ -353,13 +374,14 @@ static void client_create_connection_cannel(void)
     }
 }
 
-static int client_disconnect()
+int ble_simple_client_disconnect(void)
 {
     if (client_con_handle != INVALID_HANDLE) {
         if (BLE_ST_SEND_DISCONN != get_ble_work_state()) {
             log_info(">>>ble send disconnect\n");
             set_ble_work_state(BLE_ST_SEND_DISCONN);
-            ble_op_disconnect(client_con_handle);
+            ble_cmd_ret_e r = ble_op_disconnect(client_con_handle);
+            log_info("disconnect: %d", r);
         } else {
             log_info(">>>ble wait disconnect...\n");
         }
@@ -503,7 +525,11 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 log_info("conn_interval = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet));
                 log_info("conn_latency = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet));
                 log_info("conn_timeout = %d\n", hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
-                client_profile_start(client_con_handle);
+                // client_profile_start(client_con_handle);
+
+                ble_conn_user_handler(packet);  /* process user handler */
+
+                set_ble_work_state(BLE_ST_CONNECT);
             }
             break;
 
@@ -533,7 +559,11 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 ble_op_multi_att_send_conn_handle(client_con_handle, 0, MULTI_ROLE_CLIENT);
 
                 connection_update_complete_success(handle, packet + 8);
-                client_profile_start(client_con_handle);
+                // client_profile_start(client_con_handle);
+                
+                ble_conn_user_handler(packet); /* process user handler */
+
+                set_ble_work_state(BLE_ST_CONNECT);
             }
             break;
 
@@ -586,7 +616,7 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
             u16 handle = little_endian_read_16(packet, 2);
             if (client_con_handle == handle) {
                 mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
-                log_info("ATT MTU = %u\n", mtu);
+                log_d("ATT MTU = %u\n", mtu);
                 ble_op_multi_att_set_send_mtu(handle, mtu);
                 /* set_connection_data_length(251, 2120); */
             }
@@ -610,6 +640,7 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
             /* putchar('@'); */
             if (BLE_ST_SCAN == get_ble_work_state()) {
                 client_report_adv_data((void *)&packet[2], packet[1]);
+                ble_adv_report_user_handler((void *)&packet[2], packet[1]); /* process user handler */
             } else {
                 log_info("drop adv_report!!!%02x\n", get_ble_work_state());
             }
@@ -682,23 +713,23 @@ static int client_operation_send_ext(u16 conn_handle, u16 handle, u8 *data, u16 
     return ret;
 }
 //-----------------------------------------------
-static int client_write_send(void *priv, uint16_t handle, u8 *data, u16 len)
+int ble_simple_client_write_send(void *priv, uint16_t handle, u8 *data, u16 len)
 {
     return client_operation_send(handle, data, len, ATT_OP_WRITE);
 }
 
-static int client_write_without_respond_send(void *priv, uint16_t handle, u8 *data, u16 len)
+int ble_simple_client_write_without_respond_send(void *priv, uint16_t handle, u8 *data, u16 len)
 {
     return client_operation_send(handle, data, len, ATT_OP_WRITE_WITHOUT_RESPOND);
 }
 
-static int client_read_value_send(void *priv, uint16_t handle)
+int ble_simple_client_read_value_send(void *priv, uint16_t handle)
 {
     u16 tmp_flag = 0x55A1;
     return client_operation_send(handle, (u8 *)&tmp_flag, 2, ATT_OP_READ);
 }
 
-static int client_read_long_value_send(void *priv, uint16_t handle)
+int ble_simple_client_read_long_value_send(void *priv, uint16_t handle)
 {
     u16 tmp_flag = 0x55A2;
     return client_operation_send(handle, (u8 *)&tmp_flag, 2, ATT_OP_READ_LONG);
@@ -841,11 +872,16 @@ void ble_simple_client_exit(void)
     ble_simple_client_module_enable(0);
 }
 
-void ble_simple_client_disconnect(void)
+void ble_simple_client_create_connection(u8 *addr, u8 addr_type)
+{
+    client_create_connect_api(addr, addr_type);
+}
+
+void ble_simple_client_disconnect_block(void)
 {
     int count = 150;
     if (client_con_handle != INVALID_HANDLE) {
-        client_disconnect();
+        ble_simple_client_disconnect();
         while (count-- && (client_con_handle != INVALID_HANDLE)) {
             os_time_dly(1);
             putchar('w');
@@ -853,8 +889,59 @@ void ble_simple_client_disconnect(void)
     }
 }
 
+static void ble_conn_user_handler(uint8_t *packet)
+{
+    for (int i = 0; i < ble_conn_event_user_handler_cnt; ++i) {
+        if (ble_conn_event_user_handler[i]) {
+            ble_conn_event_user_handler[i](packet, ble_conn_event_user_handler_priv[i]);
+        }
+    }
+}
+
+static void ble_disconn_user_handler(uint8_t *packet)
+{
+    for (int i = 0; i < ble_disconn_event_user_handler_cnt; ++i) {
+        if (ble_disconn_event_user_handler[i]) {
+            ble_disconn_event_user_handler[i](packet, ble_disconn_event_user_handler_priv[i]);
+        }
+    }
+}
+
+static void ble_adv_report_user_handler(adv_report_t *report_pt, u16 len)
+{
+    for (int i = 0; i < ble_adv_report_event_user_handler_cnt; ++i) {
+        if (ble_adv_report_event_user_handler[i]) {
+            ble_adv_report_event_user_handler[i](report_pt, len, ble_adv_report_event_user_handler[i]);
+        }
+    }
+}
+
+void ble_conn_event_user_handler_add(void (*handler)(uint8_t *, void *), void *priv) 
+{
+    ASSERT(ble_conn_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
+    ble_conn_event_user_handler_priv[ble_conn_event_user_handler_cnt] = priv;
+    ble_conn_event_user_handler[ble_conn_event_user_handler_cnt] = handler;
+    ble_conn_event_user_handler_cnt++;
+}
+
+void ble_disconn_event_user_handler_add(void (*handler)(uint8_t *, void *), void *priv) 
+{
+    ASSERT(ble_disconn_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
+    ble_disconn_event_user_handler_priv[ble_disconn_event_user_handler_cnt] = priv;
+    ble_disconn_event_user_handler[ble_disconn_event_user_handler_cnt] = handler;
+    ble_disconn_event_user_handler_cnt++;
+}
+
+void ble_adv_report_event_user_handler_add(void (*handler)(adv_report_t *, u16, void *), void *priv) 
+{
+    ASSERT(ble_adv_report_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
+    ble_adv_report_event_user_handler_priv[ble_adv_report_event_user_handler_cnt] = priv;
+    ble_adv_report_event_user_handler[ble_adv_report_event_user_handler_cnt] = handler;
+    ble_adv_report_event_user_handler_cnt++;
+}
+
 //主机请求更新连接参数
-void ble_simple_client_send_conn_param_update(void)
+static void ble_simple_client_send_conn_param_update(void)
 {
     struct conn_update_param_t *param = (void *)&connection_param_table;//for test
     log_info("client update param:-%d-%d-%d-%d-\n", param->interval_min, param->interval_max, param->latency, param->timeout);

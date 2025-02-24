@@ -9,7 +9,7 @@
 #define VOLUME_STEP 5
 #define MIN_VOLUME_VALUE	5
 #define MAX_VOLUME_VALUE	100
-#define INIT_VOLUME_VALUE   70
+#define INIT_VOLUME_VALUE   10
 
 #define DEC_BUF_LEN      12 * 1024
 

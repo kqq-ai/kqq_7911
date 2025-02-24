@@ -2,7 +2,6 @@
 #define __THREADPOOL_H__
 
 #include <os/pthread.h>
-#include <stdbool.h>
 
 typedef struct {
     void (*function)(void *);

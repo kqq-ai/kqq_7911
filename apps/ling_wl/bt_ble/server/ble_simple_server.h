@@ -2,7 +2,7 @@
 #define __BLE_SIMPLE_SERVER_H__
 
 #include <stdint.h>
-#include "app_wifi_manage.h"
+#include "../app_wifi_manage.h"
 #include "cpu.h"
 
 void server_profile_init(void);

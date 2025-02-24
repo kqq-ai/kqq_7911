@@ -5,6 +5,7 @@
 #include "os/os_api.h"
 #include "cpu.h"
 #include "bt_ble/app_wifi_manage.h"
+#include "app_mode/lwl_eend_device.h"
 
 enum
 {
@@ -19,12 +20,11 @@ enum
     MY_TASK_MESSAGE_MAX = 0xFF,
 };
 
-#define SN_MAX_SIZE 16
 #define AUDIO_URL_MAX_LEN 256
 
 typedef struct
 {
-    char sn[SN_MAX_SIZE];
+    char sn[SN_SIZE];
     char audio_url[AUDIO_URL_MAX_LEN];
     void *priv;
     void *cb;
@@ -32,7 +32,7 @@ typedef struct
 
 typedef struct
 {
-    char sn[SN_MAX_SIZE];
+    char sn[SN_SIZE];
     void *priv;
     void *cb;
 } MyMessageSwitchOnly;
@@ -100,7 +100,7 @@ static OS_SEM sem_net_music_dec_end;
 #define MY_TASK_MESSAGE_QUEUE_CAPACITY 10
 static MyBlockingQueue g_message_queue; // MyBlockingQueue<MyTaskMessageType>
 
-static uint8_t uart_tx_buf[1 + SN_MAX_SIZE];
+static uint8_t uart_tx_buf[1 + SN_SIZE];
 
 extern void *uart0_hdl;
 extern music_player g_music_player;
@@ -174,8 +174,9 @@ static void switch_only(char *sn)
 {
     int i = 0;
     uart_tx_buf[i++] = 0xA0;
-    memcpy(uart_tx_buf + i, sn, SN_MAX_SIZE);
-    i += SN_MAX_SIZE;
+    memcpy(uart_tx_buf + i, sn, SN_SIZE);
+    i += SN_SIZE;
+    uart_tx_buf[i++] = '\0';
     dev_write(uart0_hdl, uart_tx_buf, i);
 }
 
@@ -330,13 +331,13 @@ void my_task_switch_play(char *sn, char *audio_url, void *priv, void *cb)
     /* 创建消息 */
     MyTaskMessageType message;
     message.msg = MY_TASK_MESSAGE_SWITCH_PLAY;
-    memcpy(message.switch_play.sn, sn, SN_MAX_SIZE);
+    memcpy(message.switch_play.sn, sn, SN_SIZE);
     strcpy(message.switch_play.audio_url, audio_url);
     message.switch_play.priv = priv;
     message.switch_play.cb = cb;
     printf("Put message: %d\n", message.msg);
     printf("sn         : ");
-    printf_dev_name(message.switch_only.sn, SN_MAX_SIZE);
+    printf_dev_name(message.switch_only.sn, SN_SIZE);
     printf("\n");
     printf("audio_url  : %s\n", message.switch_play.audio_url);
     /* 消息入队 */
@@ -356,12 +357,12 @@ void my_task_switch_only(char *sn, void *priv, void *cb)
     /* 创建消息 */
     MyTaskMessageType message;
     message.msg = MY_TASK_MESSAGE_SWITCH_ONLY;
-    memcpy(message.switch_only.sn, sn, SN_MAX_SIZE);
+    memcpy(message.switch_only.sn, sn, SN_SIZE);
     message.switch_only.priv = priv;
     message.switch_only.cb = cb;
     printf("Put message: %d\n", message.msg);
     printf("sn         : ");
-    printf_dev_name(message.switch_only.sn, SN_MAX_SIZE);
+    printf_dev_name(message.switch_only.sn, SN_SIZE);
     printf("\n");
     /* 消息入队 */
     my_blocking_queue_enqueue(&g_message_queue, &message);

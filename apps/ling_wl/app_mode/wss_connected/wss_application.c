@@ -4,7 +4,7 @@
 
 #include "util/cqueue.h"
 #include "protocol/lingos/loswssp.h"
-#include "distance/main_ble_distance.h"
+#include "bt_ble/client/ble_distance.h"
 #include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
@@ -64,14 +64,11 @@ typedef struct {
 } distance_type_history_t;
 
 typedef struct {
+    lwl_eend_dev_t *pdev;
     int ip_id;
     int session_id;
     int session_create_ok;
-    char adv_name[ADV_MAX_LEN];
-    u16 adv_name_len;
-    char sn[SN_MAX_SIZE];
     int hello_flag; //表示已经打过招呼了
-    s8 adv_rssi;
     distance_type_history_t distance_history;
 } communication_edev_t;
 
@@ -158,50 +155,61 @@ static const char g_hello_content[] = {
 
 /* 设备列表 */
 static int g_edev_closest_idx = 0;  // 当前距离更近的设备索引
-static communication_edev_t g_edev_table[] = {
-    [0] = {
-        .sn = "WCCN24H28FEEEF9",
-        // .adv_name = "FR8000_AT1\0",
-        .adv_name = "LWL_E1",
-        .ip_id = 45,
-        .session_id = 0,
-        .adv_name_len = 6,
-        .adv_rssi = -127,
-        .hello_flag = 0,
-        .distance_history = {
-            .rp = 0,
-            .wp = 0,
-            .tmp_size = 0,
-        },
-    },
-    [1] = {
-        .sn = "WCCN24H28FEEEF:",
-        .adv_name = "FR8000_AT2\0",
-        .ip_id = 5,
-        .session_id = 0,
-        .adv_name_len = 11,
-        .adv_rssi = -127,
-        .hello_flag = 0,
-        .distance_history = {
-            .rp = 0,
-            .wp = 0,
-            .tmp_size = 0,
-        },
-    },
-};
+static int g_edev_count = 0;
+static communication_edev_t g_edev_table[EEND_MAX_CNT];
+// static communication_edev_t g_edev_table[EEND_MAX_CNT] = {
+//     [0] = {
+//         .ip_id = 45,
+//         .session_id = 0,
+//         .hello_flag = 0,
+//         .distance_history = {
+//             .rp = 0,
+//             .wp = 0,
+//             .tmp_size = 0,
+//         },
+//     },
+//     [1] = {
+//         .ip_id = 5,
+//         .session_id = 0,
+//         .distance_history = {
+//             .rp = 0,
+//             .wp = 0,
+//             .tmp_size = 0,
+//         },
+//     },
+// };
+
+static void add_edev(lwl_eend_dev_t *p_eend_dev, int ip_id)
+{
+    if (g_edev_count >= EEND_MAX_CNT) {
+        log_e("eend max cnt: %d", EEND_MAX_CNT);
+        return;
+    }
+    int i = g_edev_count++;
+    g_edev_table[i].pdev = p_eend_dev;
+    g_edev_table[i].ip_id = ip_id;
+    g_edev_table[i].session_id = 0;
+    g_edev_table[i].session_create_ok = false;
+    g_edev_table[i].hello_flag = false;
+    g_edev_table[i].distance_history.rp = 0;
+    g_edev_table[i].distance_history.wp = 0;
+    g_edev_table[i].distance_history.tmp_size = 0;
+}
+
 static uint32_t get_edev_count()
 {
-    return sizeof(g_edev_table) / sizeof(g_edev_table[0]);
+    return g_edev_count;
 }
-static int find_edev_idx(char* adv_name, u16 adv_name_len) 
+
+static int find_edev_idx(lwl_eend_dev_t *p_eend_dev) 
 {
-    uint32_t edev_count = get_edev_count();
-    for (int i = 0; i < edev_count; ++i) {
-        if (memcmp(g_edev_table[i].adv_name, adv_name, adv_name_len) == 0) {
+    for (int i = 0; i < g_edev_count; ++i) {
+        if (g_edev_table[i].pdev == p_eend_dev) {
             return i;
         }
     }
     return -1;
+
 }
 
 
@@ -279,7 +287,7 @@ static void on_key_short_press(void)
     if (idx == get_edev_count()) {
         idx = 0;
     }
-    my_task_switch_only(g_edev_table[idx].sn, NULL, NULL);
+    my_task_switch_only(g_edev_table[idx].pdev->sn, NULL, NULL);
 }
 
 /**
@@ -776,11 +784,7 @@ void app_function(disatance_info_t *distance_info)
 {
     log_i("notify_function my\n");
 
-    log_i("adv name: %s\n", distance_info->adv_name);
-    log_i("adv name len: %d\n", distance_info->adv_name_len);
-
-    int idx = find_edev_idx(distance_info->adv_name, distance_info->adv_name_len);
-    ASSERT(idx != -1);
+    int idx = find_edev_idx(distance_info->p_eend_dev);
     g_edev_closest_idx = idx;
 }
 
@@ -789,13 +793,13 @@ void self_function(disatance_info_t *distance_info, int distance_type)
 {
     log_i("self_function my\n");
 
-    log_i("adv name: %s\n", distance_info->adv_name);
-    log_i("adv name len: %d\n", distance_info->adv_name_len);
     log_i("distance_type: %d\n", distance_type);
     log_i("RSSI avg: %d\n", distance_info->average_rssi);
 
-    int idx = find_edev_idx(distance_info->adv_name, distance_info->adv_name_len);
-    ASSERT(idx != -1);
+    int idx = find_edev_idx(distance_info->p_eend_dev);
+    if (idx == -1) {
+        return;
+    }
 
     /* 保存当前距离 */
     distance_put(&g_edev_table[idx].distance_history, distance_type);
@@ -917,7 +921,7 @@ static bool app_switch_say_hello_task_loop(struct websocket_struct *websockets_i
         
             /* 切换 E端 */
             g_ble_porte_switch_ok = false;
-            my_task_switch_only(g_edev_table[g_next_edev_idx].sn, NULL, switch_end_callback);
+            my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, NULL, switch_end_callback);
 
             /* 发送 你好呀！请求音频回复 */
             g_audio_play_end = false;
@@ -1040,29 +1044,16 @@ void wss_application_init()
     my_blocking_queue_init_static(&g_message_queue, g_message_queue_buffer, sizeof(WssTaskMessage), MY_TASK_MESSAGE_QUEUE_CAPACITY);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
 
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    add_edev(&context->eend_dev_list[0], 45);
+    add_edev(&context->eend_dev_list[0], 5);
+
     for (int i; i < get_edev_count(); ++i) {
         g_edev_table[i].session_create_ok = false;
     }
 
     /* 注册loswssp事件回调 */
     loswssp_register_rsp_cbk(loswssp_rsp_cbk);
-
-    /* 注册蓝牙操作具体实现 */
-    monitor_ble_ops ops;
-    ops.start_scan = my_task_scan_rssi;
-    ops.stop_scan = NULL;
-    monitor_register_ble_ops(ops);
-
-    /* 初始化RSSI测距 */
-    monitor_init(NULL);
-
-    /* 注册监听的设备广播名 */
-    for (int i = 0; i < get_edev_count(); ++i) {
-        monitor_register_device(g_edev_table[i].adv_name, g_edev_table[i].adv_name_len);
-    }
-
-    /* 开始RSSI测距 */
-    monitor_start(NULL);
 
     /* 设置VAD回调 */
     wss_app_set_vad_callback(ENABLE);
@@ -1083,9 +1074,6 @@ void wss_application_uninit()
     log_i("Uninit WSS application\n");
     my_blocking_queue_destroy_static(&g_message_queue);
     my_blocking_queue_destroy_static(&g_asr_data_queue);
-
-    /* 停止RSSI测距 */
-    monitor_stop(NULL);
     
     /* 设置VAD回调 */
     wss_app_set_vad_callback(DISABLE);

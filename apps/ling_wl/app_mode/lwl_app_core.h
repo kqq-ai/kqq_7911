@@ -4,6 +4,12 @@
 #include "cpu.h"
 #include "wss/wss_client.h"
 #include "audio/recorder.h"
+#include "net_music_play_my.h"
+#include "util/threadpool.h"
+#include "lwl_eend_device.h"
+#include "app_lfs.h"
+
+#define EEND_MAX_CNT 3
 
 typedef struct {
     char wifi_ssid[33];
@@ -11,7 +17,11 @@ typedef struct {
     char *wss_url;
     struct websocket_struct *websockets_info;
     recorder_hdl *recorder;
+    music_player *music_player;
+    threadpool_t *threadpool;
     void *uartdev;
+    lfs_t *lfs_hdl;
+    lwl_eend_dev_t eend_dev_list[EEND_MAX_CNT];
 } lwl_app_context_t;
 
 /**

@@ -21,7 +21,7 @@
 #include "asm/rf_coexistence_config.h"
 
 #include "bt_ble/app_wifi_manage.h"
-#include "ble_simple_server.h"
+#include "bt_ble/server/ble_simple_server.h"
 // #include "threadpool.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;

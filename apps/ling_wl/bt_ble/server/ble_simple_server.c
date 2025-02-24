@@ -309,7 +309,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
         case ATT_EVENT_MTU_EXCHANGE_COMPLETE:
             // MTU 更新事件
             mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
-            log_info("ATT MTU = %u\n", mtu);
+            log_d("ATT MTU = %u\n", mtu);
             ble_op_att_set_send_mtu(mtu);
             /* set_connection_data_length(251, 2120); */
             break;

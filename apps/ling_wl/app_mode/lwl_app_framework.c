@@ -131,7 +131,6 @@ void lwl_app_mode_exit_ok()
 
 void lwl_app_init(u8 init_mode)
 {
-    lwl_app_core_init();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     app_curr_mode = init_mode;
 }

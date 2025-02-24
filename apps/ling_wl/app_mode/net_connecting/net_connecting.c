@@ -34,7 +34,7 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
 
 static int net_connecting_init(void)
 {
-    if (wifi_connect_block("vivo", "h116741927", 10) == WIFI_CONNECT_SUCC) {
+    if (wifi_connect_block("hello", "88888888", 10) == WIFI_CONNECT_SUCC) {
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
     } else {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);

@@ -19,14 +19,17 @@
 #include "syscfg_id.h"
 #include "audio/recorder.h"
 #include "util/cqueue.h"
+#include "util/threadpool.h"
 #include "async_msg_loop.h"
 #include "wait.h"
+#include "bt_ble/client/ble_keep_alive.h"
 
 #include "app_mode/lwl_app_framework.h"
 
 #include "app_mode/lwl_app_core.h"
 
-#include "app_lfs.h"
+#include "bt_ble/client/ble_distance.h"
+
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -36,6 +39,8 @@ static struct app_lingwl_hdl g_lingwl_hdl;
 
 music_player g_music_player;
 recorder_hdl g_recorder;
+threadpool_t *pool = NULL;
+
 void *uart0_hdl = NULL;
 uint8_t en_data_0[] = { // 0xA0, "WCCN24H28FEEEF7"
     0xA0, 
@@ -78,26 +83,36 @@ static void lwl_app_task(void *priv)
 {
     log_i("lwl_app_task");
     lwl_app_init(APP_POWER_ON_MODE);
-
-    // 初始化录音
-    int ret = recorder_mode_init(&g_recorder);
-    log_i("ret: %d\r\n", ret);
-
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    context->recorder = &g_recorder;
-    context->uartdev = uart0_hdl;
-
     while (true) {
         lwl_app_mode_loop();
     }
 }
 
+static void open_scan_delay(void *priv)
+{
+    msleep(2000);
+
+    ble_simple_client_module_enable(1);
+}
 
 static void app_lingwl_main(void)
 {
     log_i("Hello World2!\r\n");
     log_i("%s %s\r\n", __DATE__, __TIME__);
     
+    lwl_app_core_init();
+    
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    /* 初始化E端设备 */
+    const u8 sn1[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x37 };
+    lwl_eend_dev_init(sn1, &context->eend_dev_list[0]);
+    const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x38 };
+    lwl_eend_dev_init(sn2, &context->eend_dev_list[1]);
+    const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x39 };
+    lwl_eend_dev_init(sn3, &context->eend_dev_list[2]);
+    
+    /* 初始化数据通信串口 */
     uart0_hdl = dev_open("uart0", NULL);
     if (!uart0_hdl) { 
         printf("open uart err !!!\n");
@@ -106,29 +121,74 @@ static void app_lingwl_main(void)
 
     /* 使能特殊串口,启动收发数据 */
     dev_ioctl(uart0_hdl, UART_START, 0);
+    context->uartdev = uart0_hdl;
+
+    // 初始化录音
+    recorder_mode_init(&g_recorder);
+    context->recorder = &g_recorder;
 
     // 取消静音
-    gpio_direction_output(IO_PORTA_00, 1);   // 
-    // gpio_direction_output(IO_PORTB_02, 1);  // 
+#if 1
+    gpio_direction_output(IO_PORTA_00, 1);   //
+#else 
+    gpio_direction_output(IO_PORTB_02, 1);  // 
+#endif
 
+    /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);
+    context->music_player = &g_music_player;
 
     simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
 
+    /* 创建异步任务处理任务 */
     start_async_msg_loop();
 
-    // thread_fork("wifi_monitor", 15, 512 * 3, 0, 0, wifi_monitor_thread, NULL);
+    /* 创建线程池 */
+    pool = threadpool_create(4, 10);
+    context->threadpool = pool;
+
+    /* 初始化E端BLE握手处理任务 */
+    ble_keep_alive_init();
+
+    /* 默认开启SCAN */
+    threadpool_add_task(pool, open_scan_delay, NULL);
+    
+    /* 初始化RSSI测距 */
+    monitor_init();
+
+    /* 注册监听的设备 */
+    for (int i = 0; i < EEND_MAX_CNT; ++i) {
+        monitor_register_device(&context->eend_dev_list[i]);
+        ble_keep_alive_device_add(&context->eend_dev_list[i]);
+    }
+
+    /* 开始RSSI测距 */
+    monitor_start();
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
     ASSERT(lfs_hdl);
+    context->lfs_hdl = lfs_hdl;
 
+    /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
 }
 
 void play_end_callback(void *priv)
 {
     log_i("play end\n");
+}
+
+void test1_play_end_callback(void *priv)
+{
+    log_i("test1 play end\n");
+    app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/19.%201KHz-0dB-30s.mp3", test1_play_end_callback, NULL);
+}
+
+void test2_play_end_callback(void *priv)
+{
+    log_i("test2 play end\n");
+    app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", test2_play_end_callback, NULL);
 }
 
 static u8 en = 1;
@@ -140,11 +200,12 @@ static int app_music_key_click(struct key_event *key)
     //     break;
     case KEY_1:
         log_i("KEY 1\n");
-        app_music_play_net_music(&g_music_player, "https://www.ihaoge.net/server/1/426045276.mp3");
+        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", test2_play_end_callback, NULL);
+        
         break;
     case KEY_2:
         log_i("KEY 2\n");
-        app_music_play_net_music_with_callback(&g_music_player, "https://www.ihaoge.net/server/1/263523744.mp3", play_end_callback, NULL);
+        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/19.%201KHz-0dB-30s.mp3", test1_play_end_callback, NULL);
         break;
     case KEY_3:
         log_i("KEY 3\n");
@@ -176,6 +237,8 @@ static int app_music_key_click(struct key_event *key)
         
     case KEY_VOLUME_DEC:
     case KEY_UP:
+        // power_set_soft_poweroff();
+
         if (0 == set_dec_volume(&g_music_player, -VOLUME_STEP)) {
 #ifdef CONFIG_STORE_VOLUME
             syscfg_write(CFG_MUSIC_VOL, &g_music_player.volume, sizeof(g_music_player.volume));

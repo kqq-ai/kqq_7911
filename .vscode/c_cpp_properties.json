@@ -1614,6 +1614,7 @@
                 "${workspaceFolder}/apps/common/usb/host",
                 "${workspaceFolder}/apps/common/usb/include/host",
                 "${workspaceFolder}/apps/common/usb/include",
+                "${workspaceFolder}/apps/common/example/third_party/littlefs",
                 "${workspaceFolder}/include_lib/driver/device/usb",
                 "${workspaceFolder}/include_lib/driver/device/usb/device",
                 "${workspaceFolder}/include_lib/driver/device/usb/host",

@@ -13,7 +13,7 @@
 #include "util/cqueue.h"
 #include "async_msg_loop.h"
 
-#include "distance/main_ble_distance.h"
+#include "bt_ble/client/ble_distance.h"
 
 #include "protocol/lingos/loswssp.h"
 
