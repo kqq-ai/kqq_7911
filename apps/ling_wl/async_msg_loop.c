@@ -176,7 +176,6 @@ static void switch_only(char *sn)
     uart_tx_buf[i++] = 0xA0;
     memcpy(uart_tx_buf + i, sn, SN_SIZE);
     i += SN_SIZE;
-    uart_tx_buf[i++] = '\0';
     dev_write(uart0_hdl, uart_tx_buf, i);
 }
 

@@ -6,7 +6,7 @@
 #include "btstack/le/le_common_define.h"
 #include "bt_ble/client/ble_att_util.h"
 
-#define SN_SIZE 15
+#define SN_SIZE 16
 
 typedef struct {
     u8 sn[SN_SIZE];

@@ -11,7 +11,7 @@ bool adv_match_impl(const void *__this, const u8 *adv_data, const u16 adv_len)
 {
     uint8_t buffer[32];
     int r = ble_adv_report_get_data(adv_data, adv_len, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
-    return memcmp(((lwl_eend_dev_t *)__this)->sn, buffer + 2, SN_SIZE) == 0;
+    return memcmp(((lwl_eend_dev_t *)__this)->sn, buffer + 2, SN_SIZE - 1) == 0;
 }
 
 void get_string_impl(const void *__this, char *buffer, const int size)
