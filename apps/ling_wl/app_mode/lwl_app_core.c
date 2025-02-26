@@ -61,7 +61,8 @@ void set_eend_dev_active(lwl_eend_dev_t *pdev)
     for (int i = 0; i < EEND_MAX_CNT; ++i) {
         if (&context->eend_dev_list[i] == pdev) {
             context->active_eend_idx = i;
-            break;
+            return;
         }
     }
+    context->active_eend_idx = -1;
 }

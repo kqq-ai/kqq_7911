@@ -192,28 +192,32 @@ static void let_eend_turn_on_cb(void *priv)
 
 static void switch_only(char *sn)
 {
+    /* 设置C2广播 */
     int i = 0;
     uart_tx_buf[i++] = 0xA0;
     memcpy(uart_tx_buf + i, sn, SN_SIZE);
     i += SN_SIZE;
     dev_write(uart0_hdl, uart_tx_buf, i);
 
+    /* 通知A关机 */
     lwl_eend_dev_t *pprev = find_eend_dev_active();
     if (pprev != NULL) {
-        /* 通知A关机 */
         int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
         /* 等待命令发送完毕 */
         os_sem_pend(&sem_eend_cmd_send_completed, 0);
     }
 
+    /* 通知B开机 */
     lwl_eend_dev_t *pnext = find_eend_dev_by_sn(sn);
     if (pnext != NULL) {
-        /* 通知B开机 */
         int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
         /* 等待命令发送完毕 */
         os_sem_pend(&sem_eend_cmd_send_completed, 0);
         /* 设置上下文 */
         set_eend_dev_active(pnext);
+    } else {
+        /* 设置上下文 */
+        set_eend_dev_active(NULL);
     }
 }
 
