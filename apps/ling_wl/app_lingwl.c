@@ -142,16 +142,16 @@ static void app_lingwl_main(void)
     threadpool_add_task(pool, open_scan_delay, NULL);
     
     /* 初始化RSSI测距 */
-    monitor_init();
+    // monitor_init();
 
     /* 注册监听的设备 */
     for (int i = 0; i < EEND_MAX_CNT; ++i) {
-        monitor_register_device(&context->eend_dev_list[i]);
+        // monitor_register_device(&context->eend_dev_list[i]);
         ble_keep_alive_device_add(&context->eend_dev_list[i]);
     }
 
     /* 开始RSSI测距 */
-    monitor_start();
+    // monitor_start();
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
@@ -179,9 +179,9 @@ void test2_play_end_callback(void *priv)
     app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", test2_play_end_callback, NULL);
 }
 
-static void switch_completed(void *priv)
+static void switch_completed(int code, void *priv)
 {
-    log_i("switch completed!!!!!!");
+    log_i("switch completed: %d", code);
 }
 
 static u8 en = 1;
@@ -213,11 +213,11 @@ static int app_music_key_click(struct key_event *key)
         }
 
         if (en == 0) {
-            my_task_switch_only(sn1, switch_completed, NULL);
+            my_task_switch_only(sn1, NULL, switch_completed);
         } else if (en == 1) {
-            my_task_switch_only(sn2, switch_completed, NULL);
+            my_task_switch_only(sn2, NULL, switch_completed);
         } else if (en == 2) {
-            my_task_switch_only(sn3, switch_completed, NULL);
+            my_task_switch_only(sn3, NULL, switch_completed);
         }
         break;
     case KEY_4:
@@ -226,6 +226,7 @@ static int app_music_key_click(struct key_event *key)
         break;
     case KEY_OK:
         log_i("KEY OK\n");
+        app_music_play_pause(&g_music_player);
         break;
         
     case KEY_VOLUME_DEC:

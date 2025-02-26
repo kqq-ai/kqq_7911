@@ -281,6 +281,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_application.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_connected.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/test/eend_battery_live_test.c \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
 	../../../../apps/ling_wl/util/threadpool.c \

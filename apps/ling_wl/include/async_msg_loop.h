@@ -6,6 +6,12 @@
 
 void start_async_msg_loop();
 
+enum {
+    SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT,
+    SWITCH_ONLY_CODE_NEXT_START_TIMEOUT,
+    SWITCH_ONLY_CODE_SUCCESS,
+};
+
 /**
  * @name my_task_switch_play
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
@@ -23,9 +29,9 @@ void my_task_switch_play(char *sn, char* audio_url, void* priv, void* cb);
  *
  * @param name    Pointer to a character string indicating the E-end sequence number.
  * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
+ * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
  */
-void my_task_switch_only(char *sn, void* priv, void* cb);
+void my_task_switch_only(char *sn, void *priv, void (*cb)(int code, void* priv));
 
 /**
  * @name my_task_switch_play

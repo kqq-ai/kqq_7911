@@ -45,6 +45,18 @@ int app_net_connected_event_handler(struct application *app, struct sys_event *e
 
 char url[] = OBJ_URL;
 
+void wss_recv_callback(u8 *buf, u32 len, u8 type)
+{
+    log_i("wbs recv msg : %s\n", buf);
+
+    if (strcmp(buf, "client ping") == 0) {
+
+    } else {
+        // loswssp process
+        loswssp_rsp_handler(buf, len);
+    }
+}
+
 static int net_connected_init(void)
 {
     struct websocket_info_t *websockets_info = wss_server_connect(url, wss_recv_callback);

@@ -36,7 +36,7 @@ typedef struct
 {
     char sn[SN_SIZE];
     void *priv;
-    void *cb;
+    void (*cb)(int, void *);
 } MyMessageSwitchOnly;
 
 typedef struct
@@ -190,35 +190,8 @@ static void let_eend_turn_on_cb(void *priv)
     os_sem_post(&sem_eend_cmd_send_completed);
 }
 
-static void switch_only(char *sn)
+static bool switch_only(char *sn, void (*timeout_cb)(int, void *), void *priv)
 {
-    /* 设置C2广播 */
-    int i = 0;
-    uart_tx_buf[i++] = 0xA0;
-    memcpy(uart_tx_buf + i, sn, SN_SIZE);
-    i += SN_SIZE;
-    dev_write(uart0_hdl, uart_tx_buf, i);
-
-    /* 通知A关机 */
-    lwl_eend_dev_t *pprev = find_eend_dev_active();
-    if (pprev != NULL) {
-        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
-        /* 等待命令发送完毕 */
-        os_sem_pend(&sem_eend_cmd_send_completed, 0);
-    }
-
-    /* 通知B开机 */
-    lwl_eend_dev_t *pnext = find_eend_dev_by_sn(sn);
-    if (pnext != NULL) {
-        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
-        /* 等待命令发送完毕 */
-        os_sem_pend(&sem_eend_cmd_send_completed, 0);
-        /* 设置上下文 */
-        set_eend_dev_active(pnext);
-    } else {
-        /* 设置上下文 */
-        set_eend_dev_active(NULL);
-    }
 }
 
 static void switch_only_sync(MyTaskMessageType *message)
@@ -227,12 +200,49 @@ static void switch_only_sync(MyTaskMessageType *message)
     MyMessageSwitchOnly *param = &message->switch_only;
 
     /* 切换设备 */
-    switch_only(param->sn);
+    /* 设置C2广播 */
+    int i = 0;
+    uart_tx_buf[i++] = 0xA0;
+    memcpy(uart_tx_buf + i, param->sn, SN_SIZE);
+    i += SN_SIZE;
+    dev_write(uart0_hdl, uart_tx_buf, i);
+
+    /* 通知A关机 */
+    lwl_eend_dev_t *pprev = find_eend_dev_active();
+    if (pprev != NULL) {
+        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
+        /* 等待命令发送完毕 */
+        if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
+            /* 通知A关机失败 */
+            if (param->cb != NULL) {
+                param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
+            }
+            return;
+        }
+    }
+
+    /* 通知B开机 */
+    lwl_eend_dev_t *pnext = find_eend_dev_by_sn(param->sn);
+    if (pnext != NULL) {
+        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
+        /* 等待命令发送完毕 */
+        if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
+            /* 通知B开机失败 */
+            if (param->cb != NULL) {
+                param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
+            }
+            return;
+        }
+        /* 设置上下文 */
+        set_eend_dev_active(pnext);
+    } else {
+        /* 设置上下文 */
+        set_eend_dev_active(NULL);
+    }
 
     /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
+    if (param->cb != NULL) {
+        param->cb(SWITCH_ONLY_CODE_SUCCESS, param->priv);
     }
 }
 
@@ -250,7 +260,8 @@ static void switch_play_sync(MyTaskMessageType *message)
     MyMessageSwitchPlay *param = &message->switch_play;
     /* 切换设备 */
     log_i("B");
-    switch_only(param->sn);
+    // 暂时放弃切换播放指令
+    // switch_only(param->sn);
 
     log_i("C");
     /* 播放音频 */
@@ -391,9 +402,9 @@ void my_task_switch_play(char *sn, char *audio_url, void *priv, void *cb)
  *
  * @param name    Pointer to a character string indicating the E-end sequence number.
  * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
+ * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
  */
-void my_task_switch_only(char *sn, void *priv, void *cb)
+void my_task_switch_only(char *sn, void *priv, void (*cb)(int code, void* priv))
 {
     /* 创建消息 */
     MyTaskMessageType message;

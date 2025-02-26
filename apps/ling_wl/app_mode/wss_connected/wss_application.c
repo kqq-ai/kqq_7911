@@ -430,7 +430,7 @@ static void audio_play_end_callback(void *priv)
     log_i("Audio play ongoing num: %d\n", g_audio_play_ongoing_num);
 }
 
-static void switch_end_callback(void *priv)
+static void switch_end_callback(int code, void *priv)
 {
     log_i("Switch PortE OK\n");
     g_ble_porte_switch_ok = true;
@@ -1026,17 +1026,6 @@ static bool app_record_task_loop(struct websocket_struct *websockets_info)
 //=================================================================================================
 // LOOP
 //=================================================================================================
-void wss_recv_callback(u8 *buf, u32 len, u8 type)
-{
-    log_i("wbs recv msg : %s\n", buf);
-
-    if (strcmp(buf, "client ping") == 0) {
-
-    } else {
-        // loswssp process
-        loswssp_rsp_handler(buf, len);
-    }
-}
 
 void wss_application_init()
 {
@@ -1046,7 +1035,7 @@ void wss_application_init()
 
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     add_edev(&context->eend_dev_list[0], 45);
-    add_edev(&context->eend_dev_list[0], 5);
+    add_edev(&context->eend_dev_list[1], 5);
 
     for (int i; i < get_edev_count(); ++i) {
         g_edev_table[i].session_create_ok = false;
