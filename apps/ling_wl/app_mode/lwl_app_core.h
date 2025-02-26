@@ -21,6 +21,7 @@ typedef struct {
     threadpool_t *threadpool;
     void *uartdev;
     lfs_t *lfs_hdl;
+    int active_eend_idx;
     lwl_eend_dev_t eend_dev_list[EEND_MAX_CNT];
 } lwl_app_context_t;
 
@@ -33,5 +34,9 @@ lwl_app_context_t* lwl_app_core_context_get_instance();
 
 void lwl_app_core_init();
 void lwl_app_core_destroy();
+
+lwl_eend_dev_t* find_eend_dev_active();
+lwl_eend_dev_t* find_eend_dev_by_sn(u8 *sn);
+void set_eend_dev_active(lwl_eend_dev_t *pdev);
 
 #endif

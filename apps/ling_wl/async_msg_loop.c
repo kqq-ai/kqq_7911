@@ -6,6 +6,8 @@
 #include "cpu.h"
 #include "bt_ble/app_wifi_manage.h"
 #include "app_mode/lwl_eend_device.h"
+#include "app_mode/lwl_app_core.h"
+#include "bt_ble/client/ble_keep_alive.h"
 
 enum
 {
@@ -96,6 +98,7 @@ typedef struct
 int g_playing_audio_message_id = 0;
 
 static OS_SEM sem_net_music_dec_end;
+static OS_SEM sem_eend_cmd_send_completed;
 
 #define MY_TASK_MESSAGE_QUEUE_CAPACITY 10
 static MyBlockingQueue g_message_queue; // MyBlockingQueue<MyTaskMessageType>
@@ -118,6 +121,7 @@ static void my_task(void *priv)
     MyTaskMessageType message;
 
     os_sem_create(&sem_net_music_dec_end, 0);
+    os_sem_create(&sem_eend_cmd_send_completed, 0);
 
     printf("Init message queue\n");
     my_blocking_queue_init(&g_message_queue, sizeof(MyTaskMessageType), MY_TASK_MESSAGE_QUEUE_CAPACITY);
@@ -170,6 +174,22 @@ static void ble_start_scan_rssi(void *priv, void *cb)
     ble_simple_client_module_enable(1);
 }
 
+static const u8 cmd_turn_off[] = {0xA0, 0x00};
+static const u8 cmd_turn_on[] = {0xA0, 0x01};
+
+static void let_eend_turn_off_cb(void *priv)
+{
+    u8 *cmd = (u8 *)priv;
+    log_i("cmd send completed %02X %02X", cmd[0], cmd[1]);
+    os_sem_post(&sem_eend_cmd_send_completed);
+}
+static void let_eend_turn_on_cb(void *priv)
+{
+    u8 *cmd = (u8 *)priv;
+    log_i("cmd send completed %02X %02X", cmd[0], cmd[1]);
+    os_sem_post(&sem_eend_cmd_send_completed);
+}
+
 static void switch_only(char *sn)
 {
     int i = 0;
@@ -177,6 +197,24 @@ static void switch_only(char *sn)
     memcpy(uart_tx_buf + i, sn, SN_SIZE);
     i += SN_SIZE;
     dev_write(uart0_hdl, uart_tx_buf, i);
+
+    lwl_eend_dev_t *pprev = find_eend_dev_active();
+    if (pprev != NULL) {
+        /* 通知A关机 */
+        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
+        /* 等待命令发送完毕 */
+        os_sem_pend(&sem_eend_cmd_send_completed, 0);
+    }
+
+    lwl_eend_dev_t *pnext = find_eend_dev_by_sn(sn);
+    if (pnext != NULL) {
+        /* 通知B开机 */
+        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
+        /* 等待命令发送完毕 */
+        os_sem_pend(&sem_eend_cmd_send_completed, 0);
+        /* 设置上下文 */
+        set_eend_dev_active(pnext);
+    }
 }
 
 static void switch_only_sync(MyTaskMessageType *message)
