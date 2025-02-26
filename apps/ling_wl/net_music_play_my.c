@@ -97,9 +97,9 @@ int local_music_dec_file(music_player *player, void *file, int breakpoint, void 
     struct eq_s_attr eq_attr = {0};
     extern void set_eq_req_attr_parm(struct eq_s_attr * eq_attr);
     set_eq_req_attr_parm(&eq_attr);
-    if (!__this->play_voice_prompt) {
+    if (!player->play_voice_prompt) {
         req.dec.eq_attr = &eq_attr;
-        req.dec.eq_hdl = __this->eq_hdl;
+        req.dec.eq_hdl = player->eq_hdl;
     }
 #endif
 #endif
@@ -140,6 +140,44 @@ int local_music_dec_file(music_player *player, void *file, int breakpoint, void 
 
     led_ui_post_msg("dec_start");
     puts("play_music_file: suss\n");
+
+    return 0;
+}
+
+
+static int local_music_dec_breakpoint(music_player *player, int priv)
+{
+    if (player->lbp.local_bp.len == 0) {
+        return -ENOENT;
+    }
+
+    return local_music_dec_file(player, player->local_bp_file, 1, NULL, FSEL_NEXT_FILE);
+}
+
+static int local_music_dec_play_pause(music_player *player, u8 notify)
+{
+    union audio_req r = {0};
+
+    if (!player->dec_server) {
+        return -EFAULT;
+    }
+
+#ifdef CONFIG_DEC_ANALOG_VOLUME_ENABLE
+    r.dec.attr = AUDIO_ATTR_FADE_INOUT;
+#endif
+    r.dec.cmd = AUDIO_DEC_PP;
+    server_request(player->dec_server, AUDIO_REQ_DEC, &r);
+    if (r.dec.status == AUDIO_DEC_START) {
+        led_ui_post_msg("dec_start");
+#ifdef CONFIG_UI_ENABLE
+        os_taskq_post(POST_TASK_NAME, 1, UI_MSG_PAUSE_START);
+#endif
+    } else {
+        led_ui_post_msg("dec_pause");
+#ifdef CONFIG_UI_ENABLE
+        os_taskq_post(POST_TASK_NAME, 1, UI_MSG_PAUSE_STOP);
+#endif
+    }
 
     return 0;
 }
@@ -231,8 +269,8 @@ static const struct music_dec_ops local_music_dec_ops = {
     // .switch_dir     = local_music_dec_switch_dir,
     // .switch_file    = local_music_dec_switch_file,
     .dec_file       = local_music_dec_file,
-    // .dec_breakpoint = local_music_dec_breakpoint,
-    // .dec_play_pause = local_music_dec_play_pause,
+    .dec_breakpoint = local_music_dec_breakpoint,
+    .dec_play_pause = local_music_dec_play_pause,
     // .dec_volume     = local_music_dec_volume,
     // .dec_progress   = local_musci_dec_progress,
     .dec_stop       = local_music_dec_stop,
@@ -324,6 +362,36 @@ static int __get_dec_breakpoint(music_player *player, struct audio_dec_breakpoin
     return 0;
 }
 
+static int net_music_dec_play_pause(music_player *player, u8 notify)
+{
+    union audio_req r = {0};
+
+    if (!player->dec_server) {
+        return -EFAULT;
+    }
+
+#ifdef CONFIG_DEC_ANALOG_VOLUME_ENABLE
+    r.dec.attr = AUDIO_ATTR_FADE_INOUT;
+#endif
+    r.dec.cmd = AUDIO_DEC_PP;
+    server_request(player->dec_server, AUDIO_REQ_DEC, &r);
+    if (r.dec.status == AUDIO_DEC_START) {
+        /* 播放状态 */
+        net_download_set_pp(player->net_file, 0);
+        led_ui_post_msg("dec_start");
+    } else if (r.dec.status == AUDIO_DEC_PAUSE) {
+        /* 暂停状态 */
+        net_download_set_pp(player->net_file, 1);
+        led_ui_post_msg("dec_pause");
+    } else if (r.dec.status == AUDIO_DEC_STOP) {
+        if (0 == player->dec_ops->dec_breakpoint(player, 0)) {
+            r.dec.status = AUDIO_DEC_START;
+        }
+    }
+
+    return 0;
+}
+
 static int net_music_dec_stop(music_player *player, int save_breakpoint)
 {
     int err;
@@ -341,7 +409,7 @@ static int net_music_dec_stop(music_player *player, int save_breakpoint)
         /*
          * 歌曲还未播放，删除wait
          */
-        /* sys_timer_del(__this->wait_download); */
+        /* sys_timer_del(player->wait_download); */
         wait_completion_del(player->wait_download);
         player->wait_download = 0;
         player->wait_download_suspend = 1;
@@ -464,7 +532,7 @@ static int __net_music_dec_file(void *priv)
     extern void set_eq_req_attr_parm(struct eq_s_attr * eq_attr);
     set_eq_req_attr_parm(&eq_attr);
     req.dec.eq_attr = &eq_attr;
-    req.dec.eq_hdl = __this->eq_hdl;
+    req.dec.eq_hdl = player->eq_hdl;
 #endif
 #endif
 
@@ -540,19 +608,6 @@ static int __set_dec_volume(music_player *player, int step)
 
     log_d("set_dec_volume: %d\n", volume);
 
-#ifdef CONFIG_DEC_DIGITAL_VOLUME_ENABLE
-#if TCFG_USER_EMITTER_ENABLE
-    if (get_bt_emitter_audio_server() && __this->digital_vol_hdl && __this->dec_server) {
-        return user_audio_digital_volume_set(__this->digital_vol_hdl, volume, 1);
-    }
-#endif
-#if TCFG_USER_VIRTUAL_PLAY_ENABLE
-    if (get_user_virtual_audio_server() && __this->digital_vol_hdl && __this->dec_server) {
-        return user_audio_digital_volume_set(__this->digital_vol_hdl, volume, 1);
-    }
-#endif
-#endif
-
 // TODO: play mix file
 // #ifdef CONFIG_VOICE_PROMPT_FILE_PATH
 //     if (volume == MAX_VOLUME_VALUE) {
@@ -621,6 +676,23 @@ static int net_music_dec_file(music_player *player, void *_url, int breakpoint, 
     return 0;
 }
 
+static int net_music_dec_breakpoint(music_player *player, int priv)
+{
+    puts("net_music_dec_breakpoint\n");
+
+    if (player->wait_download_suspend) {
+        if (player->net_bp.dec_bp.len > 0 && !strcmp(player->url, player->net_bp.url)) {
+            return net_music_dec_file(player, player->net_bp.url, 1, net_music_dec_end, 0);
+        } else {
+            return net_music_dec_file(player, (void *)player->url, 0, net_music_dec_end, 0);
+        }
+    }
+    if (player->net_bp.dec_bp.len == 0) {
+        return -ENOENT;
+    }
+    return net_music_dec_file(player, player->net_bp.url, 1, net_music_dec_end, 0);
+}
+
 static int net_music_dec_seek(music_player *player, int seek_step)
 {
     int err;
@@ -661,8 +733,8 @@ static int net_music_dec_seek(music_player *player, int seek_step)
 
 static const struct music_dec_ops net_music_dec_ops = {
     .dec_file       = net_music_dec_file,
-    // .dec_breakpoint = net_music_dec_breakpoint,
-    // .dec_play_pause = net_music_dec_play_pause,
+    .dec_breakpoint = net_music_dec_breakpoint,
+    .dec_play_pause = net_music_dec_play_pause,
     // .dec_volume     = net_music_dec_volume,
     // .dec_progress   = net_music_dec_progress,
     .dec_stop       = net_music_dec_stop,
@@ -709,6 +781,11 @@ int app_music_play_net_music_with_callback(music_player *player, void *url, app_
 int app_music_play_stop(music_player *player)
 {
     return net_music_dec_end(player, 0);
+}
+
+int app_music_play_pause(music_player *player)
+{
+    return net_music_dec_play_pause(player, 0);
 }
 
 int set_dec_volume(music_player *player, int step)

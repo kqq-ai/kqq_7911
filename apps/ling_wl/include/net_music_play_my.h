@@ -18,8 +18,8 @@ extern music_player;
 
 struct music_dec_ops {
     int (*dec_file)(music_player *player, void *file, int, void *, int);
-    // int (*dec_play_pause)(music_player *player, u8 notify);
-    // int (*dec_breakpoint)(music_player *player, int);
+    int (*dec_play_pause)(music_player *player, u8 notify);
+    int (*dec_breakpoint)(music_player *player, int);
     int (*dec_stop)(music_player *player, int);
     // int (*dec_volume)(music_player *player, int);
     // int (*dec_progress)(music_player *player, int);
@@ -83,6 +83,8 @@ int app_music_play_net_music(music_player *player, void *url);
 int app_music_play_net_music_with_callback(music_player *player, void *url, app_music_play_end_cb_t cb, void *priv);
 
 int app_music_play_stop(music_player *player);
+
+int app_music_play_pause(music_player *player);
 
 int set_dec_volume(music_player *player, int step);
 
