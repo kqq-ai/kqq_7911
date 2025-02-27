@@ -126,21 +126,12 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
         // 提取CMD和Payload
         uint8_t cmd = data[1];
         printf("cmd : %02x\r\n", cmd);
-        // uint8_t temppayload_len = data[2];
-        // printf("the payload data : \r\n");
-        // printf_buf(data + 3, payload_len);
         
-        uint8_t code_with_payload_len = 1 + resp_payload_len;
-        uint8_t code_with_payload_data[code_with_payload_len];
-        code_with_payload_data[0] = data[2];
-        memcpy(code_with_payload_data + 1, data + 5, resp_payload_len);
-
-        printf("resp the code_with_payload_data : \r\n");
-        printf_buf(code_with_payload_data, code_with_payload_len); 
+        uint8_t code = data[2];
 
         if (resp_packet_handler)
         {
-            resp_packet_handler(cmd, code_with_payload_data, code_with_payload_len);
+            resp_packet_handler(cmd, code, data + 5, resp_payload_len);
         }
     }
     else

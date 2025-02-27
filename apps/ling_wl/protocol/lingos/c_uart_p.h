@@ -36,7 +36,7 @@ typedef enum {
 
 // 数据包回调函数类型
 typedef void (*uart_packet_handler_t)(uint8_t cmd, uint8_t *payload, uint16_t len);
-typedef void (*uart_resp_packet_handler_t)(uint8_t cmd, uint8_t *code_with_payload, uint16_t len);
+typedef void (*uart_resp_packet_handler_t)(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len);
 typedef void (*uart_event_handler_t)(uart_event_type_t event);
 
 /* 注册回调函数 */
@@ -47,7 +47,7 @@ void uart_register_event_handler(uart_event_handler_t handler);
 /* 回调函数 */
 
 void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len);
-void handle_resp_packet(uint8_t cmd, uint8_t *code_with_payload, uint16_t len);
+void handle_resp_packet(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len);
 void handle_event(uart_event_type_t event);
 
 // 发送响应包

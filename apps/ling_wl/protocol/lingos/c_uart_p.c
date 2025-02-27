@@ -38,7 +38,7 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     }
 }
 
-void handle_resp_packet(uint8_t cmd, uint8_t *code_with_payload, uint16_t len)
+void handle_resp_packet(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len)
 {
     switch (cmd)
     {
