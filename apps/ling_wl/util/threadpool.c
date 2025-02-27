@@ -8,6 +8,8 @@ static void *threadpool_worker(void *threadpool);
 threadpool_t *threadpool_create(int thread_count, int queue_size) {
     threadpool_t *pool;
     int i;
+    pthread_attr_t attr;
+    size_t stack_size = 1024 * 4;  // 设置栈大小为1MB
 
     if (thread_count <= 0 || queue_size <= 0) {
         return NULL;
@@ -41,12 +43,19 @@ threadpool_t *threadpool_create(int thread_count, int queue_size) {
         return NULL;
     }
 
+    // 初始化线程属性并设置栈大小
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, stack_size);
+
     for (i = 0; i < thread_count; i++) {
-        if (pthread_create(&(pool->threads[i]), NULL, threadpool_worker, (void*)pool) != 0) {
+        if (pthread_create(&(pool->threads[i]), &attr, threadpool_worker, (void*)pool) != 0) {
             threadpool_destroy(pool);
+            pthread_attr_destroy(&attr);  // 清理线程属性
             return NULL;
         }
     }
+
+    pthread_attr_destroy(&attr);  // 清理线程属性
 
     return pool;
 }

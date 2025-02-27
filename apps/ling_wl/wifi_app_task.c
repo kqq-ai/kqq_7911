@@ -22,13 +22,13 @@
 
 #include "bt_ble/app_wifi_manage.h"
 #include "bt_ble/server/ble_simple_server.h"
+#include "app_mode/lwl_app_core.h"
 // #include "threadpool.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
 
 
-// extern threadpool_t * g_threadpool;
 
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
 {
@@ -228,11 +228,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         store_wifi_ip_info(NULL);
 
 
-        // /* 通知 APP(小程序) 我已经获取到 IP */
-        // if (!threadpool_add_task(g_threadpool, notify_app_wifi_ip_succ, NULL)) {
-        //     printf("!!!!!!!!!!!!!!!!!Failed to add task  !!!!!!!!!!!!!!!!!!!!!\r\n");
-        // }
-        // notify_app_wifi_ip_succ(NULL);
+        lwl_app_context_t* ctx = lwl_app_core_context_get_instance();
+        /* 通知 APP(小程序) 我已经获取到 IP */
+        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL)) {
+            printf("!!!!!!!!!!!!!!!!!Failed to add task  !!!!!!!!!!!!!!!!!!!!!\r\n");
+        }
+
 
         break;
 
