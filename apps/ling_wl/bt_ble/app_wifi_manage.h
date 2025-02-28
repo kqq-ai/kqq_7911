@@ -38,8 +38,10 @@ WIFI_SCAN_STATUES get_wifi_scan_status(void *pri);
 /* WiFi 连接状态 : 用来处理wifi 连接的逻辑状态*/
 typedef enum
 {
+    WIFI_CONNECT_IDLE = 0x00,
     WIFI_CONNECT_SUCC = 0x03,
     WIFI_CONNECT_FAIL,
+    WIFI_CONNECT_TIMEOUT,
     WIFI_CONNECT_TIMEOUT_OR_NO_SSID,
 } WIFI_connect_STATUES;
 

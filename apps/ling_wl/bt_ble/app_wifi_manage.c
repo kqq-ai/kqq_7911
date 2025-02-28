@@ -12,7 +12,7 @@ static CONNECT_FUNC_FLAG g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;      
 static DISCONNECT_FUNC_FLAG g_disconnect_func_flag = DISCONNECT_FUNC_BLOCK_DEFAULT; // 断连函数(阻塞方式)的flag
 
 static WIFI_MANAGER_MODE g_wifi_manager_mode = WIFI_IDLE_MODE;        // 当前wifi 模式
-static WIFI_connect_STATUES g_wifi_connect_state = WIFI_CONNECT_SUCC; // 当前wifi 连接状态
+static WIFI_connect_STATUES g_wifi_connect_state = WIFI_CONNECT_IDLE; // 当前wifi 连接状态
 static WIFI_INFO_STATUES g_wifi_info_state = WIFI_INFO_IDLE;          // 当前wifi 模块状态
 static WIFI_SCAN_STATUES g_wifi_scan_state = WIFI_SCAN_STOP;          // 当前wifi 扫描状态
 static WIFI_CMD_STATUES g_wifi_cmd_state = WIFI_CMD_DEFAULT;          // 当前命令状态
