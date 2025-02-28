@@ -95,13 +95,11 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
         printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
         if (0 == ret)
         {
-            printf("the sta_mode_connect_block success connect----------------------------------\r\n");
             g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
             return get_wifi_connect_status(NULL);
         }
-        else if (-1 == ret)
+        else
         {
-            printf("the sta_mode_connect_block fail conncet-------------------------------------\r\n");
             g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
             return -1;
         }

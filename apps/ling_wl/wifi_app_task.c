@@ -28,8 +28,6 @@
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
 
-
-
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
 {
     if (NULL != wifi_connect_succ_cb_func_pri)
@@ -125,7 +123,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         puts("|network_user_callback->WIFI_EVENT_STA_START\n");
 
         /*hzx add*/
-        
+
         set_wifi_manager_mode(WIFI_STA_MODE);
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
@@ -194,6 +192,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
         puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT .....\n");
+
+        /*hzx add*/
+        block_connect_sem_post(NULL);
+        
         break;
 
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC:
@@ -227,13 +229,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         /* 存储 IP*/
         store_wifi_ip_info(NULL);
 
-
-        lwl_app_context_t* ctx = lwl_app_core_context_get_instance();
+        lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
         /* 通知 APP(小程序) 我已经获取到 IP */
-        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL)) {
+        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL))
+        {
             printf("!!!!!!!!!!!!!!!!!Failed to add task  !!!!!!!!!!!!!!!!!!!!!\r\n");
         }
-
 
         break;
 
