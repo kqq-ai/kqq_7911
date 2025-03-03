@@ -662,7 +662,7 @@ typedef struct {
 
 #define MY_ASR_DATA_QUEUE_CAPACITY 10
 static MyBlockingQueue g_asr_data_queue; // MyBlockingQueue<AsrData>
-u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
+static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 
 static void wss_asr_data(void *data, u32 size)
 {
@@ -740,7 +740,7 @@ typedef struct {
 
 #define MY_TASK_MESSAGE_QUEUE_CAPACITY 10
 static MyBlockingQueue g_message_queue; // MyBlockingQueue<WssTaskMessage>
-u8 g_message_queue_buffer[MY_TASK_MESSAGE_QUEUE_CAPACITY * sizeof(WssTaskMessage)];
+static u8 g_message_queue_buffer[MY_TASK_MESSAGE_QUEUE_CAPACITY * sizeof(WssTaskMessage)];
 
 //=================================================================================================
 // Message notify functions
@@ -959,7 +959,7 @@ static void app_record_task_start()
     g_task_state = STATE_TASK_RECORD;
 }
 
-AsrData asr_data_frame;
+static AsrData asr_data_frame;
 static bool app_record_task_loop(struct websocket_struct *websockets_info)
 {
     WssTaskMessage message;
