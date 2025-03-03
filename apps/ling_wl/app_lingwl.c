@@ -22,6 +22,7 @@
 #include "util/threadpool.h"
 #include "async_msg_loop.h"
 #include "wait.h"
+#include "app_mode/7911_uart_7016/app_uart_task.h"
 #include "bt_ble/client/ble_keep_alive.h"
 
 #include "app_mode/lwl_app_framework.h"
@@ -86,6 +87,13 @@ static void open_scan_delay(void *priv)
     ble_simple_client_module_enable(1);
 }
 
+static void auto_shutdown(void *priv)
+{
+    msleep(10000);
+
+    power_set_soft_poweroff();
+}
+
 static void app_lingwl_main(void)
 {
     log_i("Hello World2!\r\n");
@@ -101,14 +109,7 @@ static void app_lingwl_main(void)
     lwl_eend_dev_init(sn3, &context->eend_dev_list[2]);
     
     /* 初始化数据通信串口 */
-    uart0_hdl = dev_open("uart0", NULL);
-    if (!uart0_hdl) { 
-        printf("open uart err !!!\n");
-        return ;
-    }
-
-    /* 使能特殊串口,启动收发数据 */
-    dev_ioctl(uart0_hdl, UART_START, 0);
+    uart0_hdl = app_uart_dev_init("uart0");
     context->uartdev = uart0_hdl;
 
     // 初始化录音
@@ -136,10 +137,10 @@ static void app_lingwl_main(void)
     context->threadpool = pool;
 
     /* 初始化E端BLE握手处理任务 */
-    ble_keep_alive_init();
+    // ble_keep_alive_init();
 
     /* 默认开启SCAN */
-    threadpool_add_task(pool, open_scan_delay, NULL);
+    // threadpool_add_task(pool, open_scan_delay, NULL);
     
     /* 初始化RSSI测距 */
     // monitor_init();
@@ -147,7 +148,7 @@ static void app_lingwl_main(void)
     /* 注册监听的设备 */
     for (int i = 0; i < EEND_MAX_CNT; ++i) {
         // monitor_register_device(&context->eend_dev_list[i]);
-        ble_keep_alive_device_add(&context->eend_dev_list[i]);
+        // ble_keep_alive_device_add(&context->eend_dev_list[i]);
     }
 
     /* 开始RSSI测距 */
@@ -160,6 +161,11 @@ static void app_lingwl_main(void)
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
+
+    
+
+    /* 【测试】默认10s后关机 */
+    // threadpool_add_task(pool, auto_shutdown, NULL);
 }
 
 void play_end_callback(void *priv)
@@ -353,11 +359,15 @@ static int app_music_net_event_handler(struct net_event *event)
 
             log_i("rf_coexistence_config_index %d -> %d\n", index_before, index_after);
         }   break;
-        case NET_EVENT_DISCONNECTED:
+        case NET_EVENT_DISCONNECTED:{
             log_i("NET_EVENT_DISCONNECTED\n");
             // dhcp ready = false
             // TODO: 可能需要进入回连状态，或者重新进入配网状态
-            break;
+
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_NET_DISCONNECTED;
+            lwl_event_notify(&e);
+        }   break;
         case NET_EVENT_SMP_CFG_TIMEOUT:
             log_i("NET_EVENT_SMP_CFG_TIMEOUT\n");
             break;
@@ -379,7 +389,6 @@ static int app_music_net_event_handler(struct net_event *event)
 
 static int app_lingwl_event_handler(struct application *app, struct sys_event *event)
 {
-    lwl_app_event_handler(app, event);
     switch (event->type) {
     case SYS_KEY_EVENT:
         return app_lingwl_key_event_handler((struct key_event *)event->payload);

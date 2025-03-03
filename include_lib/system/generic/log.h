@@ -47,12 +47,24 @@ struct logbuf {
 #define log_d(...) printf(__VA_ARGS__)
 #endif
 
+#if __LOG_LEVEL > __LOG_DEBUG
+#define log_d_buf(data, size) 
+#else
+#define log_d_buf(data, size) printf_buf((data), (size))
+#endif
+
 #if __LOG_LEVEL > __LOG_INFO
 #define log_i(...)  do {} while (0)
 #elif defined __LOG_ENABLE
 #define log_i(...) log_print(__LOG_INFO, NULL, __VA_ARGS__);
 #else
 #define log_i(...) printf(__VA_ARGS__)
+#endif
+
+#if __LOG_LEVEL > __LOG_INFO
+#define log_i_buf(data, size) 
+#else
+#define log_i_buf(data, size) printf_buf((data), (size))
 #endif
 
 #if __LOG_LEVEL > __LOG_WARN

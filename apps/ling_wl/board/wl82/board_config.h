@@ -367,8 +367,8 @@
 
 #ifdef CONFIG_BOARD_DEVELOP
 #define TCFG_SD0_ENABLE                     0
-#define TCFG_ADKEY_ENABLE                   1          //AD按键
-#define CONFIG_PRESS_LONG_KEY_POWERON                  //长按开关机功能
+#define TCFG_ADKEY_ENABLE                   0          //AD按键
+// #define CONFIG_PRESS_LONG_KEY_POWERON                  //长按开关机功能
 
 #define TCFG_DEBUG_PORT                     IO_PORTA_00
 #define TCFG_DAC_MUTE_PORT                  0xff
@@ -386,8 +386,8 @@
 //                            AUDIO_ADC应用的通道配置                              //
 //*********************************************************************************//
 #define CONFIG_AUDIO_ENC_SAMPLE_SOURCE      AUDIO_ENC_SAMPLE_SOURCE_MIC
-#define TCFG_MIC_CHANNEL_MAP                LADC_CH_MIC0_P_N
-#define TCFG_MIC_CHANNEL_NUM                1 // 2
+#define TCFG_MIC_CHANNEL_MAP                LADC_CH_MIC0_P_N | LADC_CH_MIC2_P_N
+#define TCFG_MIC_CHANNEL_NUM                2
 #define TCFG_LINEIN_CHANNEL_MAP             LADC_CH_AUX3
 #define TCFG_LINEIN_CHANNEL_NUM             0
 

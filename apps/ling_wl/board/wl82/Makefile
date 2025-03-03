@@ -282,6 +282,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_connected.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/test/eend_battery_live_test.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/test/function_test.c \
 	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_crc16.c \
 	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_uart_task.c \
 	../../../../apps/ling_wl/audio/recorder.c \

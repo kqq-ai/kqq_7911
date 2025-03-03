@@ -6,6 +6,6 @@
 
 void test_application_init();
 void test_application_uninit();
-void test_application_loop(struct websocket_struct *websockets_info);
+void test_application_loop();
 
 #endif // __EEND_BATTERY_LIVE_TEST_H__

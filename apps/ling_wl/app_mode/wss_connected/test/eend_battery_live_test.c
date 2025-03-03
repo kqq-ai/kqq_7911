@@ -217,7 +217,7 @@ void test_application_uninit()
     log_i("Uninit WSS application\n");
 }
 
-static void test_application_normal_loop(struct websocket_struct *websockets_info)
+static void test_application_normal_loop()
 {
     switch (g_task_state) {
     case STATE_TASK_IDLE:
@@ -307,19 +307,12 @@ static void test_application_normal_loop(struct websocket_struct *websockets_inf
     }
 }
 
-void test_application_loop(struct websocket_struct *websockets_info)
+void test_application_loop()
 {
     g_curr_time = timer_get_ms();
-    ASSERT(websockets_info != NULL);
 
     /* 超时定时器状态更新 */
     timeout_timer_update();
 
-    test_application_normal_loop(websockets_info);
-
-    if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
-        wss_ping_send(websockets_info);
-
-        g_heat_timer = g_curr_time;
-    }
+    test_application_normal_loop();
 }

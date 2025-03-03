@@ -1,6 +1,7 @@
 #include "c_uart_p.h"
 #include "cpu.h"
 #include "device/device.h"
+#include "app_mode/lwl_app_core.h"
 
 extern g_dev_uart_hdl;
 
@@ -9,25 +10,36 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
 {
     switch (cmd)
     {
-    case UART_CMD_NORMAL_KEY: // 普通按键控制
+    case UART_CMD_NORMAL_KEY:{ // 普通按键控制
         log_i("the UART_CMD_NORMAL_KEY !\r\n");
-        extern void wss_c2_key_press();
-        wss_c2_key_press();
-        break;
-    case UART_CMD_TOUCH_KEY: // 触摸按键控制
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK;
+        lwl_event_notify(&e);
+    }   break;
+    case UART_CMD_TOUCH_KEY:{ // 触摸按键控制
         log_i("the UART_CMD_TOUCH_KEY !\r\n");
-        break;
-    case UART_CMD_SYNCH_STATUS: // 同步状态
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
+        lwl_event_notify(&e);
+    }   break;
+    case UART_CMD_SYNCH_STATUS:{ // 同步状态
         log_i("the UART_CMD_SYNCH_STATUS !\r\n");
-        int send_cnt = 0;
-        send_cnt = uart_response_synch_status(0x01);
-        break;
-    case UART_CMD_POWER_OFF: // 关机控制
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_SYNC;
+        e.uart_cmd_sync.battery = payload[1];
+        e.uart_cmd_sync.charging = payload[2];
+        lwl_event_notify(&e);
+    }   break;
+    case UART_CMD_POWER_OFF:{ // 关机控制
         log_i("the UART_CMD_POWER_OFF !\r\n");
-        break;
-    case UART_CMD_SET_BLESN: // 设置蓝牙SN
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
+        lwl_event_notify(&e);
+    }   break;
+    case UART_CMD_SET_BLESN:{ // 设置蓝牙SN
         log_i("the UART_CMD_SET_BLESN !\r\n");
-        break;
+        // ignore
+    }   break;
     }
 }
 
@@ -37,6 +49,7 @@ void handle_resp_packet(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t le
     {
     case UART_CMD_SYNCH_STATUS: // 同步状态
         log_d("the UART_CMD_SYNCH_STATUS !\r\n");
+        // ignore
         break;
     }
 }
