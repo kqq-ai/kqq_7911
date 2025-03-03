@@ -39,12 +39,12 @@ bool verify_crc(const uint8_t *data, uint16_t len)
     // 提取接收到的 CRC 值（小端序）
     uint16_t crc_received = (data[len - 2] << 8) | data[len - 3];
 
-    printf("crc_received: %04x\n", crc_received);
+    log_d("crc_received: %04x\n", crc_received);
 
     // 计算 CRC 校验值（HEADER + LEN + PAYLOAD）
     uint16_t crc_calculated = crc16_modbus(data, len - 3);
 
-    printf("crc_calculated: %04x\n", crc_calculated);
+    log_d("crc_calculated: %04x\n", crc_calculated);
 
     // 比较接收到的 CRC 和计算得到的 CRC
     return (crc_received == crc_calculated);

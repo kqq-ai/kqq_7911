@@ -10,31 +10,24 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     switch (cmd)
     {
     case UART_CMD_NORMAL_KEY: // 普通按键控制
-        printf("the UART_CMD_NORMAL_KEY !\r\n");
-        uint8_t resp_payload[4] = {0x01, 0x02, 0x03, 0x04};
-        uart_send_response(cmd, 0x01, resp_payload, 4);
-        // handle_led_command(payload);
+        log_i("the UART_CMD_NORMAL_KEY !\r\n");
+        extern void wss_c2_key_press();
+        wss_c2_key_press();
         break;
     case UART_CMD_TOUCH_KEY: // 触摸按键控制
-        // handle_touch_key_command(payload);
-        printf("the UART_CMD_TOUCH_KEY !\r\n");
+        log_i("the UART_CMD_TOUCH_KEY !\r\n");
         break;
     case UART_CMD_SYNCH_STATUS: // 同步状态
-        printf("the UART_CMD_SYNCH_STATUS !\r\n");
+        log_i("the UART_CMD_SYNCH_STATUS !\r\n");
         int send_cnt = 0;
         send_cnt = uart_response_synch_status(0x01);
-        printf("send_cnt = %d\r\n", send_cnt);
-        // handle_sn_command(payload);
         break;
     case UART_CMD_POWER_OFF: // 关机控制
-        printf("the UART_CMD_POWER_OFF !\r\n");
-        // handle_touch_key_command(payload);
+        log_i("the UART_CMD_POWER_OFF !\r\n");
         break;
     case UART_CMD_SET_BLESN: // 设置蓝牙SN
-        printf("the UART_CMD_SET_BLESN !\r\n");
-        //handle_set_blesn_command(payload, len);
+        log_i("the UART_CMD_SET_BLESN !\r\n");
         break;
-        // ...其他命令处理
     }
 }
 
@@ -43,10 +36,8 @@ void handle_resp_packet(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t le
     switch (cmd)
     {
     case UART_CMD_SYNCH_STATUS: // 同步状态
-        printf("the UART_CMD_SYNCH_STATUS !\r\n");
-        // handle_sn_command(payload);
+        log_d("the UART_CMD_SYNCH_STATUS !\r\n");
         break;
-        // ...其他命令处理
     }
 }
 
@@ -55,19 +46,19 @@ void handle_event(uart_event_type_t event)
     switch (event)
     {
     case UART_EVENT_PACKET_RECEIVED:
-        printf("the UART_EVENT_PACKET_RECEIVED !\r\n");
+        log_d("the UART_EVENT_PACKET_RECEIVED !\r\n");
         break;
     case UART_EVENT_TIMEOUT:
-        printf("the UART_EVENT_TIMEOUT !\r\n");
+        log_d("the UART_EVENT_TIMEOUT !\r\n");
         break;
     case UART_EVENT_CRC_ERROR:
-        printf("the UART_EVENT_CRC_ERROR !\r\n");
+        log_d("the UART_EVENT_CRC_ERROR !\r\n");
         break;
     case UART_EVENT_INVALID_CMD:
-        printf("the UART_EVENT_INVALID_CMD !\r\n");
+        log_d("the UART_EVENT_INVALID_CMD !\r\n");
         break;
     case UART_EVENT_OVERFLOW:
-        printf("the UART_EVENT_OVERFLOW !\r\n");
+        log_d("the UART_EVENT_OVERFLOW !\r\n");
         break;
     }
 }
@@ -97,8 +88,8 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
     resp_packet[6 + len] = (crc >> 8) & 0xFF;                  // CRC (高字节)
     resp_packet[7 + len] = PACKET_TRAILER_RESP;                // TRAILER
 
-    printf("uart_send_response: \r\n");
-    printf_buf(resp_packet, 8 + len);
+    log_d("uart_send_response: \r\n");
+    log_d_buf(resp_packet, 8 + len);
     // 发送响应包
     return dev_write(g_dev_uart_hdl, resp_packet, 8 + len);
 }
@@ -128,8 +119,8 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
 
     send_packet[5 + len] = PACKET_TRAILER_CMD;
 
-    printf("uart_send_inquiry: \r\n");
-    printf_buf(send_packet, 6 + len);
+    log_d("uart_send_inquiry: \r\n");
+    log_d_buf(send_packet, 6 + len);
     // 发送响应包
     return dev_write(g_dev_uart_hdl, send_packet, 6 + len);
 }

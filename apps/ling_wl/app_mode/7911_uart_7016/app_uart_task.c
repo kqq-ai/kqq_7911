@@ -4,9 +4,10 @@
 #include "device/device.h"
 #include "gpio.h"
 #include "uart.h"
+#include "log.h"
 
 #include "app_crc16.h"
-#include "c_uart_p.h"
+#include "protocol/cp/c_uart_p.h"
 
 // #include "crc16.h"  // 需实现CRC-16/MODBUS
 
@@ -40,7 +41,7 @@ void uart_register_event_handler(uart_event_handler_t handler)
 // 数据包解析
 static void parse_uart_packet(uint8_t *data, uint16_t len)
 {
-    printf("===============start parse the data ! ===================\r\n");
+    log_d("===============start parse the data ! ===================\r\n");
     // 校验包头
     if (data[0] == PACKET_HEADER_CMD)
     {
@@ -48,12 +49,12 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
         uint16_t payload_len = (data[2] << 8) | data[1];
         uint16_t packet_len = 1 + 2 + payload_len + 2 + 1; // HEADER(1) + LEN(2) + PAYLOAD(LEN) + CRC(2) + TRAILER(1)
 
-        printf("================payload_len len:%d===============\r\n", payload_len);
-        printf("================packet_len len:%d===============\r\n", packet_len);
+        log_d("================payload_len len:%d===============\r\n", payload_len);
+        log_d("================packet_len len:%d===============\r\n", packet_len);
         // 检查数据包是否完整
         if (len < packet_len)
         {
-            printf("uart_packet_handler: packet is incomplete\r\n");
+            log_d("uart_packet_handler: packet is incomplete\r\n");
             if (event_handler)
                 event_handler(UART_EVENT_TIMEOUT);
             return;
@@ -62,7 +63,7 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
         // 校验包尾
         if (data[packet_len - 1] != PACKET_TRAILER_CMD)
         {
-            printf("uart_packet_handler: packet trailer error\r\n");
+            log_d("uart_packet_handler: packet trailer error\r\n");
             if (event_handler)
                 event_handler(UART_EVENT_INVALID_CMD);
             return;
@@ -78,10 +79,10 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
 
         // 提取CMD和Payload
         uint8_t cmd = data[3];
-        printf("cmd : %02x\r\n", cmd);
+        log_d("cmd : %02x\r\n", cmd);
         // uint8_t temppayload_len = data[2];
-        printf("the payload data : \r\n");
-        printf_buf(data + 3, payload_len);
+        log_d("the payload data : \r\n");
+        log_d_buf(data + 3, payload_len);
 
         if (packet_handler)
         {
@@ -95,12 +96,12 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
         uint16_t resp_payload_len = (packet_buf[4] << 8) | packet_buf[3];
         uint16_t resp_packet_len = 1 + 2 + resp_payload_len + 2 + 1; // HEADER(1) + LEN(2) + PAYLOAD(LEN) + CRC(2) + TRAILER(1)
 
-        printf("================ resp payload_len len:%d===============\r\n", resp_payload_len);
-        printf("================ resp packet_len len:%d===============\r\n", resp_packet_len);
+        log_d("================ resp payload_len len:%d===============\r\n", resp_payload_len);
+        log_d("================ resp packet_len len:%d===============\r\n", resp_packet_len);
         // 检查数据包是否完整
         if (len < resp_packet_len)
         {
-            printf("resp uart_packet_handler: packet is incomplete\r\n");
+            log_d("resp uart_packet_handler: packet is incomplete\r\n");
             if (event_handler)
                 event_handler(UART_EVENT_TIMEOUT);
             return;
@@ -109,7 +110,7 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
         // 校验包尾
         if (data[resp_packet_len - 1] != PACKET_TRAILER_RESP)
         {
-            printf("resp uart_packet_handler: packet trailer error\r\n");
+            log_d("resp uart_packet_handler: packet trailer error\r\n");
             if (event_handler)
                 event_handler(UART_EVENT_INVALID_CMD);
             return;
@@ -125,7 +126,7 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
 
         // 提取CMD和Payload
         uint8_t cmd = data[1];
-        printf("cmd : %02x\r\n", cmd);
+        log_d("cmd : %02x\r\n", cmd);
         
         uint8_t code = data[2];
 
@@ -136,7 +137,7 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
     }
     else
     {
-        printf("================ invalid packet header !===============\r\n");
+        log_d("================ invalid packet header !===============\r\n");
         if (event_handler)
             event_handler(UART_EVENT_INVALID_CMD);
         return;
@@ -146,9 +147,8 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
 // UART任务主循环
 static int app_uart_task(void *arg)
 {
-    printf("==========================app_uart_task start ==================================\r\n");
+    log_d("==========================app_uart_task start ==================================\r\n");
     int ret = 0;
-    g_dev_uart_hdl = app_uart_dev_init("uart0");
     memset(g_recv_buf, 0, UART_RECV_BUF_SIZE);
     // memset(g_send_buf, 0, UART_RECV_BUF_SIZE);
     memset(packet_buf, 0, MAX_PAYLOAD_LEN + 16);
@@ -157,18 +157,18 @@ static int app_uart_task(void *arg)
     {
         // int len = dev_read(g_dev_uart_hdl, g_recv_buf, UART_RECV_BUF_SIZE);
         int len = dev_read(g_dev_uart_hdl, g_recv_buf, 256);
-        printf("========uart recv len:%d =========\n", len);
-        printf_buf(g_recv_buf, len);
+        log_d("========uart recv len: %p %d =========\n", g_dev_uart_hdl, len);
+        log_d_buf(g_recv_buf, len);
         if (len > 0)
         {
             // 数据拼接到缓存
             memcpy(packet_buf + packet_idx, g_recv_buf, len);
             packet_idx += len;
-            printf("================the packet_idx : %d ==============\r\n", packet_idx);
+            log_d("================the packet_idx : %d ==============\r\n", packet_idx);
 
             // 检查是否超过最大缓冲区长度
             if (packet_idx >= UART_RECV_BUF_SIZE) {
-                printf("Packet buffer overflow, clearing buffer.\n");
+                log_d("Packet buffer overflow, clearing buffer.\n");
                 packet_idx = 0;
                 memset(packet_buf, 0, sizeof(packet_buf));
                 continue; // 跳过本次循环，重新读取数据
@@ -180,19 +180,19 @@ static int app_uart_task(void *arg)
             {
                 if (packet_buf[i] == PACKET_HEADER_CMD)
                 {
-                    printf("================ the header is ok ! ===================\r\n");
+                    log_d("================ the header is ok ! ===================\r\n");
                     // 提取LEN字段
                     uint16_t payload_len = (packet_buf[i + 2] << 8) | packet_buf[i + 1];
                     uint16_t packet_len = 1 + 2 + payload_len + 2 + 1; // HEADER(1) + LEN(2) + PAYLOAD(LEN) + CRC(2) + TRAILER(1)
-                    printf("============the payload_len : %d ===============\r\n", payload_len);
+                    log_d("============the payload_len : %d ===============\r\n", payload_len);
                     // 检查数据包是否完整
                     if (packet_idx >= i + packet_len)
                     {
-                        printf(" ==================== the data is whole ! ==============\r\n");
+                        log_d(" ==================== the data is whole ! ==============\r\n");
                         /* 把要传入去解析的数据先重新存储 */
                         static u8 temp_packet_buf[MAX_PAYLOAD_LEN] = {0};
                         memcpy(temp_packet_buf, packet_buf + i, packet_len);
-                        printf_buf(temp_packet_buf, packet_len);
+                        log_d_buf(temp_packet_buf, packet_len);
                         parse_uart_packet(temp_packet_buf, packet_len);
 
                         // 移除已处理数据
@@ -203,20 +203,20 @@ static int app_uart_task(void *arg)
                 }
                 else if (packet_buf[i] == PACKET_HEADER_RESP)
                 {
-                    printf("============ resp the head: PACKET_HEADER_RESP=====================\r\n");
+                    log_d("============ resp the head: PACKET_HEADER_RESP=====================\r\n");
                     // 提取LEN字段
                     uint16_t resp_payload_len = (packet_buf[i + 4] << 8) | packet_buf[i + 3];
                     uint16_t resp_packt_len = 1 + 1 + 1 + 2 + resp_payload_len + 2 + 1; // HEADER(1) + CMD(1) + CODE(1) + LEN(2) + PAYLOAD(LEN) + CRC(2) + TRAILER(1)
-                    printf("resp_payload_len: %d\r\n", resp_payload_len);
+                    log_d("resp_payload_len: %d\r\n", resp_payload_len);
 
                     // 检查数据包是否完整
                     if (packet_idx >= i + resp_packt_len)
                     {
-                        printf(" ==================== resp the data is whole ! ==============\r\n");
+                        log_d(" ==================== resp the data is whole ! ==============\r\n");
                         /* 把要传入去解析的数据先重新存储 */
                         static u8 temp_resp_packet_buf[MAX_PAYLOAD_LEN] = {0};
                         memcpy(temp_resp_packet_buf, packet_buf + i, resp_packt_len);
-                        printf_buf(temp_resp_packet_buf, resp_packt_len);
+                        log_d_buf(temp_resp_packet_buf, resp_packt_len);
                         parse_uart_packet(temp_resp_packet_buf, resp_packt_len);
 
                         // 移除已处理数据
@@ -248,7 +248,7 @@ void *app_uart_dev_init(const char *device_name)
     void *hdl = dev_open(device_name, NULL);
     if (!hdl)
     {
-        printf("UART open failed!\n");
+        log_d("UART open failed!\n");
         return NULL;
     }
 
@@ -264,13 +264,6 @@ void *app_uart_dev_init(const char *device_name)
     dev_ioctl(hdl, UART_START, 0);
 
     g_dev_uart_hdl = hdl;
+    os_task_create(app_uart_task, NULL, 10, 1000, 0, "app_uart_task");
     return hdl;
 }
-
-// 任务创建
-static int uart_task_main(void)
-{
-    os_task_create(app_uart_task, NULL, 10, 1000, 0, "app_uart_task");
-    return 0;
-}
-late_initcall(uart_task_main);

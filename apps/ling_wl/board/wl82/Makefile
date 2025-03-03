@@ -282,10 +282,13 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_connected.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/test/eend_battery_live_test.c \
+	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_crc16.c \
+	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_uart_task.c \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
 	../../../../apps/ling_wl/util/threadpool.c \
 	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
+	../../../../apps/ling_wl/protocol/cp/c_uart_p.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
 	../../../../apps/ling_wl/bt_ble/ble_data.c \
 	../../../../apps/ling_wl/bt_ble/ble_combined.c \
