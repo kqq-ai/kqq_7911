@@ -872,9 +872,9 @@ void ble_simple_client_exit(void)
     ble_simple_client_module_enable(0);
 }
 
-void ble_simple_client_create_connection(u8 *addr, u8 addr_type)
+int ble_simple_client_create_connection(u8 *addr, u8 addr_type)
 {
-    client_create_connect_api(addr, addr_type);
+    return client_create_connect_api(addr, addr_type);
 }
 
 void ble_simple_client_disconnect_block(void)

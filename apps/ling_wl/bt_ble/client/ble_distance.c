@@ -417,11 +417,11 @@ static void distance_main(void *priv)
             if (current_time - notify_app_time > NOTIFY_APP_TIME)
             {
                 process_distance_info_array(moniter_ble_numbers, current_ble_num);
-                log_i("[MEASDIST]----------------the funtions_rssi is measured !-----------------\r\n");
+                log_d("[MEASDIST]----------------the funtions_rssi is measured !-----------------\r\n");
                 blue_distance_notify_app();
                 blue_distance_notify_self();
                 clear_rssi_samples(moniter_ble_numbers, current_ble_num);
-                log_i("[MEASDIST]-------------------end measure ble rssi distance---------------\n");
+                log_d("[MEASDIST]-------------------end measure ble rssi distance---------------\n");
                 notify_app_time = current_time;
             }
 

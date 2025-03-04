@@ -224,7 +224,7 @@ static void switch_only_sync(MyTaskMessageType *message)
     /* 通知B开机 */
     lwl_eend_dev_t *pnext = find_eend_dev_by_sn(param->sn);
     if (pnext != NULL) {
-        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
+        int r = ble_keep_alive_device_push_cmd(pnext, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
         /* 等待命令发送完毕 */
         if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
             /* 通知B开机失败 */

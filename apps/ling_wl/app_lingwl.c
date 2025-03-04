@@ -43,6 +43,8 @@ recorder_hdl g_recorder;
 threadpool_t *pool = NULL;
 
 void *uart0_hdl = NULL;
+//"000000000000000"
+const u8 ns_null[SN_SIZE] = { 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00 };
 //"WCCN24H28FEEEF7"
 const u8 sn1[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x37, 0x00 };
 //"WCCN24H28FEEEF8"
@@ -137,22 +139,22 @@ static void app_lingwl_main(void)
     context->threadpool = pool;
 
     /* 初始化E端BLE握手处理任务 */
-    // ble_keep_alive_init();
+    ble_keep_alive_init();
 
     /* 默认开启SCAN */
-    // threadpool_add_task(pool, open_scan_delay, NULL);
+    threadpool_add_task(pool, open_scan_delay, NULL);
     
     /* 初始化RSSI测距 */
-    // monitor_init();
+    monitor_init();
 
     /* 注册监听的设备 */
     for (int i = 0; i < EEND_MAX_CNT; ++i) {
-        // monitor_register_device(&context->eend_dev_list[i]);
-        // ble_keep_alive_device_add(&context->eend_dev_list[i]);
+        monitor_register_device(&context->eend_dev_list[i]);
+        ble_keep_alive_device_add(&context->eend_dev_list[i]);
     }
 
     /* 开始RSSI测距 */
-    // monitor_start();
+    monitor_start();
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
@@ -213,18 +215,28 @@ static int app_music_key_click(struct key_event *key)
         // E端设备检查序列号是否与自己匹配，匹配则播放，不匹配则停止播放
         log_i("en = %d\n", en);
 
-        en++;
-        if (en == 3) {
+        // en++;
+        // if (en == 3) {
+        //     en = 0;
+        // }
+
+        // if (en == 0) {
+        //     my_task_switch_only(sn1, NULL, switch_completed);
+        // } else if (en == 1) {
+        //     my_task_switch_only(sn2, NULL, switch_completed);
+        // } else if (en == 2) {
+        //     my_task_switch_only(sn3, NULL, switch_completed);
+        // }
+
+
+        if (en) {
+            my_task_switch_only(sn2, NULL, switch_completed);
             en = 0;
+        } else {
+            my_task_switch_only(ns_null, NULL, switch_completed);
+            en = 1;
         }
 
-        if (en == 0) {
-            my_task_switch_only(sn1, NULL, switch_completed);
-        } else if (en == 1) {
-            my_task_switch_only(sn2, NULL, switch_completed);
-        } else if (en == 2) {
-            my_task_switch_only(sn3, NULL, switch_completed);
-        }
         break;
     case KEY_4:
         log_i("KEY 4\n");

@@ -18,7 +18,11 @@ void get_string_impl(const void *__this, char *buffer, const int size)
 {
     lwl_eend_dev_t * that = (lwl_eend_dev_t *)__this;
     u8 *sn = that->sn;
+#if 0
     snprintf(buffer, size, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", sn[0], sn[1], sn[2], sn[3], sn[4], sn[5], sn[6], sn[7], sn[8], sn[9], sn[10], sn[11], sn[12], sn[13], sn[14]);
+#else
+    snprintf(buffer, size, "[XXX_%02X]", sn[14]);
+#endif
 }
 
 void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)

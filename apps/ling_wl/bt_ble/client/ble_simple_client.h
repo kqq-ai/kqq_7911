@@ -3,7 +3,8 @@
 
 #include "../ble_combined.h"
 #include "cpu.h"
-#include "btstack/le/le_user.h"
+#include "ble_user.h"
+#include "btstack/le/ble_api.h"
 
 void client_profile_init(void);
 void client_deal_passkey_input(u32 *key);
@@ -14,7 +15,7 @@ void ble_simple_client_module_enable(u8 en);
 void ble_simple_client_init(void);
 void ble_simple_client_exit(void);
 
-void ble_simple_client_create_connection(u8 *addr, u8 addr_type);
+int  ble_simple_client_create_connection(u8 *addr, u8 addr_type);
 int  ble_simple_client_disconnect(void);
 void ble_simple_client_disconnect_block(void);
 

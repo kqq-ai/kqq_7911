@@ -13,10 +13,12 @@
 
 #include "util/cqueue.h"
 #include "util/threadpool.h"
+#include "app_mode/lwl_app_core.h"
 
 #include "ble_att_util.h"
 
-#define KEEP_ALIVE_CMD_DATA_SIZE 10
+#define KEEP_ALIVE_CMD_DATA_SIZE 16
+#define KEEP_ALIVE_HANDSHAKE_LOST_CNT 10
 
 typedef struct {
     uint8_t data[KEEP_ALIVE_CMD_DATA_SIZE];
@@ -26,12 +28,15 @@ typedef struct {
 } bka_cmd_t;
 
 #define KEEP_ALIVE_DEVICE_MAX_SIZE 3
-#define KEEP_ALIVE_CMD_NUM 10
+#define KEEP_ALIVE_CMD_NUM 32
 
 typedef struct {
     lwl_eend_dev_t *pdev;
     bool alive;
     bool handshake_flag;    // 握手标志，0表示没有握手，1表示已握手
+    uint8_t alive_hs_fail_cnt;  // 保活判断中，连续握手失败的次数
+    uint8_t address_type;  //冗余 用于连接 对方地址类型：0--public address,1--random address 
+    uint8_t address[6];    //冗余 用于连接 peer_address 
     uint8_t cache_buf[(sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM)];
     MyBlockingQueue cmd_buffer; // queue<bka_cmd_t>
 } bka_eend_dev_handshake_info_t;
@@ -40,11 +45,15 @@ static const uint8_t handshake_dummy_data[] = { 0x5A, 0xA5 };
 
 static bka_eend_dev_handshake_info_t g_eend_list[KEEP_ALIVE_DEVICE_MAX_SIZE];
 static int g_eend_cnt = 0;
-static int g_eend_current_idx = 0;
 
 static pthread_mutex_t g_mutex;
 
-extern threadpool_t *pool;
+/**
+ * 只有当前没有正在进行的握手任务时，才能启动一个新的握手任务
+ */
+static OS_SEM g_conn_sem;   // 连接成功信号量
+static bool g_handshake_is_ongoing = false;
+
 
 // 0000fff0-0000-1000-8000-00805f9b34fb
 // 0000fff3-0000-1000-8000-00805f9b34fb
@@ -56,35 +65,68 @@ const uint8_t uuid_char_rx[] = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 
 const uint16_t notify_handle = 0x20;    // fixed
 const uint16_t write_handle = 0x1E;     // fixed
 
-static void ble_disconnect_delay(void *priv)
+static void handshake_task(void *priv)
 {
-    u16 handle = (u16)priv;
+    bka_eend_dev_handshake_info_t *pdev_info = (bka_eend_dev_handshake_info_t *)priv;
+    if (pdev_info == NULL) {
+        log_e("[BKA]Error pdev_info is null!!!");
+        g_handshake_is_ongoing = false;
+        return;
+    }
+
+    /* 建立连接 */
+    if (ble_simple_client_create_connection(pdev_info->address, pdev_info->address_type) == APP_BLE_OPERATION_ERROR) {
+        log_e("[BKA]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
+        g_handshake_is_ongoing = false;
+        return;
+    }
+    if (os_sem_pend(&g_conn_sem, 1000) == OS_TIMEOUT) {
+        log_e("[BKA]Error ble connection timeout!!!");
+        g_handshake_is_ongoing = false;
+        return;
+    }
+    log_i("[BKA]ble connected\n");
+
+    bool has_cmd = false;
     bka_cmd_t cmd;
-    if (my_blocking_queue_try_dequeue(&g_eend_list[g_eend_current_idx].cmd_buffer, &cmd) == MYERROR_Success) {
-        /* send cmd */
-        int ret = ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size);
-        if (ret == BLE_BUFFER_FULL) {
-            log_i("[BKA]Failed to send cmd, ble buffer full.");
-        }
-        mdelay(150); // connection interval: 60ms
-        ble_simple_client_disconnect();
-        /* cmd callback */
+    if (my_blocking_queue_try_dequeue(&pdev_info->cmd_buffer, &cmd) == MYERROR_Success) {
+        has_cmd = true;
+    }
+
+    /* 发送握手数据 */
+    int ret = 0;
+    if (has_cmd) { /* send cmd */
+        ret = ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size);
+    } else { /* send dummy */
+        ret = ble_simple_client_write_without_respond_send(NULL, write_handle, handshake_dummy_data, sizeof(handshake_dummy_data));
+    }
+    if (ret == BLE_BUFFER_FULL) {
+        log_i("[BKA]Failed to send cmd, ble buffer full.");
+    }
+    mdelay(150); // connection interval: 60ms
+
+    /* 执行指令完成回调 */
+    if (has_cmd) {
         if (cmd.cb) {
             cmd.cb(cmd.priv);
         }
-        /* handshake completed */
-        g_eend_list[g_eend_current_idx].handshake_flag = 1;
-    } else {
-        /* send dummy */
-        int ret = ble_simple_client_write_without_respond_send(NULL, write_handle, handshake_dummy_data, sizeof(handshake_dummy_data));
-        if (ret == BLE_BUFFER_FULL) {
-            log_i("[BKA]Failed to send cmd, ble buffer full.");
-        }
-        mdelay(150); // connection interval: 60ms
-        ble_simple_client_disconnect();
-        /* handshake completed */
-        g_eend_list[g_eend_current_idx].handshake_flag = 1;
     }
+
+    /* 断开连接 */
+    ble_simple_client_disconnect();
+    /* handshake completed */
+    pdev_info->handshake_flag = 1;
+    g_handshake_is_ongoing = false;
+}
+
+static void start_handshake(bka_eend_dev_handshake_info_t *pdev_info)
+{
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if (!threadpool_add_task(context->threadpool, handshake_task, pdev_info)) {
+        log_e("[BKA]Failed to add task: handshake_task\n");
+        return;
+    } 
+    g_handshake_is_ongoing = true;
 }
 
 static void ble_conn_event_handler(uint8_t *packet)
@@ -108,16 +150,12 @@ static void ble_conn_event_handler(uint8_t *packet)
             ASSERT(0);
             break;
     }
-    log_i("[BKA]ble_conn_event_handler: %0x, type: %d\n", handle, addr_type);
-    printf_buf(addr, 6);
     
     // u8 tmp[2] = { 0x00, 0x01 };
     // log_info("write_ntf_ccc:%04x\n", notify_handle);
     // client_operation_send(notify_handle + 1, tmp, 2, ATT_OP_WRITE);
 
-    if (!threadpool_add_task(pool, ble_disconnect_delay, (void *)handle)) {
-        log_e("[BKA]Failed to add task: ble_disconnect_delay\n");
-    }
+    os_sem_post(&g_conn_sem);
 }
 
 static void ble_disconn_event_handler(uint8_t *packet)
@@ -145,9 +183,15 @@ static void ble_adv_report_event_handler(adv_report_t *report_pt, u16 len)
             /* 广播数据与设备不匹配 */
             continue;
         }
-        log_i("[BKA]*********create_connection***********");
-        g_eend_current_idx = i;
-        ble_simple_client_create_connection(report_pt->address, report_pt->address_type);
+        g_eend_list[i].alive = 1;
+        g_eend_list[i].alive_hs_fail_cnt = 0;
+        g_eend_list[i].address_type = report_pt->address_type;
+        memcpy(g_eend_list[i].address, report_pt->address, 6);
+
+        if (!g_handshake_is_ongoing) {
+            /* 如果没有正在进行的握手任务，就启动一次握手流程 */
+            start_handshake(&g_eend_list[i]);
+        }
         break;
     }
 }
@@ -170,6 +214,15 @@ static void ble_keep_alive_start_handshake()
             /* 上一轮没有握手成功 */
             g_eend_list[i].pdev->get_string(g_eend_list[i].pdev, sn_string, sizeof(sn_string));
             log_i("[BKA]%s handshake failed.", sn_string);
+
+            g_eend_list[i].alive_hs_fail_cnt++;
+            if (g_eend_list[i].alive_hs_fail_cnt >= KEEP_ALIVE_HANDSHAKE_LOST_CNT) {
+                /* 连续n轮没有握手成功判定为丢失 */
+                g_eend_list[i].alive = 0;
+
+                /* 清空所有cmd */
+                my_blocking_queue_clear(&g_eend_list[i].cmd_buffer);
+            }
         }
         /* 重置状态 */
         g_eend_list[i].handshake_flag = 0;
@@ -188,6 +241,7 @@ static void ble_keep_alive_task(void *priv)
 void ble_keep_alive_init(void)
 {
     pthread_mutex_init(&g_mutex, NULL);
+    os_sem_create(&g_conn_sem, 0);
 
     memset(g_eend_list, 0, sizeof(g_eend_list));
     int r = thread_fork("ble_keep_alive_task", 15, 512 * 3, 0, 0, ble_keep_alive_task, NULL);
@@ -216,6 +270,7 @@ void ble_keep_alive_device_add(lwl_eend_dev_t *p_eend_dev)
     } else {
         g_eend_list[idx].pdev = p_eend_dev;
         g_eend_list[idx].alive = 0;
+        g_eend_list[idx].alive_hs_fail_cnt = 0;
         memset(&g_eend_list[idx].cache_buf, 0, (sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM));
         my_blocking_queue_init_static(&g_eend_list[idx].cmd_buffer, g_eend_list[idx].cache_buf, sizeof(bka_cmd_t), KEEP_ALIVE_CMD_NUM);
         g_eend_cnt++;
