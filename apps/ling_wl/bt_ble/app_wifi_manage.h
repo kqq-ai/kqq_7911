@@ -3,9 +3,22 @@
 
 #include "wifi_app_task.h"
 #include "wifi/wifi_connect.h"
+#include "lfs.h"
 
 #define STORE_WIFI_NUM_MAX 50
 #define WIFI_IP_LEN 16
+
+typedef struct
+{
+    char ssid[33];
+    char pwd[33];
+} app_wifi_info_t;
+
+/* 设置app_wifi_info */
+void set_app_wifi_info(app_wifi_info_t *info);
+/* 获取app_wifi_info */
+void get_app_wifi_info(app_wifi_info_t *info);
+
 
 /*-------------------------------------------------整体的 初始化相关   start-----------------------------------------*/
 
@@ -39,9 +52,10 @@ WIFI_SCAN_STATUES get_wifi_scan_status(void *pri);
 typedef enum
 {
     WIFI_CONNECT_IDLE = 0x00,
-    WIFI_CONNECT_SUCC = 0x03,
-    WIFI_CONNECT_FAIL,
-    WIFI_CONNECT_TIMEOUT,
+    WIFI_CONNECT_SUCC,
+    WIFI_CONNECT_ASSOCIAT_FAIL,
+    WIFI_CONNECT_ASSOCIAT_TIMEOUT,
+    WIFI_CONNECT_STA_DISCONNECT,
     WIFI_CONNECT_TIMEOUT_OR_NO_SSID,
 } WIFI_connect_STATUES;
 
@@ -102,7 +116,7 @@ WIFI_connect_STATUES wifi_connect(
 WIFI_connect_STATUES wifi_disconnect(wifi_disconnect_cb disconnect_func);
 WIFI_connect_STATUES wifi_disconnect_block(void *pri);
 
-WIFI_connect_STATUES wifi_reconnect_config(int count);
+WIFI_connect_STATUES wifi_reconnect_config(lfs_t *lfs, int count);
 
 /* block connect 所需要的sem 相关的函数*/
 
@@ -123,7 +137,7 @@ int disconnect_sem_post(void *pri);
 * 0: 扫描成功
 * -1: 扫描失败 STA模式下调用返回-1代表WIFI OFF/正在扫描/连接中,无需启动扫描, 可以等待几秒或者扫描完成事件到来获取结果
 */
-int wifi_scan_start(void *pri);
+int wifi_scan_start(void);
 
 void wifi_scan_stop(void *pri);
 
@@ -140,6 +154,71 @@ void store_wifi_ip_info( void *pri);
 /*获取 wifi ip 信息*/
 void get_wifi_ip_info(char *ip);
 /*-------------------------------------------------WiFi 扫描相关   end----------------------------------------------*/
+
+
+
+
+
+/*-------------------------------------------------wifi 交给线程池相关的task start----------------------------------*/
+
+typedef struct {
+    char ssid[33];
+    char pwd[33];
+    int timeout_s;
+    wifi_connect_succ_cb connect_succ_func;
+    wifi_connect_fail_cb connect_fail_func;
+} wifi_connect_params_t;
+
+
+void wifi_scan_task(void *arg);
+void wifi_connect_task(void *arg);
+void wifi_disconnect_task(void *arg);
+
+/* -------------------------------------------------wifi 交给线程池相关的task end----------------------------------*/
+
+
+/*
+1.WIFI_EVENT_STA_SCAN_COMPLETED
+
+扫描完成事件,通常由STA模式连接过程中扫描空中所有信道完成或者用户调用wifi_sta_scan_once请求扫描触发的事件,
+接收到此事件后，应用程序的事件回调函数可以调用wifi_get_scan_result获取扫描结果
+
+2.WIFI_EVENT_STA_CONNECT_SUCC
+
+STA 已成功连接目标 AP的事件，接收到此事件后，Wi-Fi 驱动程序根据应用程序响应返回结果
+决定是否启动 DHCP 客户端服务并开始获取 IP 地址,还是说使用静态IP地址
+
+3.WIFI_EVENT_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID
+
+连接目标 AP超时事件,原因是超时时间内扫描不到指定SSID,超时时间应用程序可以通过
+wifi_set_sta_connect_timeout接口配置
+
+4.WIFI_EVENT_STA_CONNECT_TIMEOUT_ASSOCIAT_FAIL
+
+连接目标 AP超时失败事件,原因是超时时间内关联失败,通常原因是密码错误,或者距离太远/干扰太多导致通信失败
+
+5.WIFI_EVENT_STA_DISCONNECT
+
+STA模式下与AP断开事件,此事件将在以下情况下产生:
+
+Wi-Fi station 已成功连接至 AP的情况下调用了wifi_enter_ap_mode,wifi_enter_sta_mode,wifi_enter_smp_cfg_mode,wifi_off函数触发
+
+Wi-Fi 连接因为某些原因而中断，例如：由于信号太差,station 连续多次丢失 太多 beacon帧、AP 脱离 station 连接、AP 验证模式改变等
+
+接收到此事件后，通常需要通知针对基于套接字编写的客户端应用程序关闭套接字.如果此事件不是用户期待的,可以调用wifi_enter_sta_mode进行重新连接
+
+6.WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC
+
+当 DHCP 客户端成功从 DHCP 服务器获取 IP 地址，将引发此事件, 意味着应用程序可以获取到设备IP地址,并且可以创建套接字连接服务器
+
+7.WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT
+
+当 Wi-Fi station 已成功连接至 AP, 但是DHCP 客户端在指定超时时间内未能够从 DHCP 服务器获取 IP地址，将引发此事件, 
+通常情况下是由于距离远信号不好,空间干扰大导致的,应用程序可以调用lwip_set_dhcp_timeout设定超时时间,默认不指定为15秒. 
+引发事件后lwip协议栈内部会不断重试获取 IP地址
+
+
+*/
 
 
 

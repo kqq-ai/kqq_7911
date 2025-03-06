@@ -23,7 +23,6 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
-// #include "threadpool.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
@@ -137,6 +136,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_STA_STOP:
         puts("|netwk_user_callback->WIFI_EVENT_STA_STOP\n");
+
+        set_wifi_manager_mode(WIFI_IDLE_MODE);
+        set_wifi_info_status(WIFI_INFO_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_IDLE);
         break;
 
     case WIFI_EVENT_STA_SCAN_COMPLETED:
@@ -150,7 +153,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_STA_CONNECT_SUCC:
-        printf("|network_user_callback->WIFI_STA_CONNECT_SUCC\n");
+        puts("|network_user_callback->WIFI_STA_CONNECT_SUCC\n");
         break;
 
     case WIFI_EVENT_MP_TEST_START:
@@ -168,13 +171,15 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net_event_notify(NET_EVENT_FROM_USER, &net);
 
         /*hzx add*/
-        // set_wifi_connect_timeout_ms(timer_get_ms());
 
-        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
+        // set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_TIMEOUT_OR_NO_SSID);
+        set_wifi_manager_mode(WIFI_IDLE_MODE);
+        set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
+        wifi_enter_smp_cfg_mode();    // 进入SMP模式
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -185,9 +190,13 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         /*hzx 添加部分*/
 
-        set_wifi_connect_status(WIFI_CONNECT_FAIL);
-        block_connect_sem_post(NULL); // 通知连接函数
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_ASSOCIAT_FAIL);
+        set_wifi_manager_mode(WIFI_IDLE_MODE);
+        set_wifi_info_status(WIFI_INFO_IDLE);
 
+        block_connect_sem_post(NULL); // 通知连接函数
+        wifi_enter_smp_cfg_mode();    // 进入SMP模式
 
         if (NULL != wifi_connect_fail_cb_func_pri)
         {
@@ -200,8 +209,12 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         /*hzx add*/
 
-        set_wifi_connect_status(WIFI_CONNECT_TIMEOUT);
-        block_connect_sem_post(NULL);
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_ASSOCIAT_TIMEOUT);
+        set_wifi_manager_mode(WIFI_IDLE_MODE);
+        set_wifi_info_status(WIFI_INFO_IDLE);
+        block_connect_sem_post(NULL); // 通知连接函数
+        //wifi_enter_smp_cfg_mode();    // 进入SMP模式
 
         break;
 
@@ -213,15 +226,36 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         /*hzx add*/
 
-        set_wifi_manager_mode(WIFI_STA_MODE);
-        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_SUCC);
-        set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
-
+        set_wifi_manager_mode(WIFI_STA_MODE);
+        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
 
-        // /*保存当前连接的模式和ssid 为了reconnect*/
+        set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
+
+        /* 存储 IP*/
+        store_wifi_ip_info(NULL);
+
+        lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+        /* 通知 APP(小程序) 我已经获取到 IP */
+        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL))
+        {
+            printf("!!!!!!!!!!!!!!!!!Failed to add task  !!!!!!!!!!!!!!!!!!!!!\r\n");
+        }
+
+        /* 获取 最新的 WIFI SSID 和 PWD */
+        static app_wifi_info_t temp_wifi_info = {0};
+        get_app_wifi_info(&temp_wifi_info);
+
+        printf("the event callback get the current connected ssid: %s  pwd: %s\n", temp_wifi_info.ssid, temp_wifi_info.pwd);
+
+        /* 保存最近一次连接的 WIFI SSID  */
+        //change_wifi_config(ctx->lfs_hdl, temp_wifi_info.ssid, temp_wifi_info.pwd);
+        //change_wifi_config(ctx->lfs_hdl, "temp_wifi_info.ssid", "temp_wifi_info.pwd");
+        // change_wifi_config(temp_wifi_info.ssid, temp_wifi_info.pwd);
+
+        /*保存当前连接的模式和ssid 为了reconnect*/
         // struct wifi_mode_info g_temp_info;
         // g_temp_info.mode = STA_MODE;
         // wifi_get_mode_cur_info(&g_temp_info);
@@ -234,16 +268,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         //     wifi_connect_succ_cb_func_pri(NULL);
         // }
 
-        /* 存储 IP*/
-        store_wifi_ip_info(NULL);
-
-        lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-        /* 通知 APP(小程序) 我已经获取到 IP */
-        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL))
-        {
-            printf("!!!!!!!!!!!!!!!!!Failed to add task  !!!!!!!!!!!!!!!!!!!!!\r\n");
-        }
-
         break;
 
     case WIFI_EVENT_STA_DISCONNECT:
@@ -253,13 +277,25 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         net_event_notify(NET_EVENT_FROM_USER, &net);
 
         set_wifi_cmd_status(WIFI_CMD_IDLE);
-        set_wifi_connect_status(WIFI_CONNECT_FAIL);
+        set_wifi_connect_status(WIFI_CONNECT_STA_DISCONNECT);
+        set_wifi_manager_mode(WIFI_IDLE_MODE);
+        set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
+        //wifi_enter_smp_cfg_mode();    // 进入SMP模式
+
         break;
 
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT:
         puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_TIMEOUT\n");
+
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_STA_DISCONNECT);
+        set_wifi_manager_mode(WIFI_STA_MODE);
+        set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
+
+        block_connect_sem_post(NULL); // 通知连接函数
+        //wifi_enter_smp_cfg_mode(); // 进入SMP模式
         break;
 
     case WIFI_EVENT_P2P_START:
@@ -291,11 +327,15 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_SMP_CFG_MODE);
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
-        
         break;
 
     case WIFI_EVENT_SMP_CFG_STOP:
         puts("|network_user_callback->WIFI_EVENT_SMP_CFG_STOP\n");
+
+        set_wifi_cmd_status(WIFI_CMD_IDLE);
+        set_wifi_manager_mode(WIFI_IDLE_MODE); // 设置当前模式为IDLE配置模式
+        set_wifi_info_status(WIFI_INFO_IDLE);
+        set_wifi_connect_status(WIFI_CONNECT_IDLE);
         break;
 
     case WIFI_EVENT_SMP_CFG_TIMEOUT:

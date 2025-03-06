@@ -15,10 +15,6 @@ enum
     MY_TASK_MESSAGE_SWITCH_ONLY,
     MY_TASK_MESSAGE_PLAY_ONE,
     MY_TASK_MESSAGE_MONITER_RSSI,
-    MY_TASK_MESSAGE_WIFI_SCAN_START,
-    MY_TASK_MESSAGE_WIFI_CONNECCT,
-    MY_TASK_MESSAGE_WIFI_DISCONNECT,
-
     MY_TASK_MESSAGE_MAX = 0xFF,
 };
 
@@ -146,15 +142,6 @@ static void my_task(void *priv)
             break;
         case MY_TASK_MESSAGE_MONITER_RSSI:
             moniter_rssi_sync(&message);
-            break;
-        case MY_TASK_MESSAGE_WIFI_SCAN_START:
-            wifi_scan_start_sync(&message);
-            break;
-        case MY_TASK_MESSAGE_WIFI_CONNECCT:
-            wifi_connect_sync(&message);
-            break;
-        case MY_TASK_MESSAGE_WIFI_DISCONNECT:
-            wifi_disconnect_sync(&message);
             break;
         }
     }
@@ -317,46 +304,6 @@ static void moniter_rssi_sync(MyTaskMessageType *message)
         ((void (*)(void *priv))param->cb)(param->priv);
     }
 }
-static void wifi_scan_start_sync(MyTaskMessageType *message)
-{
-    ASSERT(message->msg == MY_TASK_MESSAGE_WIFI_SCAN_START);
-    MyMessageWIFIScanStart *param = &message->wifi_scan_start;
-
-    /* 调用wifi_scan_start() */
-    wifi_scan_start(NULL);
-
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
-    }
-}
-static void wifi_connect_sync(MyTaskMessageType *message)
-{
-    ASSERT(message->msg == MY_TASK_MESSAGE_WIFI_CONNECCT);
-    MyMessageWIFIConnect *param = &message->wifi_connect;
-    wifi_connect(param->ssid, param->pwd, param->timeout_s, param->connect_succ_func, param->connect_fail_func);
-
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
-    }
-}
-
-
-static void wifi_disconnect_sync(MyTaskMessageType *message)
-{
-    ASSERT(message->msg == MY_TASK_MESSAGE_WIFI_DISCONNECT);
-    MyMessageWIFIDisconnect *param = &message->wifi_disconnect;
-    wifi_disconnect(param->disconnect_func);
-
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
-    }
-}
 
 /**
  * 打印字符串，蓝牙广播名可能包含\0字符（...）
@@ -469,77 +416,6 @@ void my_task_scan_rssi(void *rssi_cb_priv,
     my_blocking_queue_enqueue(&g_message_queue, &message);
     printf("Put message: %d over\n", message.msg);
 }
-
-/**
- * @name my_task_wifi_scan_start
- * @brief This function is used to create a specific task message and enqueue it into a message queue.
- *
- * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
- */
-void my_task_wifi_scan_start(void *priv, void *cb)
-{
-    /* 创建消息 */
-    MyTaskMessageType message;
-    message.msg = MY_TASK_MESSAGE_WIFI_SCAN_START;
-    message.wifi_scan_start.priv = priv;
-    message.wifi_scan_start.cb = cb;
-    printf("Put message: %d\n", message.msg);
-    /* 消息入队 */
-    my_blocking_queue_enqueue(&g_message_queue, &message);
-}
-/**
- * @name my_task_wifi_connect
- * @brief This function is used to create a specific task message and enqueue it into a message queue.
- *
- * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
- */
-void my_task_wifi_connect(
-    char *ssid,
-    char *pwd,
-    int timeout_s,
-    wifi_connect_succ_cb connect_succ_func,
-    wifi_connect_fail_cb connect_fail_func,
-    void *priv,
-    void *cb)
-{
-    /* 创建消息 */
-    MyTaskMessageType message;
-    memset(&message, 0, sizeof(message));
-    message.msg = MY_TASK_MESSAGE_WIFI_CONNECCT;
-    memcpy(message.wifi_connect.ssid, ssid, strlen(ssid));
-    memcpy(message.wifi_connect.pwd, pwd, strlen(pwd));
-    message.wifi_connect.timeout_s = timeout_s;
-    message.wifi_connect.connect_succ_func = connect_succ_func;
-    message.wifi_connect.connect_fail_func = connect_fail_func;
-    message.wifi_connect.priv = priv;
-    message.wifi_connect.cb = cb;
-    printf("Put message: %d\n", message.msg);
-    /* 消息入队 */
-    my_blocking_queue_enqueue(&g_message_queue, &message);
-}
-
-/**
- * @name my_task_wifi_disconnect
- * @brief This function is used to create a specific task message and enqueue it into a message queue.
- *
- * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
- */
-void my_task_wifi_disconnect(wifi_disconnect_cb disconnect_func,void *priv, void *cb)
-{
-    /* 创建消息 */
-    MyTaskMessageType message;
-    message.msg = MY_TASK_MESSAGE_WIFI_DISCONNECT;
-    message.wifi_disconnect.disconnect_func = disconnect_func;
-    message.wifi_disconnect.priv = priv;
-    message.wifi_disconnect.cb = cb;
-    printf("Put message: %d\n", message.msg);
-    /* 消息入队 */
-    my_blocking_queue_enqueue(&g_message_queue, &message);
-}
-
 
 
 static void audio_message_cancellation_cb(void *data, void *priv)

@@ -23,6 +23,8 @@ static int g_all_wifi_info_num = 0;
 static struct netif_info g_netip_info = {0};
 static char *g_wifi_ip[WIFI_IP_LEN] = {0};
 
+static app_wifi_info_t g_app_wifi_info = {0};
+
 // 申明
 int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info);
 
@@ -90,7 +92,7 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
     {
         g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
         wifi_set_sta_connect_timeout(timeout_s);
-        ret = wifi_enter_sta_mode(ssid, pwd);
+        wifi_enter_sta_mode(ssid, pwd);
         ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
         printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
         if (0 == ret)
@@ -178,7 +180,7 @@ WIFI_connect_STATUES wifi_disconnect_block(void *pri)
             wifi_get_mode_cur_info(&info);
             if (info.mode == SMP_CFG_MODE)
             {
-                ret = WIFI_CONNECT_FAIL;
+                ret = WIFI_CONNECT_IDLE;
                 return ret;
             }
         }
@@ -190,11 +192,12 @@ WIFI_connect_STATUES wifi_disconnect_block(void *pri)
     }
 }
 
-WIFI_connect_STATUES wifi_reconnect_config(int count)
+WIFI_connect_STATUES wifi_reconnect_config(lfs_t *lfs, int count)
 {
-    change_wifi_retry_connect_count(count);
+    change_wifi_retry_connect_count(lfs, count);
     return 0;
 }
+
 
 /* block connect 所需要的sem 相关的函数*/
 
@@ -262,7 +265,7 @@ int disconnect_sem_post(void *pri)
 }
 
 /*扫描相关的函数定义*/
-int wifi_scan_start(void *pri)
+int wifi_scan_start(void)
 {
     int ret = 0;
     ret = wifi_scan_req();
@@ -382,3 +385,52 @@ int wifi_manage_init(void *pri)
     return ret;
 }
 
+
+
+
+/*-------------------------------------------------wifi 交给线程池相关的task start----------------------------------*/
+
+void wifi_scan_task(void *arg)
+{
+    wifi_scan_start();
+}
+void wifi_connect_task(void *arg)
+{
+    wifi_connect_params_t *params = (wifi_connect_params_t *)arg;
+    wifi_connect(
+        params->ssid,
+        params->pwd,
+        params->timeout_s,
+        params->connect_succ_func,
+        params->connect_fail_func);
+        free(params);
+}
+void wifi_disconnect_task(void *arg)
+{
+    wifi_disconnect(NULL);
+}
+
+/* -------------------------------------------------wifi 交给线程池相关的task end----------------------------------*/
+
+
+
+/* ！！！！！！！！！！可能要加互斥锁 ！！！！！！！！！！*/
+/* 设置app_wifi_info */
+void set_app_wifi_info(app_wifi_info_t *info)
+{
+    if (info == NULL) {
+        printf("Error: info is NULL in set_app_wifi_info\n");
+        return;
+    }
+    memcpy(&g_app_wifi_info, info, sizeof(app_wifi_info_t));
+    free(info);
+}
+/* 获取app_wifi_info */
+void get_app_wifi_info(app_wifi_info_t *info)
+{
+    if (info == NULL) {
+        printf("Error: info is NULL in get_app_wifi_info\n");
+        return;
+    }
+    memcpy(info, &g_app_wifi_info, sizeof(app_wifi_info_t));
+}

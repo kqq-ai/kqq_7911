@@ -9,6 +9,7 @@
 #include "lwip.h"
 #include "app_wifi_manage.h"
 #include "async_msg_loop.h"
+#include "app_mode/lwl_app_core.h"
 
 char current_connected_ssid[MAX_SSID_LEN] = {0};
 char current_connected_password[MAX_SSID_LEN] = {0};
@@ -127,14 +128,14 @@ static void wifi_scan_timeout_cb(int timeout_s)
 
             wifi_scan_req();
             set_wifi_scan_status(WIFI_SCAN_RUNNING);
-            set_wifi_cmd_status(WIFI_CMD_SCANNING); //需要验证的地方
+            set_wifi_cmd_status(WIFI_CMD_SCANNING); // 需要验证的地方
             set_wifi_info_status(WIFI_INFO_STA_MODE_SCANNING);
         }
         else
         {
             set_wifi_scan_status(WIFI_SCAN_STOP);
             set_wifi_cmd_status(WIFI_CMD_IDLE);
-            wifi_enter_smp_cfg_mode();
+            //wifi_enter_smp_cfg_mode();           // 待确认
         }
     }
 }
@@ -185,16 +186,18 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
     register_wifi_scan_func(wifi_scan_timeout_cb, timeout_s);
     set_wifi_cmd_status(WIFI_CMD_SCANNING);
 
-
     // 开始扫描
     printf("----------------------wifi_scan_start--------------------------------\r\n");
-    // ret = wifi_scan_start(NULL);
-    my_task_wifi_scan_start(NULL, NULL);
 
+    /* 将WiFi 扫描任务添加到线程池中 */
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (!threadpool_add_task(ctx->threadpool, wifi_scan_task, NULL))
+    {
+        printf("failed to add wifi_scan_task in threadpool !\r\n");
+    }
 
-    // 清楚 WiFi list 
+    // 清除 WiFi list
     clean_wifi_scan_result(NULL);
-    
 
     if (ret == 0)
     {
@@ -400,7 +403,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     }
     else
     {
-        printf("the wifi list info num is %d\r\n",temp_all_wifi_count);
+        printf("the wifi list info num is %d\r\n", temp_all_wifi_count);
         ret = 0;
         memcpy(return_errstr, "WIFI_GET_LIST_CODE_SUCCESS", strlen("WIFI_GET_LIST_CODE_SUCCESS"));
     }
@@ -584,20 +587,61 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     const char *ssid = cJSON_GetObjectItemCaseSensitive(args, "ssid")->valuestring;
     const char *password = cJSON_GetObjectItemCaseSensitive(args, "password")->valuestring;
     int connect_timeout_s = cJSON_GetObjectItemCaseSensitive(args, "timeout_s")->valueint;
+    // 检查 ssid 和 password 是否为 NULL
+    if (ssid == NULL || password == NULL)
+    {
+        printf("Error: SSID or password is missing\n");
+        ret = 1;
+        goto cleanup;
+    }
     printf("Handling %s with ssid: %s, password: %s, timeout: %d\n", cmd, ssid, password, connect_timeout_s);
     // 在这里添加实际的处理逻辑
+    if (strlen(ssid) > MAX_SSID_LEN || strlen(password) > MAX_PWD_LEN)
+    {
+        printf("Error: SSID or password is too long\n");
+        ret = 1;
+        goto cleanup;
+    }
 
     /*后面两个参数，需要实际需求的时候加上 两个callback函数*/
-    my_task_wifi_connect(ssid, password, connect_timeout_s, NULL, NULL, NULL, NULL);
-    // wifi_sta_mode_connect(ssid, password, connect_timeout_s, NULL, NULL);
+    // my_task_wifi_connect(ssid, password, connect_timeout_s, NULL, NULL, NULL, NULL);
+
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    wifi_connect_params_t *wifi_connect_params = (wifi_connect_params_t *)malloc(sizeof(wifi_connect_params_t));
+    if (wifi_connect_params == NULL)
+    {
+        printf("Failed to allocate memory for wifi_connect_params\n");
+    }
+    memset(wifi_connect_params, 0, sizeof(wifi_connect_params_t));
+
+    memcpy(wifi_connect_params->ssid, ssid, sizeof(wifi_connect_params->ssid));
+    memcpy(wifi_connect_params->pwd, password, sizeof(wifi_connect_params->pwd));
+    wifi_connect_params->timeout_s = connect_timeout_s;
+    wifi_connect_params->connect_succ_func = NULL;
+    wifi_connect_params->connect_fail_func = NULL;
+    /* 将WiFi 连接任务添加到线程池中 */
+    if (!threadpool_add_task(ctx->threadpool, wifi_connect_task, wifi_connect_params))
+    {
+        printf("failed to add wifi_connect_task in threadpool !\r\n");
+    }
+
     set_wifi_connect_start_time_ms(timer_get_ms());
 
     memcpy(return_errstr, "WIFI_CONNECT_CODE_SUCCESS", strlen("WIFI_CONNECT_CODE_SUCCESS"));
 
     set_wifi_cmd_status(WIFI_CMD_CONNECTING);
 
-    // // 保存连接信息
-    // wifi_store_mode_info(STA_MODE, ssid, password);
+    // 保存连接信息
+    app_wifi_info_t *app_wifi_info = (app_wifi_info_t *)malloc(sizeof(app_wifi_info_t));
+    if (app_wifi_info == NULL)
+    {
+        printf("Failed to allocate memory for app_wifi_info\n");
+    }
+    memcpy(app_wifi_info->ssid, ssid, sizeof(app_wifi_info->ssid));
+    memcpy(app_wifi_info->pwd, password, sizeof(app_wifi_info->pwd));
+    set_app_wifi_info(app_wifi_info);
+
+
     // 封装return_json_data
     cJSON *root = cJSON_CreateObject(); // 创建根节点
     if (!root)
@@ -644,8 +688,13 @@ int handle_wifi_disconnect(const char *cmd, cJSON *args, char *return_json_data)
     // 在这里添加实际的处理逻辑
 
     /*第一个参数为 callback函数,需要传入的时候申明之后再传入*/
-    my_task_wifi_disconnect(NULL, NULL, NULL);
-    // wifi_sta_mode_disconnect(NULL);
+
+    /* 将WiFi 断连任务添加到线程池中 */
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (!threadpool_add_task(ctx->threadpool, wifi_disconnect_task, NULL))
+    {
+        printf("failed to add wifi_disconnect_task in threadpool !\r\n");
+    }
 
     memcpy(return_errstr, "WIFI_DISCONNECT_CODE_SUCCESS", strlen("WIFI_DISCONNECT_CODE_SUCCESS"));
     // 封装return_json_data
@@ -699,22 +748,22 @@ int handle_wifi_reconnect(const char *cmd, cJSON *args, char *return_json_data)
     // 在这里添加实际的处理逻辑
     if (true == enable)
     {
-        printf("prepare wifi reconnect\r\n");
-        ret = wifi_get_stored_sta_info(wifi_stored_info);
-        printf("the saved wifi ssid count : %d\r\n", ret);
-        for (int i = 0; i < ret; i++)
-        {
-            if (wifi_stored_info[i].ssid != NULL)
-            {
-                printf("the saved wifi ssid : %s\r\n", wifi_stored_info[i].ssid);
-                printf("the saved wifi password : %s\r\n", wifi_stored_info[i].pwd);
-            }
-        }
-        while (retry--)
-        {
-            // wifi_enter_sta_mode(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd);
-            my_task_wifi_connect(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd, 10, NULL, NULL, NULL, NULL);
-        }
+        // printf("prepare wifi reconnect\r\n");
+        // ret = wifi_get_stored_sta_info(wifi_stored_info);
+        // printf("the saved wifi ssid count : %d\r\n", ret);
+        // for (int i = 0; i < ret; i++)
+        // {
+        //     if (wifi_stored_info[i].ssid != NULL)
+        //     {
+        //         printf("the saved wifi ssid : %s\r\n", wifi_stored_info[i].ssid);
+        //         printf("the saved wifi password : %s\r\n", wifi_stored_info[i].pwd);
+        //     }
+        // }
+        // while (retry--)
+        // {
+        //     // wifi_enter_sta_mode(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd);
+        //     // my_task_wifi_connect(wifi_stored_info[0].ssid, wifi_stored_info[0].pwd, 10, NULL, NULL, NULL, NULL);
+        // }
         ret = 0;
         memcpy(return_errstr, "WIFI_RECONNECT_CODE_SUCCESS", strlen("WIFI_RECONNECT_CODE_SUCCESS"));
     }
@@ -778,7 +827,7 @@ int handle_wifi_get_status(const char *cmd, cJSON *args, char *return_json_data)
     }
 
     temp_connect_state = get_wifi_connect_status(NULL);
-    if (temp_connect_state == WIFI_CONNECT_FAIL)
+    if (temp_connect_state == WIFI_CONNECT_STA_DISCONNECT)
     {
         memcpy(connect_status, "WIFI_STA_DISCONNECT", strlen("WIFI_STA_DISCONNECT"));
     }
@@ -1246,7 +1295,6 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                     ret = 1;
                     memcpy(return_errstr, "WIFI_INFO_CODE_WIFI_NOT_CONNECTED", strlen("WIFI_INFO_CODE_WIFI_NOT_CONNECTED"));
                 }
-
             }
             else if (WIFI_CMD_DEFAULT == get_wifi_cmd_status(NULL))
             {
