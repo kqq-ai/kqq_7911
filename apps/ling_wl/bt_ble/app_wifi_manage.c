@@ -192,11 +192,11 @@ WIFI_connect_STATUES wifi_disconnect_block(void *pri)
     }
 }
 
-WIFI_connect_STATUES wifi_reconnect_config(lfs_t *lfs, int count)
-{
-    change_wifi_retry_connect_count(lfs, count);
-    return 0;
-}
+// WIFI_connect_STATUES wifi_reconnect_config(lfs_t *lfs, int count)
+// {
+//     change_wifi_retry_connect_count(lfs, count);
+//     return 0;
+// }
 
 
 /* block connect 所需要的sem 相关的函数*/

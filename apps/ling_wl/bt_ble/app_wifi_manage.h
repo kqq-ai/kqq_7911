@@ -116,7 +116,7 @@ WIFI_connect_STATUES wifi_connect(
 WIFI_connect_STATUES wifi_disconnect(wifi_disconnect_cb disconnect_func);
 WIFI_connect_STATUES wifi_disconnect_block(void *pri);
 
-WIFI_connect_STATUES wifi_reconnect_config(lfs_t *lfs, int count);
+// WIFI_connect_STATUES wifi_reconnect_config(lfs_t *lfs, int count);
 
 /* block connect 所需要的sem 相关的函数*/
 
