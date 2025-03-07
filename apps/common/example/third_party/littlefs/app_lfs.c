@@ -460,6 +460,13 @@ void change_wifi_config(lfs_t *lfs, char *ssid, char *pwd)
         return;
     }
 
+    /* 2. 检查 ssid pwd */
+    if ((ssid[0] == '\0' ) || (pwd[0] == '\0'))
+    {
+        printf("ssid or pwd is error !\r\n");
+        return;
+    }
+
     // /* 2. 读取当前配置数据 */
     // get_flash_app_raw_cfg_data(lfs, NULL);
 
