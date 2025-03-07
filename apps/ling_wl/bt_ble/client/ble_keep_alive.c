@@ -74,14 +74,18 @@ static void handshake_task(void *priv)
         return;
     }
 
+
     /* 建立连接 */
+    os_sem_set(&g_conn_sem, 0);
     if (ble_simple_client_create_connection(pdev_info->address, pdev_info->address_type) == APP_BLE_OPERATION_ERROR) {
         log_e("[BKA]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
         g_handshake_is_ongoing = false;
         return;
     }
-    if (os_sem_pend(&g_conn_sem, 1000) == OS_TIMEOUT) {
+    if (os_sem_pend(&g_conn_sem, 200) == OS_TIMEOUT) {
+        ble_simple_client_create_cannel();
         log_e("[BKA]Error ble connection timeout!!!");
+        ble_simple_client_module_enable(1);
         g_handshake_is_ongoing = false;
         return;
     }
@@ -337,6 +341,7 @@ int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buff
     } else if (my_blocking_queue_try_enqueue(&g_eend_list[idx].cmd_buffer, &cmd_pair) == MYERROR_Is_Full) {
         ret = 2; /* 对应设备的 cmd_buffer 满了 */
     } else {
+        g_eend_list[idx].handshake_flag = 0;
         ret = 0;
     }
     pthread_mutex_unlock(&g_mutex); // 解锁

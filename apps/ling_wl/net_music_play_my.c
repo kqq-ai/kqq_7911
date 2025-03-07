@@ -46,6 +46,22 @@ static void set_dec_end_handler(music_player *player, void *file, void *handler,
     player->dec_end_handler = handler;
 }
 
+
+
+static int __get_dec_status(music_player *player, int priv)
+{
+    union audio_req req = {0};
+
+    if (!player->dec_server) {
+        return -EFAULT;
+    }
+
+    req.dec.cmd     = AUDIO_DEC_GET_STATUS;
+    server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+
+    return req.dec.status;
+}
+
 /*======================================================================================================================
  * local music decoder
  *======================================================================================================================*/
@@ -266,8 +282,6 @@ static int local_music_dec_seek(music_player *player, int seek_step)
 
 
 static const struct music_dec_ops local_music_dec_ops = {
-    // .switch_dir     = local_music_dec_switch_dir,
-    // .switch_file    = local_music_dec_switch_file,
     .dec_file       = local_music_dec_file,
     .dec_breakpoint = local_music_dec_breakpoint,
     .dec_play_pause = local_music_dec_play_pause,
@@ -275,7 +289,7 @@ static const struct music_dec_ops local_music_dec_ops = {
     // .dec_progress   = local_musci_dec_progress,
     .dec_stop       = local_music_dec_stop,
     .dec_seek       = local_music_dec_seek,
-    // .dec_status     = __get_dec_status,
+    .dec_status     = __get_dec_status,
 };
 
 /*======================================================================================================================
@@ -739,7 +753,7 @@ static const struct music_dec_ops net_music_dec_ops = {
     // .dec_progress   = net_music_dec_progress,
     .dec_stop       = net_music_dec_stop,
     .dec_seek       = net_music_dec_seek,
-    // .dec_status     = __get_dec_status,
+    .dec_status     = __get_dec_status,
 };
 
 static int __play_net_music(music_player *player, const char *url)

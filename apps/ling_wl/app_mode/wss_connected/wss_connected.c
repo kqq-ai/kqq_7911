@@ -55,15 +55,15 @@ int app_wss_conncted_event_handler(struct application *app, struct sys_event *ev
 
 static int wss_connected_init(void)
 {
+    ble_simple_server_module_enable(0);
+    ble_simple_client_module_enable(1);
     wss_application_init();
-    // test_application_init();
     return 0;
 }
 
 static int wss_connected_unint(void)
 {
     wss_application_uninit();
-    // test_application_uninit();
 
     /* 退出wss_connected模式时，关闭WSS连接，释放资源 */
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
@@ -82,8 +82,9 @@ void app_wss_connected_mode(void)
 
     while (1) {
         // 应用代码
-        wss_application_loop(context->websockets_info);
-        // test_application_loop(context->websockets_info);
+        if (wss_application_loop(context->websockets_info)) {
+            lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        }
         
         mdelay(10);
         if (lwl_app_mode_exitting()) {

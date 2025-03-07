@@ -16,6 +16,7 @@ void ble_simple_client_init(void);
 void ble_simple_client_exit(void);
 
 int  ble_simple_client_create_connection(u8 *addr, u8 addr_type);
+int  ble_simple_client_create_cannel(void);
 int  ble_simple_client_disconnect(void);
 void ble_simple_client_disconnect_block(void);
 

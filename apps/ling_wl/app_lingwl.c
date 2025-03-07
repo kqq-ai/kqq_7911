@@ -96,6 +96,20 @@ static void auto_shutdown(void *priv)
     power_set_soft_poweroff();
 }
 
+
+void base_lwl_event_handler(lwl_event_t *e)
+{
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_SHUTDOWN:
+        power_set_soft_poweroff();
+        break;
+    // case LWL_EVENT_TYPE_UART_SYNC:
+    //     log_i("SYNC");
+    //     uart_response_synch_status(1);
+    //     break;
+    }
+}
+
 static void app_lingwl_main(void)
 {
     log_i("Hello World2!\r\n");
@@ -104,6 +118,8 @@ static void app_lingwl_main(void)
     lwl_app_core_init();
     
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    lwl_event_handler_add(base_lwl_event_handler);
 
     /* 初始化E端设备 */
     lwl_eend_dev_init(sn1, &context->eend_dev_list[0]);

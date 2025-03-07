@@ -23,7 +23,7 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
-#include "util/threadpool_tasks.h"
+#include "app_mode/lwl_app_framework.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
@@ -276,6 +276,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         // {
         //     wifi_connect_succ_cb_func_pri(NULL);
         // }
+        
+        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
 
         break;
 

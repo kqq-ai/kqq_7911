@@ -30,6 +30,8 @@ int app_default_app_event_handler(struct application *app, struct sys_event *eve
 
 static int default_init(void)
 {
+    ble_simple_client_module_enable(0);
+    ble_simple_server_module_enable(1);
     return 0;
 }
 

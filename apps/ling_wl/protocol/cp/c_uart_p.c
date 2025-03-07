@@ -23,7 +23,7 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         lwl_event_notify(&e);
     }   break;
     case UART_CMD_SYNCH_STATUS:{ // 同步状态
-        log_i("the UART_CMD_SYNCH_STATUS !\r\n");
+        log_d("the UART_CMD_SYNCH_STATUS !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_SYNC;
         e.uart_cmd_sync.battery = payload[1];
@@ -136,4 +136,12 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
     log_d_buf(send_packet, 6 + len);
     // 发送响应包
     return dev_write(g_dev_uart_hdl, send_packet, 6 + len);
+}
+
+int uart_send_set_sn(char *sn)
+{
+    uint8_t busy_status_payload[1 + SN_SIZE] = {0};
+    busy_status_payload[0] = UART_CMD_SET_BLESN;
+    memcpy(busy_status_payload + 1, sn, SN_SIZE);
+    return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
 }

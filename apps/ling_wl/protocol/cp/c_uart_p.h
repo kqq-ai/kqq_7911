@@ -58,6 +58,7 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
 int uart_response_synch_status(uint8_t busy_status);
 
 
+int uart_send_set_sn(char *sn);
 
 // 发送事件包
 int uart_send_inquiry(uint8_t *payload, uint16_t len);

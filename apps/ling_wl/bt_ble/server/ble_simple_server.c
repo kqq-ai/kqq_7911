@@ -293,15 +293,15 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
         case HCI_EVENT_DISCONNECTION_COMPLETE:
             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
-            server_con_handle = 0;
+            server_con_handle = INVALID_HANDLE;
             ble_op_att_send_init(server_con_handle, 0, 0, 0);
             set_ble_work_state(BLE_ST_DISCONN);
 
-            if (!ble_update_get_ready_jump_flag()) {
-                os_mutex_pend(&mutex, 0);
+            // if (!ble_update_get_ready_jump_flag()) {
+                // os_mutex_pend(&mutex, 0);
                 bt_ble_adv_enable(1);
-                os_mutex_post(&mutex);
-            }
+            //     os_mutex_post(&mutex);
+            // }
             connection_update_cnt = 0;
             // ble_auto_shut_down_enable(1);
             break;
@@ -621,9 +621,9 @@ static int set_adv_enable(void *priv, u32 en)
 {
     ble_state_e next_state, cur_state;
 
-    if (!adv_ctrl_en && en) {
-        return APP_BLE_OPERATION_ERROR;
-    }
+    // if (!adv_ctrl_en && en) {
+    //     return APP_BLE_OPERATION_ERROR;
+    // }
 
     if (server_con_handle != INVALID_HANDLE) {
         return APP_BLE_OPERATION_ERROR;

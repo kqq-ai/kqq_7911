@@ -8,13 +8,13 @@
 #include "app_mode/lwl_eend_device.h"
 #include "app_mode/lwl_app_core.h"
 #include "bt_ble/client/ble_keep_alive.h"
+#include "protocol/cp/c_uart_p.h"
 
 enum
 {
     MY_TASK_MESSAGE_SWITCH_PLAY,
     MY_TASK_MESSAGE_SWITCH_ONLY,
     MY_TASK_MESSAGE_PLAY_ONE,
-    MY_TASK_MESSAGE_MONITER_RSSI,
     MY_TASK_MESSAGE_MAX = 0xFF,
 };
 
@@ -140,8 +140,6 @@ static void my_task(void *priv)
         case MY_TASK_MESSAGE_PLAY_ONE:
             play_one_sync(&message);
             break;
-        case MY_TASK_MESSAGE_MONITER_RSSI:
-            moniter_rssi_sync(&message);
             break;
         }
     }
@@ -188,32 +186,28 @@ static void switch_only_sync(MyTaskMessageType *message)
 
     /* 切换设备 */
     /* 设置C2广播 */
-    int i = 0;
-    uart_tx_buf[i++] = 0xA0;
-    memcpy(uart_tx_buf + i, param->sn, SN_SIZE);
-    i += SN_SIZE;
-    dev_write(uart0_hdl, uart_tx_buf, i);
+    uart_send_set_sn(param->sn);
 
-    /* 通知A关机 */
-    lwl_eend_dev_t *pprev = find_eend_dev_active();
-    if (pprev != NULL) {
-        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
-        /* 等待命令发送完毕 */
-        if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
-            /* 通知A关机失败 */
-            if (param->cb != NULL) {
-                param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
-            }
-            return;
-        }
-    }
+    // /* 通知A关机 */
+    // lwl_eend_dev_t *pprev = find_eend_dev_active();
+    // if (pprev != NULL) {
+    //     int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
+    //     /* 等待命令发送完毕 */
+    //     if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
+    //         /* 通知A关机失败 */
+    //         if (param->cb != NULL) {
+    //             param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
+    //         }
+    //         return;
+    //     }
+    // }
 
     /* 通知B开机 */
     lwl_eend_dev_t *pnext = find_eend_dev_by_sn(param->sn);
     if (pnext != NULL) {
         int r = ble_keep_alive_device_push_cmd(pnext, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
         /* 等待命令发送完毕 */
-        if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
+        if (os_sem_pend(&sem_eend_cmd_send_completed, 200) == OS_TIMEOUT) {
             /* 通知B开机失败 */
             if (param->cb != NULL) {
                 param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
@@ -222,7 +216,7 @@ static void switch_only_sync(MyTaskMessageType *message)
         }
         /* 设置上下文 */
         set_eend_dev_active(pnext);
-    } else {
+    } else { // pnext == NULL
         /* 设置上下文 */
         set_eend_dev_active(NULL);
     }
@@ -282,21 +276,6 @@ static void play_one_sync(MyTaskMessageType *message)
         /* 等待播放结束 */
         os_sem_pend(&sem_net_music_dec_end, 0);
     }
-
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
-    }
-}
-
-static void moniter_rssi_sync(MyTaskMessageType *message)
-{
-    ASSERT(message->msg == MY_TASK_MESSAGE_MONITER_RSSI);
-    MyMessageMoniterRSSI *param = &message->moniter_rssi;
-
-    /* 使能BLE SCAN 获取设备RSSI */
-    ble_start_scan_rssi(param->rssi_cb_priv, param->rssi_cb);
 
     /* 执行任务完成回调 */
     if (param->cb != NULL)
@@ -392,32 +371,6 @@ void my_task_play_one(int audio_message_id, char *audio_url, void *priv, void *c
     my_blocking_queue_enqueue(&g_message_queue, &message);
 }
 
-/**
- * @name my_task_play_one
- * @brief This function is used to create a specific task message and enqueue it into a message queue.
- *
- * @param rssi_cb_priv A pointer to user-defined private data.
- * @param rssi_cb      A pointer to a callback function.
- * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
- */
-void my_task_scan_rssi(void *rssi_cb_priv,
-                       void (*rssi_cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void *priv, void *cb)
-{
-    /* 创建消息 */
-    MyTaskMessageType message;
-    message.msg = MY_TASK_MESSAGE_MONITER_RSSI;
-    message.moniter_rssi.rssi_cb_priv = rssi_cb_priv;
-    message.moniter_rssi.rssi_cb = rssi_cb;
-    message.moniter_rssi.priv = priv;
-    message.moniter_rssi.cb = cb;
-    printf("Put message: %d\n", message.msg);
-    /* 消息入队 */
-    my_blocking_queue_enqueue(&g_message_queue, &message);
-    printf("Put message: %d over\n", message.msg);
-}
-
-
 static void audio_message_cancellation_cb(void *data, void *priv)
 {
     /* 取消特定audio_only消息的播放 */
@@ -441,6 +394,25 @@ static void audio_message_cancellation_cb(void *data, void *priv)
 void disable_specific_audio_message(int audio_message_id)
 {
     my_blocking_queue_traverse(&g_message_queue, audio_message_cancellation_cb, (void *)audio_message_id);
+}
+
+
+static void audio_message_cancellation_all_cb(void *data, void *priv)
+{
+    /* 取消特定audio_only消息的播放 */
+    MyTaskMessageType *pMessage = (MyTaskMessageType *)data;
+    if (pMessage->msg == MY_TASK_MESSAGE_PLAY_ONE) {
+        pMessage->play_one.audio_enable = false;
+    }
+}
+
+/**
+ * @name disable_all_audio_message
+ * @brief Cancel all of the audio message.
+ */
+void disable_all_audio_message()
+{
+    my_blocking_queue_traverse(&g_message_queue, audio_message_cancellation_all_cb, NULL);
 }
 
 void start_async_msg_loop()

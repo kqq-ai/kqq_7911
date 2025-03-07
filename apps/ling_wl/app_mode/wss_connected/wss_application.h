@@ -6,6 +6,6 @@
 
 void wss_application_init();
 void wss_application_uninit();
-void wss_application_loop(struct websocket_struct *websockets_info);
+bool wss_application_loop(struct websocket_struct *websockets_info);
 
 #endif

@@ -43,9 +43,6 @@ int os_task_create(void (*func)(void *parm),
                    int q_size,
                    const char *name);
 
-extern void my_task_scan_rssi(void *rssi_cb_priv,
-                              void (*rssi_cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void *priv, void *cb);
-
 // extern int os_taskq_post(const char *name, int type, int argc, int *argv);
 extern int __os_taskq_pend(int *argv, int argc, int tick);
 extern int __os_taskq_post(const char *name, int type, int argc, int *argv);

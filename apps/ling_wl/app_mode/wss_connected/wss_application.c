@@ -13,6 +13,7 @@
 
 static void wss_asr_data(void *data, u32 size);
 static void app_record_task_start();
+static void app_task_break();
 
 #define ENABLE 1
 #define DISABLE 0
@@ -27,7 +28,7 @@ typedef enum {
     STATE_TASK_CREATE_SESSION,
     STATE_TASK_SWITCH_SAY_HELLO,
     STATE_TASK_RECORD,
-    STATE_TASK_TEST,
+    STATE_TASK_BREAK,
 } AppTaskState;
 
 typedef enum {
@@ -39,6 +40,10 @@ typedef enum {
     STATE_SWITCH_SAY_HELLO_SWITCH,
     STATE_SWITCH_SAY_HELLO_PLAY_AUDIO,
     STATE_SWITCH_SAY_HELLO_OVER,
+
+    STATE_BREAK_STARTUP,
+    STATE_BREAK_MESSAGE_STOP,
+    STATE_BREAK_OVER,
 
     STATE_RECORD_STARTUP,
     STATE_RECORD_RECORDING,
@@ -109,7 +114,9 @@ typedef enum {
     REC_TRIG_KEY,
     REC_TRIG_VAD,
 } RECORDER_REIGGER_MODE;
-static int g_recorder_trigger_mode = REC_TRIG_KEY; //0:vad,1:key
+static int g_recorder_trigger_mode = REC_TRIG_VAD; //0:vad,1:key
+
+static int g_exception_exit = false;
 
 /* Task state */
 static int g_task_state = STATE_TASK_IDLE;
@@ -129,6 +136,12 @@ static int g_ble_porte_switch_ok = false;
 static int g_audio_play_end = false;
 static int g_audio_play_ongoing_num = 0;
 static int g_backend_message_end_ok = false;
+
+/* Break context */
+static int g_break_state = STATE_RECORD_STARTUP;
+static int g_break_start = 0;
+static int g_message_stop_ok = false;
+static int g_message_stop_message_id = 0;
 
 /* Recorder context */
 static int g_record_state = STATE_RECORD_STARTUP;
@@ -213,6 +226,15 @@ static int find_edev_idx(lwl_eend_dev_t *p_eend_dev)
 
 }
 
+static void wss_application_exception_exit()
+{
+    g_exception_exit = true;
+}
+
+static bool wss_application_check_exit()
+{
+    return g_exception_exit;
+}
 
 /* Timeout context */
 static bool g_timeout_timer_ongoing = false;
@@ -240,185 +262,6 @@ static bool timeout_timer_is_timeout()
 {
     return g_timeout_timer_is_timeout;
 }
-
-//=================================================================================================
-// Key scan
-//=================================================================================================
-#define KEY_IO_PORT             IO_PORTA_07
-#define BTN_SCAN_INTERVAL       100
-#define BTN_PRPESS_TIME         1000
-#define BTN_RELEASE_TIME        1000
-
-static uint32_t g_key_scan_timer = 0;
-static uint8_t  g_key_scan_ongoing = 0;
-static uint8_t  g_key_action_start = 0;
-static uint32_t g_key_press_start_time = 0;
-static uint32_t g_key_release_start_time = 0;
-static uint32_t g_key_latest_state = 1;       // 上一帧按键按下：0 上一帧按键未按下：1
-static uint32_t g_key_click_counter = 0;
-
-
-/**
- * @brief 当发生按键按下的回调
- */
-static void on_key_down(void)
-{
-    log_i("[KEY SCAN]key down");
-}
-
-/**
- * @brief 当发生按键抬起的回调
- */
-static void on_key_up(void)
-{
-    log_i("[KEY SCAN]key up");
-    if (g_recorder_trigger_mode == REC_TRIG_KEY) {
-        g_recording = false;
-    }
-}
-
-/**
- * @brief 当发生按键短按时的回调
- */
-static void on_key_short_press(void)
-{
-    log_i("[KEY SCAN]Short press");
-    static int idx = 0;
-    idx++;
-    if (idx == get_edev_count()) {
-        idx = 0;
-    }
-    my_task_switch_only(g_edev_table[idx].pdev->sn, NULL, NULL);
-}
-
-/**
- * @brief 当发生按键长按时的回调
- */
-static void on_key_long_press(void)
-{
-    log_i("[KEY SCAN]Long press");
-    if (g_recorder_trigger_mode == REC_TRIG_KEY) {
-        app_record_task_start();
-    }
-}
-
-/**
- * @brief 当发生按键双击的回调
- */
-static void on_key_double_click(void)
-{
-    log_i("[KEY SCAN]Double press");
-    if (g_recorder_trigger_mode == REC_TRIG_VAD) {
-        g_recorder_trigger_mode = REC_TRIG_KEY;
-    } else {
-        g_recorder_trigger_mode = REC_TRIG_VAD;
-    }
-}
-
-static void wss_application_switch_test_mode();
-/**
- * @brief 当发生按键三击的回调
- */
-static void on_key_triple_click(void)
-{
-    log_i("[KEY SCAN]Triple press");
-}
-
-/**
- * @brief 当发生按键四击的回调
- */
-static void on_key_quadruple_click(void)
-{
-    log_i("[KEY SCAN]Quadruple press");
-    wss_application_switch_test_mode();
-}
-
-/**
- * @brief 启用按键扫描
- */
-static void start_key_scan(void)
-{
-    gpio_set_direction(KEY_IO_PORT, 1); // 默认输入模式
-    gpio_set_die(KEY_IO_PORT, 1);       
-    gpio_set_pull_up(KEY_IO_PORT, 1);   // 默认上拉
-
-    g_key_scan_ongoing = 0;
-    g_key_press_start_time = 0;
-    g_key_latest_state = 1;       // 假设默认为上拉
-    g_key_scan_ongoing = true;
-}
-
-static void key_scan_loop(void)
-{
-    if (g_curr_time - g_key_scan_timer > BTN_SCAN_INTERVAL) {
-        if (!g_key_scan_ongoing) {
-            return;
-        }
-        
-        uint8_t btnCurrState = gpio_read(KEY_IO_PORT);
-
-        uint8_t hasFlip = g_key_latest_state != btnCurrState;
-
-        if (hasFlip) {
-            if (btnCurrState == 0) {
-                on_key_down();
-            } else {
-                on_key_up();
-            }  
-        }
-        
-        if (btnCurrState == 0) {
-            if (hasFlip && !g_key_action_start) {
-                g_key_action_start = true;          // 开始
-                g_key_press_start_time = 0;
-                g_key_release_start_time = 0;
-                g_key_click_counter = 0;
-            }
-
-            if (g_key_action_start) {
-                if (hasFlip) {
-                    g_key_press_start_time = g_curr_time;
-                    g_key_release_start_time = 0;
-                }
-
-                /* 检测按下时间 */
-                uint32_t duration = g_curr_time - g_key_press_start_time;
-                if (duration >= BTN_PRPESS_TIME) {  // 按下时间较长
-                    on_key_long_press();
-                    g_key_action_start = false;     // 结束
-                }
-            }
-        } else {    // if (btnCurrState == 1)
-            if (g_key_action_start) {
-                if (hasFlip) {
-                    g_key_release_start_time = g_curr_time;
-                    g_key_press_start_time = 0;
-                    g_key_click_counter++;
-                }
-
-                /* 检测松开时间 */
-                uint32_t duration = g_curr_time - g_key_release_start_time;
-                if (duration >= BTN_RELEASE_TIME) { // 松开时间较长
-                    if (g_key_click_counter == 1) {
-                        on_key_short_press();
-                    } else if (g_key_click_counter == 2) {
-                        on_key_double_click();
-                    } else if (g_key_click_counter == 3) {
-                        on_key_triple_click();
-                    } else if (g_key_click_counter == 4) {
-                        on_key_quadruple_click();
-                    }
-                    g_key_action_start = false;     // 结束
-                }
-            }
-        }
-        g_key_latest_state = btnCurrState;
-        
-        g_key_scan_timer = g_curr_time;
-    }
-
-}
-
 
 //=================================================================================================
 // Async task callback
@@ -567,6 +410,8 @@ static int loswssp_rsp_cbk(int type, loswssp_package_t *pkg)
     case LR_MESSAGE_STOP:
         log_i("LR_MESSAGE_STOP\n");
         log_i("stop message id: %d\n", pkg->message_stop.message_id);
+        g_message_stop_ok = true;
+        g_message_stop_message_id = pkg->message_stop.message_id;
         break;
     case LR_MESSAGE_POINT_DELTA:
         log_i("LR_MESSAGE_POINT_DELTA\n");
@@ -658,17 +503,13 @@ static void wss_app_set_vad_callback(u8 en)
 static void wss_app_vad_update_loop()
 {
     if (g_vad_state == 0 && g_vad_state_curr == 1) {
-        if (g_task_state == STATE_TASK_IDLE) {
-            if (g_recorder_trigger_mode == REC_TRIG_VAD) {
-                app_record_task_start();
-            }
+        if (g_task_state == STATE_TASK_IDLE && g_recorder_trigger_mode == REC_TRIG_VAD) {
+            app_record_task_start();
         }
     }
     if (g_vad_state == 1 && g_vad_state_curr == 0) {
-        if (g_task_state == STATE_TASK_RECORD) {
-            if (g_recorder_trigger_mode == REC_TRIG_VAD) {
-                g_recording = false;
-            }
+        if (g_task_state == STATE_TASK_RECORD && g_recorder_trigger_mode == REC_TRIG_VAD) {
+            g_recording = false;
         }
     }
     g_vad_state = g_vad_state_curr;
@@ -714,7 +555,10 @@ static void wss_asr_data_to_server(struct websocket_struct *websockets_info, Asr
 
     if (g_recording == true) {
         log_i(">>");
-        communication_message_asr_data(websockets_info, base64_buf);
+        if (communication_message_asr_data(websockets_info, base64_buf) != 0){
+            wss_application_exception_exit();
+            return;
+        }
     }
 }
 
@@ -813,10 +657,7 @@ void app_function(disatance_info_t *distance_info)
 #define DISTANCE_KEEP_TIME 5
 void self_function(disatance_info_t *distance_info, int distance_type)
 {
-    log_i("self_function my\n");
-
-    log_i("distance_type: %d\n", distance_type);
-    log_i("RSSI avg: %d\n", distance_info->average_rssi);
+    log_i("distance_type: %d %d\n", distance_type, distance_info->average_rssi);
 
     int idx = find_edev_idx(distance_info->p_eend_dev);
     if (idx == -1) {
@@ -832,7 +673,7 @@ void self_function(disatance_info_t *distance_info, int distance_type)
         for (int i = 0; i < (DISTANCE_KEEP_TIME + 1); ++i) {
             int distance_type = get_distance_by_rank(&g_edev_table[idx].distance_history, i);
 
-            log_i("distance_history[%d] = %d", i, distance_type);
+            log_d("distance_history[%d] = %d", i, distance_type);
 
             /* 当前不在2米范围内 */
             if (i == 0 && distance_type != DISTANCE_0) {
@@ -845,7 +686,7 @@ void self_function(disatance_info_t *distance_info, int distance_type)
                 break;
             }
         }
-        if (is_approach && g_edev_table[idx].hello_flag == 0) {
+        if (is_approach){//} && g_edev_table[idx].hello_flag == 0) {
             g_edev_table[idx].hello_flag = 1;
             wss_dev_distance(idx);
         }
@@ -879,7 +720,10 @@ static bool app_create_session_task_loop(struct websocket_struct *websockets_inf
         for (;g_session_create_idx < get_edev_count(); g_session_create_idx++) {
             if (g_edev_table[g_session_create_idx].session_create_ok == false && 
                 g_edev_table[g_session_create_idx].ip_id != -1) {
-                communication_init_role(websockets_info, g_edev_table[g_session_create_idx].ip_id);
+                if (communication_init_role(websockets_info, g_edev_table[g_session_create_idx].ip_id) != 0){
+                    wss_application_exception_exit();
+                    return true;
+                }
                 break;
             }
         }
@@ -930,26 +774,32 @@ static bool app_switch_say_hello_task_loop(struct websocket_struct *websockets_i
     case STATE_SWITCH_SAY_HELLO_STARTUP:
         /* wss 发起切换会话 */
         g_backend_switch_session_ok = false;
-        wss_2ip_switch(websockets_info, g_edev_table[g_next_edev_idx].session_id, 
-            g_edev_table[g_next_edev_idx].ip_id);
+        if (wss_2ip_switch(websockets_info, g_edev_table[g_next_edev_idx].session_id, 
+            g_edev_table[g_next_edev_idx].ip_id) != 0){
+            wss_application_exception_exit();
+            return true;
+        }
+
+        /* 切换 E端 */
+        g_ble_porte_switch_ok = false;
+        my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, NULL, switch_end_callback);
 
         log_i("[Switch and say hello] STARTUP -> SWITCH\n");
         g_switch_say_hello_state = STATE_SWITCH_SAY_HELLO_SWITCH;
         break;
     case STATE_SWITCH_SAY_HELLO_SWITCH:
-        if (g_backend_switch_session_ok) {
+        if (g_backend_switch_session_ok && g_ble_porte_switch_ok) {
             /* 切换完毕 */
             g_curr_edev_idx = g_next_edev_idx; 
         
-            /* 切换 E端 */
-            g_ble_porte_switch_ok = false;
-            my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, NULL, switch_end_callback);
-
             /* 发送 你好呀！请求音频回复 */
             g_audio_play_end = false;
             g_backend_message_end_ok = false;
             g_audio_play_ongoing_num = 0;
-            communication_talk_message(websockets_info, g_hello_content);
+            if (communication_talk_message(websockets_info, g_hello_content) != 0){
+                wss_application_exception_exit();
+                return true;
+            }
 
             log_i("[Switch and say hello] SWITCH -> PLAY_AUDIO\n");
             g_switch_say_hello_state = STATE_SWITCH_SAY_HELLO_PLAY_AUDIO;
@@ -989,10 +839,14 @@ static bool app_record_task_loop(struct websocket_struct *websockets_info)
     switch (g_record_state) {
     case STATE_RECORD_STARTUP:
         /* 发送asr start */
-        communication_message_stop(websockets_info);
-        communication_message_asr(websockets_info);
-        communication_message_asr_start(websockets_info);
-
+        if (communication_message_asr(websockets_info) != 0){
+            wss_application_exception_exit();
+            return true;
+        }
+        if (communication_message_asr_start(websockets_info) != 0){
+            wss_application_exception_exit();
+            return true;
+        }
         /* 清空asr data queue */
         my_blocking_queue_clear(&g_asr_data_queue);
 
@@ -1017,8 +871,11 @@ static bool app_record_task_loop(struct websocket_struct *websockets_info)
             /* 停止录音 */
             wss_app_recorder_en(DISABLE);
             /* 发送asr end */
-            communication_message_asr_end(websockets_info);
-            
+            if (communication_message_asr_end(websockets_info) != 0){
+                wss_application_exception_exit();
+                return true;
+            }
+
             /* 等待音频回复 */
             g_audio_play_end = false;
             g_backend_message_end_ok = false;
@@ -1045,54 +902,60 @@ static bool app_record_task_loop(struct websocket_struct *websockets_info)
     return false;
 }
 
+
+static void app_task_break()
+{
+    g_break_start = true;
+}
+static bool app_is_break()
+{
+    int tmp = g_break_start;
+    g_break_start = false;
+    return tmp;
+}
+static bool app_break_loop(struct websocket_struct *websockets_info)
+{
+    switch (g_break_state) {
+    case STATE_BREAK_STARTUP:
+        /* 发送asr start */
+        g_message_stop_ok = false;
+        if (communication_message_stop(websockets_info) != 0){
+            wss_application_exception_exit();
+            return true;
+        }
+
+        /* 设置VAD回调 */
+        wss_app_set_vad_callback(ENABLE);
+        /* 默认不设置录音上传回调 */
+        wss_app_recorder_data_upstream_en(DISABLE);
+        /* 开启录音 */
+        wss_app_recorder_en(ENABLE);
+
+        /* 取消所有播放任务 */
+        disable_all_audio_message();
+
+        /* 停止正在进行的解码 */
+        lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+        app_music_play_stop(ctx->music_player);
+
+        log_i("[Break] STARTUP -> MESSAGE_STOP\n");
+        g_break_state = STATE_BREAK_MESSAGE_STOP;
+        break;
+    case STATE_BREAK_MESSAGE_STOP:
+        if (g_message_stop_ok) {
+            log_i("[Break] MESSAGE_STOP -> OVER\n");
+            g_break_state = STATE_BREAK_OVER;
+        }
+        break;
+    case STATE_BREAK_OVER:
+        return true;
+    }
+    return false;
+}
+
 //=================================================================================================
 // LOOP
 //=================================================================================================
-
-void wss_application_init()
-{
-    log_i("Init WSS application\n");
-    my_blocking_queue_init_static(&g_message_queue, g_message_queue_buffer, sizeof(WssTaskMessage), MY_TASK_MESSAGE_QUEUE_CAPACITY);
-    my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
-
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    add_edev(&context->eend_dev_list[0], 45);
-    add_edev(&context->eend_dev_list[1], 5);
-
-    for (int i; i < get_edev_count(); ++i) {
-        g_edev_table[i].session_create_ok = false;
-    }
-
-    /* 注册loswssp事件回调 */
-    loswssp_register_rsp_cbk(loswssp_rsp_cbk);
-
-    /* 设置VAD回调 */
-    wss_app_set_vad_callback(ENABLE);
-    /* 默认不设置录音上传回调 */
-    wss_app_recorder_data_upstream_en(DISABLE);
-    /* 开启录音 */
-    wss_app_recorder_en(ENABLE);
-
-    /* 开启按键扫描 */
-    start_key_scan();
-
-    /* 默认执行创建会话任务 */
-    app_create_session_task_start();
-}
-
-void wss_application_uninit()
-{
-    log_i("Uninit WSS application\n");
-    my_blocking_queue_destroy_static(&g_message_queue);
-    my_blocking_queue_destroy_static(&g_asr_data_queue);
-    
-    /* 设置VAD回调 */
-    wss_app_set_vad_callback(DISABLE);
-    /* 取消录音上传回调 */
-    wss_app_recorder_data_upstream_en(DISABLE);
-    /* 开启录音 */
-    wss_app_recorder_en(DISABLE);
-}
 
 static void wss_application_switch_test_mode()
 {
@@ -1119,6 +982,102 @@ static void wss_application_switch_test_mode()
         /* 切换正常模式 */
         g_test_mode = false;
     }
+}
+
+void switch_cb(int code, void *priv)
+{
+    log_i("[WSS] switch code: %d", code);
+}
+static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        log_i("SHORT_CLICK");
+
+        if (g_task_state == STATE_TASK_SWITCH_SAY_HELLO ||
+            g_task_state == STATE_TASK_RECORD) {
+            /* 打断 */
+            app_task_break();
+        }
+        
+        // wss_application_switch_test_mode(); 
+
+        // log_i("en = %d\n", en);
+
+        // if (en) {
+        //     my_task_switch_only("WCCN24H28FEEEF8", NULL, switch_cb);
+        //     en = 0;
+        // } else {
+        //     my_task_switch_only("000000000000000", NULL, switch_cb);
+        //     en = 1;
+        // }
+
+        /* 打断 */
+
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC");
+        uart_response_synch_status(g_task_state != STATE_TASK_IDLE);
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        log_i("TOUCH KEY DOWN");
+        break;
+    case LWL_EVENT_TYPE_UART_SHUTDOWN:
+        log_i("SHUTDOWN");
+        break;
+    }
+}
+
+void wss_application_init()
+{
+    log_i("Init WSS application\n");
+    my_blocking_queue_init_static(&g_message_queue, g_message_queue_buffer, sizeof(WssTaskMessage), MY_TASK_MESSAGE_QUEUE_CAPACITY);
+    my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
+
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    add_edev(&context->eend_dev_list[0], 45);
+    add_edev(&context->eend_dev_list[1], 5);
+
+    for (int i; i < get_edev_count(); ++i) {
+        g_edev_table[i].session_create_ok = false;
+    }
+
+    /* 注册loswssp事件回调 */
+    loswssp_register_rsp_cbk(loswssp_rsp_cbk);
+
+    /* 设置VAD回调 */
+    wss_app_set_vad_callback(ENABLE);
+    /* 默认不设置录音上传回调 */
+    wss_app_recorder_data_upstream_en(DISABLE);
+    /* 开启录音 */
+    wss_app_recorder_en(ENABLE);
+
+    /* 注册lwl事件处理回调 */
+    lwl_event_handler_add(wss_app_lwl_event_handler_cb);
+
+    /* 默认执行创建会话任务 */
+    app_create_session_task_start();
+
+    /* 重置 */
+    g_exception_exit = false;
+}
+
+void wss_application_uninit()
+{
+    log_i("Uninit WSS application\n");
+    my_blocking_queue_destroy_static(&g_message_queue);
+    my_blocking_queue_destroy_static(&g_asr_data_queue);
+    
+    /* 设置VAD回调 */
+    wss_app_set_vad_callback(DISABLE);
+    /* 取消录音上传回调 */
+    wss_app_recorder_data_upstream_en(DISABLE);
+    /* 开启录音 */
+    wss_app_recorder_en(DISABLE);
+    
+    /* 取消注册lwl事件处理回调 */
+    lwl_event_handler_remove(wss_app_lwl_event_handler_cb);
 }
 
 static void wss_application_test_loop(struct websocket_struct *websockets_info)
@@ -1178,6 +1137,12 @@ static void wss_application_normal_loop(struct websocket_struct *websockets_info
             log_i("TIMEOUT SWITCH_SAY_HELLO -> IDLE\n");
             g_task_state = STATE_TASK_IDLE;
         }
+        if (app_is_break()) {
+            /* 发生打断了 */
+            g_break_state = STATE_BREAK_STARTUP;
+            log_i("BREAK SWITCH_SAY_HELLO -> BREAK\n");
+            g_task_state = STATE_TASK_BREAK;
+        }
         if (app_switch_say_hello_task_loop(websockets_info)) {
             /* 执行完毕切回IDLE状态 */
             log_i("COMPLETED SWITCH_SAY_HELLO -> IDLE\n");
@@ -1187,25 +1152,34 @@ static void wss_application_normal_loop(struct websocket_struct *websockets_info
     case STATE_TASK_RECORD:
         /* 检测VAD speak stop */
         wss_app_vad_update_loop();
+        if (app_is_break()) {
+            /* 发生打断了 */
+            g_break_state = STATE_BREAK_STARTUP;
+            log_i("BREAK RECORD -> BREAK\n");
+            g_task_state = STATE_TASK_BREAK;
+        }
         if (app_record_task_loop(websockets_info)) {
             /* 执行完毕切回IDLE状态 */
-            log_i("COMPLETED SWITCH_SAY_HELLO -> IDLE\n");
+            log_i("COMPLETED RECORD -> IDLE\n");
+            g_task_state = STATE_TASK_IDLE;
+        }
+        break;
+    case STATE_TASK_BREAK:
+        log_i("COMPLETED BREAK -> IDLE\n");
+        if (app_break_loop(websockets_info)) {
             g_task_state = STATE_TASK_IDLE;
         }
         break;
     }
 }
 
-void wss_application_loop(struct websocket_struct *websockets_info)
+bool wss_application_loop(struct websocket_struct *websockets_info)
 {
     g_curr_time = timer_get_ms();
     ASSERT(websockets_info != NULL);
 
     /* 超时定时器状态更新 */
     timeout_timer_update();
-
-    /* 按键检测 */
-    key_scan_loop();
 
     if (g_test_mode) {
         wss_application_test_loop(websockets_info);
@@ -1214,7 +1188,10 @@ void wss_application_loop(struct websocket_struct *websockets_info)
     }
 
     if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
-        wss_ping_send(websockets_info);
+        if (wss_ping_send(websockets_info) != 0){
+            wss_application_exception_exit();
+            return true;
+        }
 
         int pp = 2;
         lwl_app_context_t *context = lwl_app_core_context_get_instance();
@@ -1226,4 +1203,9 @@ void wss_application_loop(struct websocket_struct *websockets_info)
 
         g_heat_timer = g_curr_time;
     }
+
+    if (wss_application_check_exit()) {
+        return true;
+    }
+    return false;
 }

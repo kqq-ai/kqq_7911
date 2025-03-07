@@ -9,7 +9,7 @@
 #define VOLUME_STEP 5
 #define MIN_VOLUME_VALUE	5
 #define MAX_VOLUME_VALUE	100
-#define INIT_VOLUME_VALUE   10
+#define INIT_VOLUME_VALUE   30
 
 #define DEC_BUF_LEN      12 * 1024
 
@@ -24,14 +24,13 @@ struct music_dec_ops {
     // int (*dec_volume)(music_player *player, int);
     // int (*dec_progress)(music_player *player, int);
     int (*dec_seek)(music_player *player, int);
-    // int (*dec_status)(music_player *player, int);
+    int (*dec_status)(music_player *player, int);
 };
 
 struct net_breakpoint {
     u32 fptr;
     u16 url_len;
     char *url;
-    const char *ai_name;
     struct audio_dec_breakpoint dec_bp;
 };
 
