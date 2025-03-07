@@ -842,9 +842,11 @@ int notify_app_wifi_ip_succ(void *pri)
 
     get_wifi_ip_info(sta_localip);
 
-    memcpy(return_errstr, "MCU_GET_IP_SUCC", strlen("MCU_GET_IP_SUCC"));
-    memcpy(cmd_name, "mcu_notify_app_ip", strlen("mcu_notify_app_ip"));
+    // memcpy(return_errstr, "MCU_GET_IP_SUCC", strlen("MCU_GET_IP_SUCC"));
+    // memcpy(cmd_name, "mcu_notify_app_ip", strlen("mcu_notify_app_ip"));
 
+    memcpy(return_errstr, "WIFI_CONNECT_CODE_SUCCESS", strlen("WIFI_CONNECT_CODE_SUCCESS"));
+    memcpy(cmd_name, "wifi_connect", strlen("wifi_connect"));
 
     // 封装return_json_data
     cJSON *root = cJSON_CreateObject();
@@ -856,8 +858,9 @@ int notify_app_wifi_ip_succ(void *pri)
     }
 
     cJSON_AddStringToObject(root, "cmd_name", cmd_name);
-    cJSON_AddStringToObject(root, "sta_localip", sta_localip);
+    cJSON_AddNumberToObject(root, "return_code", ret); // 添加返回码
     cJSON_AddStringToObject(root, "return_errstr", return_errstr);
+    cJSON_AddStringToObject(root, "ip_address", sta_localip);
 
     char *return_json_str = cJSON_PrintUnformatted(root);
     if (return_json_str == NULL)

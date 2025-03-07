@@ -9,6 +9,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
 #include "device.h"
+#include "util/threadpool_tasks.h"
 
 static void wss_asr_data(void *data, u32 size);
 static void app_record_task_start();
@@ -508,6 +509,27 @@ static int loswssp_rsp_cbk(int type, loswssp_package_t *pkg)
                 }
             } else if (g_task_state == STATE_TASK_CREATE_SESSION) {
                 /* 不处理 */
+                
+                // /* 保存开场白 */
+                // lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+                // save_role_opening_task_param_t *save_opening_param = (save_role_opening_task_param_t *)malloc(sizeof(save_role_opening_task_param_t));
+                // save_opening_param->lfs = ctx->lfs_hdl;
+                // save_opening_param->url = (char *)malloc(strlen(vurl) + 1);
+                // if (save_opening_param->url == NULL) {
+                //     printf("Failed to allocate memory for vurl\n");
+                //     free(save_opening_param);
+                //     break;
+                // }
+                // strcpy(save_opening_param->url, vurl);
+                // save_opening_param->role_name = g_edev_table[g_session_create_idx].ip_id;
+                // sprintf(save_opening_param->opening_filename, "opening_%d.mp3", g_edev_table[g_session_create_idx].ip_id);
+                // if (!threadpool_add_task(ctx->threadpool, save_role_opening_file_task, save_opening_param))
+                // {
+                //     printf("!!!!!!!!!!!!!!!!!Failed to add save_role_opening_file_task  !!!!!!!!!!!!!!!!!!!!!\r\n");
+                //     free(save_opening_param->url);
+                //     free(save_opening_param); 
+                //     break;                  
+                // }
             }
         }
     }   break;

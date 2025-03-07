@@ -23,6 +23,7 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
+#include "util/threadpool_tasks.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
@@ -251,9 +252,17 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         printf("the event callback get the current connected ssid: %s  pwd: %s\n", temp_wifi_info.ssid, temp_wifi_info.pwd);
 
         /* 保存最近一次连接的 WIFI SSID  */
-        //change_wifi_config(ctx->lfs_hdl, temp_wifi_info.ssid, temp_wifi_info.pwd);
-        //change_wifi_config(ctx->lfs_hdl, "temp_wifi_info.ssid", "temp_wifi_info.pwd");
-        // change_wifi_config(temp_wifi_info.ssid, temp_wifi_info.pwd);
+        change_wifi_config(ctx->lfs_hdl, temp_wifi_info.ssid, temp_wifi_info.pwd);
+
+        // store_role_opening_file_init(ctx->lfs_hdl, "role_opening_54.mp3");
+
+        
+        // /* 测试下载url 内容*/
+        // if (!threadpool_add_task(ctx->threadpool, test_url_task, NULL))
+        // {
+        //     printf("!!!!!!!!!!!!!!!!!Failed to add url task  !!!!!!!!!!!!!!!!!!!!!\r\n");
+        // }
+
 
         /*保存当前连接的模式和ssid 为了reconnect*/
         // struct wifi_mode_info g_temp_info;

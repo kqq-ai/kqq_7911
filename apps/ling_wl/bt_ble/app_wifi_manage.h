@@ -106,6 +106,7 @@ typedef enum
 } DISCONNECT_FUNC_FLAG;
 
 WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s);
+WIFI_connect_STATUES wifi_auto_reconnect(void); /* 自动重连函数 */
 WIFI_connect_STATUES wifi_connect(
     char *ssid,
     char *pwd,

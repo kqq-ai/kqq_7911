@@ -607,6 +607,7 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     // my_task_wifi_connect(ssid, password, connect_timeout_s, NULL, NULL, NULL, NULL);
 
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    /* 在wifi_connect_task任务中会进行释放 */
     wifi_connect_params_t *wifi_connect_params = (wifi_connect_params_t *)malloc(sizeof(wifi_connect_params_t));
     if (wifi_connect_params == NULL)
     {
@@ -623,6 +624,7 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     if (!threadpool_add_task(ctx->threadpool, wifi_connect_task, wifi_connect_params))
     {
         printf("failed to add wifi_connect_task in threadpool !\r\n");
+        free(wifi_connect_params);
     }
 
     set_wifi_connect_start_time_ms(timer_get_ms());
@@ -1143,7 +1145,7 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
         }
         else if (strcmp(cmd_name, "wifi_connect") == 0)
         {
-            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL))
+            if (WIFI_CMD_IDLE == get_wifi_cmd_status(NULL) || WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
             {
                 ret = handle_wifi_connect(cmd_name, cmd_args_item, return_json_data);
                 if (1 == ret)
@@ -1157,11 +1159,11 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
                 ret = 1;
                 memcpy(return_errstr, "WIFI_CONNECT_CODE_DEFAULT", strlen("WIFI_CONNECT_CODE_DEFAULT"));
             }
-            else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
-            {
-                ret = 1;
-                memcpy(return_errstr, "WIFI_CONNECT_CODE_SCANNING", strlen("WIFI_CONNECT_CODE_SCANNING"));
-            }
+            // else if (WIFI_CMD_SCANNING == get_wifi_cmd_status(NULL))
+            // {
+            //     ret = 1;
+            //     memcpy(return_errstr, "WIFI_CONNECT_CODE_SCANNING", strlen("WIFI_CONNECT_CODE_SCANNING"));
+            // }
             else if (WIFI_CMD_CONNECTING == get_wifi_cmd_status(NULL))
             {
                 ret = 1;

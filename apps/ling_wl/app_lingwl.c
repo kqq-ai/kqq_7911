@@ -142,7 +142,7 @@ static void app_lingwl_main(void)
     ble_keep_alive_init();
 
     /* 默认开启SCAN */
-    threadpool_add_task(pool, open_scan_delay, NULL);
+    // threadpool_add_task(pool, open_scan_delay, NULL);
     
     /* 初始化RSSI测距 */
     monitor_init();
@@ -160,11 +160,11 @@ static void app_lingwl_main(void)
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
     ASSERT(lfs_hdl);
     context->lfs_hdl = lfs_hdl;
+    //app_lfs_cfgfile_init(context->lfs_hdl);
+    get_flash_app_cfg_data(context->lfs_hdl);
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
-
-    
 
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);

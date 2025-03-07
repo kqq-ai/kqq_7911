@@ -147,6 +147,43 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
     //     return -5;
     // }
 }
+
+ /* 自动重连函数 */
+WIFI_connect_STATUES wifi_auto_reconnect(void)
+{
+    int ret = 0;
+    char auto_ssid[33] = {0};
+    char auto_pwd[33] = {0};
+    
+    get_wifi_config(auto_ssid,auto_pwd);
+
+    printf("the auto_ssid is %s     the auto_pwd is %s\r\n",auto_ssid,auto_pwd);
+
+    if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
+    {
+        g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
+        wifi_set_sta_connect_timeout(10);
+        wifi_enter_sta_mode(auto_ssid, auto_pwd);
+        ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
+        printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
+        if (0 == ret)
+        {
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            return get_wifi_connect_status(NULL);
+        }
+        else
+        {
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            return -1;
+        }
+    }
+    else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
+    {
+        printf("the wifi_sta_mode_connect_block is running\r\n");
+        return -5;
+    }
+}
+
 WIFI_connect_STATUES wifi_connect(
     char *ssid,
     char *pwd,
