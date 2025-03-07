@@ -74,7 +74,7 @@ static void process_rssi(disatance_info_t *info)
         
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
     info->p_eend_dev->get_string(info->p_eend_dev, sn_string, sizeof(sn_string));
-    log_i("[MEASDIST]===process_rssi   %s  sample_count : %d          ======\r\n",sn_string,info->sample_count);
+    log_d("[MEASDIST]===process_rssi   %s  sample_count : %d          ======\r\n",sn_string,info->sample_count);
     // 计算原始平均RSSI
     int sum = 0;
     for (int i = 0; i < info->sample_count; ++i)
@@ -82,7 +82,7 @@ static void process_rssi(disatance_info_t *info)
         sum += info->rssi_samples[i];
     }
     int original_average = sum / info->sample_count;
-    log_i("[MEASDIST]original_average : %d\n",original_average);
+    log_d("[MEASDIST]original_average : %d\n",original_average);
 
     // 过滤数据点，创建临时数组存储符合条件的数据点
     s8 filtered_samples[MAX_SAMPLES];
@@ -122,7 +122,7 @@ static void process_rssi(disatance_info_t *info)
     //         info->functions_rssi = filtered_samples[i];
     //     }
     // }
-    log_i("[MEASDIST]%s  Average RSSI: %d, Function RSSI: %d\n", sn_string, info->average_rssi, info->functions_rssi);
+    log_d("[MEASDIST]%s  Average RSSI: %d, Function RSSI: %d\n", sn_string, info->average_rssi, info->functions_rssi);
 }
 
 static void clear_rssi_samples(disatance_info_t *info, size_t current_ble_num)
