@@ -200,6 +200,7 @@ INCLUDES := \
 
 # 需要编译的 .c 文件
 c_SRC_FILES := \
+	../../../../apps/common/fat_nor/extflash.c \
 	../../../../apps/common/asr/aisp/aisp.c \
 	../../../../apps/common/asr/jlkws/jlkws.c \
 	../../../../apps/common/asr/roobo/roobo.c \
@@ -288,6 +289,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
 	../../../../apps/ling_wl/util/threadpool.c \
+	../../../../apps/ling_wl/util/threadpool_tasks.c \
 	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
 	../../../../apps/ling_wl/protocol/cp/c_uart_p.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
