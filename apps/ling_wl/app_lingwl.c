@@ -101,7 +101,7 @@ void base_lwl_event_handler(lwl_event_t *e)
 {
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
-        // power_set_soft_poweroff();
+        power_set_soft_poweroff();
         break;
     // case LWL_EVENT_TYPE_UART_SYNC:
     //     log_i("SYNC");
