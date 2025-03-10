@@ -83,7 +83,7 @@ void app_wss_connected_mode(void)
     while (1) {
         // 应用代码
         if (wss_application_loop(context->websockets_info)) {
-            lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         }
         
         mdelay(10);
