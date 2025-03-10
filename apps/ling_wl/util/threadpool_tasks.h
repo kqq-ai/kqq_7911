@@ -11,7 +11,7 @@ void test_url_task();
 typedef struct {
     char * url;
     int role_name;
-    char * opening_filename;
+    char opening_filename[MAX_OPENING_FILE_LEN];
     lfs_t *lfs;
 } save_role_opening_task_param_t;
 

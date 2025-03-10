@@ -253,17 +253,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         /* 保存最近一次连接的 WIFI SSID  */
         change_wifi_config(ctx->lfs_hdl, temp_wifi_info.ssid, temp_wifi_info.pwd);
-
-        // store_role_opening_file_init(ctx->lfs_hdl, "role_opening_54.mp3");
-
-        
-        // /* 测试下载url 内容*/
-        // if (!threadpool_add_task(ctx->threadpool, test_url_task, NULL))
-        // {
-        //     printf("!!!!!!!!!!!!!!!!!Failed to add url task  !!!!!!!!!!!!!!!!!!!!!\r\n");
-        // }
-
-
+     
         /*保存当前连接的模式和ssid 为了reconnect*/
         // struct wifi_mode_info g_temp_info;
         // g_temp_info.mode = STA_MODE;

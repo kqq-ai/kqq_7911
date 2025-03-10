@@ -12,10 +12,12 @@ static lfs_app_config_t g_lfs_app_config = {
     .app_config_key = "lingxi_ai",
     .app_config_version = "1.0.0",
     .app_wifi_config = {
-        .ssid = "hello",
-        .pwd = "20020719",
-        .retry_connect_count = 0,
+        [0] = {
+            .ssid = "hello",
+            .pwd = "20020719",
+        },
     },
+    .retry_connect_count = 1,
     .role_openings = {
         {.opening_filename = "opening_name.mp3", .role_name = 1, .role_flag = 0},
     }
@@ -167,6 +169,10 @@ void get_flash_app_cfg_data(lfs_t *lfs)
             return;
         }
         printf("========================lfs_file_read success!   the data : %s\r\n", all_file_data);
+
+        /* 清空全局变量 */
+        memset(&g_lfs_app_config, 0, sizeof(g_lfs_app_config));
+
         // 解析JSON数据
         cJSON *root = cJSON_Parse(all_file_data);
         if (root == NULL)
@@ -189,7 +195,7 @@ void get_flash_app_cfg_data(lfs_t *lfs)
         cJSON *app_config_key = cJSON_GetObjectItem(root, "app_config_key");
         if (app_config_key == NULL)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
+            printf("cJSON_GetObjectItem fail 1 !\r\n");
             cJSON_Delete(root);
             free(all_file_data);
             lfs_file_close(lfs, &file);
@@ -199,7 +205,7 @@ void get_flash_app_cfg_data(lfs_t *lfs)
         cJSON *app_config_version = cJSON_GetObjectItem(root, "app_config_version");
         if (app_config_version == NULL)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
+            printf("cJSON_GetObjectItem fail 2 !\r\n");
             cJSON_Delete(root);
             free(all_file_data);
             lfs_file_close(lfs, &file);
@@ -209,47 +215,81 @@ void get_flash_app_cfg_data(lfs_t *lfs)
         cJSON *app_wifi_config = cJSON_GetObjectItem(root, "app_wifi_config");
         if (app_wifi_config == NULL)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
+            printf("cJSON_GetObjectItem fail 3 !\r\n");
             cJSON_Delete(root);
             free(all_file_data);
             lfs_file_close(lfs, &file);
             return;
         }
-        cJSON *ssid = cJSON_GetObjectItem(app_wifi_config, "ssid");
-        if (ssid == NULL)
+
+        int store_wifi_count = cJSON_GetArraySize(app_wifi_config);
+        if (store_wifi_count > MAX_STORE_WIFI_NUM)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
+            printf("store_wifi_count > MAX_STORE_WIFI_NUM\r\n");
             cJSON_Delete(root);
             free(all_file_data);
             lfs_file_close(lfs, &file);
             return;
         }
-        printf("ssid = %s\r\n", ssid->valuestring);
-        cJSON *pwd = cJSON_GetObjectItem(app_wifi_config, "pwd");
-        if (pwd == NULL)
+
+        for (int i = 0; i < store_wifi_count; i++)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
-            cJSON_Delete(root);
-            free(all_file_data);
-            lfs_file_close(lfs, &file);
-            return;
+            cJSON *wifi_config = cJSON_GetArrayItem(app_wifi_config, i);
+            if (wifi_config == NULL)
+                break;
+
+            cJSON *ssid = cJSON_GetObjectItem(wifi_config, "ssid");
+            if (ssid == NULL)
+            {
+                printf("cJSON_GetObjectItem fail 4 !\r\n");
+                cJSON_Delete(root);
+                free(all_file_data);
+                lfs_file_close(lfs, &file);
+                return;
+            }
+            printf("ssid = %s\r\n", ssid->valuestring);
+            strncpy(g_lfs_app_config.app_wifi_config[i].ssid, ssid->valuestring, WIFI_SSID_LEN - 1);
+
+            cJSON *pwd = cJSON_GetObjectItem(wifi_config, "pwd");
+            if (pwd == NULL)
+            {
+                printf("cJSON_GetObjectItem fail 5 !\r\n");
+                cJSON_Delete(root);
+                free(all_file_data);
+                lfs_file_close(lfs, &file);
+                return;
+            }
+            printf("pwd = %s\r\n", pwd->valuestring);
+            strncpy(g_lfs_app_config.app_wifi_config[i].pwd, pwd->valuestring, WIFI_PWD_LEN - 1);
         }
-        printf("pwd = %s\r\n", pwd->valuestring);
-        cJSON *retry_connect_count = cJSON_GetObjectItem(app_wifi_config, "retry_connect_count");
+
+        // 获取 retry_connect_count 从根对象中
+        cJSON *retry_connect_count = cJSON_GetObjectItem(root, "retry_connect_count");
         if (retry_connect_count == NULL)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
+            printf("cJSON_GetObjectItem fail 6 !\r\n");
             cJSON_Delete(root);
             free(all_file_data);
             lfs_file_close(lfs, &file);
             return;
         }
-        printf("retry_connect_count = %d\r\n", retry_connect_count->valueint);
+
+        if (!cJSON_IsNumber(retry_connect_count))
+        {
+            printf("retry_connect_count is not a number!\r\n");
+            cJSON_Delete(root);
+            free(all_file_data);
+            lfs_file_close(lfs, &file);
+            return;
+        }
+
+        g_lfs_app_config.retry_connect_count = retry_connect_count->valueint;
+        printf("retry_connect_count = %d\r\n", g_lfs_app_config.retry_connect_count);
 
         cJSON *role_openings = cJSON_GetObjectItem(root, "role_openings");
         if (role_openings == NULL)
         {
-            printf("cJSON_GetObjectItem fail\r\n");
+            printf("cJSON_GetObjectItem fail 7 !\r\n");
             cJSON_Delete(root);
             free(all_file_data);
             lfs_file_close(lfs, &file);
@@ -278,7 +318,7 @@ void get_flash_app_cfg_data(lfs_t *lfs)
             cJSON *opening_filename = cJSON_GetObjectItem(role_opening, "opening_filename");
             if (opening_filename == NULL)
             {
-                printf("cJSON_GetObjectItem fail\r\n");
+                printf("cJSON_GetObjectItem fail 8 !\r\n");
                 cJSON_Delete(root);
                 free(all_file_data);
                 lfs_file_close(lfs, &file);
@@ -287,7 +327,7 @@ void get_flash_app_cfg_data(lfs_t *lfs)
             cJSON *role_name = cJSON_GetObjectItem(role_opening, "role_name");
             if (role_name == NULL)
             {
-                printf("cJSON_GetObjectItem fail\r\n");
+                printf("cJSON_GetObjectItem fail 9 !\r\n");
                 cJSON_Delete(root);
                 free(all_file_data);
                 lfs_file_close(lfs, &file);
@@ -296,7 +336,7 @@ void get_flash_app_cfg_data(lfs_t *lfs)
             cJSON *role_flag = cJSON_GetObjectItem(role_opening, "role_flag");
             if (role_flag == NULL)
             {
-                printf("cJSON_GetObjectItem fail\r\n");
+                printf("cJSON_GetObjectItem fail 10 !\r\n");
                 cJSON_Delete(root);
                 free(all_file_data);
                 lfs_file_close(lfs, &file);
@@ -309,12 +349,13 @@ void get_flash_app_cfg_data(lfs_t *lfs)
         }
 
         // 将这些数据赋值给g_lfs_app_config
-        memset(&g_lfs_app_config, 0, sizeof(g_lfs_app_config));
+        // memset(&g_lfs_app_config, 0, sizeof(g_lfs_app_config));
         memcpy(g_lfs_app_config.app_config_key, app_config_key->valuestring, strlen(app_config_key->valuestring));
         memcpy(g_lfs_app_config.app_config_version, app_config_version->valuestring, strlen(app_config_version->valuestring));
-        memcpy(g_lfs_app_config.app_wifi_config.ssid, ssid->valuestring, strlen(ssid->valuestring));
-        memcpy(g_lfs_app_config.app_wifi_config.pwd, pwd->valuestring, strlen(pwd->valuestring));
-        g_lfs_app_config.app_wifi_config.retry_connect_count = retry_connect_count->valueint;
+        // memcpy(g_lfs_app_config.app_wifi_config.ssid, ssid->valuestring, strlen(ssid->valuestring));
+        // memcpy(g_lfs_app_config.app_wifi_config.pwd, pwd->valuestring, strlen(pwd->valuestring));
+        g_lfs_app_config.retry_connect_count = retry_connect_count->valueint;
+        
 
         cJSON_Delete(root);
         free(all_file_data);
@@ -351,18 +392,32 @@ void save_flash_app_cfg_data(lfs_t *lfs)
     cJSON_AddStringToObject(root, "app_config_key", g_lfs_app_config.app_config_key);
     cJSON_AddStringToObject(root, "app_config_version", g_lfs_app_config.app_config_version);
 
-    // 创建嵌套对象
-    cJSON *wifi_config = cJSON_CreateObject();
-    if (wifi_config == NULL)
+    // 处理 app_wifi_config 数组
+    cJSON *app_wifi_config = cJSON_CreateArray();
+    if (app_wifi_config == NULL)
     {
         cJSON_Delete(root);
         printf("Failed to create nested object\n");
         return;
     }
-    cJSON_AddStringToObject(wifi_config, "ssid", g_lfs_app_config.app_wifi_config.ssid);
-    cJSON_AddStringToObject(wifi_config, "pwd", g_lfs_app_config.app_wifi_config.pwd);
-    cJSON_AddNumberToObject(wifi_config, "retry_connect_count", g_lfs_app_config.app_wifi_config.retry_connect_count);
-    cJSON_AddItemToObject(root, "app_wifi_config", wifi_config);
+    for (int i = 0; i < MAX_STORE_WIFI_NUM && g_lfs_app_config.app_wifi_config[i].ssid[0] != '\0'; i++)
+    {
+        cJSON *wifi_config = cJSON_CreateObject();
+        if (wifi_config == NULL)
+        {
+            cJSON_Delete(root);
+            cJSON_Delete(app_wifi_config);
+            printf("Failed to create role_opening object\n");
+            return;
+        }
+        cJSON_AddStringToObject(wifi_config, "ssid", g_lfs_app_config.app_wifi_config[i].ssid);
+        cJSON_AddStringToObject(wifi_config, "pwd", g_lfs_app_config.app_wifi_config[i].pwd);
+        cJSON_AddItemToArray(app_wifi_config, wifi_config);
+    }
+    cJSON_AddItemToObject(root, "app_wifi_config", app_wifi_config);
+
+    // 添加重连次数信息
+    cJSON_AddNumberToObject(root, "retry_connect_count", g_lfs_app_config.retry_connect_count);
 
     // 处理 role_openings 数组
     cJSON *role_openings = cJSON_CreateArray();
@@ -386,6 +441,7 @@ void save_flash_app_cfg_data(lfs_t *lfs)
         cJSON_AddNumberToObject(role_opening, "role_name", g_lfs_app_config.role_openings[i].role_name);
         cJSON_AddNumberToObject(role_opening, "role_flag", g_lfs_app_config.role_openings[i].role_flag);
         cJSON_AddItemToArray(role_openings, role_opening);
+        printf("===========================add role once !==================\r\n");
     }
     cJSON_AddItemToObject(root, "role_openings", role_openings);
 
@@ -451,6 +507,7 @@ void save_flash_app_cfg_data(lfs_t *lfs)
 }
 
 /* 修改ssid pwd */
+/* 修改ssid pwd */
 void change_wifi_config(lfs_t *lfs, char *ssid, char *pwd)
 {
     /* 1. 检查 lfs */
@@ -461,22 +518,58 @@ void change_wifi_config(lfs_t *lfs, char *ssid, char *pwd)
     }
 
     /* 2. 检查 ssid pwd */
-    if ((ssid[0] == '\0' ) || (pwd[0] == '\0'))
+    if ((ssid[0] == '\0') || (pwd[0] == '\0'))
     {
         printf("ssid or pwd is error !\r\n");
         return;
     }
 
-    // /* 2. 读取当前配置数据 */
-    // get_flash_app_raw_cfg_data(lfs, NULL);
+    int found = 0;
+    int empty_slot = -1;
 
-    /* 3. 更新 WiFi 配置 */
-    memset(g_lfs_app_config.app_wifi_config.ssid, 0, sizeof(g_lfs_app_config.app_wifi_config.ssid));
-    memset(g_lfs_app_config.app_wifi_config.pwd, 0, sizeof(g_lfs_app_config.app_wifi_config.pwd));
-    memcpy(g_lfs_app_config.app_wifi_config.ssid, ssid, strlen(ssid));
-    memcpy(g_lfs_app_config.app_wifi_config.pwd, pwd, strlen(pwd));
+    /* 3. 遍历 app_wifi_config 数组 */
+    for (int i = 0; i < MAX_STORE_WIFI_NUM; i++)
+    {
+        if (strcmp(g_lfs_app_config.app_wifi_config[i].ssid, ssid) == 0)
+        {
+            found = 1;
+            if (strcmp(g_lfs_app_config.app_wifi_config[i].pwd, pwd) != 0)
+            {
+                /* 3.1 如果密码不同，更新密码 */
+                memset(g_lfs_app_config.app_wifi_config[i].pwd, 0, sizeof(g_lfs_app_config.app_wifi_config[i].pwd));
+                memcpy(g_lfs_app_config.app_wifi_config[i].pwd, pwd, strlen(pwd));
+                printf("Updated password for SSID: %s\n", ssid);
+            }
+            else
+            {
+                /* 3.2 如果密码相同，不进行任何操作 */
+                printf("Password for SSID: %s is already up to date.\n", ssid);
+            }
+            break;
+        }
+        else if (g_lfs_app_config.app_wifi_config[i].ssid[0] == '\0' && empty_slot == -1)
+        {
+            /* 记录第一个空闲槽位 */
+            empty_slot = i;
+        }
+    }
 
-    /* 4. 保存更新后的配置数据 */
+    if (!found && empty_slot != -1)
+    {
+        /* 4. 如果没有找到相同的 SSID 且数组未满，添加新的 SSID 和密码 */
+        memset(g_lfs_app_config.app_wifi_config[empty_slot].ssid, 0, sizeof(g_lfs_app_config.app_wifi_config[empty_slot].ssid));
+        memset(g_lfs_app_config.app_wifi_config[empty_slot].pwd, 0, sizeof(g_lfs_app_config.app_wifi_config[empty_slot].pwd));
+        memcpy(g_lfs_app_config.app_wifi_config[empty_slot].ssid, ssid, strlen(ssid));
+        memcpy(g_lfs_app_config.app_wifi_config[empty_slot].pwd, pwd, strlen(pwd));
+        printf("Added new SSID: %s with password: %s\n", ssid, pwd);
+    }
+    else if (!found && empty_slot == -1)
+    {
+        /* 5. 如果数组已满，打印错误信息 */
+        printf("No available slot to add new SSID: %s\n", ssid);
+    }
+
+    /* 6. 保存更新后的配置数据 */
     save_flash_app_cfg_data(lfs);
 }
 
@@ -494,7 +587,7 @@ void change_wifi_retry_connect_count(lfs_t *lfs, int count)
     // get_flash_app_raw_cfg_data(lfs, NULL);
 
     /* 3. 更新重连次数 */
-    g_lfs_app_config.app_wifi_config.retry_connect_count = count;
+    g_lfs_app_config.retry_connect_count = count;
 
     /* 4. 保存更新后的配置数据 */
     save_flash_app_cfg_data(lfs);
@@ -545,6 +638,40 @@ void update_role_opening(lfs_t *lfs, int role_name, char *opening_file_name)
 }
 
 
+/*
+    判断此次的角色名字是否已经有记录了 有记录就不需要更改 
+    有记录返回 ：-1
+    没记录返回 ：0
+*/
+int check_role_name_exist(int role_name)
+{
+    for (int i = 0; i < MAX_ROLES; i++)
+    {
+        printf("g_lfs_app_config.role_openings[%d].role_flag = %d\r\n", i, g_lfs_app_config.role_openings[i].role_flag);
+        printf("g_lfs_app_config.role_openings[%d].role_name = %d\r\n", i, g_lfs_app_config.role_openings[i].role_name);
+        if ((g_lfs_app_config.role_openings[i].role_flag == 1 ) && (g_lfs_app_config.role_openings[i].role_name == role_name))
+        {
+            printf(" =========== have record ! =====================\r\n");
+            return -1; // 有记录
+        }
+    }
+    printf(" =========== no record ! =====================\r\n");
+    return 0; // 没记录
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // /*
 //     根据角色名字 来写入对应角色开场白文件的文件内容
@@ -571,10 +698,10 @@ void store_role_opening_file_init(lfs_t *lfs, char *role_open_file_name)
     printf("role_opening_54.mp3 file created successfully.\n");
 }
 
-
 /* 得到存储的wifi ssid pwd */
-void get_wifi_config(char * ssid, char * pwd)
+app_wifi_config_t * get_wifi_config(void)
 {
-    memcpy(ssid, g_lfs_app_config.app_wifi_config.ssid, strlen(g_lfs_app_config.app_wifi_config.ssid));
-    memcpy(pwd, g_lfs_app_config.app_wifi_config.pwd, strlen(g_lfs_app_config.app_wifi_config.pwd));
+    return g_lfs_app_config.app_wifi_config;
+    // memcpy(ssid, g_lfs_app_config.app_wifi_config.ssid, strlen(g_lfs_app_config.app_wifi_config.ssid));
+    // memcpy(pwd, g_lfs_app_config.app_wifi_config.pwd, strlen(g_lfs_app_config.app_wifi_config.pwd));
 }

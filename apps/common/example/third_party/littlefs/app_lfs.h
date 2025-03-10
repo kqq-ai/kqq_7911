@@ -12,18 +12,19 @@
 #define WIFI_PWD_LEN 64
 
 #define MAX_ROLES 10          // 最大角色数量
-#define MAX_OPENING_LEN 128   // 开场白文件名字最大长度
+#define MAX_OPENING_FILE_LEN 255   // 开场白文件名字最大长度
+
+#define MAX_STORE_WIFI_NUM 10
 
 typedef struct
 {
     char ssid[WIFI_SSID_LEN];
     char pwd[WIFI_PWD_LEN];
-    int retry_connect_count;
 } app_wifi_config_t;
 
 typedef struct {
     int role_name;
-    char opening_filename[MAX_OPENING_LEN];      // 开场白文件名字   /* sprintf(filename, "opening_%d.mp3", name); */
+    char opening_filename[MAX_OPENING_FILE_LEN];      // 开场白文件名字   /* sprintf(filename, "opening_%d.mp3", name); */
     short role_flag;
 } role_opening_t;
 
@@ -31,7 +32,8 @@ typedef struct
 {
     char app_config_key[APP_CONFIG_KEY_LEN];
     char app_config_version[APP_CONFIG_VERSION_LEN];
-    app_wifi_config_t app_wifi_config;
+    app_wifi_config_t app_wifi_config[MAX_STORE_WIFI_NUM];
+    int retry_connect_count;
     role_opening_t role_openings[MAX_ROLES]
 }lfs_app_config_t;
 
@@ -55,13 +57,19 @@ void change_wifi_config(lfs_t *lfs, char * ssid, char * pwd);
 /* 修改重连次数 */
 void change_wifi_retry_connect_count(lfs_t *lfs, int count);
 
+/*
+    判断此次的角色名字是否已经有记录了 有记录就不需要更改 
+    有记录返回 ：0
+    没记录返回 ：-1
+*/
+int check_role_name_exist(int role_name);
+
 /* 更新或录入 角色 （角色名字、角色开场白文件名）*/
 void update_role_opening(lfs_t *lfs, int role_name, char * opening_file_name);
 
-/* 根据角色名字来得到 对应的角色开场白文件名 */
 
-/* 根据角色名字 来写入对应角色开场白文件的文件内容 */
-void write_role_opening_file(lfs_t *lfs, int role_name);
+// /* 根据角色名字 来写入对应角色开场白文件的文件内容 */
+// void write_role_opening_file(lfs_t *lfs, int role_name);
 
 /* 初始化 存储角色开场白的文件 */
 void store_role_opening_file_init(lfs_t *lfs, char * role_open_file_name);
@@ -71,7 +79,7 @@ void store_role_opening_file_init(lfs_t *lfs, char * role_open_file_name);
 
 
 /* 得到存储的wifi ssid pwd */
-void get_wifi_config(char * ssid, char * pwd);
+app_wifi_config_t * get_wifi_config(void);
 
 
 

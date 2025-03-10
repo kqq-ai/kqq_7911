@@ -31,7 +31,7 @@ int argc = 2;
 int argv[30] = {0};
 int recv_argv[30] = {0};
 
-OS_MUTEX g_mutex;
+OS_MUTEX g_distance_mutex;
 
 disatance_info_t moniter_ble_numbers[MAX_BLE_NUM];
 
@@ -137,7 +137,7 @@ static void clear_rssi_samples(disatance_info_t *info, size_t current_ble_num)
 static void process_distance_info_array(disatance_info_t *array, size_t current_ble_num)
 {
     int ret = 0;
-    ret = os_mutex_pend(&g_mutex, 0);
+    ret = os_mutex_pend(&g_distance_mutex, 0);
     if (0 != ret)
     {
         log_i("[MEASDIST]scan_rssi_record_cb : os_mutex_pend failed\n");
@@ -148,7 +148,7 @@ static void process_distance_info_array(disatance_info_t *array, size_t current_
         log_d("[MEASDIST]===process_distance_info_array    %d======\r\n", i);
         process_rssi(&array[i]);
     }
-    ret = os_mutex_post(&g_mutex);
+    ret = os_mutex_post(&g_distance_mutex);
     if (0 != ret)
     {
         log_i("[MEASDIST]scan_rssi_record_cb : os_mutex_post failed\n");
@@ -165,7 +165,7 @@ void monitor_init(void)
 
     ble_adv_report_event_user_handler_add(scan_rssi_record_cb, NULL);
     // 创建互斥锁
-    ret = os_mutex_create(&g_mutex);
+    ret = os_mutex_create(&g_distance_mutex);
     if (0 != ret)
     {
         log_i("[MEASDIST]create mutex failed\n");
@@ -254,14 +254,14 @@ void monitor_register_device(lwl_eend_dev_t *p_eend_dev)
 static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 {
     int ret = 0;
-    ret = os_mutex_pend(&g_mutex, 0);
+    ret = os_mutex_pend(&g_distance_mutex, 0);
     if (0 != ret)
     {
         log_i("[MEASDIST]scan_rssi_record_cb : os_mutex_pend failed\n");
     }
 
     if (!adv_pre_match_impl(report_pt->data, report_pt->length)) {
-        ret = os_mutex_post(&g_mutex);
+        ret = os_mutex_post(&g_distance_mutex);
         return;
     }
 
@@ -288,7 +288,7 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 
         }
     }
-    ret = os_mutex_post(&g_mutex);
+    ret = os_mutex_post(&g_distance_mutex);
     if (0 != ret)
     {
         log_i("[MEASDIST]scan_rssi_record_cb : os_mutex_post failed\n");

@@ -7,6 +7,7 @@
 
 #define STORE_WIFI_NUM_MAX 50
 #define WIFI_IP_LEN 16
+#define WIFI_SCAN_TO_RECONNECT_TIMEOUT 7000
 
 typedef struct
 {
@@ -14,6 +15,12 @@ typedef struct
     char pwd[33];
 } app_wifi_info_t;
 
+
+/* 
+    set_app_wifi_info
+    get_app_wifi_info
+    这两个函数用来 操作保存在 lfs中 的wifi信息 ---->为了自动重连
+*/
 /* 设置app_wifi_info */
 void set_app_wifi_info(app_wifi_info_t *info);
 /* 获取app_wifi_info */
