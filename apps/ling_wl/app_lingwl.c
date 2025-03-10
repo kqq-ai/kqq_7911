@@ -101,7 +101,7 @@ void base_lwl_event_handler(lwl_event_t *e)
 {
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
-        power_set_soft_poweroff();
+        // power_set_soft_poweroff();
         break;
     // case LWL_EVENT_TYPE_UART_SYNC:
     //     log_i("SYNC");
@@ -109,6 +109,18 @@ void base_lwl_event_handler(lwl_event_t *e)
     //     break;
     }
 }
+
+
+static void moni_task(void *priv)
+{
+    while (1) {
+        u32 vaild_len = 0;
+        ble_op_multi_att_get_remain(client_con_handle, &vaild_len);
+        log_i("moni valid_len: %d", vaild_len);           
+        msleep(1000);
+    }
+}
+
 
 static void app_lingwl_main(void)
 {
@@ -182,8 +194,12 @@ static void app_lingwl_main(void)
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
 
+    
+
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);
+    /* 【调试】监测att send buffer remaing size */
+    // thread_fork("moni", 15, 512 * 3, 0, 0, moni_task, NULL);
 }
 
 void play_end_callback(void *priv)

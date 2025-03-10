@@ -294,7 +294,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
         case HCI_EVENT_DISCONNECTION_COMPLETE:
             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
             server_con_handle = INVALID_HANDLE;
-            ble_op_att_send_init(server_con_handle, 0, 0, 0);
+            // ble_op_att_send_init(server_con_handle, 0, 0, 0);
             set_ble_work_state(BLE_ST_DISCONN);
 
             // if (!ble_update_get_ready_jump_flag()) {
