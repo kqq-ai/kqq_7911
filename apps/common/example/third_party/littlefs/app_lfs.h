@@ -79,7 +79,7 @@ void store_role_opening_file_init(lfs_t *lfs, char * role_open_file_name);
 
 
 /* 得到存储的wifi ssid pwd */
-app_wifi_config_t * get_wifi_config(void);
+app_wifi_config_t * get_wifi_config(int *store_wifi_number);
 
 
 
