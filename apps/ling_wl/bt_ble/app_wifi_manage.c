@@ -175,7 +175,6 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
         {
             printf("wifi_auto_reconnect: scan wait\n");
             os_time_dly(100);
-            //notify_reconnect_time = reconnect_current_time;
         }
     }
 
@@ -190,9 +189,7 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
 
     app_wifi_config_t *temp_wifi_config_for_reconnect = get_wifi_config(&real_store_wifi_num);
 
-    printf("the real store wifi number is : %d\r\n",real_store_wifi_num);
-
-    //printf("the auto_ssid is %s     the auto_pwd is %s\r\n", auto_ssid, auto_pwd);
+    printf("the real store wifi number is : %d\r\n", real_store_wifi_num);
 
     /* 3. 判断是否有满足需求重连的wifi */
     struct wifi_scan_ssid_info *best_ssid_info = NULL;
@@ -208,51 +205,48 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
                 {
                     max_rssi = temp_for_reconnect_ssid_info[i].rssi;
                     best_ssid_info = &temp_for_reconnect_ssid_info[i];
+                    strncpy(auto_ssid, best_ssid_info->ssid, sizeof(auto_ssid) - 1);
+                    strncpy(auto_pwd, temp_wifi_config_for_reconnect[j].pwd, sizeof(auto_pwd) - 1); // 使用对应下标的密码
                 }
             }
         }
     }
 
-    if (best_ssid_info != NULL)
-    {
-        strncpy(auto_ssid, best_ssid_info->ssid, sizeof(auto_ssid) - 1);
-        strncpy(auto_pwd, temp_wifi_config_for_reconnect[0].pwd, sizeof(auto_pwd) - 1); // 假设所有配置的密码相同
-
-        if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
-        {
-            g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
-            wifi_set_sta_connect_timeout(10);
-            wifi_enter_sta_mode(auto_ssid, auto_pwd);
-            ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
-            printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
-            if (0 == ret)
-            {
-                g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
-                // 释放内存
-                free(temp_for_reconnect_ssid_info);
-                return get_wifi_connect_status(NULL);
-            }
-            else
-            {
-                g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
-                // 释放内存
-                free(temp_for_reconnect_ssid_info);
-                return -1;
-            }
-        }
-        else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
-        {
-            printf("the wifi_sta_mode_connect_block is running\r\n");
-            return -5;
-        }
-    }
-    else
+    if (best_ssid_info == NULL)
     {
         /* 没有一个匹配到的 wifi ssid */
-        printf("No matching SSID found for reconnection.\r\n");
-        free(temp_for_reconnect_ssid_info);
-        wifi_enter_smp_cfg_mode();
-        return -1;
+        printf("No matching SSID found for reconnection. Using default SSID and password.\r\n");
+        strncpy(auto_ssid, "lingxi", sizeof(auto_ssid) - 1); // 使用默认的 SSID
+        strncpy(auto_pwd, "20020719", sizeof(auto_pwd) - 1);   // 使用默认的密码
+    }
+
+    if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
+    {
+        g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
+        wifi_set_sta_connect_timeout(10);
+        printf("the reconnect start  the ssid : %s  the pwd : %s\r\n", auto_ssid, auto_pwd);
+        wifi_enter_sta_mode(auto_ssid, auto_pwd);
+        ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
+        printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
+        if (0 == ret)
+        {
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            // 释放内存
+            free(temp_for_reconnect_ssid_info);
+            return get_wifi_connect_status(NULL);
+        }
+        else
+        {
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            // 释放内存
+            free(temp_for_reconnect_ssid_info);
+            return -1;
+        }
+    }
+    else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
+    {
+        printf("the wifi_sta_mode_connect_block is running\r\n");
+        return -5;
     }
 }
 
