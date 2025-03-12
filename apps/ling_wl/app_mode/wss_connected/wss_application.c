@@ -11,6 +11,8 @@
 #include "device.h"
 #include "util/threadpool_tasks.h"
 
+#include "ota/http_ota.h"
+
 static void wss_asr_data(void *data, u32 size);
 static void app_record_task_start();
 static void app_task_break();
@@ -994,7 +996,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("SHORT_CLICK");
-
+        
         if (g_task_state == STATE_TASK_SWITCH_SAY_HELLO ||
             g_task_state == STATE_TASK_RECORD) {
             /* 打断 */

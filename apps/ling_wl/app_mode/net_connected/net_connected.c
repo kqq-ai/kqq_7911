@@ -24,6 +24,7 @@
 #include "../lwl_app_core.h"
 #include "../wss_connected/wss_application.h"
 #include "log.h"
+#include "ota/http_ota.h"
 
 #include "wss/wss_client.h"
 
@@ -57,8 +58,73 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     }
 }
 
+
+static const cJSON *cjson_parse(u8 *buf)
+{
+    const cJSON *nroot = cJSON_Parse(buf);
+    if (nroot == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr!= NULL) {
+            log_i("INFO: failed to analysis JSON string at position %ld: %s", 
+                ((u8 *)error_ptr - (u8 *)buf), error_ptr);
+        } else {
+            log_i("INFO: failed to analysis JSON string, unknown reason");
+        }
+    }
+    return nroot;
+}
+
+int do_check_and_ota()
+{
+    char *ota_info_json = NULL;
+    int ret = request_ota_info(&ota_info_json);
+    if (ret < 0 || ota_info_json == NULL) {
+        log_e("[UPGRADE]failed to request OTA info: %d", ret);
+        return -1;
+    }
+    log_i("ota_info: %s", ota_info_json);
+
+    const cJSON *nroot = cjson_parse(ota_info_json);
+    if (nroot == NULL) {
+        goto error_ret;
+    }
+
+    ota_info_t ota_info;
+    if (parse_ota_info(nroot, &ota_info) != OTAERROR_Success) {
+        goto error_ret;
+    }
+
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    ctx->lw_ota_ver_code = 62; // test
+    if (ctx->lw_ota_ver_code < ota_info.version_code) {
+        log_i("%d < %d, need OTA.", ctx->lw_ota_ver_code, ota_info.version_code);
+        log_i("download %s", ota_info.file_url);
+
+        size_t url_len = strlen(ota_info.file_url);
+        char *ufw_url = malloc(url_len + 1);
+        strncpy(ufw_url, ota_info.file_url, url_len + 1);
+
+        http_create_download_task(ufw_url);
+    }
+
+error_ret:
+    if (nroot != NULL) {
+        cJSON_Delete(nroot);
+        nroot = NULL;
+    }
+    if (ota_info_json != NULL) {
+        free(ota_info_json);
+        ota_info_json = NULL;
+    }
+    return ret;
+}
+
 static int net_connected_init(void)
 {
+    // OTA check version
+    // do_check_and_ota();
+
+
     struct websocket_info_t *websockets_info = wss_server_connect(url, wss_recv_callback);
 
     if (websockets_info == NULL) {
