@@ -12,6 +12,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
+#define LOCAL_VERSION_CODE 11 
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -224,6 +225,21 @@ int request_ota_info(char **pota_info)
     return ret;
 }
 
+static const cJSON *cjson_parse(u8 *buf)
+{
+    const cJSON *nroot = cJSON_Parse(buf);
+    if (nroot == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr!= NULL) {
+            log_i("INFO: failed to analysis JSON string at position %ld: %s", 
+                ((u8 *)error_ptr - (u8 *)buf), error_ptr);
+        } else {
+            log_i("INFO: failed to analysis JSON string, unknown reason");
+        }
+    }
+    return nroot;
+}
+
 static char *cjson_get_string_value(cJSON *object, const char *string)
 {
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
@@ -336,3 +352,45 @@ error_ret:
     return OTAERROR_Parse_Error;
 }
 
+int do_check_and_ota()
+{
+    char *ota_info_json = NULL;
+    int ret = request_ota_info(&ota_info_json);
+    if (ret < 0 || ota_info_json == NULL) {
+        log_e("[UPGRADE]failed to request OTA info: %d", ret);
+        return -1;
+    }
+    log_i("ota_info: %s", ota_info_json);
+
+    const cJSON *nroot = cjson_parse(ota_info_json);
+    if (nroot == NULL) {
+        goto error_ret;
+    }
+
+    ota_info_t ota_info;
+    if (parse_ota_info(nroot, &ota_info) != OTAERROR_Success) {
+        goto error_ret;
+    }
+
+    if (LOCAL_VERSION_CODE < ota_info.version_code) {
+        log_i("%d < %d, need OTA.", LOCAL_VERSION_CODE, ota_info.version_code);
+        log_i("download %s", ota_info.file_url);
+
+        size_t url_len = strlen(ota_info.file_url);
+        char *ufw_url = malloc(url_len + 1);
+        strncpy(ufw_url, ota_info.file_url, url_len + 1);
+
+        http_create_download_task(ufw_url);
+    }
+
+error_ret:
+    if (nroot != NULL) {
+        cJSON_Delete(nroot);
+        nroot = NULL;
+    }
+    if (ota_info_json != NULL) {
+        free(ota_info_json);
+        ota_info_json = NULL;
+    }
+    return ret;
+}
