@@ -25,9 +25,6 @@ static char *g_wifi_ip[WIFI_IP_LEN] = {0};
 
 static app_wifi_info_t g_app_wifi_info = {0};
 
-static int notify_reconnect_time = 0;
-static int reconnect_current_time = 0;
-
 // 申明
 int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info);
 
@@ -151,103 +148,39 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
     // }
 }
 
-/* 自动重连函数 */
-/* 自动重连函数 */
+ /* 自动重连函数 */
 WIFI_connect_STATUES wifi_auto_reconnect(void)
 {
     int ret = 0;
     char auto_ssid[33] = {0};
     char auto_pwd[33] = {0};
+    
+    get_wifi_config(auto_ssid,auto_pwd);
 
-    /* 0. 开启扫描 */
-    wifi_scan_req();
-    /* 1. 等待扫描结果 */
-    while (1)
+    printf("the auto_ssid is %s     the auto_pwd is %s\r\n",auto_ssid,auto_pwd);
+
+    if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
     {
-        reconnect_current_time = timer_get_ms();
-        if (reconnect_current_time - notify_reconnect_time >= WIFI_SCAN_TO_RECONNECT_TIMEOUT)
+        g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
+        wifi_set_sta_connect_timeout(10);
+        wifi_enter_sta_mode(auto_ssid, auto_pwd);
+        ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
+        printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
+        if (0 == ret)
         {
-            printf("wifi_auto_reconnect: scan timeout\n");
-            break;
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            return get_wifi_connect_status(NULL);
         }
         else
         {
-            printf("wifi_auto_reconnect: scan wait\n");
-            os_time_dly(100);
-            //notify_reconnect_time = reconnect_current_time;
+            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
+            return -1;
         }
     }
-
-    /* 2. 获取扫描结果 */
-    struct wifi_scan_ssid_info *temp_for_reconnect_ssid_info = (struct wifi_scan_ssid_info *)malloc(g_all_wifi_info_num * sizeof(struct wifi_scan_ssid_info));
-    if (temp_for_reconnect_ssid_info == NULL)
+    else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
     {
-        printf("Error: Failed to allocate memory for temp_for_reconnect_ssid_info\n");
-        return -1; // 或者适当的错误处理
-    }
-    memcpy(temp_for_reconnect_ssid_info, g_all_wifi_info, g_all_wifi_info_num * sizeof(struct wifi_scan_ssid_info));
-
-    app_wifi_config_t *temp_wifi_config_for_reconnect = get_wifi_config();
-
-    printf("the auto_ssid is %s     the auto_pwd is %s\r\n", auto_ssid, auto_pwd);
-
-    /* 3. 判断是否有满足需求重连的wifi */
-    struct wifi_scan_ssid_info *best_ssid_info = NULL;
-    int max_rssi = -128;
-
-    for (int i = 0; i < g_all_wifi_info_num; i++)
-    {
-        for (int j = 0; j < MAX_STORE_WIFI_NUM; j++)
-        {
-            if (strcmp(temp_for_reconnect_ssid_info[i].ssid, temp_wifi_config_for_reconnect[j].ssid) == 0)
-            {
-                if (temp_for_reconnect_ssid_info[i].rssi > max_rssi)
-                {
-                    max_rssi = temp_for_reconnect_ssid_info[i].rssi;
-                    best_ssid_info = &temp_for_reconnect_ssid_info[i];
-                }
-            }
-        }
-    }
-
-    if (best_ssid_info != NULL)
-    {
-        strncpy(auto_ssid, best_ssid_info->ssid, sizeof(auto_ssid) - 1);
-        strncpy(auto_pwd, temp_wifi_config_for_reconnect[0].pwd, sizeof(auto_pwd) - 1); // 假设所有配置的密码相同
-
-        if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
-        {
-            g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
-            wifi_set_sta_connect_timeout(10);
-            wifi_enter_sta_mode(auto_ssid, auto_pwd);
-            ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
-            printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
-            if (0 == ret)
-            {
-                g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
-                // 释放内存
-                free(temp_for_reconnect_ssid_info);
-                return get_wifi_connect_status(NULL);
-            }
-            else
-            {
-                g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
-                // 释放内存
-                free(temp_for_reconnect_ssid_info);
-                return -1;
-            }
-        }
-        else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
-        {
-            printf("the wifi_sta_mode_connect_block is running\r\n");
-            return -5;
-        }
-    }
-    else
-    {
-        printf("No matching SSID found for reconnection.\r\n");
-        free(temp_for_reconnect_ssid_info);
-        return -1;
+        printf("the wifi_sta_mode_connect_block is running\r\n");
+        return -5;
     }
 }
 
@@ -301,6 +234,7 @@ WIFI_connect_STATUES wifi_disconnect_block(void *pri)
 //     change_wifi_retry_connect_count(lfs, count);
 //     return 0;
 // }
+
 
 /* block connect 所需要的sem 相关的函数*/
 
@@ -439,7 +373,7 @@ int clean_wifi_scan_result(void *pri)
 {
     memset(g_all_wifi_info, 0, sizeof(g_all_wifi_info));
     g_all_wifi_info_num = 0;
-    printf("WiFi scan result cleared.\r\n"); /* 清除 计数器*/
+    printf("WiFi scan result cleared.\r\n"); /* 清楚 计数器*/
     return 0;
 }
 
@@ -488,6 +422,9 @@ int wifi_manage_init(void *pri)
     return ret;
 }
 
+
+
+
 /*-------------------------------------------------wifi 交给线程池相关的task start----------------------------------*/
 
 void wifi_scan_task(void *arg)
@@ -503,7 +440,7 @@ void wifi_connect_task(void *arg)
         params->timeout_s,
         params->connect_succ_func,
         params->connect_fail_func);
-    free(params);
+        free(params);
 }
 void wifi_disconnect_task(void *arg)
 {
@@ -512,12 +449,13 @@ void wifi_disconnect_task(void *arg)
 
 /* -------------------------------------------------wifi 交给线程池相关的task end----------------------------------*/
 
+
+
 /* ！！！！！！！！！！可能要加互斥锁 ！！！！！！！！！！*/
 /* 设置app_wifi_info */
 void set_app_wifi_info(app_wifi_info_t *info)
 {
-    if (info == NULL)
-    {
+    if (info == NULL) {
         printf("Error: info is NULL in set_app_wifi_info\n");
         return;
     }
@@ -527,8 +465,7 @@ void set_app_wifi_info(app_wifi_info_t *info)
 /* 获取app_wifi_info */
 void get_app_wifi_info(app_wifi_info_t *info)
 {
-    if (info == NULL)
-    {
+    if (info == NULL) {
         printf("Error: info is NULL in get_app_wifi_info\n");
         return;
     }

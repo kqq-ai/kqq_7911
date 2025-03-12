@@ -135,7 +135,7 @@ static void wifi_scan_timeout_cb(int timeout_s)
         {
             set_wifi_scan_status(WIFI_SCAN_STOP);
             set_wifi_cmd_status(WIFI_CMD_IDLE);
-            // wifi_enter_smp_cfg_mode();           // 待确认
+            //wifi_enter_smp_cfg_mode();           // 待确认
         }
     }
 }
@@ -189,9 +189,6 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
     // 开始扫描
     printf("----------------------wifi_scan_start--------------------------------\r\n");
 
-    // 清除 WiFi list
-    clean_wifi_scan_result(NULL);
-
     /* 将WiFi 扫描任务添加到线程池中 */
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (!threadpool_add_task(ctx->threadpool, wifi_scan_task, NULL))
@@ -199,31 +196,29 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
         printf("failed to add wifi_scan_task in threadpool !\r\n");
     }
 
-    printf("Scan request initiated successfully.\n");
-    memcpy(return_errstr, "WIFI_SCAN_CODE_SUCCESS", strlen("WIFI_SCAN_CODE_SUCCESS"));
-    g_wifi_scan_flag = 1; /*只有扫描成功后，才能获取wifi list 的标志位*/
-    set_wifi_scan_status(WIFI_SCAN_RUNNING);
+    // 清除 WiFi list
+    clean_wifi_scan_result(NULL);
 
-    // if (ret == 0)
-    // {
-    //     printf("Scan request initiated successfully.\n");
-    //     memcpy(return_errstr, "WIFI_SCAN_CODE_SUCCESS", strlen("WIFI_SCAN_CODE_SUCCESS"));
-    //     g_wifi_scan_flag = 1; /*只有扫描成功后，才能获取wifi list 的标志位*/
-    //     set_wifi_scan_status(WIFI_SCAN_RUNNING);
-    //     // 等待扫描完成事件或定时查询结果
-    // }
-    // else if (ret == -1)
-    // {
-    //     /*前面的状态排查中 可以排除 WiFi off 和 connecting 状态*/
-    //     printf("Scan request failed: WIFI is off, scanning, or connecting.\n");
-    //     // 可以选择等待一段时间后重试
-    //     memcpy(return_errstr, "WIFI_SCAN_CODE_SCANNING", strlen("WIFI_SCAN_CODE_SCANNING"));
-    //     ret = 0;
-    // }
-    // else
-    // {
-    //     printf("Unknown error occurred during scan request.\n");
-    // }
+    if (ret == 0)
+    {
+        printf("Scan request initiated successfully.\n");
+        memcpy(return_errstr, "WIFI_SCAN_CODE_SUCCESS", strlen("WIFI_SCAN_CODE_SUCCESS"));
+        g_wifi_scan_flag = 1; /*只有扫描成功后，才能获取wifi list 的标志位*/
+        set_wifi_scan_status(WIFI_SCAN_RUNNING);
+        // 等待扫描完成事件或定时查询结果
+    }
+    else if (ret == -1)
+    {
+        /*前面的状态排查中 可以排除 WiFi off 和 connecting 状态*/
+        printf("Scan request failed: WIFI is off, scanning, or connecting.\n");
+        // 可以选择等待一段时间后重试
+        memcpy(return_errstr, "WIFI_SCAN_CODE_SCANNING", strlen("WIFI_SCAN_CODE_SCANNING"));
+        ret = 0;
+    }
+    else
+    {
+        printf("Unknown error occurred during scan request.\n");
+    }
 
     // 创建返回的 JSON 数据
     cJSON *root = cJSON_CreateObject();
@@ -317,9 +312,6 @@ int handle_wifi_list_ready(const char *cmd, cJSON *args, char *return_json_data)
         ret = 0;
         memcpy(return_errstr, "WIFI_LIST_READY_CODE_LIST_OK", strlen("WIFI_LIST_READY_CODE_LIST_OK"));
     }
-
-    /* 直接返回成功 */
-    memcpy(return_errstr, "WIFI_LIST_READY_CODE_LIST_OK", strlen("WIFI_LIST_READY_CODE_LIST_OK"));
 
     // 封装rerurn_json_data
     cJSON *root = cJSON_CreateObject();
@@ -650,6 +642,7 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     memcpy(app_wifi_info->ssid, ssid, sizeof(app_wifi_info->ssid));
     memcpy(app_wifi_info->pwd, password, sizeof(app_wifi_info->pwd));
     set_app_wifi_info(app_wifi_info);
+
 
     // 封装return_json_data
     cJSON *root = cJSON_CreateObject(); // 创建根节点

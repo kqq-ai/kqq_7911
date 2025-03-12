@@ -111,7 +111,7 @@ void save_role_opening_file_task(void *args) {
     /* 0. 初始化准备 */
     void *net_file = NULL;
     struct net_download_parm net_parm;
-    int err = 0;
+    int err;
 
     /* 1. 检查args */
     if (args == NULL) {
@@ -127,18 +127,6 @@ void save_role_opening_file_task(void *args) {
 
     log_i("Downloading from URL: %s", task_param->url);
     log_i("Saving to file: %s", task_param->opening_filename);
-    log_i("Role name: %d", task_param->role_name);
-
-    /* 00. 判断此次是否要进行存储 */
-    err = check_role_name_exist(task_param->role_name);
-    if (-1 == err) {
-        log_i("role_name is exist, no need to save opening file\r\n");
-        goto cleanup;
-    }
-    
-    /* 01. 保存 角色 角色对应的开场白名字 */
-    update_role_opening(task_param->lfs, task_param->role_name, task_param->opening_filename);
-    
 
     /* 4. 打开网络下载 */
     err = net_download_open(&net_file, &net_parm);
