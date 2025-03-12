@@ -13,7 +13,7 @@ static lfs_app_config_t g_lfs_app_config = {
     .app_config_version = "1.0.0",
     .app_wifi_config = {
         [0] = {
-            .ssid = "lingxi_ai",
+            .ssid = "hello",
             .pwd = "20020719",
         },
     },
