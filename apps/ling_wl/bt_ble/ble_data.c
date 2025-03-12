@@ -318,6 +318,9 @@ int handle_wifi_list_ready(const char *cmd, cJSON *args, char *return_json_data)
         memcpy(return_errstr, "WIFI_LIST_READY_CODE_LIST_OK", strlen("WIFI_LIST_READY_CODE_LIST_OK"));
     }
 
+    /* 直接返回成功 */
+    memcpy(return_errstr, "WIFI_LIST_READY_CODE_LIST_OK", strlen("WIFI_LIST_READY_CODE_LIST_OK"));
+
     // 封装rerurn_json_data
     cJSON *root = cJSON_CreateObject();
     if (root == NULL)
@@ -464,15 +467,8 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     }
     else
     {
-        // 设置 wifi_list 为空数组
-        cJSON *empty_wifi_list = cJSON_CreateArray();
-        if (empty_wifi_list == NULL)
-        {
-            printf("Error: Failed to create cJSON array\n");
-            ret = 1;
-            goto cleanup;
-        }
-        cJSON_AddItemToObject(root, "wifi_list", empty_wifi_list);
+        cJSON_AddStringToObject(wifi_list, "ssid", "");
+        cJSON_AddNumberToObject(wifi_list, "rssi", 0);
     }
 
     cJSON_AddItemToObject(root, "wifi_list", wifi_list);

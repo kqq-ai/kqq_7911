@@ -699,30 +699,9 @@ void store_role_opening_file_init(lfs_t *lfs, char *role_open_file_name)
 }
 
 /* 得到存储的wifi ssid pwd */
-app_wifi_config_t *get_wifi_config(int *num)
+app_wifi_config_t * get_wifi_config(void)
 {
-    if (num == NULL)
-    {
-        printf("num is NULL\r\n");
-        return NULL;
-    }
-
-    // 计算实际的 WiFi 配置数量
-    int count = 0;
-    for (int i = 0; i < MAX_STORE_WIFI_NUM; i++)
-    {
-        if (g_lfs_app_config.app_wifi_config[i].ssid[0] != '\0')
-        {
-            count++;
-        }
-        else
-        {
-            continue;;
-        }
-    }
-
-    // 将数量赋值给 num
-    *num = count;
-
     return g_lfs_app_config.app_wifi_config;
+    // memcpy(ssid, g_lfs_app_config.app_wifi_config.ssid, strlen(g_lfs_app_config.app_wifi_config.ssid));
+    // memcpy(pwd, g_lfs_app_config.app_wifi_config.pwd, strlen(g_lfs_app_config.app_wifi_config.pwd));
 }

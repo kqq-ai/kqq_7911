@@ -156,7 +156,6 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
 WIFI_connect_STATUES wifi_auto_reconnect(void)
 {
     int ret = 0;
-    int real_store_wifi_num = 0;
     char auto_ssid[33] = {0};
     char auto_pwd[33] = {0};
 
@@ -188,11 +187,9 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
     }
     memcpy(temp_for_reconnect_ssid_info, g_all_wifi_info, g_all_wifi_info_num * sizeof(struct wifi_scan_ssid_info));
 
-    app_wifi_config_t *temp_wifi_config_for_reconnect = get_wifi_config(&real_store_wifi_num);
+    app_wifi_config_t *temp_wifi_config_for_reconnect = get_wifi_config();
 
-    printf("the real store wifi number is : %d\r\n",real_store_wifi_num);
-
-    //printf("the auto_ssid is %s     the auto_pwd is %s\r\n", auto_ssid, auto_pwd);
+    printf("the auto_ssid is %s     the auto_pwd is %s\r\n", auto_ssid, auto_pwd);
 
     /* 3. 判断是否有满足需求重连的wifi */
     struct wifi_scan_ssid_info *best_ssid_info = NULL;
@@ -200,7 +197,7 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
 
     for (int i = 0; i < g_all_wifi_info_num; i++)
     {
-        for (int j = 0; j < real_store_wifi_num; j++)
+        for (int j = 0; j < MAX_STORE_WIFI_NUM; j++)
         {
             if (strcmp(temp_for_reconnect_ssid_info[i].ssid, temp_wifi_config_for_reconnect[j].ssid) == 0)
             {
@@ -248,10 +245,8 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
     }
     else
     {
-        /* 没有一个匹配到的 wifi ssid */
         printf("No matching SSID found for reconnection.\r\n");
         free(temp_for_reconnect_ssid_info);
-        wifi_enter_smp_cfg_mode();
         return -1;
     }
 }
