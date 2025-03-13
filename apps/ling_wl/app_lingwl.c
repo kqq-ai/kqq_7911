@@ -54,14 +54,11 @@ const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 
 static void simple_play_prompt(const char *fname) 
 {
-    FILE *file = fopen(fname, "r");
-    if (file) {
-        g_music_player.play_voice_prompt = 1;
-        int err = local_music_dec_file(&g_music_player, file, 0, NULL, 0);
-        if (err) {
-            key_event_enable();
-            g_music_player.play_voice_prompt = 0;
-        }
+    // g_music_player.play_voice_prompt = 1;
+    int err = app_music_play_local_music_with_callback(&g_music_player, fname, NULL, NULL);
+    if (err) {
+        key_event_enable();
+        // g_music_player.play_voice_prompt = 0;
     }
 }
 
@@ -224,6 +221,7 @@ static void switch_completed(int code, void *priv)
     log_i("switch completed: %d", code);
 }
 
+extern lfs_t g_lfs;
 static u8 en = 1;
 static int app_music_key_click(struct key_event *key)
 {
@@ -233,12 +231,12 @@ static int app_music_key_click(struct key_event *key)
     //     break;
     case KEY_1:
         log_i("KEY 1\n");
-        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", test2_play_end_callback, NULL);
+        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", NULL, NULL);
         
         break;
     case KEY_2:
         log_i("KEY 2\n");
-        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/19.%201KHz-0dB-30s.mp3", test1_play_end_callback, NULL);
+        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/19.%201KHz-0dB-30s.mp3", NULL, NULL);
         break;
     case KEY_3:
         log_i("KEY 3\n");
@@ -276,7 +274,18 @@ static int app_music_key_click(struct key_event *key)
         break;
     case KEY_OK:
         log_i("KEY OK\n");
-        app_music_play_pause(&g_music_player);
+        lfs_file_t lfs_file;
+        // // 打开文件系统中的MP3文件
+        // int err = lfs_file_open(&g_lfs, &lfs_file, "opening_45.mp3", LFS_O_RDONLY);
+        // if (err)
+        // {
+        //     log_e("Failed to open file: %s, error: %d\n", "opening_45.mp3", err);
+        //     return err;
+        // } else {
+        //     log_e("open success.");
+        // }
+        app_music_play_lfs_music_with_callback(&g_music_player, "opening_45.mp3", NULL, NULL);
+        // app_music_play_pause(&g_music_player);
         break;
         
     case KEY_VOLUME_DEC:
