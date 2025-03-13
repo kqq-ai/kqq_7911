@@ -22,7 +22,7 @@ static lfs_app_config_t g_lfs_app_config = {
 };
 
 // variables used by the filesystem
-static lfs_t g_lfs;
+lfs_t g_lfs;
 
 static int lfs_flash_block_read(const struct lfs_config *c, lfs_block_t block,
                                 lfs_off_t off, void *buffer, lfs_size_t size)
@@ -167,6 +167,10 @@ void get_flash_app_cfg_data(lfs_t *lfs)
             return;
         }
         printf("========================lfs_file_read success!   the data : %s\r\n", all_file_data);
+
+        /* 0. 清空数据 */
+        memset(&g_lfs_app_config, 0, sizeof(g_lfs_app_config));
+
         // 解析JSON数据
         cJSON *root = cJSON_Parse(all_file_data);
         if (root == NULL)
@@ -309,7 +313,6 @@ void get_flash_app_cfg_data(lfs_t *lfs)
         }
 
         // 将这些数据赋值给g_lfs_app_config
-        memset(&g_lfs_app_config, 0, sizeof(g_lfs_app_config));
         memcpy(g_lfs_app_config.app_config_key, app_config_key->valuestring, strlen(app_config_key->valuestring));
         memcpy(g_lfs_app_config.app_config_version, app_config_version->valuestring, strlen(app_config_version->valuestring));
         memcpy(g_lfs_app_config.app_wifi_config.ssid, ssid->valuestring, strlen(ssid->valuestring));
@@ -543,6 +546,43 @@ void update_role_opening(lfs_t *lfs, int role_name, char *opening_file_name)
     /* 5. 保存更新后的配置数据 */
     save_flash_app_cfg_data(lfs);
 }
+
+
+
+
+
+/*
+    判断此次的角色名字是否已经有记录了 有记录就不需要更改 
+    有记录返回 ：-1
+    没记录返回 ：0
+*/
+int check_role_name_exist(int role_name)
+{
+    for (int i = 0; i < MAX_ROLES; i++)
+    {
+        printf("g_lfs_app_config.role_openings[%d].role_flag = %d\r\n", i, g_lfs_app_config.role_openings[i].role_flag);
+        printf("g_lfs_app_config.role_openings[%d].role_name = %d\r\n", i, g_lfs_app_config.role_openings[i].role_name);
+        if ((g_lfs_app_config.role_openings[i].role_flag == 1 ) && (g_lfs_app_config.role_openings[i].role_name == role_name))
+        {
+            printf(" =========== have record ! =====================\r\n");
+            return -1; // 有记录
+        }
+    }
+    printf(" =========== no record ! =====================\r\n");
+    return 0; // 没记录
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

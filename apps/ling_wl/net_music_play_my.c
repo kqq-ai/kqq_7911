@@ -10,9 +10,13 @@
 #include "log.h"
 #include "errno.h"
 #include "netdb.h"
+#include "lfs.h"
 
 static const struct music_dec_ops local_music_dec_ops;
 static const struct music_dec_ops net_music_dec_ops;
+static const struct music_dec_ops lfs_music_dec_ops;
+// 定义文件系统的全局句柄
+extern lfs_t g_lfs;
 
 static void led_ui_post_msg(const char *msg, ...) {
     // nothing to do
@@ -46,8 +50,6 @@ static void set_dec_end_handler(music_player *player, void *file, void *handler,
     player->dec_end_handler = handler;
 }
 
-
-
 static int __get_dec_status(music_player *player, int priv)
 {
     union audio_req req = {0};
@@ -63,9 +65,350 @@ static int __get_dec_status(music_player *player, int priv)
 }
 
 /*======================================================================================================================
- * local music decoder
+ * lfs music decoder
  *======================================================================================================================*/
 
+ static void lfs_do_dec_end_handler(music_player *player, void *file)
+ {
+     if (file == player->dec_end_file)
+     {
+         player->dec_end_file = NULL;
+         if (player->dec_end_handler)
+         {
+             if (player->dec_end_args[1] == -1)
+             {
+                 ((int (*)(music_player *, int))player->dec_end_handler)(player, player->dec_end_args[0]);
+             }
+             else
+             {
+                 ((int (*)(music_player *, int, int))player->dec_end_handler)(player, player->dec_end_args[0],
+                                                                              player->dec_end_args[1]);
+             }
+         }
+     }
+ }
+ 
+ static void lfs_set_dec_end_handler(music_player *player, void *file, void *handler, int arg0, int arg1)
+ {
+     player->dec_end_file = file;
+     player->dec_end_args[0] = arg0;
+     player->dec_end_args[1] = arg1;
+     player->dec_end_handler = handler;
+ }
+
+ // 文件系统的fread实现
+int lfs_file_read_wrapper(void *file, void *buf, u32 len)
+{
+    lfs_file_t *f = (lfs_file_t *)file;
+    int ret = lfs_file_read(&g_lfs, f, buf, len);
+    log_d("[DEC] lfs file read: len = %d, ret = %d\n", len, ret);
+    /* 打印 file变量 地址*/
+    log_i("lfs_file_read_wrapper file address: %p\n", file);
+    return ret;
+}
+
+// 文件系统的fseek实现
+int lfs_file_seek_wrapper(void *file, u32 offset, int origin)
+{
+    lfs_file_t *f = (lfs_file_t *)file;
+    int ret = lfs_file_seek(&g_lfs, f, offset, origin);
+    /* 打印 file变量 地址*/
+    log_i("lfs_file_seek_wrapper file address: %p\n", file);
+    log_d("[DEC] lfs file seek: offset = %d, orig = %d, ret = %d\n", offset, origin, ret);
+    return ret;
+}
+
+// 文件系统的flen实现
+int lfs_file_len_wrapper(void *file)
+{
+    lfs_file_t *f = (lfs_file_t *)file;
+    int ret = lfs_file_size(&g_lfs, f);
+    /* 打印 file变量 地址*/
+    log_i("lfs_file_len_wrapper file address: %p\n", file);
+    log_d("[DEC] lfs file size: %d\n", ret);
+    return ret;
+}
+
+// 定义文件系统的vfs_ops
+static const struct audio_vfs_ops lfs_audio_dec_vfs_ops = {
+    .fread = lfs_file_read_wrapper, // 使用文件系统的读取函数
+    .fseek = lfs_file_seek_wrapper, // 使用文件系统的定位函数
+    .flen = lfs_file_len_wrapper,   // 使用文件系统的获取文件长度函数
+};
+/*
+ * 选择文件并播放, mode为选择方式，如FSEL_NEXT_FILE
+ */
+int lfs_music_dec_file(music_player *player, const char *file_path)
+{
+    int err;
+    union audio_req req = {0};
+
+    log_i("app_lfs_music_dec_lfs_file\n");
+
+    player->dec_ops->dec_stop(player, 0);
+    // 打开文件系统中的MP3文件
+    err = lfs_file_open(&g_lfs, &player->lfs_file, file_path, LFS_O_RDONLY);
+    if (err)
+    {
+        log_e("Failed to open file: %s, error: %d\n", file_path, err);
+        return err;
+    }
+    /* 打印 file变量 地址*/
+    log_i("================================file address: %p\n", player->lfs_file);
+    
+    // if (!file)
+    // {
+    //     return -1;
+    // }
+
+    lfs_set_dec_end_handler(player, &player->lfs_file, lfs_do_dec_end_handler, 0, -1);
+
+    // if (breakpoint) {
+    //     req.dec.bp = &player->lbp.lfs_bp;
+    // }
+    req.dec.dec_type = "mp3";
+    req.dec.cmd = AUDIO_DEC_OPEN;
+    req.dec.volume = player->volume;
+    req.dec.output_buf = NULL;
+    req.dec.output_buf_len = DEC_BUF_LEN;
+    req.dec.file = (void *)&player->lfs_file; // 传递文件句柄
+    req.dec.channel = 0;
+    req.dec.sample_rate = 0;
+    req.dec.priority = 1;
+    req.dec.vfs_ops = &lfs_audio_dec_vfs_ops; // 使用文件系统的vfs_ops
+    req.dec.sample_source = "dac";
+
+#if TCFG_EQ_ENABLE
+#if defined EQ_CORE_V1
+    req.dec.attr |= AUDIO_ATTR_EQ_EN;
+#if TCFG_LIMITER_ENABLE
+    req.dec.attr |= AUDIO_ATTR_EQ32BIT_EN;
+#endif
+#if TCFG_DRC_ENABLE
+    req.dec.attr |= AUDIO_ATTR_DRC_EN;
+#endif
+#else
+    struct eq_s_attr eq_attr = {0};
+    extern void set_eq_req_attr_parm(struct eq_s_attr * eq_attr);
+    set_eq_req_attr_parm(&eq_attr);
+    if (!player->play_voice_prompt)
+    {
+        req.dec.eq_attr = &eq_attr;
+        req.dec.eq_hdl = player->eq_hdl;
+    }
+#endif
+#endif
+
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    if (err)
+    {
+        log_e("Failed to start playback: %d\n", err);
+        lfs_file_close(&g_lfs, &player->lfs_file);
+        return err;
+    }
+
+    player->play_time = req.dec.play_time;
+    player->total_time = req.dec.total_time;
+
+    // if (breakpoint) {
+    //     player->lbp.lfs_bp.len = 0;
+    // }
+
+    if (player->seek_step && !player->play_voice_prompt)
+    {
+        player->dec_ops->dec_seek(player, player->seek_step);
+        player->seek_step = 0;
+    }
+
+    req.dec.cmd = AUDIO_DEC_START;
+
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    if (err)
+    {
+        log_e("Failed to start playback: %d\n", err);
+        lfs_file_close(&g_lfs, &player->lfs_file);
+        return err;
+    }
+    // player->file = (FILE *)file;
+    // player->cmp_file = (void *)file;
+
+    if (!player->play_voice_prompt)
+    {
+        player->dec_ops = &lfs_music_dec_ops;
+    }
+
+    led_ui_post_msg("dec_start");
+    puts("play_music_file: suss\n");
+
+    // // 等待文件播放完成
+    // while (player->play_time < player->total_time)
+    // {
+    //     // 等待播放完成
+    // }
+
+    // // 停止播放
+    // local_music_dec_stop(player, 0);
+
+    // // 关闭文件
+    // lfs_file_close(&g_lfs, &player->lfs_file);
+
+    return 0;
+}
+
+static int lfs_music_dec_breakpoint(music_player *player, int priv)
+{
+    // if (player->lbp.lfs_bp.len == 0) {
+    //     return -ENOENT;
+    // }
+
+    // return lfs_music_dec_file(player, player->lfs_bp_file, 1, NULL, FSEL_NEXT_FILE);
+    return 0;
+}
+
+static int lfs_music_dec_play_pause(music_player *player, u8 notify)
+{
+    union audio_req r = {0};
+
+    if (!player->dec_server)
+    {
+        return -EFAULT;
+    }
+
+#ifdef CONFIG_DEC_ANALOG_VOLUME_ENABLE
+    r.dec.attr = AUDIO_ATTR_FADE_INOUT;
+#endif
+    r.dec.cmd = AUDIO_DEC_PP;
+    server_request(player->dec_server, AUDIO_REQ_DEC, &r);
+    if (r.dec.status == AUDIO_DEC_START)
+    {
+        led_ui_post_msg("dec_start");
+#ifdef CONFIG_UI_ENABLE
+        os_taskq_post(POST_TASK_NAME, 1, UI_MSG_PAUSE_START);
+#endif
+    }
+    else
+    {
+        led_ui_post_msg("dec_pause");
+#ifdef CONFIG_UI_ENABLE
+        os_taskq_post(POST_TASK_NAME, 1, UI_MSG_PAUSE_STOP);
+#endif
+    }
+
+    return 0;
+}
+
+static int lfs_music_dec_stop(music_player *player, int save_breakpoint)
+{
+    int err = 0;
+    union audio_req req;
+
+    int resume_play = 0;
+
+    if (!player->file)
+    {
+        return 0;
+    }
+
+    log_i("lfs_music_dec_stop\n");
+
+    // if (save_breakpoint) {
+    //     err = __get_dec_breakpoint(player, &player->lbp.lfs_bp, resume_play);
+    //     if (!err) {
+    //         if (player->lfs_bp_file && player->lfs_bp_file != player->file) {
+    //             fclose(player->lfs_bp_file);
+    //         }
+    //         player->lfs_bp_file = player->file;
+    //     }
+    // }
+
+    if (player->dec_server)
+    {
+        req.dec.cmd = AUDIO_DEC_STOP;
+        server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    }
+
+    int argv[2];
+    argv[0] = AUDIO_SERVER_EVENT_END;
+    argv[1] = (int)player->file;
+    server_event_handler_del(player->dec_server, 2, argv);
+
+    // if (!save_breakpoint || err) {
+    //     fclose(player->file);
+    //     if (player->lfs_bp_file == player->file) {
+    //         player->lfs_bp_file = NULL;
+    //     }
+    // }
+
+    /* 关闭文件 */
+    printf("lfs_music_dec_stop: close file\n");
+    lfs_file_close(&g_lfs, &player->lfs_file);
+    printf("lfs_music_dec_stop: suss\n");
+
+    player->file = NULL;
+
+    return 0;
+}
+
+static int lfs_music_dec_seek(music_player *player, int seek_step)
+{
+    int err;
+    union audio_req r = {0};
+
+    if (0 == seek_step)
+    {
+        return 0;
+    }
+
+    if (player->total_time != 0 && player->total_time != -1)
+    {
+        if (player->play_time + seek_step <= 0 || player->play_time + seek_step >= player->total_time)
+        {
+            log_e("local music seek out of range\n");
+            return -1;
+        }
+    }
+
+    if (seek_step > 0)
+    {
+        r.dec.cmd = AUDIO_DEC_FF;
+        r.dec.ff_fr_step = seek_step;
+    }
+    else
+    {
+        r.dec.cmd = AUDIO_DEC_FR;
+        r.dec.ff_fr_step = -seek_step;
+    }
+
+    log_i("local music seek step : %d\n", seek_step);
+
+    if (!player->dec_server)
+    {
+        return -EFAULT;
+    }
+
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &r);
+    if (!err && r.dec.status == AUDIO_DEC_START)
+    {
+        led_ui_post_msg("dec_start");
+    }
+
+    return 0;
+}
+
+static const struct music_dec_ops lfs_music_dec_ops = {
+    .dec_file = lfs_music_dec_file,
+    .dec_breakpoint = lfs_music_dec_breakpoint,
+    .dec_play_pause = lfs_music_dec_play_pause,
+    // .dec_volume     = lfs_music_dec_volume,
+    // .dec_progress   = lfs_musci_dec_progress,
+    .dec_stop = lfs_music_dec_stop,
+    .dec_seek = lfs_music_dec_seek,
+    .dec_status = __get_dec_status,
+};
+
+/*======================================================================================================================
+ * local music decoder
+ *======================================================================================================================*/
 
 /*
  * 选择文件并播放, mode为选择方式，如FSEL_NEXT_FILE
@@ -159,7 +502,6 @@ int local_music_dec_file(music_player *player, void *file, int breakpoint, void 
 
     return 0;
 }
-
 
 static int local_music_dec_breakpoint(music_player *player, int priv)
 {
@@ -280,7 +622,6 @@ static int local_music_dec_seek(music_player *player, int seek_step)
     return 0;
 }
 
-
 static const struct music_dec_ops local_music_dec_ops = {
     .dec_file       = local_music_dec_file,
     .dec_breakpoint = local_music_dec_breakpoint,
@@ -295,8 +636,6 @@ static const struct music_dec_ops local_music_dec_ops = {
 /*======================================================================================================================
  * net music decoder
  *======================================================================================================================*/
-
-
 int my_net_download_read(void *priv, void *buf, u32 len) 
 {
     int ret = net_download_read(priv, buf, len);
@@ -576,7 +915,7 @@ static int __net_music_dec_file(void *priv)
     server_request(player->dec_server, AUDIO_REQ_DEC, &req);
 
     net_download_set_pp(player->net_file, 0);
-    
+
     net_download_set_tmp_data_threshold(player->net_file, 80 * 1024);
 
     return 0;
@@ -664,7 +1003,7 @@ static int net_music_dec_file(music_player *player, void *_url, int breakpoint, 
     parm.timeout_millsec    = 10000;
     parm.seek_high_range    = 0;
     parm.seek_low_range     = breakpoint ? player->net_bp.fptr : 0;
-    
+
     parm.seek_threshold     = 1024 * 200;	//用户可适当调整
     /* parm.no_wait_close      = 1; */
     /* parm.start_play_threshold = 1024 * 4; */

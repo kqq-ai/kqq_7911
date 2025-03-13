@@ -3,6 +3,7 @@
 
 #include "cpu.h"
 #include "server/audio_server.h"
+#include "lfs.h"
 
 #define CONFIG_PLAY_PROMPT_DISABLE_KEY	1 //播放提示音时屏蔽按键
 #define CONFIG_STORE_VOLUME
@@ -64,6 +65,7 @@ typedef struct _music_player {
     int total_time;
     FILE *local_bp_file;
     FILE *file;
+    lfs_file_t lfs_file;
     int dec_end_args[4];
     void *dec_end_file;
     void *dec_end_handler;
@@ -88,5 +90,6 @@ int app_music_play_pause(music_player *player);
 int set_dec_volume(music_player *player, int step);
 
 int local_music_dec_file(music_player *player, void *file, int breakpoint, void *handler, int arg);
+int lfs_music_dec_file(music_player *player, const char *file_path);
 
 #endif

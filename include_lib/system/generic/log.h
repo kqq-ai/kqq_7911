@@ -21,7 +21,7 @@ struct logbuf {
 #define __LOG_ENABLE
 
 #ifndef __LOG_LEVEL
-#define __LOG_LEVEL __LOG_INFO
+#define __LOG_LEVEL __LOG_DEBUG
 #endif
 
 #ifdef CONFIG_RELEASE_ENABLE

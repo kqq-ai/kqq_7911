@@ -5,14 +5,6 @@
 #include "log.h"
 #include <stdio.h>
 #include <string.h>
-
-// 定义下载完成后的回调函数
-void download_complete_callback(void *priv)
-{
-    log_i("Download complete callback called.\n");
-    // 在这里可以处理下载完成后的逻辑，例如通知应用程序或进行其他操作
-}
-
 // 初始化下载参数
 void init_download_params(struct net_download_parm *parm, const char *url)
 {
@@ -34,77 +26,6 @@ void init_download_params(struct net_download_parm *parm, const char *url)
     // parm->seek_threshold = 1024 * 200; // 跳转范围超过200KB时重建链接
 }
 
-// 下载URL内容
-int download_url_content(const char *url)
-{
-    void *net_file = NULL;
-    struct net_download_parm parm;
-    int err;
-
-    // 初始化下载参数
-    init_download_params(&parm, url);
-
-    // 打开网络下载
-    err = net_download_open(&net_file, &parm);
-    if (err)
-    {
-        log_e("net_download_open failed with error: %d\n", err);
-        return err;
-    }
-
-    // 检查下载是否准备好
-    while (!net_download_check_ready(net_file))
-    {
-        // 等待下载准备好
-        log_i("Waiting for download to be ready...\n");
-        // 这里可以添加一些延迟或等待逻辑
-    }
-
-    // 读取下载内容
-    char buffer[1024];
-    int bytes_read;
-    while ((bytes_read = net_download_read(net_file, buffer, sizeof(buffer))) > 0)
-    {
-        // 处理下载的内容，例如写入文件或进行其他操作
-        log_i("Read %d bytes from download.\n", bytes_read);
-    }
-
-    // 检查下载状态
-    int status = net_download_get_status(net_file);
-    if (status == NET_DOWNLOAD_COMPLETE)
-    {
-        log_i("Download completed successfully.\n");
-    }
-    else
-    {
-        log_e("Download failed with status: %d\n", status);
-    }
-
-    // 关闭下载
-    net_download_close(net_file);
-
-    // 调用下载完成回调
-    download_complete_callback(NULL);
-
-    return 0;
-}
-
-// 主函数，测试下载功能
-void test_url_task()
-{
-    printf("================================== test_url_task ==========================\r\n");
-    const char *url = "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3";
-    int ret = download_url_content(url);
-    if (ret == 0)
-    {
-        log_i("Download completed successfully.\n");
-    }
-    else
-    {
-        log_e("Download failed with error: %d\n", ret);
-    }
-    return;
-}
 
 /* 根据 role名字 来保存 opening文件 */
 void save_role_opening_file_task(void *args) {
@@ -127,7 +48,16 @@ void save_role_opening_file_task(void *args) {
 
     log_i("Downloading from URL: %s", task_param->url);
     log_i("Saving to file: %s", task_param->opening_filename);
+    log_i("Role name: %d", task_param->role_name);
 
+    /* 00. 判断此次是否要进行存储 */
+    err = check_role_name_exist(task_param->role_name);
+    if (-1 == err) {
+        log_i("role_name is exist, no need to save opening file\r\n");
+        goto cleanup;
+    }
+
+    
     /* 4. 打开网络下载 */
     err = net_download_open(&net_file, &net_parm);
     if (err) {
@@ -167,6 +97,9 @@ void save_role_opening_file_task(void *args) {
     }
     free(buffer);
 
+    err = lfs_file_size(task_param->lfs,&lfs_file);
+    printf("the file : %s  is size : %d !\r\n",task_param->opening_filename,err);
+
     /* 8. 关闭文件 */
     lfs_file_close(task_param->lfs, &lfs_file);
 
@@ -180,6 +113,10 @@ void save_role_opening_file_task(void *args) {
 
     /* 10. 关闭下载 */
     net_download_close(net_file);
+
+    /* 01. 保存 角色 角色对应的开场白名字 */
+    update_role_opening(task_param->lfs, task_param->role_name, task_param->opening_filename);
+    log_i("save_role_opening_file_task end!\n");
 
 cleanup:
     /* 11. 释放资源 */

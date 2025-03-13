@@ -267,13 +267,13 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 
     s8 rssi = report_pt->rssi;
 
-    log_d("[MEASDIST]scan_rssi_record_cb : %s, %d, %d\n", dev_name, dev_name_len, rssi);
+    // log_d("[MEASDIST]scan_rssi_record_cb : %s, %d, %d\n", dev_name, dev_name_len, rssi);
     for (uint32_t i = 0; i < current_ble_num; ++i)
     {
         lwl_eend_dev_t *p_eend_dev = moniter_ble_numbers[i].p_eend_dev;
         if (p_eend_dev->adv_match(p_eend_dev, report_pt->data, report_pt->length))
         {
-            log_d("[MEASDIST]RSSI = %d, len = %d, name: %s", rssi, dev_name_len, dev_name);
+            // log_d("[MEASDIST]RSSI = %d, len = %d, name: %s", rssi, dev_name_len, dev_name);
 
             // Store the RSSI value
             moniter_ble_numbers[i].rssi_samples[moniter_ble_numbers[i].sample_count % MAX_SAMPLES] = rssi;

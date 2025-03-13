@@ -4,14 +4,11 @@
 #include "threadpool.h"
 #include "app_lfs.h"
 
-void test_url_task();
-
-
 /* 根据 role名字 来保存 opening文件 */
 typedef struct {
     char * url;
     int role_name;
-    char * opening_filename;
+    char opening_filename[MAX_OPENING_FILE_LEN];
     lfs_t *lfs;
 } save_role_opening_task_param_t;
 
