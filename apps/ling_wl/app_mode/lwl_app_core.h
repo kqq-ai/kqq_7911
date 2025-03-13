@@ -43,6 +43,10 @@ typedef void (*lwl_event_handler_cb_t)(lwl_event_t *);
 typedef struct {
     char wifi_ssid[33];
     char wifi_passwd[64];
+    char lw_x_dev_code[33];
+    char lw_ota_md5[33];
+    int  lw_ota_ver_code;
+    char lw_ota_ver_name[33];
     char *wss_url;
     struct websocket_struct *websockets_info;
     recorder_hdl *recorder;

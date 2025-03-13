@@ -10,10 +10,9 @@
 #include "app_config.h"
 #include "wifi/wifi_connect.h"
 
-#define OTA_URL_ADDR "http://192.168.3.2:8000/update-ota.ufw"
-
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
+#define LOCAL_VERSION_CODE 11 
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -152,3 +151,246 @@ int http_create_download_task(char *url)
     return thread_fork("download_task", 20,  2 * 1024, 0, NULL, download_task, hdl);
 }
 
+int request_ota_info(char **pota_info)
+{
+    int ret = 0;
+    http_body_obj http_body_buf;
+    httpcli_ctx *ctx = (httpcli_ctx *)calloc(1, sizeof(httpcli_ctx));
+    if (!ctx) {
+        return OTAERROR_Malloc_Failed;
+    }
+
+    memset(&http_body_buf, 0x0, sizeof(http_body_obj));
+
+    http_body_buf.recv_len = 0;
+    http_body_buf.buf_len = 4 * 1024;
+    http_body_buf.buf_count = 1;
+    http_body_buf.p = (char *) malloc(http_body_buf.buf_len * http_body_buf.buf_count);
+    if (!http_body_buf.p) {
+        free(ctx);
+        return OTAERROR_Malloc_Failed;
+    }
+
+    ctx->url = "http://lw-ota.test.ling.space/v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c";
+    ctx->timeout_millsec = 5000;
+    ctx->priv = &http_body_buf;
+    ctx->connection = "close";
+    ctx->user_http_header = "GET /v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c HTTP/1.1\r\n"\
+                            "Accept: */*\r\n" \
+                            "X-Device-Code: WL00000001\r\n"\
+                            "Connection: close\r\n"\
+                            "Date: Mon, 11 Mar 2025 08:00:00 GMT\r\n" \
+                            "Host: lw-ota.test.ling.space\r\n" \
+                            "User-Agent: Apifox/1.0.0 (https://apifox.com)\r\n" \
+                            "Accept-Encoding: identity\r\n"\
+                            "Cache-Control: no-cache\r\n"\
+                            "\r\n";
+
+
+    log_i("http get ota info start\n\n");
+    ret = httpcli_get(ctx);
+
+    if (ret != HERROR_OK) {
+        log_e("http get ota info faile %d\n", ret);
+        ret = OTAERROR_Net_Error;
+    } else {
+        if (http_body_buf.recv_len > 0) {
+            log_i("\nReceive %d Bytes\n", http_body_buf.recv_len);
+            ret = http_body_buf.recv_len;
+            *pota_info = (char *)malloc(http_body_buf.recv_len + 1);
+            if (*pota_info == NULL) {
+                ret = OTAERROR_Malloc_Failed;
+            } else {
+                memcpy(*pota_info, http_body_buf.p, http_body_buf.recv_len);
+                *((*pota_info) + http_body_buf.recv_len) = '\0';
+                ret = http_body_buf.recv_len;
+            }
+        } else {
+            ret = OTAERROR_Unexpected_Error;
+        }
+    }
+
+    //关闭连接
+    httpcli_close(ctx);
+
+    if (http_body_buf.p) {
+        free(http_body_buf.p);
+        http_body_buf.p = NULL;
+    }
+
+    if (ctx) {
+        free(ctx);
+        ctx = NULL;
+    }
+    return ret;
+}
+
+static const cJSON *cjson_parse(u8 *buf)
+{
+    const cJSON *nroot = cJSON_Parse(buf);
+    if (nroot == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr!= NULL) {
+            log_i("INFO: failed to analysis JSON string at position %ld: %s", 
+                ((u8 *)error_ptr - (u8 *)buf), error_ptr);
+        } else {
+            log_i("INFO: failed to analysis JSON string, unknown reason");
+        }
+    }
+    return nroot;
+}
+
+static char *cjson_get_string_value(cJSON *object, const char *string)
+{
+    const cJSON *nnode = cJSON_GetObjectItem(object, string);
+    if (nnode == NULL || !cJSON_IsString(nnode)) {
+        if (nnode == NULL) {
+            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+        } else {
+            log_i("INFO: the '%s' key exists, but its value is not of string type.", string);
+        }
+        return NULL;
+    }
+    return cJSON_GetStringValue(nnode);
+}
+
+static int cjson_get_integer_value(cJSON *object, const char *string, int *value)
+{
+    const cJSON *nnode = cJSON_GetObjectItem(object, string);
+    if (nnode == NULL || !cJSON_IsNumber(nnode)) {
+        if (nnode == NULL) {
+            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+        } else {
+            log_i("INFO: the '%s' key exists, but its value is not of number type.", string);
+        }
+        return 1;
+    }
+    *value = nnode->valueint;
+    return 0;
+}
+
+int parse_ota_info(const cJSON *nroot, ota_info_t *pota_info)
+{
+    if (nroot == NULL || pota_info == NULL) {
+        goto error_ret;
+    }
+    memset(pota_info, 0, sizeof(ota_info_t));
+
+    if (cjson_get_integer_value(nroot, "errno", &pota_info->_errno))
+        goto error_ret;
+
+    pota_info->errmsg = cjson_get_string_value(nroot, "errmsg");
+    if (pota_info->errmsg == NULL)
+        goto error_ret;
+
+    pota_info->debug  = cjson_get_string_value(nroot, "debug");
+    if (pota_info->debug == NULL)
+        goto error_ret;
+
+    cJSON *ndatas = cjson_get_array(nroot, "data");
+    if (ndatas == NULL || cJSON_GetArraySize(ndatas) == 0) 
+        goto error_ret;
+
+    cJSON *ndata = cJSON_GetArrayItem(ndatas, 0);
+    if (ndata == NULL)
+        goto error_ret;
+
+    pota_info->file_md5 = cjson_get_string_value(ndata, "file_md5");
+    if (pota_info->file_md5 == NULL)
+        goto error_ret;
+
+    if (cjson_get_integer_value(ndata, "file_size", &pota_info->file_size))
+        goto error_ret;
+
+    pota_info->file_url = cjson_get_string_value(ndata, "file_url");
+    if (pota_info->file_url == NULL)
+        goto error_ret;
+    
+    if (cjson_get_integer_value(ndata, "is_force", &pota_info->is_force))
+        goto error_ret;
+
+    pota_info->package_name = cjson_get_string_value(ndata, "package_name");
+    if (pota_info->package_name == NULL)
+        goto error_ret;
+
+    pota_info->release = cjson_get_string_value(ndata, "release");
+    // if (pota_info->release == NULL)
+    //     goto error_ret;
+
+    pota_info->release_date = cjson_get_string_value(ndata, "release_date");
+    if (pota_info->release_date == NULL)
+        goto error_ret;
+
+    if (cjson_get_integer_value(ndata, "version_code", &pota_info->version_code))
+        goto error_ret;
+
+    pota_info->version_name = cjson_get_string_value(ndata, "version_name");
+    if (pota_info->version_name == NULL)
+        goto error_ret;
+
+    log_i("errno       : %d", pota_info->_errno);
+    log_i("errmsg      : %s", pota_info->errmsg);
+    log_i("debug       : %s", pota_info->debug);
+
+    log_i("file_md5    : %s", pota_info->file_md5);
+    log_i("file_size   : %d", pota_info->file_size);
+    log_i("file_url    : %s", pota_info->file_url);
+    log_i("is_force    : %d", pota_info->is_force);
+    log_i("package_name: %s", pota_info->package_name);
+    if (pota_info->release != NULL) {
+        log_i("release     : %s", pota_info->release);
+    } else {
+        log_i("release     : null");
+    }
+    log_i("release_date: %s", pota_info->release_date);
+    log_i("version_code: %d", pota_info->version_code);
+    log_i("version_name: %s", pota_info->version_name);
+
+    return OTAERROR_Success;
+
+error_ret:
+    return OTAERROR_Parse_Error;
+}
+
+int do_check_and_ota()
+{
+    char *ota_info_json = NULL;
+    int ret = request_ota_info(&ota_info_json);
+    if (ret < 0 || ota_info_json == NULL) {
+        log_e("[UPGRADE]failed to request OTA info: %d", ret);
+        return -1;
+    }
+    log_i("ota_info: %s", ota_info_json);
+
+    const cJSON *nroot = cjson_parse(ota_info_json);
+    if (nroot == NULL) {
+        goto error_ret;
+    }
+
+    ota_info_t ota_info;
+    if (parse_ota_info(nroot, &ota_info) != OTAERROR_Success) {
+        goto error_ret;
+    }
+
+    if (LOCAL_VERSION_CODE < ota_info.version_code) {
+        log_i("%d < %d, need OTA.", LOCAL_VERSION_CODE, ota_info.version_code);
+        log_i("download %s", ota_info.file_url);
+
+        size_t url_len = strlen(ota_info.file_url);
+        char *ufw_url = malloc(url_len + 1);
+        strncpy(ufw_url, ota_info.file_url, url_len + 1);
+
+        http_create_download_task(ufw_url);
+    }
+
+error_ret:
+    if (nroot != NULL) {
+        cJSON_Delete(nroot);
+        nroot = NULL;
+    }
+    if (ota_info_json != NULL) {
+        free(ota_info_json);
+        ota_info_json = NULL;
+    }
+    return ret;
+}

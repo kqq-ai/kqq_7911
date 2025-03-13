@@ -24,6 +24,7 @@
 #include "../lwl_app_core.h"
 #include "../wss_connected/wss_application.h"
 #include "log.h"
+#include "ota/http_ota.h"
 
 #include "wss/wss_client.h"
 
@@ -57,8 +58,12 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     }
 }
 
+
 static int net_connected_init(void)
 {
+    // OTA check version
+    // do_check_and_ota();
+
     struct websocket_info_t *websockets_info = wss_server_connect(url, wss_recv_callback);
 
     if (websockets_info == NULL) {
