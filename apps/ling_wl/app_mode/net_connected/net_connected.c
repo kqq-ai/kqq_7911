@@ -62,8 +62,12 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
 static int net_connected_init(void)
 {
     // OTA check version
-    // do_check_and_ota();
-
+    int ret = do_check_and_ota();
+    if (ret == 1) {
+        lwl_app_mode_switch_to(APP_UPDATE_MODE);
+        return 0;
+    }
+    
     struct websocket_info_t *websockets_info = wss_server_connect(url, wss_recv_callback);
 
     if (websockets_info == NULL) {

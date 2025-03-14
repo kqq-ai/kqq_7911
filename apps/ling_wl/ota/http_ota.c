@@ -381,7 +381,20 @@ int do_check_and_ota()
         strncpy(ufw_url, ota_info.file_url, url_len + 1);
 
         http_create_download_task(ufw_url);
+        ret = 1;
+    } else {
+        ret = 0;
     }
+    
+    if (nroot != NULL) {
+        cJSON_Delete(nroot);
+        nroot = NULL;
+    }
+    if (ota_info_json != NULL) {
+        free(ota_info_json);
+        ota_info_json = NULL;
+    }
+    return ret;
 
 error_ret:
     if (nroot != NULL) {
@@ -392,5 +405,5 @@ error_ret:
         free(ota_info_json);
         ota_info_json = NULL;
     }
-    return ret;
+    return -1;
 }

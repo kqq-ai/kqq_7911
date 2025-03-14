@@ -96,7 +96,6 @@ int my_lfs_download_read(void *file, void *buf, u32 len)
     int ret = lfs_file_read(&g_lfs, f, buf, len);
     log_d("[DEC] lfs file read: len = %d, ret = %d\n", len, ret);
     /* 打印 file变量 地址*/
-    log_i("lfs_file_read_wrapper file address: %p\n", file);
     return ret;
 }
 int my_lfs_download_seek(void *file, u32 offset, int origin)
@@ -104,7 +103,6 @@ int my_lfs_download_seek(void *file, u32 offset, int origin)
     lfs_file_t *f = (lfs_file_t *)file;
     int ret = lfs_file_seek(&g_lfs, f, offset, origin);
     /* 打印 file变量 地址*/
-    log_i("lfs_file_seek_wrapper file address: %p\n", file);
     log_d("[DEC] lfs file seek: offset = %d, orig = %d, ret = %d\n", offset, origin, ret);
     return ret;
 }
@@ -113,7 +111,6 @@ int my_lfs_download_get_file_len(void *file)
     lfs_file_t *f = (lfs_file_t *)file;
     int ret = lfs_file_size(&g_lfs, f);
     /* 打印 file变量 地址*/
-    log_i("lfs_file_len_wrapper file address: %p\n", file);
     log_d("[DEC] lfs file size: %d\n", ret);
     return ret;
 }
@@ -150,7 +147,7 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
         return err;
     }
     /* 打印 file变量 地址*/
-    log_i("================================file address: %p\n", lfs_file);
+    log_d("================================file address: %p\n", lfs_file);
     
     req.dec.dec_type = "mp3";
     req.dec.cmd = AUDIO_DEC_OPEN;

@@ -15,10 +15,12 @@ enum
     MY_TASK_MESSAGE_SWITCH_PLAY,
     MY_TASK_MESSAGE_SWITCH_ONLY,
     MY_TASK_MESSAGE_PLAY_ONE,
+    MY_TASK_MESSAGE_PLAY_ONE_LFS,
     MY_TASK_MESSAGE_MAX = 0xFF,
 };
 
 #define AUDIO_URL_MAX_LEN 256
+#define AUDIO_FNAME_MAX_LEN 256
 
 typedef struct
 {
@@ -43,6 +45,13 @@ typedef struct
     void *priv;
     void *cb;
 } MyMessagePlayOne;
+
+typedef struct
+{
+    char audio_fname[AUDIO_FNAME_MAX_LEN];
+    void *priv;
+    void *cb;
+} MyMessagePlayOneLFS;
 
 typedef struct
 {
@@ -84,6 +93,7 @@ typedef struct
         MyMessageSwitchPlay switch_play;
         MyMessageSwitchOnly switch_only;
         MyMessagePlayOne play_one;
+        MyMessagePlayOneLFS play_one_lfs;
         MyMessageMoniterRSSI moniter_rssi;
         MyMessageWIFIScanStart wifi_scan_start;
         MyMessageWIFIConnect wifi_connect;
@@ -107,6 +117,7 @@ extern music_player g_music_player;
 static void switch_only_sync(MyTaskMessageType *message);
 static void switch_play_sync(MyTaskMessageType *message);
 static void play_one_sync(MyTaskMessageType *message);
+static void play_one_lfs_sync(MyTaskMessageType *message);
 static void moniter_rssi_sync(MyTaskMessageType *message);
 static void wifi_scan_start_sync(MyTaskMessageType *message);
 static void wifi_connect_sync(MyTaskMessageType *message);
@@ -140,6 +151,8 @@ static void my_task(void *priv)
         case MY_TASK_MESSAGE_PLAY_ONE:
             play_one_sync(&message);
             break;
+        case MY_TASK_MESSAGE_PLAY_ONE_LFS:
+            play_one_lfs_sync(&message);
             break;
         }
     }
@@ -284,6 +297,24 @@ static void play_one_sync(MyTaskMessageType *message)
     }
 }
 
+static void play_one_lfs_sync(MyTaskMessageType *message)
+{
+    ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE_LFS);
+    MyMessagePlayOneLFS *param = &message->play_one;
+
+    /* 播放音频 */
+    app_music_play_lfs_music_with_callback(&g_music_player, param->audio_fname, play_end_callback, NULL);
+
+    /* 等待播放结束 */
+    os_sem_pend(&sem_net_music_dec_end, 0);
+
+    /* 执行任务完成回调 */
+    if (param->cb != NULL)
+    {
+        ((void (*)(void *priv))param->cb)(param->priv);
+    }
+}
+
 /**
  * 打印字符串，蓝牙广播名可能包含\0字符（...）
  */
@@ -367,6 +398,28 @@ void my_task_play_one(int audio_message_id, char *audio_url, void *priv, void *c
     message.play_one.cb = cb;
     printf("Put message: %d\n", message.msg);
     printf("audio_url  : %s\n", message.play_one.audio_url);
+    /* 消息入队 */
+    my_blocking_queue_enqueue(&g_message_queue, &message);
+}
+
+/**
+ * @name my_task_play_one_lfs
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param fname    Pointer to a character string indicating the audio file name.
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_play_one_lfs(char *fname, void *priv, void *cb)
+{
+    /* 创建消息 */
+    MyTaskMessageType message;
+    message.msg = MY_TASK_MESSAGE_PLAY_ONE_LFS;
+    strcpy(message.play_one_lfs.audio_fname, fname);
+    message.play_one_lfs.priv = priv;
+    message.play_one_lfs.cb = cb;
+    printf("Put message: %d\n", message.msg);
+    printf("audio_fname: %s\n", message.play_one_lfs.audio_fname);
     /* 消息入队 */
     my_blocking_queue_enqueue(&g_message_queue, &message);
 }

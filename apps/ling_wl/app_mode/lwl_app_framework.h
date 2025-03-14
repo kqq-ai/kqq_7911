@@ -9,7 +9,8 @@ enum {
     APP_DEFAULT_MODE            = 2,
     APP_NET_CONNECTING_MODE     = 3,
     APP_NET_CONNECTED_MODE      = 4,
-    APP_WSS_CONNECTED_MODE      = 5,
+    APP_UPDATE_MODE             = 5,
+    APP_WSS_CONNECTED_MODE      = 6,
 };
 
 int lwl_app_event_handler(struct application *app, struct sys_event *event);

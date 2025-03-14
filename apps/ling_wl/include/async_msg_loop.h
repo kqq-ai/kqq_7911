@@ -45,6 +45,16 @@ void my_task_switch_only(char *sn, void *priv, void (*cb)(int code, void* priv))
 void my_task_play_one(int audio_message_id, char* audio_url, void* priv, void* cb);
 
 /**
+ * @name my_task_play_one_lfs
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param fname    Pointer to a character string indicating the audio file name.
+ * @param priv    A pointer to user-defined private data.
+ * @param cb      A pointer to a callback function.
+ */
+void my_task_play_one_lfs(char *fname, void *priv, void *cb);
+
+/**
  * @name disable_specific_audio_message
  * @brief Cancel the audio message with a specific audio message ID.
  *

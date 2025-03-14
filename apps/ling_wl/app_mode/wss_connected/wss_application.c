@@ -794,21 +794,22 @@ static bool app_switch_say_hello_task_loop(struct websocket_struct *websockets_i
             /* 切换完毕 */
             g_curr_edev_idx = g_next_edev_idx; 
         
-            /* 发送 你好呀！请求音频回复 */
             g_audio_play_end = false;
-            g_backend_message_end_ok = false;
             g_audio_play_ongoing_num = 0;
-            if (communication_talk_message(websockets_info, g_hello_content) != 0){
-                wss_application_exception_exit();
-                return true;
-            }
+
+            /* 播放开场白 */
+            char fname[16];
+            snprintf(fname, sizeof(fname), "opening_%d.mp3", g_edev_table[g_curr_edev_idx].ip_id);
+            my_task_play_one_lfs(fname, NULL, audio_play_end_callback);
+            g_audio_play_end = false;
+            g_audio_play_ongoing_num++;
 
             log_i("[Switch and say hello] SWITCH -> PLAY_AUDIO\n");
             g_switch_say_hello_state = STATE_SWITCH_SAY_HELLO_PLAY_AUDIO;
         }
         break;
     case STATE_SWITCH_SAY_HELLO_PLAY_AUDIO:
-        if (g_backend_message_end_ok && g_audio_play_ongoing_num == 0) {
+        if (g_audio_play_end == true && g_audio_play_ongoing_num == 0) {
             /* 音频播放完毕 */
             log_i("[Switch and say hello] PLAY_AUDIO -> OVER\n");
             g_switch_say_hello_state = STATE_SWITCH_SAY_HELLO_OVER;
