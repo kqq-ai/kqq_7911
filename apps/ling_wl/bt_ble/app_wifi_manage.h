@@ -26,7 +26,6 @@ void get_app_wifi_info(app_wifi_info_t *info);
 typedef enum 
 {
     WIFI_IDLE_MODE,    //默认的模式，一般不用到
-    WIFI_SMP_CFG_MODE, //上电之后设置为smp配置模式
     WIFI_STA_MODE
 }WIFI_MANAGER_MODE;
 WIFI_MANAGER_MODE set_wifi_manager_mode(WIFI_MANAGER_MODE mode);
@@ -66,7 +65,6 @@ WIFI_connect_STATUES get_wifi_connect_status(void *pri);
 typedef enum
 {
     WIFI_INFO_IDLE,        
-    WIFI_INFO_SMP_CFG_MODE, 
     WIFI_INFO_STA_MODE_IDLE,
     WIFI_INFO_STA_MODE_SCANNING,
     WIFI_INFO_STA_MODE_CNNECTING

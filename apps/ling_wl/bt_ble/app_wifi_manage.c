@@ -4,6 +4,7 @@
 #include "app_lfs.h"
 #include "lwip.h"
 #include "le/att.h"
+#include "stdlib.h" // 包含 qsort 所需的头文件
 
 /*-------------------------------------------------本文件的 变量及其 所有函数的定义-----------------------------------*/
 static OS_SEM g_disconnect_sem;                                                     // 断连函数(阻塞方式)所用到的sem
@@ -111,41 +112,6 @@ WIFI_connect_STATUES wifi_connect_block(char *ssid, char *pwd, int timeout_s)
         printf("the wifi_sta_mode_connect_block is running\r\n");
         return -5;
     }
-
-    // int ret = 0;
-    // if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
-    // {
-    //     g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
-    //     wifi_set_connect_sta_block(1);
-    //     wifi_set_sta_connect_timeout(timeout_s);
-    //     ret = wifi_enter_sta_mode(ssid, pwd);
-    //     if (0 == ret)
-    //     {
-    //         printf("the sta_mode_connect_block success connect\r\n");
-    //     }
-    //     else if (-1 == ret)
-    //     {
-    //         printf("the sta_mode_connect_block fail conncet\r\n");
-    //     }
-    //     enum wifi_sta_connect_state state_flag = wifi_get_sta_connect_state();
-    //     printf("the sta_mode_connect_state is %d    !!!!!!!!!!!!!!!!\r\n", state_flag);
-    //     if ((state_flag == WIFI_STA_CONNECT_SUCC) && (ret == 0))
-    //     {
-    //         ret = WIFI_CONNECT_SUCC;
-    //     }
-    //     else if ((state_flag == WIFI_STA_CONNECT_ASSOCIAT_FAIL) && (ret == 1))
-    //     {
-    //         ret = WIFI_CONNECT_FAIL;
-    //     }
-    //     wifi_set_connect_sta_block(0); // 恢复连接为非阻塞方式
-    //     g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT; // 恢复connect_func_flag为默认值
-    //     return ret;
-    // }
-    // else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
-    // {
-    //     printf("the wifi_sta_mode_connect_block is running\r\n");
-    //     return -5;
-    // }
 }
 
  /* 自动重连函数 */
@@ -326,6 +292,13 @@ int get_wifi_scan_ssid_info(struct wifi_scan_ssid_info **ssid_info)
     return sta_ssid_num;
 }
 
+// 比较函数，用于 qsort 按照 RSSI 值降序排序
+static int compare_wifi_scan_ssid_info(const void *a, const void *b) {
+    const struct wifi_scan_ssid_info *wifi_a = (const struct wifi_scan_ssid_info *)a;
+    const struct wifi_scan_ssid_info *wifi_b = (const struct wifi_scan_ssid_info *)b;
+    return wifi_b->rssi - wifi_a->rssi; // 降序排序
+}
+
 int store_wifi_scan_result(void *pri)
 {
     int ret = 0;
@@ -364,6 +337,8 @@ int store_wifi_scan_result(void *pri)
             }
         }
     }
+    // 对 g_all_wifi_info 数组按照 RSSI 值进行排序
+    qsort(g_all_wifi_info, g_all_wifi_info_num, sizeof(struct wifi_scan_ssid_info), compare_wifi_scan_ssid_info);
     ret = g_all_wifi_info_num;
     return ret;
 }

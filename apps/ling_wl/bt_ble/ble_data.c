@@ -24,7 +24,7 @@ uint32_t g_wifi_connect_end_time_ms = 0;
 uint32_t g_wifi_connect_timeout_ms = 0;
 
 uint32_t g_wifi_scan_timeout = 0;
-uint32_t g_wifi_scan_flag = 0;
+uint32_t g_wifi_scan_flag = 1;
 
 void set_current_connected_ssid(char *ssid)
 {
@@ -67,6 +67,7 @@ int parse_and_assemble(const uint8_t *data, uint16_t data_length, char *assemble
     if (data_length < 4)
     {
         printf("Invalid data length\n");
+        clear_buffer();
         return -2;
     }
 
@@ -350,6 +351,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     char return_errstr[32] = {0};
     struct wifi_scan_ssid_info *temp_all_wifi_info = NULL;
     int temp_all_wifi_count = 0;
+    int judge_size = 0;
 
     // 检查 args 是否为 NULL
     if (args == NULL)
@@ -407,7 +409,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
         ret = 0;
         memcpy(return_errstr, "WIFI_GET_LIST_CODE_SUCCESS", strlen("WIFI_GET_LIST_CODE_SUCCESS"));
     }
-    g_wifi_scan_flag = 0; /*此次获取完wifi list 之后还需要再扫描才能拿到新的 wifi list*/
+    g_wifi_scan_flag = 1; /*此次获取完wifi list 之后还需要再扫描才能拿到新的 wifi list*/
 
     // 创建根 JSON 对象
     cJSON *root = cJSON_CreateObject();
@@ -430,6 +432,8 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
         ret = 1;
         goto cleanup;
     }
+
+    judge_size += 100;
 
     // 根据 details 的值执行不同的处理逻辑
     if (temp_all_wifi_count > 0)
@@ -455,6 +459,14 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
             }
 
             cJSON_AddItemToArray(wifi_list, wifi_item);
+
+            judge_size += strlen(temp_all_wifi_info[i].ssid) + 22;
+
+            if (judge_size >= (BUFFER_SIZE - 150) )
+            {
+                printf("the wifi_list array is approach the max size --> stop add wifi ssid !\r\n");
+                break;
+            }
         }
     }
     else
@@ -476,6 +488,8 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
         ret = 1;
         goto cleanup;
     }
+
+    printf("the wifi_list json_str size is %d\r\n", strlen(json_str));
 
     // 确保目标缓冲区足够大
     if (strlen(json_str) >= BUFFER_SIZE)
@@ -1359,5 +1373,9 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
     cJSON_Delete(root);
     printf("Exiting parse_and_dispatch_json\n"); // 函数出口
 cleanup:
+    if (ret == 1)
+    {
+        memset(json_data, 0, strlen(json_data));
+    }
     return ret;
 }

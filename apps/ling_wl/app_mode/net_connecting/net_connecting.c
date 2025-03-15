@@ -34,12 +34,12 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
 
 static int net_connecting_init(void)
 {
-    if (wifi_auto_reconnect() == WIFI_CONNECT_SUCC) {
-        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-    } else {
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    }
-
+    // if (wifi_auto_reconnect() == WIFI_CONNECT_SUCC) {
+    //     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+    // } else {
+    //     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    // }
+    lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     return 0;
 }
 

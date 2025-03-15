@@ -42,7 +42,7 @@ extern void printf_buf(u8 *buf, u32 len);
 //ATT发送的包长,    note: 20 <=need >= MTU
 #define ATT_LOCAL_MTU_SIZE      (200)                   //
 //ATT缓存的buffer大小,  note: need >= 20,可修改
-#define ATT_SEND_CBUF_SIZE      (2000)                   //
+#define ATT_SEND_CBUF_SIZE      (2560)                   //
 
 //共配置的RAM
 #define ATT_RAM_BUFSIZE         (ATT_CTRL_BLOCK_SIZE + ATT_LOCAL_MTU_SIZE + ATT_SEND_CBUF_SIZE)                   //note:
@@ -426,6 +426,8 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
             {
                 memset(return_json_data,0,BUFFER_SIZE);
             }
+            else
+                memset(return_json_data,0,BUFFER_SIZE);
             printf("return_json_data: %s\n",return_json_data);
         }
         break;
@@ -453,13 +455,15 @@ static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_typ
     }
 
     ret = ble_op_att_send_data(handle, data, len, handle_type);
+    if (ret) {
+        log_info("app_send_user_data app_send_fail:%d !!!!!!\n", ret);
+    }
+
     if (ret == BLE_BUFFER_FULL) {
+        printf(" app_send_user_data   ble_buffer_full\n");
         ret = APP_BLE_BUFF_FULL;
     }
 
-    if (ret) {
-        log_info("app_send_fail:%d !!!!!!\n", ret);
-    }
     return ret;
 }
 
@@ -483,13 +487,16 @@ int app_send_user_data_external(u16 handle, u8 *data, u16 len, u8 handle_type)
     }
 
     ret = ble_op_att_send_data(handle, data, len, handle_type);
+
+    if (ret) {
+        log_info("app_send_user_data_external app_send_fail:%d !!!!!!\n", ret);
+    }
+
     if (ret == BLE_BUFFER_FULL) {
+        printf(" app_send_user_data_external   ble_buffer_full\n");
         ret = APP_BLE_BUFF_FULL;
     }
 
-    if (ret) {
-        log_info("app_send_fail:%d !!!!!!\n", ret);
-    }
     return ret;
 }
 

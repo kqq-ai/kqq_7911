@@ -25,6 +25,9 @@
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
 
+#define INIT_SSID "LINGXI"
+#define INIT_PWD  "lingxikeji"
+
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
 
@@ -68,8 +71,17 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         struct wifi_store_info wifi_default_mode_parm;
         memset(&wifi_default_mode_parm, 0, sizeof(struct wifi_store_info));
-        wifi_default_mode_parm.mode = SMP_CFG_MODE;
-        wifi_set_default_mode(&wifi_default_mode_parm, 1, 0);
+        wifi_default_mode_parm.mode = STA_MODE;
+        wifi_default_mode_parm.sta_cnt = 1;
+        wifi_default_mode_parm.connect_best_network = 1;
+        memcpy(wifi_default_mode_parm.ssid[0], INIT_SSID, strlen(INIT_SSID));
+        memcpy(wifi_default_mode_parm.pwd[0], INIT_PWD, strlen(INIT_PWD));
+        
+
+        wifi_set_sta_connect_timeout(5);
+        // wifi_set_store_ssid_cnt(10);
+        wifi_set_sta_connect_best_ssid(1);
+        wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
 
         /*wifi manager 所需要的一些初始化*/
         wifi_manage_init(NULL);
@@ -180,7 +192,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
-        wifi_enter_smp_cfg_mode();    // 进入SMP模式
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -197,7 +208,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
-        wifi_enter_smp_cfg_mode();    // 进入SMP模式
 
         if (NULL != wifi_connect_fail_cb_func_pri)
         {
@@ -215,7 +225,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
-        wifi_enter_smp_cfg_mode();    // 进入SMP模式
 
         break;
 
@@ -242,41 +251,18 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         /* 通知 APP(小程序) 我已经获取到 IP */
         if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL))
         {
-            printf("!!!!!!!!!!!!!!!!!Failed to add task  !!!!!!!!!!!!!!!!!!!!!\r\n");
+            printf("Failed to add the notify_app_wifi_ip_succ task !\r\n");
         }
 
         /* 获取 最新的 WIFI SSID 和 PWD */
         static app_wifi_info_t temp_wifi_info = {0};
         get_app_wifi_info(&temp_wifi_info);
-
         printf("the event callback get the current connected ssid: %s  pwd: %s\n", temp_wifi_info.ssid, temp_wifi_info.pwd);
-
-        /* 保存最近一次连接的 WIFI SSID  */
-        change_wifi_config(ctx->lfs_hdl, temp_wifi_info.ssid, temp_wifi_info.pwd);
-
-        // store_role_opening_file_init(ctx->lfs_hdl, "role_opening_54.mp3");
-
-        
-        // /* 测试下载url 内容*/
-        // if (!threadpool_add_task(ctx->threadpool, test_url_task, NULL))
-        // {
-        //     printf("!!!!!!!!!!!!!!!!!Failed to add url task  !!!!!!!!!!!!!!!!!!!!!\r\n");
-        // }
-
-
-        /*保存当前连接的模式和ssid 为了reconnect*/
-        // struct wifi_mode_info g_temp_info;
-        // g_temp_info.mode = STA_MODE;
-        // wifi_get_mode_cur_info(&g_temp_info);
-        // set_current_connected_ssid(g_temp_info.ssid);
-        // wifi_store_mode_info(g_temp_info.mode, g_temp_info.ssid, g_temp_info.pwd);
-        // printf("the event callback store the current connected ssid: %s  pwd: %s\n", g_temp_info.ssid, g_temp_info.pwd);
-
-        // if (NULL != wifi_connect_succ_cb_func_pri)
-        // {
-        //     wifi_connect_succ_cb_func_pri(NULL);
-        // }
-        
+        /* 存储到VM */
+        if (temp_wifi_info.ssid[0] != '\0' && temp_wifi_info.pwd[0] != '\0'){
+            wifi_store_mode_info(STA_MODE, temp_wifi_info.ssid, temp_wifi_info.pwd);
+        }
+        /* 将APP切换到 APP的连接成功模式 */
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
 
         break;
@@ -332,21 +318,21 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_SMP_CFG_START:
         puts("|network_user_callback->WIFI_EVENT_SMP_CFG_START\n");
 
-        /*hzx add*/
-        set_wifi_cmd_status(WIFI_CMD_IDLE);
-        set_wifi_manager_mode(WIFI_SMP_CFG_MODE); // 设置当前模式为smp配置模式
-        set_wifi_info_status(WIFI_INFO_SMP_CFG_MODE);
-        set_wifi_connect_status(WIFI_CONNECT_IDLE);
+        // /*hzx add*/
+        // set_wifi_cmd_status(WIFI_CMD_IDLE);
+        // set_wifi_manager_mode(WIFI_SMP_CFG_MODE); // 设置当前模式为smp配置模式
+        // set_wifi_info_status(WIFI_INFO_SMP_CFG_MODE);
+        // set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
         break;
 
     case WIFI_EVENT_SMP_CFG_STOP:
         puts("|network_user_callback->WIFI_EVENT_SMP_CFG_STOP\n");
 
-        set_wifi_cmd_status(WIFI_CMD_IDLE);
-        set_wifi_manager_mode(WIFI_IDLE_MODE); // 设置当前模式为IDLE配置模式
-        set_wifi_info_status(WIFI_INFO_IDLE);
-        set_wifi_connect_status(WIFI_CONNECT_IDLE);
+        // set_wifi_cmd_status(WIFI_CMD_IDLE);
+        // set_wifi_manager_mode(WIFI_IDLE_MODE); // 设置当前模式为IDLE配置模式
+        // set_wifi_info_status(WIFI_INFO_IDLE);
+        // set_wifi_connect_status(WIFI_CONNECT_IDLE);
         break;
 
     case WIFI_EVENT_SMP_CFG_TIMEOUT:
@@ -393,8 +379,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 static void wifi_app_task(void *priv) // 主要是create wifi 线程的
 {
     wifi_set_store_ssid_cnt(NETWORK_SSID_INFO_CNT);
-    wifi_set_smp_cfg_just_monitor_mode(true);
-    wifi_set_sta_connect_best_ssid(0);
+    // wifi_set_smp_cfg_just_monitor_mode(true);
+    // wifi_set_sta_connect_best_ssid(0);
     wifi_set_event_callback(wifi_event_callback);
     wifi_on();
 }
