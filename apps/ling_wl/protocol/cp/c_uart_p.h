@@ -20,6 +20,8 @@ typedef enum {
     UART_CMD_SYNCH_STATUS      = 0xA2, // 同步状态 ： 电量 充电状态 告知给7911    7911需将工作状态返回给7016（相应包发送）
     UART_CMD_POWER_OFF         = 0xA3, // 关机
     UART_CMD_SET_BLESN         = 0xA4, // 设置蓝牙序列号
+    UART_CMD_MOVE_DETECT_EN    = 0xA5, // 使能移动检测
+    UART_CMD_MOVE_OVER_A_METER = 0xA6, // 通知检测距离大于一米
 } uart_cmd_t;
 
 // 返回码表
@@ -55,10 +57,11 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
 
 // 针对CMD 指定的发送函数
 /* 1. 获取设备状态 的响应函数 */
-int uart_response_synch_status(uint8_t busy_status);
+int uart_response_synch_status(uint8_t busy_status, uint8_t volume);
 
 
 int uart_send_set_sn(char *sn);
+int uart_send_move_detect_en(uint8_t en);
 
 // 发送事件包
 int uart_send_inquiry(uint8_t *payload, uint16_t len);

@@ -322,7 +322,7 @@ static void blue_distance_notify_app()
             max_rssi_index = i;
         }
     }
-    if (max_rssi = -128) {
+    if (max_rssi == -128) {
         return;
     }
     for (int j = 0; j < current_ble_num; j++)
@@ -349,22 +349,26 @@ static void blue_distance_notify_self()
         
         log_i("[MEASDIST] %s: %d\r\n", sn_string, moniter_ble_numbers[i].average_rssi);
 
-        if (moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_TWO_METER && moniter_ble_numbers[i].average_rssi != -128)
+        if (moniter_ble_numbers[i].average_rssi >= BLUE_DISTANCE_TWO_METER && moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_0);
-            log_i("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
+            log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
         }
         else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_TWO_METER &&
-                 moniter_ble_numbers[i].average_rssi > BLUE_DISTANCE_FIVE_METER &&
+                 moniter_ble_numbers[i].average_rssi >= BLUE_DISTANCE_FIVE_METER &&
                  moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_1);
-            log_i("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
+            log_d("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
         }
         else if (moniter_ble_numbers[i].average_rssi < BLUE_DISTANCE_FIVE_METER && moniter_ble_numbers[i].average_rssi != -128)
         {
             self_function(&moniter_ble_numbers[i], DISTANCE_2);
-            log_i("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
+            log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
+        } 
+        else {
+            self_function(&moniter_ble_numbers[i], DISTANCE_3);
+            log_d("[MEASDIST] not found ---%s\r\n", sn_string);
         }
     }
 }

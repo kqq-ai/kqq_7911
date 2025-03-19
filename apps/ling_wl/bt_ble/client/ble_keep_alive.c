@@ -107,7 +107,7 @@ static void handshake_task(void *priv)
     if (ret == BLE_BUFFER_FULL) {
         log_i("[BKA]Failed to send cmd, ble buffer full.");
     }
-    mdelay(150); // connection interval: 60ms
+    mdelay(200); // connection interval: 60ms
 
     /* 执行指令完成回调 */
     if (has_cmd) {

@@ -15,6 +15,7 @@ enum
     MY_TASK_MESSAGE_SWITCH_PLAY,
     MY_TASK_MESSAGE_SWITCH_ONLY,
     MY_TASK_MESSAGE_PLAY_ONE,
+    MY_TASK_MESSAGE_PLAY_ONE_LINGOS,
     MY_TASK_MESSAGE_PLAY_ONE_LFS,
     MY_TASK_MESSAGE_MAX = 0xFF,
 };
@@ -22,86 +23,45 @@ enum
 #define AUDIO_URL_MAX_LEN 256
 #define AUDIO_FNAME_MAX_LEN 256
 
-typedef struct
-{
+typedef struct {
     char sn[SN_SIZE];
-    char audio_url[AUDIO_URL_MAX_LEN];
+    pl_switch_cb_func_t cb;
     void *priv;
-    void *cb;
-} MyMessageSwitchPlay;
-
-typedef struct
-{
-    char sn[SN_SIZE];
-    void *priv;
-    void (*cb)(int, void *);
 } MyMessageSwitchOnly;
 
-typedef struct
-{
+typedef struct {
+    char audio_url[AUDIO_URL_MAX_LEN];
+    u8 audio_enable;
+    pl_music_play_cb_func_t cb;
+    void *priv;
+} MyMessagePlayOne;
+
+typedef struct {
     char audio_url[AUDIO_URL_MAX_LEN];
     u8 audio_enable;
     int audio_message_id;
+    pl_music_play_cb_func_t cb;
     void *priv;
-    void *cb;
-} MyMessagePlayOne;
+} MyMessagePlayOneLingOS;
 
-typedef struct
-{
+typedef struct {
     char audio_fname[AUDIO_FNAME_MAX_LEN];
+    u8 audio_enable;
+    pl_music_play_cb_func_t cb;
     void *priv;
-    void *cb;
 } MyMessagePlayOneLFS;
-
-typedef struct
-{
-    void *rssi_cb_priv;
-    void (*rssi_cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi);
-    void *priv;
-    void *cb;
-} MyMessageMoniterRSSI;
-
-typedef struct
-{
-    void *priv;
-    void *cb;
-} MyMessageWIFIScanStart;
-
-typedef struct
-{
-    char ssid[32];
-    char pwd[32];
-    int timeout_s;
-    wifi_connect_succ_cb connect_succ_func;
-    wifi_connect_fail_cb connect_fail_func;
-    void *priv;
-    void *cb;
-} MyMessageWIFIConnect;
-
-typedef struct
-{
-    wifi_disconnect_cb disconnect_func;
-    void *priv;
-    void *cb;
-} MyMessageWIFIDisconnect;
 
 typedef struct
 {
     int msg;
     union
     {
-        MyMessageSwitchPlay switch_play;
         MyMessageSwitchOnly switch_only;
         MyMessagePlayOne play_one;
+        MyMessagePlayOneLingOS play_one_lingos;
         MyMessagePlayOneLFS play_one_lfs;
-        MyMessageMoniterRSSI moniter_rssi;
-        MyMessageWIFIScanStart wifi_scan_start;
-        MyMessageWIFIConnect wifi_connect;
-        MyMessageWIFIDisconnect wifi_disconnect;
     };
 } MyTaskMessageType;
-
-int g_playing_audio_message_id = 0;
 
 static OS_SEM sem_net_music_dec_end;
 static OS_SEM sem_eend_cmd_send_completed;
@@ -109,19 +69,12 @@ static OS_SEM sem_eend_cmd_send_completed;
 #define MY_TASK_MESSAGE_QUEUE_CAPACITY 10
 static MyBlockingQueue g_message_queue; // MyBlockingQueue<MyTaskMessageType>
 
-static uint8_t uart_tx_buf[1 + SN_SIZE];
-
-extern void *uart0_hdl;
 extern music_player g_music_player;
 
 static void switch_only_sync(MyTaskMessageType *message);
-static void switch_play_sync(MyTaskMessageType *message);
 static void play_one_sync(MyTaskMessageType *message);
+static void play_one_lingos_sync(MyTaskMessageType *message);
 static void play_one_lfs_sync(MyTaskMessageType *message);
-static void moniter_rssi_sync(MyTaskMessageType *message);
-static void wifi_scan_start_sync(MyTaskMessageType *message);
-static void wifi_connect_sync(MyTaskMessageType *message);
-static void wifi_disconnect_sync(MyTaskMessageType *message);
 
 static void my_task(void *priv)
 {
@@ -142,14 +95,14 @@ static void my_task(void *priv)
 
         switch (message.msg)
         {
-        case MY_TASK_MESSAGE_SWITCH_PLAY:
-            switch_play_sync(&message);
-            break;
         case MY_TASK_MESSAGE_SWITCH_ONLY:
             switch_only_sync(&message);
             break;
         case MY_TASK_MESSAGE_PLAY_ONE:
             play_one_sync(&message);
+            break;
+        case MY_TASK_MESSAGE_PLAY_ONE_LINGOS:
+            play_one_lingos_sync(&message);
             break;
         case MY_TASK_MESSAGE_PLAY_ONE_LFS:
             play_one_lfs_sync(&message);
@@ -214,6 +167,8 @@ static void switch_only_sync(MyTaskMessageType *message)
     //         return;
     //     }
     // }
+    pl_switch_info_t switch_info;
+    switch_info.sn = param->sn;
 
     /* 通知B开机 */
     lwl_eend_dev_t *pnext = find_eend_dev_by_sn(param->sn);
@@ -223,7 +178,7 @@ static void switch_only_sync(MyTaskMessageType *message)
         if (os_sem_pend(&sem_eend_cmd_send_completed, 200) == OS_TIMEOUT) {
             /* 通知B开机失败 */
             if (param->cb != NULL) {
-                param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
+                param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, &switch_info, param->priv);
             }
             return;
         }
@@ -236,7 +191,7 @@ static void switch_only_sync(MyTaskMessageType *message)
 
     /* 执行任务完成回调 */
     if (param->cb != NULL) {
-        param->cb(SWITCH_ONLY_CODE_SUCCESS, param->priv);
+        param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv);
     }
 }
 
@@ -246,54 +201,57 @@ static void play_end_callback(void *priv)
     os_sem_post(&sem_net_music_dec_end);
 }
 
-static void switch_play_sync(MyTaskMessageType *message)
-{
-    log_i("switch_play_sync");
-    ASSERT(message->msg == MY_TASK_MESSAGE_SWITCH_PLAY);
-    log_i("A");
-    MyMessageSwitchPlay *param = &message->switch_play;
-    /* 切换设备 */
-    log_i("B");
-    // 暂时放弃切换播放指令
-    // switch_only(param->sn);
-
-    log_i("C");
-    /* 播放音频 */
-    app_music_play_net_music_with_callback(&g_music_player, param->audio_url, play_end_callback, NULL);
-
-    log_i("D");
-    /* 等待播放结束 */
-    os_sem_pend(&sem_net_music_dec_end, 0);
-
-    log_i("E");
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
-    }
-}
 
 static void play_one_sync(MyTaskMessageType *message)
 {
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE);
     MyMessagePlayOne *param = &message->play_one;
 
-    if (param->audio_enable)
-    {
-        /* 记录当前播放的音频message_id */
-        g_playing_audio_message_id = param->audio_message_id;
+    pl_music_info_t music_info;
+    music_info.name = param->audio_url;
+
+    if (param->audio_enable) {
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_BEFORE_DEC_START, &music_info, param->priv);
 
         /* 播放音频 */
         app_music_play_net_music_with_callback(&g_music_player, param->audio_url, play_end_callback, NULL);
 
         /* 等待播放结束 */
         os_sem_pend(&sem_net_music_dec_end, 0);
+        
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_AFTER_DEC_END, &music_info, param->priv);
+    } else {
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_CANCEL, &music_info, param->priv);
     }
+}
 
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
+
+static void play_one_lingos_sync(MyTaskMessageType *message)
+{
+    ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE_LINGOS);
+    MyMessagePlayOneLingOS *param = &message->play_one_lingos;
+
+    pl_music_info_t music_info;
+    music_info.name = param->audio_url;
+
+    if (param->audio_enable) {
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_BEFORE_DEC_START, &music_info, param->priv);
+
+        /* 播放音频 */
+        app_music_play_net_music_with_callback(&g_music_player, param->audio_url, play_end_callback, NULL);
+
+        /* 等待播放结束 */
+        os_sem_pend(&sem_net_music_dec_end, 0);
+        
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_AFTER_DEC_END, &music_info, param->priv);
+    } else {
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_CANCEL, &music_info, param->priv);
     }
 }
 
@@ -302,16 +260,24 @@ static void play_one_lfs_sync(MyTaskMessageType *message)
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE_LFS);
     MyMessagePlayOneLFS *param = &message->play_one;
 
-    /* 播放音频 */
-    app_music_play_lfs_music_with_callback(&g_music_player, param->audio_fname, play_end_callback, NULL);
+    pl_music_info_t music_info;
+    music_info.name = param->audio_fname;
+    
+    if (param->audio_enable) {
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_BEFORE_DEC_START, &music_info, param->priv);
 
-    /* 等待播放结束 */
-    os_sem_pend(&sem_net_music_dec_end, 0);
+        /* 播放音频 */
+        app_music_play_lfs_music_with_callback(&g_music_player, param->audio_fname, play_end_callback, NULL);
 
-    /* 执行任务完成回调 */
-    if (param->cb != NULL)
-    {
-        ((void (*)(void *priv))param->cb)(param->priv);
+        /* 等待播放结束 */
+        os_sem_pend(&sem_net_music_dec_end, 0);
+        
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_AFTER_DEC_END, &music_info, param->priv);
+    } else {
+        /* 执行回调 */
+        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_CANCEL, &music_info, param->priv);
     }
 }
 
@@ -320,37 +286,9 @@ static void play_one_lfs_sync(MyTaskMessageType *message)
  */
 void printf_dev_name(char *name, u16 len)
 {
-    for (int i = 0; i < len; ++i)
-    {
+    for (int i = 0; i < len; ++i) {
         printf("%c", name[i]);
     }
-}
-
-/**
- * @name my_task_switch_play
- * @brief This function is used to create a specific task message and enqueue it into a message queue.
- *
- * @param sn      Pointer to a character string indicating the E-end sequence number.
- * @param audio_url    Pointer to a character string indicating the audio source URL.
- * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
- */
-void my_task_switch_play(char *sn, char *audio_url, void *priv, void *cb)
-{
-    /* 创建消息 */
-    MyTaskMessageType message;
-    message.msg = MY_TASK_MESSAGE_SWITCH_PLAY;
-    memcpy(message.switch_play.sn, sn, SN_SIZE);
-    strcpy(message.switch_play.audio_url, audio_url);
-    message.switch_play.priv = priv;
-    message.switch_play.cb = cb;
-    printf("Put message: %d\n", message.msg);
-    printf("sn         : ");
-    printf_dev_name(message.switch_only.sn, SN_SIZE);
-    printf("\n");
-    printf("audio_url  : %s\n", message.switch_play.audio_url);
-    /* 消息入队 */
-    my_blocking_queue_enqueue(&g_message_queue, &message);
 }
 
 /**
@@ -358,10 +296,10 @@ void my_task_switch_play(char *sn, char *audio_url, void *priv, void *cb)
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
  * @param name    Pointer to a character string indicating the E-end sequence number.
- * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
+ * @param priv    A pointer to user-defined private data.
  */
-void my_task_switch_only(char *sn, void *priv, void (*cb)(int code, void* priv))
+void my_task_switch_only(char *sn, pl_switch_cb_func_t *cb, void *priv)
 {
     /* 创建消息 */
     MyTaskMessageType message;
@@ -378,24 +316,47 @@ void my_task_switch_only(char *sn, void *priv, void (*cb)(int code, void* priv))
 }
 
 /**
- * @name my_task_switch_play
+ * @name my_task_play_one
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
- * @param audio_messageId Audio messsage id (LingOS).
  * @param audio_url    Pointer to a character string indicating the audio source URL.
- * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
+ * @param priv    A pointer to user-defined private data.
  */
-void my_task_play_one(int audio_message_id, char *audio_url, void *priv, void *cb)
+void my_task_play_one(char* audio_url, pl_music_play_cb_func_t cb, void *priv)
 {
     /* 创建消息 */
     MyTaskMessageType message;
     message.msg = MY_TASK_MESSAGE_PLAY_ONE;
     strcpy(message.play_one.audio_url, audio_url);
     message.play_one.audio_enable = true;
-    message.play_one.audio_message_id = audio_message_id;
     message.play_one.priv = priv;
     message.play_one.cb = cb;
+    printf("Put message: %d\n", message.msg);
+    printf("audio_url  : %s\n", message.play_one.audio_url);
+    /* 消息入队 */
+    my_blocking_queue_enqueue(&g_message_queue, &message);
+}
+
+/**
+ * @name my_task_play_one_lingos
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param audio_messageId Audio messsage id (LingOS).
+ * @param audio_url    Pointer to a character string indicating the audio source URL.
+ * @param cb      A pointer to a callback function.
+ * @param priv    A pointer to user-defined private data.
+ */
+void my_task_play_one_lingos(int audio_message_id, char *audio_url, pl_music_play_cb_func_t cb, void *priv)
+{
+    /* 创建消息 */
+    MyTaskMessageType message;
+    message.msg = MY_TASK_MESSAGE_PLAY_ONE_LINGOS;
+    strcpy(message.play_one_lingos.audio_url, audio_url);
+    message.play_one_lingos.audio_enable = true;
+    message.play_one_lingos.audio_message_id = audio_message_id;
+    message.play_one_lingos.priv = priv;
+    message.play_one_lingos.cb = cb;
     printf("Put message: %d\n", message.msg);
     printf("audio_url  : %s\n", message.play_one.audio_url);
     /* 消息入队 */
@@ -410,12 +371,13 @@ void my_task_play_one(int audio_message_id, char *audio_url, void *priv, void *c
  * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
  */
-void my_task_play_one_lfs(char *fname, void *priv, void *cb)
+void my_task_play_one_lfs(char *fname, pl_music_play_cb_func_t cb, void *priv)
 {
     /* 创建消息 */
     MyTaskMessageType message;
     message.msg = MY_TASK_MESSAGE_PLAY_ONE_LFS;
     strcpy(message.play_one_lfs.audio_fname, fname);
+    message.play_one_lfs.audio_enable = true;
     message.play_one_lfs.priv = priv;
     message.play_one_lfs.cb = cb;
     printf("Put message: %d\n", message.msg);
@@ -429,11 +391,9 @@ static void audio_message_cancellation_cb(void *data, void *priv)
     /* 取消特定audio_only消息的播放 */
     int audio_message_id = (int)priv;
     MyTaskMessageType *pMessage = (MyTaskMessageType *)data;
-    if (pMessage->msg == MY_TASK_MESSAGE_PLAY_ONE)
-    {
-        if (pMessage->play_one.audio_message_id == audio_message_id)
-        {
-            pMessage->play_one.audio_enable = false;
+    if (pMessage->msg == MY_TASK_MESSAGE_PLAY_ONE_LINGOS) {
+        if (pMessage->play_one_lingos.audio_message_id == audio_message_id) {
+            pMessage->play_one_lingos.audio_enable = false;
         }
     }
 }
@@ -449,13 +409,20 @@ void disable_specific_audio_message(int audio_message_id)
     my_blocking_queue_traverse(&g_message_queue, audio_message_cancellation_cb, (void *)audio_message_id);
 }
 
-
 static void audio_message_cancellation_all_cb(void *data, void *priv)
 {
     /* 取消特定audio_only消息的播放 */
     MyTaskMessageType *pMessage = (MyTaskMessageType *)data;
-    if (pMessage->msg == MY_TASK_MESSAGE_PLAY_ONE) {
+    switch (pMessage->msg) {
+    case MY_TASK_MESSAGE_PLAY_ONE:
         pMessage->play_one.audio_enable = false;
+        break;
+    case MY_TASK_MESSAGE_PLAY_ONE_LINGOS:
+        pMessage->play_one_lingos.audio_enable = false;
+        break;
+    case MY_TASK_MESSAGE_PLAY_ONE_LFS:
+        pMessage->play_one_lfs.audio_enable = false;
+        break;
     }
 }
 

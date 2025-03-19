@@ -17,7 +17,7 @@
 #define MAX_SAMPLES 1000
 #define MAX_BLE_NUM 10
 
-#define NOTIFY_APP_TIME 2000 // 2s
+#define NOTIFY_APP_TIME 5000 // 5s
 
 #define NOTIFY_SELF_TIME 10000 // 10S
 
@@ -25,6 +25,7 @@ enum distance_type {
     DISTANCE_0, // 小于2米
     DISTANCE_1, // 2米到5米
     DISTANCE_2, // 大于5米
+    DISTANCE_3, // RSSI等于-128或没有检测到
 };
 
 typedef struct

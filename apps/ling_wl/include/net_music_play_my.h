@@ -54,6 +54,7 @@ typedef struct _music_player {
 int music_player_init(music_player *player);
 
 int app_music_play_stop(music_player *player);
+int app_music_play_get_status(music_player *player);
 int set_dec_volume(music_player *player, int step);
 
 int app_music_play_net_music(music_player *player, void *url);

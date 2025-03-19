@@ -25,8 +25,8 @@
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
 
-#define INIT_SSID "LINGXI"
-#define INIT_PWD  "lingxikeji"
+#define INIT_SSID "vivo"
+#define INIT_PWD  "88888888"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;

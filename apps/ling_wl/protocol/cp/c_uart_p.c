@@ -40,6 +40,16 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         log_i("the UART_CMD_SET_BLESN !\r\n");
         // ignore
     }   break;
+    case UART_CMD_MOVE_DETECT_EN:{ // 使能移动检测
+        log_i("the UART_CMD_MOVE_DETECT_EN !\r\n");
+        // ignore
+    }   break;
+    case UART_CMD_MOVE_OVER_A_METER:{ // 通知检测距离大于一米
+        log_i("the UART_CMD_MOVE_OVER_A_METER !\r\n");
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER;
+        lwl_event_notify(&e);
+    }   break;
     }
 }
 
@@ -107,10 +117,10 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
     return dev_write(g_dev_uart_hdl, resp_packet, 8 + len);
 }
 
-int uart_response_synch_status(uint8_t busy_status)
+int uart_response_synch_status(uint8_t busy_status, uint8_t volume)
 {
-    uint8_t busy_status_payload[1] = {busy_status};
-    return uart_send_response(UART_CMD_SYNCH_STATUS, CPCODE_SUCCESS, busy_status_payload, 1);
+    uint8_t busy_status_payload[2] = {busy_status, volume};
+    return uart_send_response(UART_CMD_SYNCH_STATUS, CPCODE_SUCCESS, busy_status_payload, 2);
 }
 
 
@@ -144,4 +154,13 @@ int uart_send_set_sn(char *sn)
     busy_status_payload[0] = UART_CMD_SET_BLESN;
     memcpy(busy_status_payload + 1, sn, SN_SIZE);
     return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
+}
+
+int uart_send_move_detect_en(uint8_t en)
+{
+    uint8_t send_payload[2];
+    memset(send_payload, 0, sizeof(send_payload));
+    send_payload[0] = UART_CMD_MOVE_DETECT_EN;
+    send_payload[1] = en;
+    return uart_send_inquiry(send_payload, 2);
 }

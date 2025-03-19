@@ -47,7 +47,7 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 #define SET_SCAN_TYPE       SCAN_ACTIVE
 //搜索 周期大小
 #define SET_SCAN_INTERVAL   ADV_SCAN_MS(24) // unit: ms
-#define SET_SCAN_WINDOW     ADV_SCAN_MS(10) // unit: ms
+#define SET_SCAN_WINDOW     ADV_SCAN_MS(4) // unit: ms
 //连接周期
 #define SET_CONN_INTERVAL   (BASE_INTERVAL_MIN*8) //(unit:1.25ms)
 //连接latency

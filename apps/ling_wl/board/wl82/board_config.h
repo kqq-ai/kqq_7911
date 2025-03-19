@@ -386,8 +386,8 @@
 //                            AUDIO_ADC应用的通道配置                              //
 //*********************************************************************************//
 #define CONFIG_AUDIO_ENC_SAMPLE_SOURCE      AUDIO_ENC_SAMPLE_SOURCE_MIC
-#define TCFG_MIC_CHANNEL_MAP                LADC_CH_MIC0_P_N | LADC_CH_MIC2_P_N
-#define TCFG_MIC_CHANNEL_NUM                2
+#define TCFG_MIC_CHANNEL_MAP                LADC_CH_MIC0_P
+#define TCFG_MIC_CHANNEL_NUM                1
 #define TCFG_LINEIN_CHANNEL_MAP             LADC_CH_AUX3
 #define TCFG_LINEIN_CHANNEL_NUM             0
 

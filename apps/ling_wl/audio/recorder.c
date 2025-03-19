@@ -42,7 +42,6 @@ static int recorder_vfs_fwrite(void *file, void *data, u32 len)
     recorder_hdl *recorder = (recorder_hdl *)file;
 
     if (recorder->data_cb != NULL) {
-        log_i("vfs: %d", len);
         recorder->data_cb(recorder->data_cb_priv, data, len);
     }
 
@@ -167,8 +166,8 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
         req.enc.vad_auto_refresh = 1; //VAD自动刷新
     }
     if (req.enc.use_vad == 1) {
-        req.enc.vad_start_threshold = 500;    //ms
-        req.enc.vad_stop_threshold  = 0;    //ms
+        req.enc.vad_start_threshold = 1000;    //ms
+        req.enc.vad_stop_threshold  = 500;    //ms
     }
     if (req.enc.dns_enable == 1) //降噪的配置
     {

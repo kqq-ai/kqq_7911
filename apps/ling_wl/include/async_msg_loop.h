@@ -2,47 +2,75 @@
 #define __ASYNC_MSG_LOOP_H__
 
 #include "cpu.h"
-#include "wifi_app_task.h"
 
 void start_async_msg_loop();
 
-enum {
+typedef enum {
     SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT,
     SWITCH_ONLY_CODE_NEXT_START_TIMEOUT,
     SWITCH_ONLY_CODE_SUCCESS,
-};
+} pl_switch_state_code_e;
+
+typedef enum {
+    PLAY_AUDIO_STATE_BEFORE_DEC_START,
+    PLAY_AUDIO_STATE_AFTER_DEC_END,
+    PLAY_AUDIO_STATE_CANCEL,
+} pl_play_audio_state_e;
+
+typedef struct {
+    char *sn;
+} pl_switch_info_t;
+
+typedef struct {
+    char *name;
+} pl_music_info_t;
 
 /**
- * @name my_task_switch_play
- * @brief This function is used to create a specific task message and enqueue it into a message queue.
- *
- * @param sn      Pointer to a character string indicating the E-end sequence number.
- * @param audio_url    Pointer to a character string indicating the audio source URL.
- * @param priv    A pointer to user-defined private data.
- * @param cb      A pointer to a callback function.
+ * @brief switch callback
+ * @param[in] code see 'pl_switch_state_code_e'
+ * @param[in] switch_info see 'pl_switch_info_t'
+ * @param[in] priv A pointer to user-defined private data.
  */
-void my_task_switch_play(char *sn, char* audio_url, void* priv, void* cb);
+typedef void (*pl_switch_cb_func_t)(int code, pl_switch_info_t *switch_info, void *priv);
+
+/**
+ * @brief music play callback
+ * @param[in] code see 'pl_play_audio_state_e'
+ * @param[in] music_info see 'pl_music_info_t'
+ * @param[in] priv A pointer to user-defined private data.
+ */
+typedef void (*pl_music_play_cb_func_t)(int code, pl_music_info_t *music_info, void *priv);
 
 /**
  * @name my_task_switch_only
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
  * @param name    Pointer to a character string indicating the E-end sequence number.
- * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
+ * @param priv    A pointer to user-defined private data.
  */
-void my_task_switch_only(char *sn, void *priv, void (*cb)(int code, void* priv));
+void my_task_switch_only(char *sn, pl_switch_cb_func_t *cb, void *priv);
 
 /**
- * @name my_task_switch_play
+ * @name my_task_play_one
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param audio_url    Pointer to a character string indicating the audio source URL.
+ * @param cb      A pointer to a callback function.
+ * @param priv    A pointer to user-defined private data.
+ */
+void my_task_play_one(char* audio_url, pl_music_play_cb_func_t cb, void *priv);
+
+/**
+ * @name my_task_play_one_lingos
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
  * @param audio_messageId Audio messsage id (LingOS).
  * @param audio_url    Pointer to a character string indicating the audio source URL.
- * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
+ * @param priv    A pointer to user-defined private data.
  */
-void my_task_play_one(int audio_message_id, char* audio_url, void* priv, void* cb);
+void my_task_play_one_lingos(int audio_message_id, char *audio_url, pl_music_play_cb_func_t cb, void *priv);
 
 /**
  * @name my_task_play_one_lfs
@@ -52,7 +80,7 @@ void my_task_play_one(int audio_message_id, char* audio_url, void* priv, void* c
  * @param priv    A pointer to user-defined private data.
  * @param cb      A pointer to a callback function.
  */
-void my_task_play_one_lfs(char *fname, void *priv, void *cb);
+void my_task_play_one_lfs(char *fname, pl_music_play_cb_func_t cb, void *priv);
 
 /**
  * @name disable_specific_audio_message

@@ -289,6 +289,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_uart_task.c \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
+	../../../../apps/ling_wl/util/ringbuffer.c \
 	../../../../apps/ling_wl/util/threadpool.c \
 	../../../../apps/ling_wl/util/threadpool_tasks.c \
 	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
