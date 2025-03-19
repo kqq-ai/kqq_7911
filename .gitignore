@@ -67,6 +67,7 @@ cpu/wl82/tools/sdk.elf.0.5.precodegen.bc
 cpu/wl82/tools/sdk.elf.objs.txt
 cpu/wl82/tools/sdk.elf.resolution.txt
 cpu/wl82/tools/sdk.map
+cpu/wl82/tools/sdk.lst
 cpu/wl82/tools/symbol_tbl.txt
 cpu/wl82/tools/update.ufw
 tools/
