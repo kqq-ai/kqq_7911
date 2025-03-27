@@ -553,6 +553,11 @@ __err:
         req.dec.cmd = AUDIO_DEC_STOP;
         server_request(player->dec_server, AUDIO_REQ_DEC, &req);
     }
+    // 执行回调
+    if (player->dec_with_cb && player->dec_end_cb != NULL) {
+        player->dec_end_cb(player->dec_end_cb_priv);
+        player->dec_end_cb = NULL;
+    }
 
     net_download_close(player->net_file);
     player->net_file = NULL;
