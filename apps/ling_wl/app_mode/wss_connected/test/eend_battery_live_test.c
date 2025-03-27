@@ -166,6 +166,7 @@ static void switch_end_callback(int code, pl_switch_info_t *switch_info, void *p
     switch (code) {
     case SWITCH_ONLY_CODE_TURNOFF_TIMEOUT:
     case SWITCH_ONLY_CODE_TURNON_TIMEOUT:
+    case SWITCH_ONLY_CODE_UNEXPECTED_ERROR:
     case SWITCH_ONLY_CODE_SUCCESS:
         log_i("Switch PortE OK %d\n", code);
         g_ble_edev_switch_ok = true;
