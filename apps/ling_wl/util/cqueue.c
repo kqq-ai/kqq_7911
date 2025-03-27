@@ -445,8 +445,8 @@ int my_blocking_queue_try_remove_if(MyBlockingQueue *queue, int (*condition)(voi
         memmove(QUEUE_ELEMENT(queue, dst), QUEUE_ELEMENT(queue, src), len * queue->element_size);
     }
     queue->size--;
-    pthread_mutex_unlock(&queue->mutex);
     pthread_cond_signal(&queue->not_full);
     
+    pthread_mutex_unlock(&queue->mutex);
     return MYERROR_Success;
 }
