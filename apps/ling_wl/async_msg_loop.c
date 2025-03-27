@@ -175,16 +175,33 @@ static void turn_off_sync(MyTaskMessageType *message)
     pl_switch_info_t switch_info;
     switch_info.sn = param->sn;
     
-    /* 通知A关机 */
-    lwl_eend_dev_t *pprev = find_eend_dev_by_sn(param->sn);
-    if (pprev != NULL) {
-        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
-        if (os_sem_pend(&sem_eend_cmd_send_completed, param->timeout) == OS_TIMEOUT) { /* 等待命令发送完毕 */
-            if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_TURNOFF_TIMEOUT, &switch_info, param->priv); /* 通知A关机超时 */
-            return;
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(param->sn);
+    if (pdev == NULL)
+        return;
+
+    uint32_t cmd_id = 0;
+    int r = ble_keep_alive_device_push_cmd(pdev, cmd_turn_off, sizeof(cmd_turn_off), 
+        let_eend_turn_off_cb, cmd_turn_off, &cmd_id);   /* 添加指令 */
+    if (r != BKACODE_Success) {
+        log_e("[SWITCH]failed to push cmd(turn off): %d", r);
+        if (param->cb != NULL) {
+            param->cb(SWITCH_ONLY_CODE_UNEXPECTED_ERROR, &switch_info, param->priv);
         }
+        return;
     }
-    if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv); /* 执行任务完成回调 */
+    if (os_sem_pend(&sem_eend_cmd_send_completed, param->timeout) == OS_TIMEOUT) { /* 命令发送等待超时 */
+        r = ble_keep_alive_device_remove_cmd(pdev, cmd_id); /* 移除指令 */
+        if (r != BKACODE_Success) {
+            log_e("[SWITCH]failed to remove cmd(turn off): %d", r);
+        }
+        if (param->cb != NULL) {
+            param->cb(SWITCH_ONLY_CODE_TURNOFF_TIMEOUT, &switch_info, param->priv); /* 通知关机超时 */
+        }
+        return;
+    }
+    if (param->cb != NULL) {
+        param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv); /* 执行任务完成回调 */
+    }
 }
 
 static void switch_only_sync(MyTaskMessageType *message)
@@ -199,25 +216,33 @@ static void switch_only_sync(MyTaskMessageType *message)
     pl_switch_info_t switch_info;
     switch_info.sn = param->sn;
 
-    /* 通知B开机 */
-    lwl_eend_dev_t *pnext = find_eend_dev_by_sn(param->sn);
-    if (pnext != NULL) {
-        int r = ble_keep_alive_device_push_cmd(pnext, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
-        /* 等待命令发送完毕 */
-        if (os_sem_pend(&sem_eend_cmd_send_completed, param->timeout) == OS_TIMEOUT) {
-            /* 通知B开机失败 */
-            if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_TURNON_TIMEOUT, &switch_info, param->priv);
-            return;
-        }
-        /* 设置上下文 */
-        set_eend_dev_active(pnext);
-    } else { // pnext == NULL
-        /* 设置上下文 */
-        set_eend_dev_active(NULL);
-    }
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(param->sn);
+    if (pdev == NULL)
+        return;
 
-    /* 执行任务完成回调 */
-    if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv);
+    uint32_t cmd_id = 0;
+    int r = ble_keep_alive_device_push_cmd(pdev, cmd_turn_on, sizeof(cmd_turn_on), 
+        let_eend_turn_on_cb, cmd_turn_on, &cmd_id);   /* 添加指令 */
+    if (r != BKACODE_Success) {
+        log_e("[SWITCH]failed to push turn on cmd(turn on): %d", r);
+        if (param->cb != NULL) {
+            param->cb(SWITCH_ONLY_CODE_UNEXPECTED_ERROR, &switch_info, param->priv);
+        }
+        return;
+    }
+    if (os_sem_pend(&sem_eend_cmd_send_completed, param->timeout) == OS_TIMEOUT) {  /* 命令发送等待超时 */
+        r = ble_keep_alive_device_remove_cmd(pdev, cmd_id); /* 移除指令 */
+        if (r != BKACODE_Success) {
+            log_e("[SWITCH]failed to remove cmd(turn on): %d", r);
+        }
+        if (param->cb != NULL) {
+            param->cb(SWITCH_ONLY_CODE_TURNON_TIMEOUT, &switch_info, param->priv); /* 通知开机超时 */
+        }
+        return;
+    }
+    if (param->cb != NULL) {
+        param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv); /* 执行任务完成回调 */
+    }
 }
 
 static void play_end_callback(void *priv)

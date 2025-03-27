@@ -8,6 +8,7 @@ void start_async_msg_loop();
 typedef enum {
     SWITCH_ONLY_CODE_TURNOFF_TIMEOUT,
     SWITCH_ONLY_CODE_TURNON_TIMEOUT,
+    SWITCH_ONLY_CODE_UNEXPECTED_ERROR,
     SWITCH_ONLY_CODE_SUCCESS,
 } pl_switch_state_code_e;
 
