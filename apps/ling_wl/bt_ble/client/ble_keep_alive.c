@@ -70,8 +70,7 @@ static void handshake_task(void *priv)
     bka_eend_dev_handshake_info_t *pdev_info = (bka_eend_dev_handshake_info_t *)priv;
     if (pdev_info == NULL) {
         log_e("[BKA]Error pdev_info is null!!!");
-        g_handshake_is_ongoing = false;
-        return;
+        goto __finish;
     }
 
 
@@ -79,15 +78,13 @@ static void handshake_task(void *priv)
     os_sem_set(&g_conn_sem, 0);
     if (ble_simple_client_create_connection(pdev_info->address, pdev_info->address_type) == APP_BLE_OPERATION_ERROR) {
         log_e("[BKA]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
-        g_handshake_is_ongoing = false;
-        return;
+        goto __finish;
     }
-    if (os_sem_pend(&g_conn_sem, 200) == OS_TIMEOUT) {
+    if (os_sem_pend(&g_conn_sem, 400) == OS_TIMEOUT) {
         ble_simple_client_create_cannel();
         log_e("[BKA]Error ble connection timeout!!!");
-        ble_simple_client_module_enable(1);
-        g_handshake_is_ongoing = false;
-        return;
+        ble_simple_client_scan_enable(1);
+        goto __finish;
     }
     log_i("[BKA]ble connected\n");
 
@@ -112,7 +109,7 @@ static void handshake_task(void *priv)
     /* 执行指令完成回调 */
     if (has_cmd) {
         if (cmd.cb) {
-            cmd.cb(cmd.priv);
+            cmd.cb(BKA_CMD_CODE_COMPL, cmd.priv);
         }
     }
 
@@ -120,6 +117,8 @@ static void handshake_task(void *priv)
     ble_simple_client_disconnect();
     /* handshake completed */
     pdev_info->handshake_flag = 1;
+
+__finish:
     g_handshake_is_ongoing = false;
 }
 
@@ -225,7 +224,12 @@ static void ble_keep_alive_start_handshake()
                 g_eend_list[i].alive = 0;
 
                 /* 清空所有cmd */
-                my_blocking_queue_clear(&g_eend_list[i].cmd_buffer);
+                bka_cmd_t cmd;
+                while (my_blocking_queue_try_dequeue(&g_eend_list[i].cmd_buffer, &cmd) == MYERROR_Success) {
+                    if (cmd.cb) {
+                        cmd.cb(BKA_CMD_CODE_DEVLOST, cmd.priv);
+                    }
+                }
             }
         }
         /* 重置状态 */

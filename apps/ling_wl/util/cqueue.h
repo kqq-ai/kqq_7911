@@ -10,6 +10,7 @@ typedef enum {
     MYERROR_OS_Api_Error = -3,
     MYERROR_Is_Full = -4,
     MYERROR_Is_Empty = -5,
+    MYERROR_Not_Found = -6,
 } MyErrorType;
 
 typedef struct {
@@ -177,5 +178,18 @@ int my_blocking_queue_is_empty(MyBlockingQueue *queue);
  */
 int my_blocking_queue_is_full(MyBlockingQueue *queue);
 
+/**
+ * @name    my_blocking_queue_try_remove_if
+ * @brief   Remove the first element in the queue that matches the condition (no % operations)
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure
+ * @param   condition   A pointer to the condition function
+ * @param   priv        A pointer to user-defined private data
+ * 
+ * @return  MYERROR_Success if removed successfully,
+ *          MYERROR_Null_Pointer if queue or condition is NULL,
+ *          MYERROR_Not_Found if no matching element found
+ */
+int my_blocking_queue_try_remove_if(MyBlockingQueue *queue, int (*condition)(void *, void *), void *priv);
 
 #endif

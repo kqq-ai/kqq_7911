@@ -14,6 +14,7 @@ enum
 {
     MY_TASK_MESSAGE_SWITCH_PLAY,
     MY_TASK_MESSAGE_SWITCH_ONLY,
+    MY_TASK_MESSAGE_TURN_OFF_EDEV,
     MY_TASK_MESSAGE_PLAY_ONE,
     MY_TASK_MESSAGE_PLAY_ONE_LINGOS,
     MY_TASK_MESSAGE_PLAY_ONE_LFS,
@@ -25,9 +26,17 @@ enum
 
 typedef struct {
     char sn[SN_SIZE];
+    int timeout;
     pl_switch_cb_func_t cb;
     void *priv;
 } MyMessageSwitchOnly;
+
+typedef struct {
+    char sn[SN_SIZE];
+    int timeout;
+    pl_switch_cb_func_t cb;
+    void *priv;
+} MyMessageTurnOffEDev;
 
 typedef struct {
     char audio_url[AUDIO_URL_MAX_LEN];
@@ -57,6 +66,7 @@ typedef struct
     union
     {
         MyMessageSwitchOnly switch_only;
+        MyMessageTurnOffEDev turn_off_edev;
         MyMessagePlayOne play_one;
         MyMessagePlayOneLingOS play_one_lingos;
         MyMessagePlayOneLFS play_one_lfs;
@@ -72,6 +82,7 @@ static MyBlockingQueue g_message_queue; // MyBlockingQueue<MyTaskMessageType>
 extern music_player g_music_player;
 
 static void switch_only_sync(MyTaskMessageType *message);
+static void turn_off_sync(MyTaskMessageType *message);
 static void play_one_sync(MyTaskMessageType *message);
 static void play_one_lingos_sync(MyTaskMessageType *message);
 static void play_one_lfs_sync(MyTaskMessageType *message);
@@ -97,6 +108,9 @@ static void my_task(void *priv)
         {
         case MY_TASK_MESSAGE_SWITCH_ONLY:
             switch_only_sync(&message);
+            break;
+        case MY_TASK_MESSAGE_TURN_OFF_EDEV:
+            turn_off_sync(&message);
             break;
         case MY_TASK_MESSAGE_PLAY_ONE:
             play_one_sync(&message);
@@ -128,21 +142,49 @@ static void ble_start_scan_rssi(void *priv, void *cb)
 static const u8 cmd_turn_off[] = {0xA0, 0x00};
 static const u8 cmd_turn_on[] = {0xA0, 0x01};
 
-static void let_eend_turn_off_cb(void *priv)
+static void let_eend_turn_off_cb(bka_cmd_code_e code, void *priv)
 {
-    u8 *cmd = (u8 *)priv;
-    log_i("cmd send completed %02X %02X", cmd[0], cmd[1]);
-    os_sem_post(&sem_eend_cmd_send_completed);
+    if (code == BKA_CMD_CODE_COMPL) {
+        u8 *cmd = (u8 *)priv;
+        log_i("cmd send completed %02X %02X", cmd[0], cmd[1]);
+        os_sem_post(&sem_eend_cmd_send_completed);
+    } else {
+        log_i("cmd send failed: %d", code);
+        os_sem_post(&sem_eend_cmd_send_completed); 
+    }
 }
-static void let_eend_turn_on_cb(void *priv)
+static void let_eend_turn_on_cb(bka_cmd_code_e code, void *priv)
 {
-    u8 *cmd = (u8 *)priv;
-    log_i("cmd send completed %02X %02X", cmd[0], cmd[1]);
-    os_sem_post(&sem_eend_cmd_send_completed);
+    if (code == BKA_CMD_CODE_COMPL) {
+        u8 *cmd = (u8 *)priv;
+        log_i("cmd send completed %02X %02X", cmd[0], cmd[1]);
+        os_sem_post(&sem_eend_cmd_send_completed); 
+    } else if (code == BKA_CMD_CODE_DEVLOST) {
+        log_i("cmd send failed: %d", code);
+        os_sem_post(&sem_eend_cmd_send_completed); 
+    }
 }
 
-static bool switch_only(char *sn, void (*timeout_cb)(int, void *), void *priv)
+static void turn_off_sync(MyTaskMessageType *message)
 {
+    ASSERT(message->msg == MY_TASK_MESSAGE_TURN_OFF_EDEV);
+    MyMessageTurnOffEDev *param = &message->turn_off_edev;
+
+    uart_send_set_sn("000000000000000");
+
+    pl_switch_info_t switch_info;
+    switch_info.sn = param->sn;
+    
+    /* 通知A关机 */
+    lwl_eend_dev_t *pprev = find_eend_dev_by_sn(param->sn);
+    if (pprev != NULL) {
+        int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
+        if (os_sem_pend(&sem_eend_cmd_send_completed, param->timeout) == OS_TIMEOUT) { /* 等待命令发送完毕 */
+            if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_TURNOFF_TIMEOUT, &switch_info, param->priv); /* 通知A关机超时 */
+            return;
+        }
+    }
+    if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv); /* 执行任务完成回调 */
 }
 
 static void switch_only_sync(MyTaskMessageType *message)
@@ -154,19 +196,6 @@ static void switch_only_sync(MyTaskMessageType *message)
     /* 设置C2广播 */
     uart_send_set_sn(param->sn);
 
-    // /* 通知A关机 */
-    // lwl_eend_dev_t *pprev = find_eend_dev_active();
-    // if (pprev != NULL) {
-    //     int r = ble_keep_alive_device_push_cmd(pprev, cmd_turn_off, sizeof(cmd_turn_off), let_eend_turn_off_cb, cmd_turn_off);
-    //     /* 等待命令发送完毕 */
-    //     if (os_sem_pend(&sem_eend_cmd_send_completed, 1000) == OS_TIMEOUT) {
-    //         /* 通知A关机失败 */
-    //         if (param->cb != NULL) {
-    //             param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, param->priv);
-    //         }
-    //         return;
-    //     }
-    // }
     pl_switch_info_t switch_info;
     switch_info.sn = param->sn;
 
@@ -175,11 +204,9 @@ static void switch_only_sync(MyTaskMessageType *message)
     if (pnext != NULL) {
         int r = ble_keep_alive_device_push_cmd(pnext, cmd_turn_on, sizeof(cmd_turn_on), let_eend_turn_on_cb, cmd_turn_on);
         /* 等待命令发送完毕 */
-        if (os_sem_pend(&sem_eend_cmd_send_completed, 200) == OS_TIMEOUT) {
+        if (os_sem_pend(&sem_eend_cmd_send_completed, param->timeout) == OS_TIMEOUT) {
             /* 通知B开机失败 */
-            if (param->cb != NULL) {
-                param->cb(SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT, &switch_info, param->priv);
-            }
+            if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_TURNON_TIMEOUT, &switch_info, param->priv);
             return;
         }
         /* 设置上下文 */
@@ -190,9 +217,7 @@ static void switch_only_sync(MyTaskMessageType *message)
     }
 
     /* 执行任务完成回调 */
-    if (param->cb != NULL) {
-        param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv);
-    }
+    if (param->cb != NULL) param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv);
 }
 
 static void play_end_callback(void *priv)
@@ -295,21 +320,49 @@ void printf_dev_name(char *name, u16 len)
  * @name my_task_switch_only
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
- * @param name    Pointer to a character string indicating the E-end sequence number.
+ * @param sn      Pointer to a character string indicating the E-end sequence number.
+ * @param timeout Switch timeout, 等待超时（时钟节拍），取0时无限等待
  * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
  * @param priv    A pointer to user-defined private data.
  */
-void my_task_switch_only(char *sn, pl_switch_cb_func_t *cb, void *priv)
+void my_task_switch_only(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv)
 {
     /* 创建消息 */
     MyTaskMessageType message;
     message.msg = MY_TASK_MESSAGE_SWITCH_ONLY;
     memcpy(message.switch_only.sn, sn, SN_SIZE);
+    message.switch_only.timeout = timeout;
     message.switch_only.priv = priv;
     message.switch_only.cb = cb;
     printf("Put message: %d\n", message.msg);
     printf("sn         : ");
     printf_dev_name(message.switch_only.sn, SN_SIZE);
+    printf("\n");
+    /* 消息入队 */
+    my_blocking_queue_enqueue(&g_message_queue, &message);
+}
+
+/**
+ * @name my_task_turn_off_edev
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param name    Pointer to a character string indicating the E-end sequence number.
+ * @param timeout Switch timeout, 等待超时（时钟节拍），取0时无限等待
+ * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
+ * @param priv    A pointer to user-defined private data.
+ */
+void my_task_turn_off_edev(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv)
+{
+    /* 创建消息 */
+    MyTaskMessageType message;
+    message.msg = MY_TASK_MESSAGE_TURN_OFF_EDEV;
+    memcpy(message.turn_off_edev.sn, sn, SN_SIZE);
+    message.turn_off_edev.timeout = timeout;
+    message.turn_off_edev.priv = priv;
+    message.turn_off_edev.cb = cb;
+    printf("Put message: %d\n", message.msg);
+    printf("sn         : ");
+    printf_dev_name(message.turn_off_edev.sn, SN_SIZE);
     printf("\n");
     /* 消息入队 */
     my_blocking_queue_enqueue(&g_message_queue, &message);

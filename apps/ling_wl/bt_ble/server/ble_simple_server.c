@@ -780,6 +780,11 @@ void ble_simple_server_disconnect(void)
     }
 }
 
+void ble_simple_server_adv_enable(u8 en)
+{
+    bt_ble_adv_enable(en);
+}
+
 void ble_simple_server_module_enable(u8 en)
 {
     os_mutex_pend(&mutex, 0);

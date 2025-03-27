@@ -46,9 +46,9 @@ void *uart0_hdl = NULL;
 //"000000000000000"
 const u8 ns_null[SN_SIZE] = { 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00 };
 //"WCCN24H28FEEEF7"
-const u8 sn1[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x33, 0x00 };
+const u8 sn1[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x41, 0x00 };
 //"WCCN24H28FEEEF8"
-const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x34, 0x00 };
+const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x42, 0x00 };
 //"WCCN24H28FEEEF9"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x39, 0x00 };
 
@@ -207,13 +207,13 @@ void play_end_callback(void *priv)
 void test1_play_end_callback(void *priv)
 {
     log_i("test1 play end\n");
-    app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/19.%201KHz-0dB-30s.mp3", test1_play_end_callback, NULL);
+    app_music_play_net_music_with_callback(&g_music_player, "http://192.168.46.71:8888/19.%201KHz-0dB-30s.mp3", test1_play_end_callback, NULL);
 }
 
 void test2_play_end_callback(void *priv)
 {
     log_i("test2 play end\n");
-    app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", test2_play_end_callback, NULL);
+    app_music_play_net_music_with_callback(&g_music_player, "https://lx-sycdn.kuwo.cn/d238c8266e6df50edd90b5b00d81e695/67e0ce41/resource/n2/49/23/1247020737.mp3", test2_play_end_callback, NULL);
 }
 
 static void switch_completed(int code, void *priv)
@@ -231,12 +231,12 @@ static int app_music_key_click(struct key_event *key)
     //     break;
     case KEY_1:
         log_i("KEY 1\n");
-        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/M500000a1c8y2kutQE.mp3", NULL, NULL);
+        app_music_play_net_music_with_callback(&g_music_player, "https://lx-sycdn.kuwo.cn/d238c8266e6df50edd90b5b00d81e695/67e0ce41/resource/n2/49/23/1247020737.mp3", NULL, NULL);
         
         break;
     case KEY_2:
         log_i("KEY 2\n");
-        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.3.45:8888/19.%201KHz-0dB-30s.mp3", NULL, NULL);
+        app_music_play_net_music_with_callback(&g_music_player, "http://192.168.46.71:8888/19.%201KHz-0dB-30s.mp3", NULL, NULL);
         break;
     case KEY_3:
         log_i("KEY 3\n");
@@ -260,10 +260,10 @@ static int app_music_key_click(struct key_event *key)
 
 
         if (en) {
-            my_task_switch_only(sn2, NULL, switch_completed);
+            my_task_switch_only(sn2, 200, NULL, switch_completed);
             en = 0;
         } else {
-            my_task_switch_only(ns_null, NULL, switch_completed);
+            my_task_switch_only(ns_null, 200, NULL, switch_completed);
             en = 1;
         }
 

@@ -4,7 +4,13 @@
 #include "cpu.h"
 #include "app_mode/lwl_eend_device.h"
 
-typedef void (*bka_cmd_cb_funp_t)(void *);
+typedef enum {
+    BKA_CMD_CODE_COMPL,
+    BKA_CMD_CODE_DEVLOST,
+    BKA_CMD_CODE_UNEXPECTED,
+} bka_cmd_code_e;
+
+typedef void (*bka_cmd_cb_funp_t)(bka_cmd_code_e code, void *);
 
 void ble_keep_alive_init(void);
 

@@ -1,109 +1,97 @@
 #include "eend_battery_live_test.h"
-#include "../wss_app_util.h"
 #include "cpu.h"
 
 #include "util/cqueue.h"
+#include "util/ringbuffer.h"
 #include "protocol/lingos/loswssp.h"
 #include "bt_ble/client/ble_distance.h"
 #include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
 #include "device.h"
+#include "util/threadpool_tasks.h"
 
+#include "ota/http_ota.h"
+#include "uart.h"
+
+static void wss_app_recorder_data_upstream(recorder_data_cb_t cb);
+static void recorder_data_to_data_queue(void* priv, void *data, u32 size);
+static void recorder_data_to_ringbuffer(void* priv, void *data, u32 size);
+static void wss_application_switch_test_mode();
 static void wss_asr_data(void *data, u32 size);
+static void wss_asr_data_to_ringbuffer(void *data, u32 size);
 static void app_record_task_start();
+static void app_task_break();
 
 #define ENABLE 1
 #define DISABLE 0
 
-#define DEV_A_IDX 0
-#define DEV_B_IDX 1
+#define DUMMY_SN "000000000000000"
+#define AUTO_TEST_SN "WCCN24H28FEEEFA"
 
 typedef enum {
-    STATE_TASK_IDLE,
-    STATE_TASK_TEST_RUNNING,
-    STATE_TASK_TEST_PAUSE,
-} AppTaskState;
+    STATE_MODE_IDLE,
+    STATE_MODE_AUTO_TEST_RUNNING,
+    STATE_MODE_AUTO_TEST_PAUSE,
+} AppModeState;
 
 typedef enum {
-    STATE_ROUND_STARTUP,
-    STATE_ROUND_SWITCH_A,
-    STATE_ROUND_AUDIO_PLAY_A,
-    STATE_ROUND_SWITCH_B,
-    STATE_ROUND_AUDIO_PLAY_B,
-    STATE_ROUND_OVER,
-} AppTaskSubState;
-
-#define ADV_MAX_LEN 16
-#define SN_MAX_SIZE 16
-
-typedef struct {
-    lwl_eend_dev_t *pdev;
-    int ip_id;
-    int session_id;
-} communication_edev_t;
+    STATE_AUTO_TEST_WAIT_HANDSHAKE,
+    STATE_AUTO_TEST_TURNON,
+    STATE_AUTO_TEST_PLAY,
+    STATE_AUTO_TEST_TURNOFF,
+    STATE_AUTO_TEST_WAIT,
+} AppTaskStepState;
 
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
 
-static bool g_test_mode = false;
+static int g_exception_exit = false;
+
+static lwl_app_context_t *g_app_ctx = NULL;
 
 /* Task state */
-static int g_task_state = STATE_TASK_IDLE;
-static int g_task_sub_state = STATE_ROUND_STARTUP;
-static int g_task_sub_round_cnt = 0;
+static int g_mode_state = STATE_MODE_IDLE;
 
-static int g_session_create_idx = 0;
+/* Auto test running state */
+static int g_auto_test_running_state = STATE_AUTO_TEST_WAIT_HANDSHAKE;
+static int g_auto_test_open_count = 0;
 
-#define TIMER_TASK_TIMEOUT (50 * 60 * 1000)
-static u32 g_task_timer = 0;
-#define TIMER_ROUND_TIMEOUT (30 * 1000)
-static u32 g_task_round_timer = 0;
+/*=================================================================================================
+ * E switch context
+ *=================================================================================================*/
+static int g_ble_edev_switch_ok = false;
 
-static int g_curr_edev_idx = DEV_A_IDX;
-static int g_next_edev_idx = DEV_B_IDX;
-static int g_backend_switch_session_ok = false;
-static int g_ble_porte_switch_ok = false;
-static int g_audio_play_end = false;
-static int g_audio_play_ongoing_num = 0;
-static int g_backend_message_end_ok = false;
 
-/* 设备列表 */
-static int g_edev_closest_idx = 0;  // 当前距离更近的设备索引
-static int g_edev_count = 0;
-static communication_edev_t g_edev_table[EEND_MAX_CNT];
+/*=================================================================================================
+ * message queue
+ *=================================================================================================*/
+typedef enum {
+    APPMSG_SHORT_CLICK,
+} AppMessageEnum;
 
-static void add_edev(lwl_eend_dev_t *p_eend_dev, int ip_id)
+typedef struct {
+    int type;
+} AppMessage;
+
+#define MY_MESSAGE_QUEUE_CAPACITY 10
+static MyBlockingQueue g_msg_queue; // MyBlockingQueue<AsrData>
+static u8 g_msg_queue_buffer[MY_MESSAGE_QUEUE_CAPACITY * sizeof(AppMessage)];
+
+static void wss_application_exception_exit()
 {
-    if (g_edev_count >= EEND_MAX_CNT) {
-        log_e("eend max cnt: %d", EEND_MAX_CNT);
-        return;
-    }
-    int i = g_edev_count++;
-    g_edev_table[i].pdev = p_eend_dev;
-    g_edev_table[i].ip_id = ip_id;
-    g_edev_table[i].session_id = 0;
+    g_exception_exit = true;
 }
 
-static uint32_t get_edev_count()
+static bool wss_application_check_exit()
 {
-    return g_edev_count;
+    return g_exception_exit;
 }
 
-static int find_edev_idx(lwl_eend_dev_t *p_eend_dev) 
-{
-    for (int i = 0; i < g_edev_count; ++i) {
-        if (g_edev_table[i].pdev == p_eend_dev) {
-            return i;
-        }
-    }
-    return -1;
-
-}
-
-
-/* Timeout context */
+/*=================================================================================================
+ * Timeout timer
+ *=================================================================================================*/
 static bool g_timeout_timer_ongoing = false;
 static bool g_timeout_timer_is_timeout = false;
 static u32  g_timeout_timer_start_time = 0;
@@ -130,189 +118,266 @@ static bool timeout_timer_is_timeout()
     return g_timeout_timer_is_timeout;
 }
 
+
+
 //=================================================================================================
 // Async task callback
 //=================================================================================================
-static void audio_play_end_callback(void *priv)
+static void audio_play_end_callback(int state, pl_music_info_t *music_info, void *priv)
 {
-    log_i("Audio play over\n");
-    g_audio_play_end = true;
-    g_audio_play_ongoing_num--;
-    log_i("Audio play ongoing num: %d\n", g_audio_play_ongoing_num);
+    switch (state) {
+    case PLAY_AUDIO_STATE_BEFORE_DEC_START:
+        log_i("Audio play begin\n");
+        break;
+    case PLAY_AUDIO_STATE_AFTER_DEC_END:
+        log_i("Audio play over\n");
+        break;
+    case PLAY_AUDIO_STATE_CANCEL:
+        log_i("Audio play cancel\n");
+        break;
+    }
 }
 
-static void switch_end_callback(int code, void *priv)
+static void play_audio_task(void *priv);
+static void music_play_cb(void *priv)
+{
+    threadpool_add_task(g_app_ctx->threadpool, play_audio_task, NULL);
+}
+
+static void play_audio_task(void *priv)
+{
+    msleep(10000);
+    app_music_play_net_music_with_callback(g_app_ctx->music_player, "https://music.163.com/song/media/outer/url?id=1902252436.mp3", music_play_cb, NULL);
+}
+
+static void net_active_task(void *priv)
+{ 
+    while (1) {
+        msleep(800);
+        char *ota_info_json = NULL;
+        extern int request_ota_info(char **pota_info);
+        int ret = request_ota_info(&ota_info_json);
+    }
+}
+
+
+static void switch_end_callback(int code, pl_switch_info_t *switch_info, void *priv)
 {
     switch (code) {
-    case SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT:
-        log_i("Switch e-end timeout: %d\n", code);
-        break;
-    case SWITCH_ONLY_CODE_NEXT_START_TIMEOUT:
-        log_i("Switch e-end timeout: %d\n", code);
-        break;
+    case SWITCH_ONLY_CODE_TURNOFF_TIMEOUT:
+    case SWITCH_ONLY_CODE_TURNON_TIMEOUT:
     case SWITCH_ONLY_CODE_SUCCESS:
-        log_i("Switch e-end OK\n");
+        log_i("Switch PortE OK %d\n", code);
+        g_ble_edev_switch_ok = true;
         break;
     }
-    g_ble_porte_switch_ok = true;
 }
 
 //=================================================================================================
-// WSS response callback
+// LWL event callback
 //=================================================================================================
-static int loswssp_rsp_cbk(int type, loswssp_package_t *pkg)
+static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
 {
-    switch (type) {
-    case LR_SESSION:
-        log_i("LR_SESSION\n");
-        break;
-    case LR_MESSAGE_ASR_DATA:
-        log_i("LR_MESSAGE_ASR_DATA\n");
-        break;
-    case LR_MESSAGE_ASR_END:
-        log_i("LR_MESSAGE_ASR_END\n");
-        break;
-    case LR_MESSAGE_DELTA:
-        log_i("LR_MESSAGE_DELTA\n");
-        break;
-    case LR_MESSAGE_AUDIO: {
-        log_i("LR_MESSAGE_AUDIO\n");
+    static int en = 1;
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK: {
+        log_i("SHORT_CLICK");
+
+        AppMessage msg;
+        msg.type = APPMSG_SHORT_CLICK;
+        if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&g_msg_queue, &msg)) {
+            log_e("Failed to add message APPMSG_SHORT_CLICK");
+        }
     }   break;
-    case LR_MESSAGE_FILE:
-        log_i("LR_MESSAGE_FILE\n");
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC");
+        uart_response_synch_status(g_mode_state != STATE_MODE_IDLE, 8);
         break;
-    case LR_MESSAGE_END:
-        log_i("LR_MESSAGE_END\n");
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        log_i("TOUCH KEY DOWN");
         break;
-    case LR_MESSAGE_STOP:
-        log_i("LR_MESSAGE_STOP\n");
+    case LWL_EVENT_TYPE_UART_SHUTDOWN:
+        log_i("SHUTDOWN");
         break;
-    case LR_MESSAGE_POINT_DELTA:
-        log_i("LR_MESSAGE_POINT_DELTA\n");
-        break;
-    case LR_PONG:
-        log_i("LR_PONG\n");
+    case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
+        log_i("MOVE_MORE_THAN_ONE_METER");
         break;
     }
+}
+
+static bool wss_app_msg_short_click_handler() 
+{
+    struct websocket_struct *websockets_info = g_app_ctx->websockets_info;
+    return false;
 }
 
 //=================================================================================================
 // LOOP
 //=================================================================================================
-
-void test_application_init()
+void auto_test_application_init()
 {
-    log_i("Init WSS application\n");
+    ble_simple_server_module_enable(0);
+    ble_simple_client_module_enable(1);
 
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    add_edev(&context->eend_dev_list[0], 45);
-    add_edev(&context->eend_dev_list[1], 5);
+    log_i("Init auto test application\n");
+    my_blocking_queue_init_static(&g_msg_queue, g_msg_queue_buffer, sizeof(AppMessage), MY_MESSAGE_QUEUE_CAPACITY);
 
-    /* 注册loswssp事件回调 */
-    loswssp_register_rsp_cbk(loswssp_rsp_cbk);
+    g_app_ctx = lwl_app_core_context_get_instance();
+
+    /* 注册lwl事件处理回调 */
+    lwl_event_handler_add(wss_app_lwl_event_handler_cb);
+
+    
+    // gpio_direction_output(IO_PORTA_00, 0);   //
+
+    /* 重置 */
+    g_exception_exit = false;
+    
+    ASSERT(g_mode_state == STATE_MODE_IDLE);
+
+    /* 后台一直播放 */
+    threadpool_add_task(g_app_ctx->threadpool, play_audio_task, NULL);
+    // threadpool_add_task(g_app_ctx->threadpool, net_active_task, NULL);
+
+    
+
+    /* 初始化 Auto test running 任务上下文 */
+    timeout_timer_init(1 * 60 * 1000);
+    g_auto_test_running_state = STATE_AUTO_TEST_WAIT_HANDSHAKE;
+
+    log_i("AUTO_TEST_PAUSE -> AUTO_TEST_RUNNING(WAIT_HANDSHAKE)");
+    g_mode_state = STATE_MODE_AUTO_TEST_RUNNING;
 }
 
-void test_application_uninit()
+void auto_test_application_uninit()
 {
-    log_i("Uninit WSS application\n");
+    log_i("Uninit auto test application\n");
+    my_blocking_queue_destroy_static(&g_msg_queue);
+    
+    /* 取消注册lwl事件处理回调 */
+    lwl_event_handler_remove(wss_app_lwl_event_handler_cb);
 }
 
-static void test_application_normal_loop()
+static void wss_application_normal_loop()
 {
-    switch (g_task_state) {
-    case STATE_TASK_IDLE:
-        log_i("[TASK]IDLE -> TEST_RUNNING\n");
-        g_task_state = STATE_TASK_TEST_RUNNING;
-        g_task_sub_state = STATE_ROUND_STARTUP;
+    AppMessage msg;
+    if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_msg_queue, &msg)) {
+        log_i("get msg type: %d", msg.type);
+        switch (msg.type) {
+        case APPMSG_SHORT_CLICK:
+            wss_app_msg_short_click_handler();
+            break;
+        }
+        return;
+    }
+    struct websocket_struct *websockets_info = g_app_ctx->websockets_info;
+
+    switch (g_mode_state) {
+    case STATE_MODE_IDLE:
         break;
-    case STATE_TASK_TEST_RUNNING:
-        switch (g_task_sub_state) {
-        case STATE_ROUND_STARTUP:
-            /* 切换 E端 */
-            g_ble_porte_switch_ok = false;
-            my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, NULL, switch_end_callback);
+    case STATE_MODE_AUTO_TEST_RUNNING:
+        switch (g_auto_test_running_state) {
+        case STATE_AUTO_TEST_WAIT_HANDSHAKE:
+            if (timeout_timer_is_timeout()) {
 
-            log_i("[ROUND] STARTUP -> SWITCH_A\n");
-            g_task_sub_state = STATE_ROUND_SWITCH_A;
-            break;
-        case STATE_ROUND_SWITCH_A:
-            if (g_ble_porte_switch_ok) {
-                /* 切换完毕 */
-                g_curr_edev_idx = g_next_edev_idx; 
-                g_next_edev_idx = (g_curr_edev_idx == DEV_A_IDX) ? DEV_B_IDX : DEV_A_IDX;
+                g_ble_edev_switch_ok = false;
+                my_task_switch_only(AUTO_TEST_SN, 0, switch_end_callback, NULL);
 
-                /* 30s计时开始 */
-                g_task_round_timer = g_curr_time;
-            
-                log_i("[ROUND] SWITCH_A -> PLAY_A\n");
-                g_task_sub_state = STATE_ROUND_AUDIO_PLAY_A;
+                log_i("[AUTO_TEST_RUNNING] HANDSHAKE -> TUENON");
+                g_auto_test_running_state = STATE_AUTO_TEST_TURNON;
             }
             break;
-        case STATE_ROUND_AUDIO_PLAY_A:
-            if (g_curr_time - g_task_round_timer >= TIMER_ROUND_TIMEOUT) {
-                /* 30s计时结束 */
+        case STATE_AUTO_TEST_TURNON:
+            if (g_ble_edev_switch_ok == true) {
+
+                // g_ble_edev_switch_ok = false;
+                // my_task_switch_only(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+
+                // log_i("[AUTO_TEST_RUNNING] HANDSHAKE -> TUENON");
+                // g_auto_test_running_state = STATE_AUTO_TEST_TURNON;
+
+                timeout_timer_init(30000);
+
+                log_i("[AUTO_TEST_RUNNING] TURNON -> PLAY");
+                g_auto_test_running_state = STATE_AUTO_TEST_PLAY;
+            }
+            break;
+        case STATE_AUTO_TEST_PLAY:
+            if (timeout_timer_is_timeout()) {
+
+                g_ble_edev_switch_ok = false;
+                my_task_turn_off_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+
+                log_i("[AUTO_TEST_RUNNING] PLAY -> TURNOFF");
+                g_auto_test_running_state = STATE_AUTO_TEST_TURNOFF;
+            }
+            break;
+        case STATE_AUTO_TEST_TURNOFF:
+            if (g_ble_edev_switch_ok == true) {
+                if (g_auto_test_open_count++ < 10) {
+                    timeout_timer_init(30000);
+                    
+                    log_i("[AUTO_TEST_RUNNING] TURNOFF -> WAIT");
+                    g_auto_test_running_state = STATE_AUTO_TEST_WAIT;
+                } else {
+                    timeout_timer_init(49 * 60 * 1000);
+                    ble_simple_client_module_enable(0);
+
+                    log_i("AUTO_TEST_RUNNING(TURNOFF) -> AUTO_TEST_PAUSE");
+                    g_mode_state = STATE_MODE_AUTO_TEST_PAUSE;
+                }
+            }
+            break;
+        case STATE_AUTO_TEST_WAIT:
+            if (timeout_timer_is_timeout()) {
+
+                g_ble_edev_switch_ok = false;
+                my_task_switch_only(AUTO_TEST_SN, 0, switch_end_callback, NULL);
                 
-                /* 切换 E端 */
-                g_ble_porte_switch_ok = false;
-                my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, NULL, switch_end_callback);
-
-                log_i("[ROUND] PLAY_A -> SWITCH_B\n");
-                g_task_sub_state = STATE_ROUND_SWITCH_B;
-            }
-            break;
-        case STATE_ROUND_SWITCH_B:
-            if (g_ble_porte_switch_ok) {
-                /* 切换完毕 */
-                g_curr_edev_idx = g_next_edev_idx; 
-                g_next_edev_idx = (g_curr_edev_idx == DEV_A_IDX) ? DEV_B_IDX : DEV_A_IDX;
-
-                /* 30s计时开始 */
-                g_task_round_timer = g_curr_time;
-            
-                log_i("[ROUND] SWITCH_B -> PLAY_B\n");
-                g_task_sub_state = STATE_ROUND_AUDIO_PLAY_B;
-            }
-            break;
-        case STATE_ROUND_AUDIO_PLAY_B:
-            if (g_curr_time - g_task_round_timer >= TIMER_ROUND_TIMEOUT) {
-                /* 30s计时结束 */
-                
-                log_i("[ROUND] PLAY_B -> OVER\n");
-                g_task_sub_state = STATE_ROUND_OVER;
-            }
-            break;
-        case STATE_ROUND_OVER:
-            if (g_task_sub_round_cnt++ < 10) {
-                /* 重复一轮 */
-                log_i("[ROUND] OVER -> STARTUP\n");
-                g_task_sub_state = STATE_ROUND_STARTUP;
-            } else {
-                /* 10轮结束  */
-                /* 50分钟计时开始 */
-                g_task_timer = g_curr_time;
-                g_task_state = STATE_TASK_TEST_PAUSE;
-                log_i("[TASK] RUNNING -> PAUSE\n");
+                log_i("[AUTO_TEST_RUNNING] WAIT -> TUENON");
+                g_auto_test_running_state = STATE_AUTO_TEST_TURNON;
             }
             break;
         }
         break;
-    case STATE_TASK_TEST_PAUSE:
-        if (g_curr_time - g_task_timer >= TIMER_TASK_TIMEOUT) {
-            /* 50分钟计时结束 */
-            log_i("[ROUND] PAUSE -> RUNNING\n");
-            g_task_state = STATE_TASK_TEST_RUNNING;
-            g_task_sub_state = STATE_ROUND_STARTUP;
+    case STATE_MODE_AUTO_TEST_PAUSE:
+        if (timeout_timer_is_timeout()) {
+            ble_simple_client_module_enable(1);
+            g_auto_test_open_count = 0;
+
+            timeout_timer_init(1 * 60 * 1000);
+            g_auto_test_running_state = STATE_AUTO_TEST_WAIT_HANDSHAKE;
+            
+            log_i("AUTO_TEST_PAUSE -> AUTO_TEST_RUNNING(WAIT_HANDSHAKE)");
+            g_mode_state = STATE_MODE_AUTO_TEST_RUNNING;
         }
         break;
     }
 }
 
-void test_application_loop()
+bool auto_test_application_loop()
 {
     g_curr_time = timer_get_ms();
 
     /* 超时定时器状态更新 */
     timeout_timer_update();
 
-    test_application_normal_loop();
+    wss_application_normal_loop();
+
+    if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
+
+        int pp = 2;
+        lwl_app_context_t *context = lwl_app_core_context_get_instance();
+        if (context && context->recorder) {
+            pp = recorder_get_play_pause_state(context->recorder);
+        }
+        log_i("%d %d %d %d %d", g_mode_state, g_auto_test_running_state, pp, wifi_get_rssi(), wifi_get_cqi());
+
+        g_heat_timer = g_curr_time;
+    }
+
+    if (wss_application_check_exit()) {
+        return true;
+    }
+    return false;
 }

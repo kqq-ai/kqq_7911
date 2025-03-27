@@ -11,6 +11,7 @@ void server_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
 void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
 void ble_simple_server_disconnect(void);
+void ble_simple_server_adv_enable(u8 en);
 void ble_simple_server_module_enable(u8 en);
 void ble_simple_server_init(void);
 void ble_simple_server_exit(void);

@@ -202,7 +202,18 @@ static int find_edev_idx(lwl_eend_dev_t *p_eend_dev)
     return -1;
 }
 
-static int  get_around_edev_count()
+static int  get_2m_edev_count()
+{
+    int n = 0;
+    for (int i = 0; i < g_edev_count; ++i) {
+        if ((g_edev_table[i].distance_type == DISTANCE_0)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static int  get_5m_edev_count()
 {
     int n = 0;
     for (int i = 0; i < g_edev_count; ++i) {
@@ -286,8 +297,8 @@ static void audio_play_end_callback(int state, pl_music_info_t *music_info, void
 static void switch_end_callback(int code, pl_switch_info_t *switch_info, void *priv)
 {
     switch (code) {
-    case SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT:
-    case SWITCH_ONLY_CODE_NEXT_START_TIMEOUT:
+    case SWITCH_ONLY_CODE_TURNOFF_TIMEOUT:
+    case SWITCH_ONLY_CODE_TURNON_TIMEOUT:
     case SWITCH_ONLY_CODE_SUCCESS:
         log_i("Switch PortE OK %d\n", code);
         g_ble_edev_switch_ok = true;
@@ -449,6 +460,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     }   break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC");
+        log_i("battery: %d", e->uart_cmd_sync.battery);
         uart_response_synch_status(g_mode_state != STATE_MODE_IDLE, 8);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
@@ -696,7 +708,7 @@ void self_function(disatance_info_t *distance_info, int distance_type)
 //=================================================================================================
 static bool app_idle_loop()
 {
-    if (0 < get_around_edev_count()) {
+    if (0 < get_2m_edev_count()) {
         g_next_edev_idx = g_edev_closest_idx;
         /* 初始化 playintro 任务上下文 */
         g_playintro_state = STATE_PLAYINTRO_STARTUP;
@@ -771,7 +783,7 @@ static bool app_playintro_loop()
 
         /* 切换 E端 */
         g_ble_edev_switch_ok = false;
-        my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, switch_end_callback, NULL);
+        my_task_switch_only(g_edev_table[g_next_edev_idx].pdev->sn, 200, switch_end_callback, NULL);
 
         log_i("[PLAYINTRO] STARTUP -> SWITCH (%d -> %d)\n", g_curr_edev_idx, g_next_edev_idx);
         g_playintro_state = STATE_PLAYINTRO_SWITCH;
@@ -822,15 +834,6 @@ static bool app_playintro_loop()
                 g_playintro_state = STATE_PLAYINTRO_WAIT_VAD;
             }
         } else if (g_recording == true) { /* 触发VAD，开始一对一对话 */
-            /* 发送asr start */
-            if (communication_message_asr(websockets_info) != 0) {
-                wss_application_exception_exit();
-                return true;
-            }
-            if (communication_message_asr_start(websockets_info) != 0) {
-                wss_application_exception_exit();
-                return true;
-            }
             /* 清空asr data queue */
             my_blocking_queue_clear(&g_asr_data_queue);
 
@@ -845,7 +848,7 @@ static bool app_playintro_loop()
             return true;
 
         } else if (timeout_timer_is_timeout()) {  /* VAD 超时 */
-            int around_edev_count = get_around_edev_count();
+            int around_edev_count = get_2m_edev_count();
             if (around_edev_count == 1) {   /* 周围只有一个设备，进入一对一对话 （TODO: 是否是当前对话的这一个？） */
                 log_i("PLAYINTRO -> ONEONONE(WAIT_VAD)\n");
                 g_mode_state = STATE_MODE_ONEONONE;
@@ -985,7 +988,7 @@ static bool app_oneonmany_loop()
     struct websocket_struct *websockets_info = g_app_ctx->websockets_info;
     switch (g_oneonmany_state) {
     case STATE_ONEONMANY_IDLE:
-        if (is_edev_far_away(g_curr_edev_idx)) { /* 当前设备距离 > 5 */
+        if (0 == get_5m_edev_count()) { /* 5米内无设备 */
             g_mode_state = STATE_MODE_IDLE;
             log_i("ONEONMANY(IDLE) -> IDLE\n");
         }
@@ -1082,7 +1085,7 @@ void wss_application_uninit()
     /* 设置VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
     /* 取消录音上传回调 */
-    wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
+    wss_app_recorder_data_upstream(NULL);
     /* 开启录音 */
     wss_app_recorder_en(DISABLE);
 }

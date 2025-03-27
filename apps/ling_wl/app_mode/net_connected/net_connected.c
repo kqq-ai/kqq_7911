@@ -23,6 +23,7 @@
 #include "../lwl_app_framework.h"
 #include "../lwl_app_core.h"
 #include "../wss_connected/wss_application.h"
+#include "../wss_connected/test/eend_battery_live_test.h"
 #include "log.h"
 #include "ota/http_ota.h"
 
@@ -67,7 +68,10 @@ static int net_connected_init(void)
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 0;
     }
-    
+
+#if 0
+    auto_test_application_init();
+#else
     struct websocket_info_t *websockets_info = wss_server_connect(url, wss_recv_callback);
 
     if (websockets_info == NULL) {
@@ -81,11 +85,16 @@ static int net_connected_init(void)
         context->websockets_info = websockets_info;
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     }
+#endif
     return 0;
 }
 
 static int net_connected_unint(void)
 {
+#if 0
+    auto_test_application_uninit();
+#else
+#endif
     return 0;
 }
 
@@ -94,6 +103,10 @@ void app_net_connected_mode(void)
     net_connected_init();
 
     while (1) {
+#if 0
+        auto_test_application_loop();
+#else
+#endif
         // 应用代码
         mdelay(10);
         if (lwl_app_mode_exitting()) {

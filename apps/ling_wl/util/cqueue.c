@@ -2,6 +2,10 @@
 
 #include <os/pthread.h>
 
+#define NEXT_INDEX(idx, cap) ((idx) + 1 == (cap) ? 0 : (idx) + 1)
+#define PREV_INDEX(idx, cap) ((idx) == 0 ? (cap) - 1 : (idx) - 1)
+#define QUEUE_ELEMENT(queue, index) (&(queue)->data[(index) * (queue)->element_size])
+
 /**
  * @name    my_blocking_queue_init
  * @brief   Init custom blocking queue
@@ -387,4 +391,62 @@ int my_blocking_queue_is_full(MyBlockingQueue *queue)
         return MYERROR_Null_Pointer;
     }
     return queue->size == queue->capacity;
+}
+
+/**
+ * @name    my_blocking_queue_try_remove_if
+ * @brief   Remove the first element in the queue that matches the condition (no % operations)
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure
+ * @param   condition   A pointer to the condition function
+ * @param   priv        A pointer to user-defined private data
+ * 
+ * @return  MYERROR_Success if removed successfully,
+ *          MYERROR_Null_Pointer if queue or condition is NULL,
+ *          MYERROR_Not_Found if no matching element found
+ */
+int my_blocking_queue_try_remove_if(MyBlockingQueue *queue, int (*condition)(void *, void *), void *priv)
+{
+    if (queue == NULL || condition == NULL) {
+        return MYERROR_Null_Pointer;
+    }
+
+    pthread_mutex_lock(&queue->mutex);
+
+    int removed_index = -1;
+    int index = queue->front;
+    for (int i = 0; i < queue->size; ++i) {
+        if (condition(&queue->data[index * queue->element_size], priv)) {
+            removed_index = index;
+            break;
+        }
+        index = NEXT_INDEX(index, queue->capacity);
+    }
+    if (removed_index == -1) {
+        pthread_mutex_unlock(&queue->mutex);
+        return MYERROR_Not_Found;
+    }
+
+    if (queue->size == 1) {
+        queue->front = queue->rear = 0;
+    } else if (removed_index == queue->front) {
+        queue->front = NEXT_INDEX(queue->front, queue->capacity);
+    } else if (removed_index == PREV_INDEX(queue->rear, queue->capacity)) {
+        queue->rear = PREV_INDEX(queue->rear, queue->capacity);
+    } else if (queue->front < removed_index) {
+        int len = removed_index - queue->front;
+        int dst = NEXT_INDEX(queue->front, queue->capacity);
+        int src = queue->front;
+        memmove(QUEUE_ELEMENT(queue, dst), QUEUE_ELEMENT(queue, src), len * queue->element_size);
+    } else if (removed_index < PREV_INDEX(queue->rear, queue->capacity)) {
+        int len = PREV_INDEX(queue->rear, queue->capacity) - removed_index;
+        int dst = removed_index;
+        int src = NEXT_INDEX(removed_index, queue->capacity);
+        memmove(QUEUE_ELEMENT(queue, dst), QUEUE_ELEMENT(queue, src), len * queue->element_size);
+    }
+    queue->size--;
+    pthread_mutex_unlock(&queue->mutex);
+    pthread_cond_signal(&queue->not_full);
+    
+    return MYERROR_Success;
 }

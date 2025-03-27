@@ -53,7 +53,7 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 //连接latency
 #define SET_CONN_LATENCY    0  //(unit:conn_interval)
 //连接超时
-#define SET_CONN_TIMEOUT    150 //(unit:10ms)
+#define SET_CONN_TIMEOUT    400 //(unit:10ms)
 
 //----------------------------------------------------------------------------
 static u8 scan_ctrl_en;
@@ -837,6 +837,11 @@ int ble_simple_client_create_cannel(void)
 static int get_ble_work_state_api(void)
 {
     return get_ble_work_state();
+}
+
+void ble_simple_client_scan_enable(u8 en)
+{
+    bt_ble_scan_enable(0, en);
 }
 
 //模块开关

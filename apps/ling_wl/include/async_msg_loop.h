@@ -6,8 +6,8 @@
 void start_async_msg_loop();
 
 typedef enum {
-    SWITCH_ONLY_CODE_PREV_STOP_TIMEOUT,
-    SWITCH_ONLY_CODE_NEXT_START_TIMEOUT,
+    SWITCH_ONLY_CODE_TURNOFF_TIMEOUT,
+    SWITCH_ONLY_CODE_TURNON_TIMEOUT,
     SWITCH_ONLY_CODE_SUCCESS,
 } pl_switch_state_code_e;
 
@@ -45,11 +45,23 @@ typedef void (*pl_music_play_cb_func_t)(int code, pl_music_info_t *music_info, v
  * @name my_task_switch_only
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
- * @param name    Pointer to a character string indicating the E-end sequence number.
+ * @param sn      Pointer to a character string indicating the E-end sequence number.
+ * @param timeout Switch timeout, 等待超时（时钟节拍），取0时无限等待
  * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
  * @param priv    A pointer to user-defined private data.
  */
-void my_task_switch_only(char *sn, pl_switch_cb_func_t *cb, void *priv);
+void my_task_switch_only(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv);
+
+/**
+ * @name my_task_turn_off_edev
+ * @brief This function is used to create a specific task message and enqueue it into a message queue.
+ *
+ * @param name    Pointer to a character string indicating the E-end sequence number.
+ * @param timeout Switch timeout, 等待超时（时钟节拍），取0时无限等待
+ * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
+ * @param priv    A pointer to user-defined private data.
+ */
+void my_task_turn_off_edev(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv);
 
 /**
  * @name my_task_play_one

@@ -670,31 +670,31 @@ static const struct music_dec_ops net_music_dec_ops = {
  *======================================================================================================================*/
 int app_music_play_net_music(music_player *player, void *url)
 {
+    net_music_dec_file(player, url);
     player->dec_end_cb = NULL;
     player->dec_end_cb_priv = NULL;
     player->dec_with_cb = 0;
-    net_music_dec_file(player, url);
 }
 int app_music_play_net_music_with_callback(music_player *player, void *url, app_music_play_end_cb_t cb, void *priv)
 {
+    net_music_dec_file(player, url);
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
-    net_music_dec_file(player, url);
 }
 int app_music_play_lfs_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv)
 {
+    lfs_music_dec_file(player, fname);
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
-    lfs_music_dec_file(player, fname);
 }
 int app_music_play_local_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv)
 {
+    local_music_dec_file(player, fname);
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
-    local_music_dec_file(player, fname);
 }
 
 int app_music_play_stop(music_player *player)
