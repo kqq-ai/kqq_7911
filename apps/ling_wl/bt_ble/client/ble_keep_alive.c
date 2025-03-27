@@ -21,6 +21,7 @@
 #define KEEP_ALIVE_HANDSHAKE_LOST_CNT 10
 
 typedef struct {
+    uint32_t cmd_id;
     uint8_t data[KEEP_ALIVE_CMD_DATA_SIZE];
     uint8_t size;
     bka_cmd_cb_funp_t cb;
@@ -62,8 +63,27 @@ const uint8_t uuid_server[]  = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 
 const uint8_t uuid_char_tx[] = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xf3, 0xff, 0x00, 0x00};
 const uint8_t uuid_char_rx[] = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xf4, 0xff, 0x00, 0x00};
 
-const uint16_t notify_handle = 0x20;    // fixed
-const uint16_t write_handle = 0x1E;     // fixed
+const uint16_t notify_handle = 0x20;    // fixed GATT profile
+const uint16_t write_handle = 0x1E;     // fixed GATT profile
+
+/**
+ * @brief 生成32位唯一ID（24位时间戳 + 4位设备号 + 4位随机数）
+ * @param device_id 设备号（取值范围0~15，超出部分会被截断）
+ * @return 生成的32位ID
+ */
+static uint32_t generate_cmd_id(uint8_t device_id) 
+{
+    uint32_t timestamp = timer_get_ms() & 0x00FFFFFF;
+
+    uint8_t random_buf;
+    get_random_number(&random_buf, 1);
+    uint8_t random_num = random_buf & 0x0F;
+
+    uint8_t valid_device_id = device_id & 0x0F;
+
+    uint32_t id = (timestamp << 8) | (valid_device_id << 4) | random_num;
+    return id;
+}
 
 static void handshake_task(void *priv)
 {
@@ -305,34 +325,28 @@ void ble_keep_alive_device_remove(lwl_eend_dev_t *p_eend_dev)
     pthread_mutex_unlock(&g_mutex); // 解锁
 }
 
+
 /**
  * 
  * @brief 往指定设备的控制指令队列中添加一条指令
  * 
- * @param[in] p_eend_dev 设备引用
- * @param[in] cmd_buffer 控制指令数据
- * @param[in] size 控制指令数据长度
- * @param[in] cb 函数指针，控制指令传输完成时的回调
- * @param[in] priv 用户私有数据
+ * @param[in]  p_eend_dev 设备引用
+ * @param[in]  cmd_buffer 控制指令数据
+ * @param[in]  size 控制指令数据长度
+ * @param[in]  cb 函数指针，控制指令传输完成时的回调
+ * @param[in]  priv 用户私有数据
+ * @param[out] cmd_id_out 指令ID
  * 
- * @return 0: 指令添加成功, 
- *         1: 设备列表中未找到指定sn的设备, 
- *         2: 对应设备的控制指令队列已满
+ * @return BKACODE_Success       : 指令添加成功, 
+ *         BKACODE_Not_Found     : 设备列表中未找到指定sn的设备, 
+ *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
  */
-int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buffer, uint32_t size, bka_cmd_cb_funp_t cb, void *priv) 
+int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buffer, uint32_t size, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out) 
 {
     ASSERT(size < KEEP_ALIVE_CMD_DATA_SIZE);
     pthread_mutex_lock(&g_mutex); // 上锁
-    int ret = 1;
-
-    /* 构造 cmd_pair */
-    bka_cmd_t cmd_pair;
-    memset(&cmd_pair, 0, sizeof(bka_cmd_t));
-    memcpy(cmd_pair.data, cmd_buffer, size);
-    cmd_pair.size = size;
-    cmd_pair.cb = cb;
-    cmd_pair.priv = priv;
-
+    int ret = BKACODE_Success;
+    
     /* 检索设备 */
     int idx;
     for (idx = 0; idx < KEEP_ALIVE_DEVICE_MAX_SIZE; ++idx) {
@@ -341,14 +355,72 @@ int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buff
         }
     }
     if (idx == KEEP_ALIVE_DEVICE_MAX_SIZE) {
-        ret = 1; /* sn没检索到 */
-    } else if (my_blocking_queue_try_enqueue(&g_eend_list[idx].cmd_buffer, &cmd_pair) == MYERROR_Is_Full) {
-        ret = 2; /* 对应设备的 cmd_buffer 满了 */
-    } else {
-        g_eend_list[idx].handshake_flag = 0;
-        ret = 0;
+        ret = BKACODE_Dev_Not_Found; /* sn没检索到 */
+        goto final;
     }
+
+    uint32_t cmd_id = generate_cmd_id(idx);
+
+    /* 构造 cmd_pair */
+    bka_cmd_t cmd_pair;
+    memset(&cmd_pair, 0, sizeof(bka_cmd_t));
+    memcpy(cmd_pair.data, cmd_buffer, size);
+    cmd_pair.size = size;
+    cmd_pair.cb = cb;
+    cmd_pair.priv = priv;
+    cmd_pair.cmd_id = cmd_id;
+
+    if (my_blocking_queue_try_enqueue(&g_eend_list[idx].cmd_buffer, &cmd_pair) == MYERROR_Is_Full) {
+        ret = BKACODE_Cmd_Queue_Full; /* 对应设备的 cmd_buffer 满了 */
+        goto final;
+    }
+
+    *cmd_id_out = cmd_id;
+    g_eend_list[idx].handshake_flag = 0;
+
+final:
     pthread_mutex_unlock(&g_mutex); // 解锁
     return ret;
 }
 
+static int bka_device_remove_cmd_condition(void *pcmd_data, void *priv) {
+    return ((bka_cmd_t *)pcmd_data)->cmd_id == (uint32_t)priv;
+}
+
+/**
+ * @brief 删除指定设备的控制指令队列中的指定指令
+ * 
+ * @param[in] p_eend_dev 指定设备引用
+ * @param[in] cmd_id 指定指令ID
+ * 
+ * @return BKACODE_Success : 删除成功
+ *         BKACODE_Dev_Not_Found : 设备列表中未找到指定设备引用
+ *         BKACODE_Cmd_Not_Found : 设备的控制指令队列中未找到指定指令ID的指令
+ */
+int ble_keep_alive_device_remove_cmd(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id)
+{
+    pthread_mutex_lock(&g_mutex); // 上锁
+    int ret = BKACODE_Success;
+    
+    /* 检索设备 */
+    int idx;
+    for (idx = 0; idx < KEEP_ALIVE_DEVICE_MAX_SIZE; ++idx) {
+        if (g_eend_list[idx].pdev == p_eend_dev) {
+            break;
+        }
+    }
+    if (idx == KEEP_ALIVE_DEVICE_MAX_SIZE) {
+        ret = BKACODE_Dev_Not_Found; /* sn没检索到 */
+        goto final;
+    }
+
+    if (MYERROR_Not_Found == 
+        my_blocking_queue_try_remove_if(&g_eend_list[idx].cmd_buffer, bka_device_remove_cmd_condition, (void*)cmd_id)) {
+        ret = BKACODE_Cmd_Not_Found;
+        goto final;
+    }
+
+final:
+    pthread_mutex_unlock(&g_mutex); // 解锁
+    return ret;
+}
