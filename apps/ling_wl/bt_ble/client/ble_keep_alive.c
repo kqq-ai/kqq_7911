@@ -38,7 +38,7 @@ typedef struct {
     uint8_t alive_hs_fail_cnt;  // 保活判断中，连续握手失败的次数
     uint8_t address_type;  //冗余 用于连接 对方地址类型：0--public address,1--random address 
     uint8_t address[6];    //冗余 用于连接 peer_address 
-    uint8_t cache_buf[(sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM)];
+    uint8_t cache_buf[(sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM)]__attribute__((aligned(4)));
     MyBlockingQueue cmd_buffer; // queue<bka_cmd_t>
 } bka_eend_dev_handshake_info_t;
 
