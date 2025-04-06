@@ -679,6 +679,7 @@ int app_music_play_net_music(music_player *player, void *url)
     player->dec_end_cb = NULL;
     player->dec_end_cb_priv = NULL;
     player->dec_with_cb = 0;
+    return 0;
 }
 int app_music_play_net_music_with_callback(music_player *player, void *url, app_music_play_end_cb_t cb, void *priv)
 {
@@ -686,6 +687,7 @@ int app_music_play_net_music_with_callback(music_player *player, void *url, app_
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
+    return 0;
 }
 int app_music_play_lfs_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv)
 {
@@ -693,6 +695,7 @@ int app_music_play_lfs_music_with_callback(music_player *player, void *fname, ap
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
+    return 0;
 }
 int app_music_play_local_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv)
 {
@@ -700,6 +703,7 @@ int app_music_play_local_music_with_callback(music_player *player, void *fname, 
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
+    return 0;
 }
 
 int app_music_play_stop(music_player *player)
@@ -725,9 +729,15 @@ int app_music_play_get_status(music_player *player)
     return -1;
 }
 
-int set_dec_volume(music_player *player, int step)
+int set_dec_volume_step(music_player *player, int step)
 {
     return __set_dec_volume(player, step);
+}
+
+int set_dec_volume(music_player *player, int volume)
+{
+    player->volume = 0;
+    return __set_dec_volume(player, volume);
 }
 
 

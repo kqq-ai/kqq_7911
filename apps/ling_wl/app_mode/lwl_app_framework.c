@@ -170,25 +170,3 @@ void lwl_app_mode_loop()
     }
 }
 
-int lwl_app_event_handler(struct application *app, struct sys_event *event)
-{
-    switch(app_curr_mode) {
-    case APP_POWER_ON_MODE:
-        app_power_on_event_handler(app, event);
-        break;
-    case APP_DEFAULT_MODE:
-        app_default_app_event_handler(app, event);
-        break;
-    case APP_NET_CONNECTING_MODE:
-        app_net_connecting_event_handler(app, event);
-        break;
-    case APP_NET_CONNECTED_MODE:
-        app_net_connected_event_handler(app, event);
-        break;
-    case APP_WSS_CONNECTED_MODE:
-        app_wss_conncted_event_handler(app, event);
-        break;
-    }
-}
-
-
