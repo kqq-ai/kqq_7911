@@ -26,6 +26,8 @@
 #include "test/eend_battery_live_test.h"
 #include "net_event.h"
 #include "log.h"
+#include "bt_ble/ble_combined.h"
+#include "bt_ble/server/ble_simple_server.h"
 
 static int wss_app_net_event_handler(struct net_event *event)
 {
@@ -55,9 +57,23 @@ int app_wss_conncted_event_handler(struct application *app, struct sys_event *ev
 
 static int wss_connected_init(void)
 {
-    ble_simple_server_module_enable(0);
+    if (!get_ble_app_disconnect_flag()) {
+        lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+        /* 通知 APP(小程序) 我已经与wss握手成功 */
+        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_mqtt_succ, NULL)) {
+            printf("Failed to add the notify_app_wifi_mqtt_succ task !\r\n");
+        }
+    }
+    ble_simple_server_adv_enable(0);
     ble_simple_client_module_enable(1);
-    wss_application_init();
+    /* 等待ble与小程序断开 再进入小程序 */
+    while(1) {
+        if (get_ble_app_disconnect_flag()) {
+            wss_application_init();
+            break;
+        }
+    }
+    printf("wss_connected_init exit ! \r\n");
     return 0;
 }
 

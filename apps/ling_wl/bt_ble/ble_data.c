@@ -349,7 +349,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     printf(" ================ in wifi_get_list ====================\r\n");
     int ret = 0;
     char return_errstr[32] = {0};
-    struct wifi_scan_ssid_info *temp_all_wifi_info = NULL;
+    struct wifi_scan_ssid_info *wifi_list_info_array = NULL;
     int temp_all_wifi_count = 0;
     int judge_size = 0;
 
@@ -395,8 +395,19 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     // 打印调试信息
     printf("Handling %s with details level: %d\n", cmd, details);
 
-    get_wifi_scan_result(&temp_all_wifi_info, &temp_all_wifi_count);
+    // 获取 wifi 扫描结果
+    get_wifi_scan_result(&wifi_list_info_array, &temp_all_wifi_count);
 
+    // malloc 存储 wifi 列表的数组
+    struct wifi_scan_ssid_info *temp_all_wifi_info = (struct wifi_scan_ssid_info *)malloc(sizeof(struct wifi_scan_ssid_info) * temp_all_wifi_count);
+    if (temp_all_wifi_info == NULL) {
+        printf("Error: Failed to allocate memory for temp_all_wifi_info\n");
+        ret = 1;
+        goto cleanup;
+    }
+    memcpy(temp_all_wifi_info, wifi_list_info_array, sizeof(struct wifi_scan_ssid_info) * temp_all_wifi_count);
+
+    // 判断 wifi 列表是否为空
     if (temp_all_wifi_count == 0)
     {
         printf("the wifi list info is empty\n");
@@ -416,6 +427,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     if (root == NULL)
     {
         printf("Error: Failed to create cJSON object\n");
+        free(temp_all_wifi_info); // 释放malloc存储 wifi list 的空间
         ret = 1;
         goto cleanup;
     }
@@ -429,6 +441,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     {
         printf("Error: Failed to create cJSON array\n");
         cJSON_Delete(root);
+        free(temp_all_wifi_info); // 释放malloc存储 wifi list 的空间
         ret = 1;
         goto cleanup;
     }
@@ -446,6 +459,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
                 printf("Error: Failed to create cJSON object for WiFi item\n");
                 cJSON_Delete(root);
                 cJSON_Delete(wifi_list);
+                free(temp_all_wifi_info); // 释放malloc存储 wifi list 的空间
                 ret = 1;
                 goto cleanup;
             }
@@ -485,6 +499,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
     {
         printf("Error: Failed to print cJSON object\n");
         cJSON_Delete(root);
+        free(temp_all_wifi_info); // 释放malloc存储 wifi list 的空间
         ret = 1;
         goto cleanup;
     }
@@ -497,6 +512,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
         printf("Error: Return buffer too small\n");
         free(json_str);
         cJSON_Delete(root);
+        free(temp_all_wifi_info); // 释放malloc存储 wifi list 的空间
         ret = 1;
         goto cleanup;
     }
@@ -506,6 +522,7 @@ int handle_wifi_get_list(const char *cmd, cJSON *args, char *return_json_data)
 
     // 清理资源
     free(json_str);
+    free(temp_all_wifi_info); // 释放malloc存储 wifi list 的空间
     cJSON_Delete(root);
 
 cleanup:
@@ -843,7 +860,7 @@ int handle_wifi_get_status(const char *cmd, cJSON *args, char *return_json_data)
     }
 
     temp_connect_state = get_wifi_connect_status(NULL);
-    if (temp_connect_state == WIFI_CONNECT_STA_DISCONNECT)
+    if (temp_connect_state == WIFI_CONNECT_IDLE)
     {
         memcpy(connect_status, "WIFI_STA_DISCONNECT", strlen("WIFI_STA_DISCONNECT"));
     }
@@ -851,9 +868,29 @@ int handle_wifi_get_status(const char *cmd, cJSON *args, char *return_json_data)
     {
         memcpy(connect_status, "WIFI_STA_CONNECT_SUCC", strlen("WIFI_STA_CONNECT_SUCC"));
     }
-    else if (temp_connect_state == WIFI_CONNECT_TIMEOUT_OR_NO_SSID)
+    else if (temp_connect_state == WIFI_CONNECT_ASSOCIAT_FAIL)
     {
         memcpy(connect_status, "WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID", strlen("WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID"));
+    }
+    else if (temp_connect_state == WIFI_CONNECT_ASSOCIAT_TIMEOUT)
+    {
+        memcpy(connect_status, "WIFI_STA_CONNECT_ASSOCIAT_FAIL", strlen("WIFI_STA_CONNECT_ASSOCIAT_FAIL"));
+    }
+    else if (temp_connect_state == WIFI_CONNECT_STA_DISCONNECT)
+    {
+        memcpy(connect_status, "WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID", strlen("WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID"));
+    }
+    else if (temp_connect_state == WIFI_CONNECT_TIMEOUT_NO_SSID)
+    {
+        memcpy(connect_status, "WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID", strlen("WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID"));
+    }
+    else if (temp_connect_state == WIFI_CONNECT_DHCP_SUCC)
+    {
+        memcpy(connect_status, "WIFI_STA_NETWORK_STACK_DHCP_SUCC", strlen("WIFI_STA_NETWORK_STACK_DHCP_SUCC"));
+    }
+    else if (temp_connect_state == WIFI_CONNECT_DHCP_TIMEOUT)
+    {
+        memcpy(connect_status, "WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT", strlen("WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT"));
     }
 
     memcpy(return_str, "WIFI_INFO_CODE_SUCCESS", strlen("WIFI_INFO_CODE_SUCCESS"));

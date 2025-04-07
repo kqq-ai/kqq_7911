@@ -348,7 +348,7 @@ int clean_wifi_scan_result(void *pri)
 {
     memset(g_all_wifi_info, 0, sizeof(g_all_wifi_info));
     g_all_wifi_info_num = 0;
-    printf("WiFi scan result cleared.\r\n"); /* 清楚 计数器*/
+    printf("WiFi scan result cleared.\r\n"); /* 清除 计数器*/
     return 0;
 }
 
@@ -364,7 +364,7 @@ void store_wifi_ip_info(void *pri)
              (temp_ip >> 8) & 0xFF,  // 第三字节
              temp_ip & 0xFF          // 第四字节
     );
-    printf("====================current get wifi ip:%s ===============================\n", g_wifi_ip);
+    printf("current get wifi ip:%s \r\n", g_wifi_ip);
 }
 
 /*获取 wifi ip 信息*/

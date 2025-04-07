@@ -553,7 +553,7 @@ static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u
         // }
         // 发送完整的分包数据
         if (app_send_user_data(handle, packet, total_packet_size, handle_type) != 0) {
-            printf("Error: Failed to send packet %zu\n", i + 1);
+            printf("Error: Failed to send packet %d\n", i + 1);
             return -1;
         }
     }
@@ -780,10 +780,10 @@ void ble_simple_server_disconnect(void)
     }
 }
 
-void ble_simple_server_adv_enable(u8 en)
-{
-    bt_ble_adv_enable(en);
-}
+// void ble_simple_server_adv_enable(u8 en)
+// {
+//     bt_ble_adv_enable(en);
+// }
 
 void ble_simple_server_module_enable(u8 en)
 {
@@ -799,6 +799,21 @@ void ble_simple_server_module_enable(u8 en)
     }
     os_mutex_post(&mutex);
 }
+
+void ble_simple_server_adv_enable(u8 en)
+{
+    os_mutex_pend(&mutex, 0);
+    log_info("mode_en:%d\n", en);
+    if (en) {
+        adv_ctrl_en = 1;
+        bt_ble_adv_enable(1);
+    } else {
+        adv_ctrl_en = 0;
+        bt_ble_adv_enable(0);
+    }
+    os_mutex_post(&mutex);
+}
+
 
 void ble_simple_server_init(void)
 {
@@ -835,13 +850,16 @@ void ble_simple_server_exit(void)
 }
 
 
-
-
-
-
-
-
-
+/* 获取ble与小程序是否断开 */
+int get_ble_app_disconnect_flag(void)
+{
+    if (server_con_handle == INVALID_HANDLE) {
+        return 1;
+    }
+    else if (server_con_handle != INVALID_HANDLE) {
+        return 0;
+    }
+}
 
 /* 通知 APP（小程序） 相关 函数*/
 int notify_app_wifi_ip_succ(void *pri)
@@ -888,7 +906,7 @@ int notify_app_wifi_ip_succ(void *pri)
     //app_send_user_data_external(ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE,return_json_str,strlen(return_json_str),ATT_OP_AUTO_READ_CCC);
 
     free(return_json_str);
-    printf("=========notify  app  the wifi ip is ok   return_json_str:%s=====\r\n",return_json_str);
+    printf("notify  app  the wifi ip is ok   return_json_str:%s\r\n",return_json_str);
 cleanup:
     return ret;
 }
@@ -900,8 +918,8 @@ int notify_app_wifi_mqtt_succ(void *pri)
     char return_errstr[32] = {0};
     char return_json_data[BUFFER_SIZE] = {0};
 
-    memcpy(return_errstr, "MCU_GET_IP_SUCC", strlen("MCU_GET_IP_SUCC"));
-    memcpy(cmd_name, "mcu_notify_app_ip", strlen("mcu_notify_app_ip"));
+    memcpy(return_errstr, "MCU_WIFI_TASK_SUCC", strlen("MCU_WIFI_TASK_SUCC"));
+    memcpy(cmd_name, "mcu_notify_app_mqtt", strlen("mcu_notify_app_mqtt"));
 
 
     // 封装return_json_data
@@ -929,7 +947,11 @@ int notify_app_wifi_mqtt_succ(void *pri)
     //app_send_user_data_external(ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE,return_json_str,strlen(return_json_str),ATT_OP_AUTO_READ_CCC);
 
     free(return_json_str);
-    printf("======notify app the wifi task ok ---- return_json_str:%s======\r\n",return_json_str);
+    printf("notify app the wifi task ok ---- return_json_str:%s\r\n",return_json_data);
+
+    // msleep(100);
+    /* 发送完毕，使其断开连接 */
+    server_disconnect();
 cleanup:
     return ret;
 }

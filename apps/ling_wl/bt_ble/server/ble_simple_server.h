@@ -11,8 +11,9 @@ void server_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
 void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
 void ble_simple_server_disconnect(void);
-void ble_simple_server_adv_enable(u8 en);
+// void ble_simple_server_adv_enable(u8 en);
 void ble_simple_server_module_enable(u8 en);
+void ble_simple_server_adv_enable(u8 en);
 void ble_simple_server_init(void);
 void ble_simple_server_exit(void);
 
@@ -23,6 +24,8 @@ void ble_simple_server_exit(void);
 */
 int app_send_user_data_external(u16 handle, u8 *data, u16 len, u8 handle_type);
 
+/* 获取ble与小程序是否断开 */
+int get_ble_app_disconnect_flag(void);
 
 /* 通知 APP（小程序） 相关 函数*/
 int notify_app_wifi_ip_succ(void *pri);

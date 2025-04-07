@@ -25,7 +25,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
 
-#define INIT_SSID "vivo"
+#define INIT_SSID "hello"
 #define INIT_PWD  "88888888"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
@@ -187,7 +187,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         // set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
-        set_wifi_connect_status(WIFI_CONNECT_TIMEOUT_OR_NO_SSID);
+        set_wifi_connect_status(WIFI_CONNECT_TIMEOUT_NO_SSID);
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
 
@@ -279,6 +279,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
+
+
+        wifi_set_sta_connect_best_ssid(1);
+        wifi_enter_sta_mode(INIT_SSID,INIT_PWD);
         //wifi_enter_smp_cfg_mode();    // 进入SMP模式
 
         break;
