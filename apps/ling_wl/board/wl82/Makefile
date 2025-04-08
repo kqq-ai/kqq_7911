@@ -287,7 +287,6 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/wss_connected/test/function_test.c \
 	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_crc16.c \
 	../../../../apps/ling_wl/app_mode/7911_uart_7016/app_uart_task.c \
-	../../../../apps/ling_wl/SC7A20/sc7a20.c \
 	../../../../apps/ling_wl/audio/recorder.c \
 	../../../../apps/ling_wl/util/cqueue.c \
 	../../../../apps/ling_wl/util/ringbuffer.c \
