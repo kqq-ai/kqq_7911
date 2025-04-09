@@ -949,7 +949,7 @@ int notify_app_wifi_mqtt_succ(void *pri)
     free(return_json_str);
     printf("notify app the wifi task ok ---- return_json_str:%s\r\n",return_json_data);
 
-    // msleep(100);
+    msleep(500);
     /* 发送完毕，使其断开连接 */
     server_disconnect();
 cleanup:
