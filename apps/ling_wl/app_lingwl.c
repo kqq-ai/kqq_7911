@@ -122,6 +122,7 @@ static void moni_task(void *priv)
 static void app_lingwl_main(void)
 {
     log_i("Hello World2!\r\n");
+    log_i("Version: 12\r\n");
     log_i("%s %s\r\n", __DATE__, __TIME__);
     
     lwl_app_core_init();
