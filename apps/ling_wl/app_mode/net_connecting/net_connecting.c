@@ -40,7 +40,7 @@ static int net_connecting_init(void)
     //     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     // }
     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    return 0;
+    return 0;d
 }
 
 static int net_connecting_unint(void)

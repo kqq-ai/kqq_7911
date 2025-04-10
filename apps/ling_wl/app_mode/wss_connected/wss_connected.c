@@ -28,6 +28,7 @@
 #include "log.h"
 #include "bt_ble/ble_combined.h"
 #include "bt_ble/server/ble_simple_server.h"
+#include "bt_ble/client/ble_simple_client.h"
 
 static int wss_app_net_event_handler(struct net_event *event)
 {

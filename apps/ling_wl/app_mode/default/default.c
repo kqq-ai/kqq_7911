@@ -22,6 +22,8 @@
 #include "default.h"
 #include "../lwl_app_framework.h"
 #include "log.h"
+#include "bt_ble/server/ble_simple_server.h"
+#include "bt_ble/client/ble_simple_client.h"
 
 int app_default_app_event_handler(struct application *app, struct sys_event *event)
 {
