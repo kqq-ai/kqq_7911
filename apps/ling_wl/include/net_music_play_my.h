@@ -3,6 +3,7 @@
 
 #include "cpu.h"
 #include "server/audio_server.h"
+#include "util/ring_queue.h"
 #include "lfs.h"
 
 #define CONFIG_STORE_VOLUME
@@ -49,6 +50,7 @@ typedef struct _music_player {
  
     FILE *file;                         /**< File pointer */
     lfs_file_t *lfs_file;               /**< LittleFS file pointer */
+    RingQueue *queue;                   /**< RingQueue file pointer */  
 
     struct server *dec_server;          /**< Audio decoder server instance */
 
@@ -121,6 +123,16 @@ int app_music_play_net_music_with_callback(music_player *player, void *url, app_
  * @return 0 on success
  */
 int app_music_play_lfs_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv);
+
+/**
+ * @brief Play music from circuler buffer with completion callback
+ * @param player Pointer to music player instance
+ * @param ringbuf ringbuffer
+ * @param cb Callback to invoke when playback completes
+ * @param priv Private data to pass to callback
+ * @return 0 on success
+ */
+int app_music_play_stream_music_with_callback(music_player *player, RingQueue *queue, app_music_play_end_cb_t cb, void *priv);
 
 /**
  * @brief Play music from local filesystem(VM) with completion callback

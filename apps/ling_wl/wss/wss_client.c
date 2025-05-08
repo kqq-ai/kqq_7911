@@ -80,6 +80,11 @@ int wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size)
     return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
 }
 
+int wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size)
+{
+    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+}
+
 struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback)
 {
     int err;

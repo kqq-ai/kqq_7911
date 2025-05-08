@@ -4,6 +4,7 @@
 #include "network_download/net_download.h"
 #include "server/audio_server.h"
 #include "server/server_core.h"
+#include "circular_buf.h"
 #include "asm/eq.h"
 #include "wait.h"
 #include "syscfg_id.h"
@@ -15,6 +16,7 @@
 static const struct music_dec_ops local_music_dec_ops;
 static const struct music_dec_ops net_music_dec_ops;
 static const struct music_dec_ops lfs_music_dec_ops;
+static const struct music_dec_ops cbuf_music_dec_ops;
 // 定义文件系统的全局句柄
 extern lfs_t g_lfs;
 
@@ -257,6 +259,187 @@ static const struct music_dec_ops lfs_music_dec_ops = {
     .dec_stop = lfs_music_dec_stop,
     .dec_status = __get_dec_status,
 };
+
+
+/*======================================================================================================================
+ * stream music decoder
+ *======================================================================================================================*/
+int my_stream_download_read(void *file, void *buf, u32 len)
+{
+    int ret = ring_queue_try_read(file, buf, len);
+
+    static int stream_cnt2 = 0;
+
+    if (RINGQUEUE_Is_Empty == ret) {
+        log_i("[DEC] cbuf file read: len = %d, ret = %d, total: %d\n", len, ret, stream_cnt2);
+        return -1;
+    } else {
+        stream_cnt2 += ret;
+        log_i_buf(buf, len);
+        
+        log_d("[DEC] cbuf file read: len = %d, ret = %d, total: %d\n", len, ret, stream_cnt2);
+        return ret;
+    }
+}
+int my_stream_download_seek(void *file, u32 offset, int origin)
+{
+    return -1;
+}
+int my_stream_download_get_file_len(void *file)
+{
+    return -1;
+}
+
+static const struct audio_vfs_ops cbuf_audio_dec_vfs_ops = {
+    .fread = my_stream_download_read,
+    .fseek = my_stream_download_seek,
+    .flen  = my_stream_download_get_file_len,
+};
+
+static int __stream_download_ready(void *priv)
+{
+    music_player *player = (music_player *)priv;
+    RingQueue *queue = player->queue;
+    if (0x3000 < ring_queue_size(queue)) {
+        return 1;
+    }
+    return 0;
+}
+
+static int __stream_music_dec_file(music_player *player)
+{
+    int err;
+    union audio_req req = {0};
+
+    RingQueue *queue = player->queue;
+
+    req.dec.dec_type = "mp3";
+    req.dec.cmd = AUDIO_DEC_OPEN;
+    req.dec.volume = player->volume;
+    req.dec.output_buf = NULL;
+    req.dec.output_buf_len = DEC_BUF_LEN;
+    req.dec.file = (void *)queue; // 传递文件句柄
+    req.dec.channel = 0;
+    req.dec.sample_rate = 0;
+    req.dec.priority = 1;
+    req.dec.vfs_ops = &cbuf_audio_dec_vfs_ops; // 使用文件系统的vfs_ops
+    req.dec.sample_source = "dac";
+
+#if TCFG_EQ_ENABLE
+#if defined EQ_CORE_V1
+    req.dec.attr |= AUDIO_ATTR_EQ_EN;
+#if TCFG_LIMITER_ENABLE
+    req.dec.attr |= AUDIO_ATTR_EQ32BIT_EN;
+#endif
+#if TCFG_DRC_ENABLE
+    req.dec.attr |= AUDIO_ATTR_DRC_EN;
+#endif
+#else
+    struct eq_s_attr eq_attr = {0};
+    extern void set_eq_req_attr_parm(struct eq_s_attr * eq_attr);
+    set_eq_req_attr_parm(&eq_attr);
+    if (!player->play_voice_prompt)
+    {
+        req.dec.eq_attr = &eq_attr;
+        req.dec.eq_hdl = player->eq_hdl;
+    }
+#endif
+#endif
+
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    if (err) {
+        log_e("Failed to start playback: %d\n", err);
+        return err;
+    }
+
+    player->play_time = req.dec.play_time;
+    player->total_time = req.dec.total_time;
+
+    req.dec.cmd = AUDIO_DEC_START;
+
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    if (err)
+    {
+        log_e("Failed to start playback: %d\n", err);
+        return err;
+    }
+    player->cmp_file = queue;
+}
+
+static int stream_music_dec_file(music_player *player, RingQueue *queue)
+{
+    log_i("app_stream_music_dec_file\n");
+
+    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
+        // 停止解码
+        player->dec_ops->dec_stop(player);
+        // 执行回调
+        if (player->dec_with_cb && player->dec_end_cb != NULL) {
+            player->dec_end_cb(player->dec_end_cb_priv);
+            player->dec_end_cb = NULL;
+        }
+    }
+    player->queue = queue;
+
+    /*
+     * 异步等待网络下载ready，防止网络阻塞导致app卡住
+     */
+    player->wait_download_suspend = 0;
+    player->wait_download = wait_completion(__stream_download_ready,
+                                            (int (*)(void *))__stream_music_dec_file, (void *)player, player);
+
+    // if (!player->play_voice_prompt)
+    // {
+    //     player->dec_ops = &lfs_music_dec_ops;
+    // }
+    player->dec_ops = &cbuf_music_dec_ops;
+
+    led_ui_post_msg("dec_start");
+    puts("play_music_file: suss\n");
+    return 0;
+}
+
+static int stream_music_dec_stop(music_player *player)
+{
+    int err = 0;
+    union audio_req req;
+
+    int resume_play = 0;
+
+    if (!player->queue) {
+        return 0;
+    }
+
+    log_i("cbuf_music_dec_stop\n");
+
+    if (player->dec_server)
+    {
+        req.dec.cmd = AUDIO_DEC_STOP;
+        server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    }
+
+    int argv[2];
+    argv[0] = AUDIO_SERVER_EVENT_END;
+    argv[1] = (int)player->queue;
+    server_event_handler_del(player->dec_server, 2, argv);
+
+    /* 关闭文件 */
+    printf("cbuf_music_dec_stop: suss\n");
+
+    player->queue = NULL;
+
+    return 0;
+}
+
+static const struct music_dec_ops cbuf_music_dec_ops = {
+    .dec_file = stream_music_dec_file,
+    // .dec_volume     = cbuf_music_dec_volume,
+    // .dec_progress   = cbuf_musci_dec_progress,
+    .dec_stop = stream_music_dec_stop,
+    .dec_status = __get_dec_status,
+};
+
+
 
 /*======================================================================================================================
  * local music decoder
@@ -692,6 +875,14 @@ int app_music_play_net_music_with_callback(music_player *player, void *url, app_
 int app_music_play_lfs_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv)
 {
     lfs_music_dec_file(player, fname);
+    player->dec_end_cb = cb;
+    player->dec_end_cb_priv = priv;
+    player->dec_with_cb = 1;
+    return 0;
+}
+int app_music_play_stream_music_with_callback(music_player *player, RingQueue *queue, app_music_play_end_cb_t cb, void *priv)
+{
+    stream_music_dec_file(player, queue);
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;

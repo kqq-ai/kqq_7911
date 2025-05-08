@@ -9,6 +9,7 @@
 #include "net_update.h"
 #include "app_config.h"
 #include "wifi/wifi_connect.h"
+#include "util/cjson_util.h"
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
@@ -223,50 +224,6 @@ int request_ota_info(char **pota_info)
         ctx = NULL;
     }
     return ret;
-}
-
-static const cJSON *cjson_parse(u8 *buf)
-{
-    const cJSON *nroot = cJSON_Parse(buf);
-    if (nroot == NULL) {
-        const char *error_ptr = cJSON_GetErrorPtr();
-        if (error_ptr!= NULL) {
-            log_i("INFO: failed to analysis JSON string at position %ld: %s", 
-                ((u8 *)error_ptr - (u8 *)buf), error_ptr);
-        } else {
-            log_i("INFO: failed to analysis JSON string, unknown reason");
-        }
-    }
-    return nroot;
-}
-
-static char *cjson_get_string_value(cJSON *object, const char *string)
-{
-    const cJSON *nnode = cJSON_GetObjectItem(object, string);
-    if (nnode == NULL || !cJSON_IsString(nnode)) {
-        if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
-        } else {
-            log_i("INFO: the '%s' key exists, but its value is not of string type.", string);
-        }
-        return NULL;
-    }
-    return cJSON_GetStringValue(nnode);
-}
-
-static int cjson_get_integer_value(cJSON *object, const char *string, int *value)
-{
-    const cJSON *nnode = cJSON_GetObjectItem(object, string);
-    if (nnode == NULL || !cJSON_IsNumber(nnode)) {
-        if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
-        } else {
-            log_i("INFO: the '%s' key exists, but its value is not of number type.", string);
-        }
-        return 1;
-    }
-    *value = nnode->valueint;
-    return 0;
 }
 
 int parse_ota_info(const cJSON *nroot, ota_info_t *pota_info)

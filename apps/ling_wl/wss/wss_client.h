@@ -30,6 +30,15 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
 int  wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size);
 
 /**
+ * @brief Sends binary data through an established WebSocket connection
+ * @param websockets_info Pointer to the websocket_struct obtained from wss_server_connect()
+ * @param buf Pointer to the data buffer to send
+ * @param size Size of the data to send
+ * @return Number of bytes sent on success, negative value on error
+ */
+int  wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size);
+
+/**
  * @brief Closes an established WebSocket connection
  * @param websockets_info Pointer to the websocket_struct obtained from wss_server_connect()
  * @note This function will free all resources associated with the connection

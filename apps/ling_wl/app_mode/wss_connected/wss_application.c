@@ -4,7 +4,6 @@
 
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
-#include "protocol/lingos/loswssp.h"
 #include "bt_ble/client/ble_distance.h"
 #include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
@@ -14,6 +13,9 @@
 
 #include "ota/http_ota.h"
 #include "uart.h"
+
+#include "protocol/odm/odmp.h"
+#include "protocol/odm/odm_util.h"
 
 static void wss_app_recorder_data_upstream(recorder_data_cb_t cb);
 static void recorder_data_to_data_queue(void* priv, void *data, u32 size);
@@ -37,6 +39,8 @@ typedef enum {
     STATE_MODE_PLAYINTRO,
     STATE_MODE_ONEONONE,
     STATE_MODE_ONEONMANY,
+
+    STATE_MODE_TEST,
 } AppModeState;
 
 typedef enum {
@@ -54,6 +58,17 @@ typedef enum {
     STATE_ONEONONE_PLAYING,
 
     STATE_ONEONMANY_IDLE,
+
+    STATE_TEST_STEP_1,
+    STATE_TEST_STEP_2,
+    STATE_TEST_STEP_3,
+    STATE_TEST_STEP_4,
+    STATE_TEST_STEP_5,
+    STATE_TEST_STEP_6,
+    STATE_TEST_STEP_7,
+    STATE_TEST_STEP_8,
+    STATE_TEST_STEP_9,
+    STATE_TEST_STEP_10,
 
 } AppTaskStepState;
 
@@ -97,6 +112,16 @@ static int g_wait_resp_flag = false;
 /* Oneonmany context */
 static int g_oneonmany_state = STATE_ONEONMANY_IDLE; 
 
+/* Test context */
+static int g_test_state = STATE_TEST_STEP_1;
+static int g_setup_complete = false;
+static int g_tts_bind_flag = false;
+static int g_audio_playing = false;
+static int g_audio_ready = false;
+static int g_audio_play_ok = false;
+static RingQueue g_audio_data_queue;
+static u8 g_audio_data_queue_buffer[200 * 1024]; // 200KB
+
 
 /* LingOS 对话上下文 */
 #define COMMUNICATION_AUDIO_LIST_MAX_SIZE 10
@@ -129,16 +154,16 @@ static int g_backend_message_end_ok = false;    // lingos message end event
 /*=================================================================================================
  * Audio enc app context
  *=================================================================================================*/
-#define ASR_DATA_CHUNK_SIZE 1280
+#define ASR_DATA_CHUNK_SIZE 144
 typedef struct {
     u8 data[ASR_DATA_CHUNK_SIZE];
 } AsrData;
 
-#define MY_ASR_DATA_QUEUE_CAPACITY 24
+#define MY_ASR_DATA_QUEUE_CAPACITY 20
 static MyBlockingQueue g_asr_data_queue; // MyBlockingQueue<AsrData>
 static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 
-#define MY_ASR_RING_BUFFER_CAPACITY 24   // 24 = floor(((1000ms / 1s) * 2byte * 16000Hz) / 1280byte)
+#define MY_ASR_RING_BUFFER_CAPACITY 20   // 24 = floor(((1000ms / 1s) * 2byte * 16000Hz) / 1280byte)
 static MyRingBuffer g_asr_ringbuffer;    // MyRingBuffer<AsrData>
 static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)];
 
@@ -163,7 +188,7 @@ typedef struct {
 
 #define MY_MESSAGE_QUEUE_CAPACITY 10
 static MyBlockingQueue g_msg_queue; // MyBlockingQueue<AsrData>
-static u8 g_msg_queue_buffer[MY_MESSAGE_QUEUE_CAPACITY * sizeof(AppMessage)];
+static u8 g_msg_queue_buffer[MY_MESSAGE_QUEUE_CAPACITY * sizeof(AppMessage)] __attribute__((aligned(4)));
 
 /*=================================================================================================
  * App edev table
@@ -307,140 +332,83 @@ static void switch_end_callback(int code, pl_switch_info_t *switch_info, void *p
     }
 }
 
+static void app_music_play_end_cb(void *priv)
+{
+    log_i("app_music_play_end_cb\n");
+    g_audio_play_ok = true;
+}
+static int nnnnn = 0;
+
 //=================================================================================================
 // WSS response callback
 //=================================================================================================
-static int loswssp_rsp_cbk(int type, loswssp_package_t *pkg)
+static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
 {
     switch (type) {
-    case LR_SESSION:
-        log_i("LR_SESSION\n");
-        if (pkg->session.new_session) {
-            int session_id = pkg->session.session_id;
+    case OR_INITIAL_SETUP_RESPONSE:
+        log_i("INITIAL_SETUP_RESPONSE\n");
+        log_i("setup_complete: %d\n", pkg->initial_setup_response.setup_complete);
+        g_setup_complete = true;
+        break;
+    case OR_DEVICE_SWITCH_RESPONSE:
+        log_i("DEVICE_SWITCH_RESPONSE\n");
+        log_i("device_id: %s\n", pkg->device_switch_response.device_id);
+        log_i("status: %s\n", pkg->device_switch_response.status);
+        break;
+    case OR_TTS_BIND:
+        log_i("TTS_BIND\n");
+        log_i("c_id: %s\n", pkg->tts_bind.c_id);
+        log_i("send_id: %s\n", pkg->tts_bind.send_id);
+        log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
+        g_tts_bind_flag = true;
+        break;
+    case OR_AUDIO_STATUS:
+        log_i("AUDIO_STATUS\n");
+        log_i("c_id: %s\n", pkg->audio_status.c_id);
+        log_i("type: %s\n", odmp_ast_to_text(pkg->audio_status.type));
+        log_i("event: %s\n", odmp_ase_to_text(pkg->audio_status.event));
+        log_i("format: %s\n", pkg->audio_status.audio_param.format);
+        log_i("sample_rate: %d\n", pkg->audio_status.audio_param.sample_rate);
+        log_i("channels: %d\n", pkg->audio_status.audio_param.channels);
+        log_i("frame_duration: %d\n", pkg->audio_status.audio_param.frame_duration);
+        
+        if (pkg->audio_status.type == OAST_ASR) {
+        } else if (pkg->audio_status.type == OAST_TTS) {
+            if (pkg->audio_status.event == OASE_START) {
+                log_i("AUDIO_STATUS: OASE_START\n");
 
-            if (g_mode_state == STATE_MODE_CREATE_SESSION) {
-                if (g_session_create_state == STATE_CREATE_ROLE_SESSION_CREATING) {
-                    log_i("get role[%d] session id: %d\n", g_session_create_idx, session_id);
-                    g_edev_table[g_session_create_idx].session_id = session_id;
+                if (nnnnn == 0) {
+                    nnnnn = 1;
+                    ring_queue_clear(&g_audio_data_queue); // 清空音频数据队列
+                    app_music_play_stream_music_with_callback(g_app_ctx->music_player, &g_audio_data_queue, app_music_play_end_cb, &g_audio_data_queue);
+                    g_audio_playing = true;
                 }
-            }
-        } else {
-            /* 请求后端切换session时，若session已存在，则new_session字段为False */
-            if (g_mode_state == STATE_MODE_PLAYINTRO) {
-                if (g_playintro_state == STATE_PLAYINTRO_SWITCH) {
-                    g_backend_switch_session_ok = true;
-                }
+            } else if (pkg->audio_status.event == OASE_END) {
+                log_i("AUDIO_STATUS: OASE_END\n");
+            } else if (pkg->audio_status.event == OASE_ABNORMAL) {
+            } else if (pkg->audio_status.event == OASE_SENTENCE_START) {
+            } else if (pkg->audio_status.event == OASE_SENTENCE_END) {
             }
         }
         break;
-    case LR_MESSAGE_ASR_DATA:
-        log_i("LR_MESSAGE_ASR_DATA\n");
-        break;
-    case LR_MESSAGE_ASR_END: {
-        log_i("LR_MESSAGE_ASR_END\n");
-        int vmessage_id = pkg->message_asr_end.message_id;
-        log_i("message id     :%d", vmessage_id);
-        g_communication_message_id = vmessage_id;
-    }   break;
-    case LR_MESSAGE_DELTA:
-        log_i("LR_MESSAGE_DELTA\n");
-        break;
-    case LR_MESSAGE_AUDIO: {
-        log_i("LR_MESSAGE_AUDIO\n");
-        int vmessage_id = pkg->message_audio.message_id;
-        log_i("message id     :%d", vmessage_id);
-        int audio_num = pkg->message_audio.audio_num;
-        log_i("audio num      :%d", audio_num);
-        for (int i = 0; i < audio_num; ++i) {
-            char* vcontent = pkg->message_audio.audios[i].content;
-            char* vurl = pkg->message_audio.audios[i].url;
-
-            if (g_mode_state == STATE_MODE_ONEONONE) {
-                if (g_oneonone_state == STATE_ONEONONE_PLAYING) {
-                    /* 保存对话内容，用于之后和另一个角色对话 */
-                    log_i("latest content :%s", vcontent);
-                    log_i("latest url     :%s", vurl);
-
-                    /* 保存到记录，用于按键重播 */
-                    strncpy(g_communication_audio_list[g_communication_audio_cnt], vurl, sizeof(g_communication_audio_list[0]));
-                    g_communication_audio_cnt++;
-
-                    /* 执行任务播放音乐，并注册回调，播放完成时处理 */
-                    my_task_play_one_lingos(vmessage_id, vurl, audio_play_end_callback, &g_edev_table[g_curr_edev_idx]);
-                    g_audio_play_ongoing_num++;
-
-                    g_wait_resp_flag = true;
-                }
-            } else if (g_mode_state == STATE_MODE_CREATE_SESSION) {
-                if (g_session_create_state == STATE_CREATE_ROLE_SESSION_CREATING) {
-                    /* 保存开场白 */
-                    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-                    save_role_opening_task_param_t *save_opening_param = (save_role_opening_task_param_t *)malloc(sizeof(save_role_opening_task_param_t));
-                    save_opening_param->lfs = ctx->lfs_hdl;
-                    save_opening_param->url = (char *)malloc(strlen(vurl) + 1);
-                    if (save_opening_param->url == NULL) {
-                        printf("Failed to allocate memory for vurl\n");
-                        free(save_opening_param);
-                        break;
-                    }
-                    strcpy(save_opening_param->url, vurl);
-                    save_opening_param->role_name = g_edev_table[g_session_create_idx].ip_id;
-                    sprintf(save_opening_param->opening_filename, "opening_%d.mp3", g_edev_table[g_session_create_idx].ip_id);
-                    if (!threadpool_add_task(ctx->threadpool, save_role_opening_file_task, save_opening_param))
-                    {
-                        printf("!!!!!!!!!!!!!!!!!Failed to add save_role_opening_file_task  !!!!!!!!!!!!!!!!!!!!!\r\n");
-                        free(save_opening_param->url);
-                        free(save_opening_param); 
-                        break;                  
-                    }
-                }
-            }
-        }
-    }   break;
-    case LR_MESSAGE_FILE:
-        log_i("LR_MESSAGE_FILE\n");
-        break;
-    case LR_MESSAGE_END:
-        log_i("LR_MESSAGE_END\n");
-
-        if (pkg->errno != 0) {
-            
-            lwl_app_context_t *context = lwl_app_core_context_get_instance();
-            log_i("url: %s", context->wss_url);
-
-            log_i("Errno: %d", pkg->errno);
-            if (pkg->errmsg) {
-                log_i("Error message: %s", pkg->errmsg);
-            }
-        }
-
-        if (g_mode_state == STATE_MODE_PLAYINTRO) {
-            if (g_playintro_state == STATE_PLAYINTRO_PLAYING) {
-                g_backend_message_end_ok = true;
-            }
-        } else if (g_mode_state == STATE_MODE_ONEONONE) {
-            if (g_oneonone_state == STATE_ONEONONE_PLAYING) {
-                g_backend_message_end_ok = true;
-            }
-        } else if (g_mode_state == STATE_MODE_CREATE_SESSION) {
-            if (g_session_create_state == STATE_CREATE_ROLE_SESSION_CREATING) {
-                g_edev_table[g_session_create_idx].session_create_ok = true;
-            }
-        }
-        break;
-    case LR_MESSAGE_STOP:
-        log_i("LR_MESSAGE_STOP\n");
-        log_i("stop message id: %d\n", pkg->message_stop.message_id);
-        g_message_stop_ok = true;
-        g_message_stop_message_id = pkg->message_stop.message_id;
-        break;
-    case LR_MESSAGE_POINT_DELTA:
-        log_i("LR_MESSAGE_POINT_DELTA\n");
-        break;
-    case LR_PONG:
+    case OR_PONG:
         log_i("LR_PONG\n");
         break;
     }
+}
+
+static int odmp_audio_data_cbk(uint8_t *data, uint32_t len)
+{
+    if (g_audio_playing) {
+        int ret = ring_queue_write(&g_audio_data_queue, data, len);
+
+        static int stream_cnt1 = 0;
+        stream_cnt1 += ret;
+        log_i("write: %d\n", stream_cnt1);
+    } else {
+        log_e("Audio data not playing\n");
+    }
+    return 0;
 }
 
 //=================================================================================================
@@ -643,19 +611,26 @@ static void wss_asr_data_to_server(struct websocket_struct *websockets_info, Asr
     // log_d("cnt1: %d\n", cnt1);
     g_recording_upload_package_index++;
 
-    size_t write_len = 0;
-    memset(base64_buf, 0, sizeof(base64_buf));
-    int ret = mbedtls_base64_encode(base64_buf, BASE64_BUF_MAX_SIZE, &write_len, asr_data->data, ASR_DATA_CHUNK_SIZE);
-    ASSERT(ret == 0);
-    ASSERT(write_len == (BASE64_BUF_MAX_SIZE - 1));
+    // size_t write_len = 0;
+    // memset(base64_buf, 0, sizeof(base64_buf));
+    // int ret = mbedtls_base64_encode(base64_buf, BASE64_BUF_MAX_SIZE, &write_len, asr_data->data, ASR_DATA_CHUNK_SIZE);
+    // ASSERT(ret == 0);
+    // ASSERT(write_len == (BASE64_BUF_MAX_SIZE - 1));
 
     dev_write(g_hdl, asr_data, ASR_DATA_CHUNK_SIZE);
-    log_i(">>");
+    log_d(">>");
+#if 0
     if (communication_message_asr_data(websockets_info, base64_buf) != 0) {
         wss_application_exception_exit();
         return;
     }
-    log_i("--");
+#else
+    uint8_t *pdata = (uint8_t *)asr_data;
+    wss_server_send_bin(websockets_info, pdata, ASR_DATA_CHUNK_SIZE);
+    // log_d("%d %02X %02X %02X %02X ...", ASR_DATA_CHUNK_SIZE, pdata[0], pdata[1], pdata[2], pdata[3]);
+    log_i_buf(pdata, ASR_DATA_CHUNK_SIZE);
+#endif
+    log_d("--");
 }
 
 
@@ -908,6 +883,7 @@ static bool app_oneonone_loop()
         }
 
         if (g_recording_upload_package_index == 0) { /* 发送第一包数据前，先发送asr事件和asr start事件 */
+#if 0
             if (communication_message_asr(websockets_info) != 0) { /* 发送asr */
                 wss_application_exception_exit();
                 return true;
@@ -916,24 +892,42 @@ static bool app_oneonone_loop()
                 wss_application_exception_exit();
                 return true;
             }
+#else
+            char *send_data = odmp_req_message_vad_speaker_start(NULL, 0, "CC1CC1CC1CC1", "");
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+
+            send_data = odmp_audio_status("CC1CC1CC1CC1", OAST_ASR, OASE_START);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+#endif
         }
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
-        log_i("AAA");
+        log_d("AAA");
         if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
-            log_i("BBB");
+            log_d("BBB");
             wss_asr_data_to_server(websockets_info, &asr_data_frame);
         } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
-            log_i("CCC");
+            log_d("CCC");
             wss_asr_data_to_server(websockets_info, &asr_data_frame);
         }
 
         if (g_recording == false) { /* VAD结束 */
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
             
+#if 0
             if (communication_message_asr_end(websockets_info) != 0) { /* 发送asr end */
                 wss_application_exception_exit();
                 return true;
             }
+#else
+            char *send_data = odmp_audio_status("CC1CC1CC1CC1", OAST_ASR, OASE_END);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+#endif
 
             /* 清空按键重播的音频链接列表 */
             g_communication_audio_cnt = 0;
@@ -998,6 +992,165 @@ static bool app_oneonmany_loop()
 }
 
 //=================================================================================================
+// Test
+//=================================================================================================
+static bool app_test_loop()
+{
+    struct websocket_struct *websockets_info = g_app_ctx->websockets_info;
+    switch (g_test_state) {
+    case STATE_TEST_STEP_1:
+        if (g_setup_complete == true) {
+
+            const char test_target_id[] = { 
+                0x74, 0x65, 0x73, 0x74, 0x5F, // test_
+                0xE5, 0xB0, 0x8F,             // 小
+                0xE7, 0x86, 0x8A,             // 熊
+                0x00                          // 结束符
+            };
+            const char *targets[] = {test_target_id};
+            char *send_data = odmp_req_message_near_trigger(targets, 1, "CC1CC1CC1CC1", test_target_id);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+            
+            g_tts_bind_flag = false;
+            g_test_state = STATE_TEST_STEP_2;
+            log_i("TEST_STEP_1 -> TEST_STEP_2\n");
+        }
+        break;
+    case STATE_TEST_STEP_2:
+        if (g_tts_bind_flag == true) {
+
+            const char test_target_id[] = { 
+                0x74, 0x65, 0x73, 0x74, 0x5F, // test_
+                0xE5, 0xB0, 0x8F,             // 小
+                0xE7, 0x86, 0x8A,             // 熊
+                0x00                          // 结束符
+            };
+            const char *targets[] = {test_target_id};
+            char *send_data = odmp_req_message_switch_success(targets, 1, "CC1CC1CC1CC1", test_target_id);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+
+            g_audio_play_ok = false;
+            g_test_state = STATE_TEST_STEP_3;
+            log_i("TEST_STEP_2 -> TEST_STEP_3\n");
+        }
+        break;
+    case STATE_TEST_STEP_3:
+        if (g_audio_play_ok == true) {
+            g_recording = false;
+            g_test_state = STATE_TEST_STEP_4;
+            log_i("TEST_STEP_3 -> TEST_STEP_4\n");
+        }
+        break;
+    case STATE_TEST_STEP_4:
+        if (g_recording == true) {
+            my_blocking_queue_clear(&g_asr_data_queue); /* 清空asr data queue */
+
+            wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
+            g_recording_upload_package_index = 0;
+            g_recording = true;
+
+            g_test_state = STATE_TEST_STEP_5;
+            log_i("TEST_STEP_4 -> TEST_STEP_5\n");
+            break;
+        }
+        break;
+    case STATE_TEST_STEP_5:
+        if (g_recording_upload_package_index == 0) { /* 发送第一包数据前，先发送asr事件和asr start事件 */
+#if 0
+            if (communication_message_asr(websockets_info) != 0) { /* 发送asr */
+                wss_application_exception_exit();
+                return true;
+            }
+            if (communication_message_asr_start(websockets_info) != 0) { /* 发送asr start */
+                wss_application_exception_exit();
+                return true;
+            }
+#else
+
+            // char *send_data = odmp_req_message_vad_speaker_start(NULL, 0, "CC1CC1CC1CC1", "");
+            // wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            // log_i("%s", send_data);
+            // free(send_data);
+
+            char *send_data = odmp_audio_status("CC1CC1CC1CC1", OAST_ASR, OASE_START);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+#endif
+        }
+        /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
+        log_i("AAA");
+        if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
+            log_i("BBB");
+            wss_asr_data_to_server(websockets_info, &asr_data_frame);
+        } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
+            log_i("CCC");
+            wss_asr_data_to_server(websockets_info, &asr_data_frame);
+        }
+
+        if (g_recording == false) { /* VAD结束 */
+            wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
+            
+#if 0
+            if (communication_message_asr_end(websockets_info) != 0) { /* 发送asr end */
+                wss_application_exception_exit();
+                return true;
+            }
+#else
+            char *send_data = odmp_audio_status("CC1CC1CC1CC1", OAST_ASR, OASE_END);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+#endif
+            g_tts_bind_flag = false;
+
+            g_test_state = STATE_TEST_STEP_6;
+            log_i("TEST_STEP_5 -> TEST_STEP_6\n");
+        }
+        break;
+    case STATE_TEST_STEP_6:
+        if (g_tts_bind_flag == true) {
+            
+            const char test_target_id[] = { 
+                0x74, 0x65, 0x73, 0x74, 0x5F, // test_
+                0xE5, 0xB0, 0x8F,             // 小
+                0xE7, 0x86, 0x8A,             // 熊
+                0x00                          // 结束符
+            };
+            const char *targets[] = {test_target_id};
+            char *send_data = odmp_req_message_switch_success(targets, 1, "CC1CC1CC1CC1", test_target_id);
+            wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+            log_i("%s", send_data);
+            free(send_data);
+
+            nnnnn = 0;
+            g_audio_play_ok = false;
+            g_test_state = STATE_TEST_STEP_7;
+            log_i("TEST_STEP_6 -> TEST_STEP_7\n");
+        }
+        break;
+    case STATE_TEST_STEP_7:
+        if (g_audio_play_ok == true) {
+            g_recording = false;
+            g_test_state = STATE_TEST_STEP_4;
+            log_i("TEST_STEP_7 -> TEST_STEP_4\n");
+        }
+        break;
+    case STATE_TEST_STEP_8:
+        break;
+    case STATE_TEST_STEP_9:
+        break;
+    case STATE_TEST_STEP_10:
+        break;
+    }
+    return false;
+}
+
+//=================================================================================================
 // LOOP
 //=================================================================================================
 
@@ -1030,6 +1183,7 @@ void wss_application_init()
     my_blocking_queue_init_static(&g_msg_queue, g_msg_queue_buffer, sizeof(AppMessage), MY_MESSAGE_QUEUE_CAPACITY);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
+    ring_queue_init_static(&g_audio_data_queue, g_audio_data_queue_buffer, sizeof(g_audio_data_queue_buffer));
 
     g_app_ctx = lwl_app_core_context_get_instance();
     add_edev(&g_app_ctx->eend_dev_list[0], 45);
@@ -1049,8 +1203,9 @@ void wss_application_init()
 
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(wss_app_lwl_event_handler_cb);
-    /* 注册loswssp事件回调 */
-    loswssp_register_rsp_cbk(loswssp_rsp_cbk);
+    /* 注册odmp事件回调 */
+    odmp_register_rsp_cbk(odmp_rsp_cbk);
+    odmp_register_audio_data_cbk(odmp_audio_data_cbk); /* 注册音频数据回调 */
     /* 设置VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
     /* 默认不设置录音上传回调 */
@@ -1062,6 +1217,8 @@ void wss_application_init()
     g_exception_exit = false;
     
     ASSERT(g_mode_state == STATE_MODE_IDLE);
+
+#if 0
     log_i("Start create session task.\n");
 
     /* 初始化 Create session 任务上下文 */
@@ -1070,6 +1227,22 @@ void wss_application_init()
 
     log_i("IDLE -> CREATE_SESSION\n");
     g_mode_state = STATE_MODE_CREATE_SESSION;
+#endif
+
+    char *send_data = odmp_req_message_initial_setup(NULL, 0, "CC1CC1CC1CC1", "");
+    wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
+    log_i("%s", send_data);
+    free(send_data);
+
+    g_mode_state = STATE_MODE_TEST;
+    g_setup_complete = false;
+    g_test_state = STATE_TEST_STEP_1;
+    log_i("IDLE -> TEST(STEP_1)\n");
+    
+    // g_recording = false;
+    // log_i("PLAYINTRO -> ONEONONE(WAIT_VAD)\n");
+    // g_mode_state = STATE_MODE_ONEONONE;
+    // g_oneonone_state = STATE_ONEONONE_WAIT_VAD;
 }
 
 void wss_application_uninit()
@@ -1078,7 +1251,8 @@ void wss_application_uninit()
     my_blocking_queue_destroy_static(&g_msg_queue);
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);
-    
+    ring_queue_destroy_static(&g_audio_data_queue);
+
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(wss_app_lwl_event_handler_cb);
     /* 取消注册loswssp事件回调 */
@@ -1132,6 +1306,10 @@ static void wss_application_normal_loop(struct websocket_struct *websockets_info
         if (app_oneonmany_loop()) {
         }
         break;
+    case STATE_MODE_TEST:
+        if (app_test_loop()) {
+        }
+        break;
     }
 }
 
@@ -1148,7 +1326,7 @@ bool wss_application_loop(struct websocket_struct *websockets_info)
     } else {
         wss_application_normal_loop(websockets_info);
     }
-
+r
     if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
         if (wss_ping_send(websockets_info) != 0) {
             wss_application_exception_exit();

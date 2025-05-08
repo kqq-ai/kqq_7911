@@ -65,7 +65,7 @@ static int wss_connected_init(void)
             printf("Failed to add the notify_app_wifi_mqtt_succ task !\r\n");
         }
     }
-    ble_simple_server_adv_enable(0);
+    ble_simple_server_module_enable(0);
     ble_simple_client_module_enable(1);
     /* 等待ble与小程序断开 再进入小程序 */
     while(1) {

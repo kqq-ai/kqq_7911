@@ -376,6 +376,7 @@ LFLAGS := \
 	--plugin-opt=-movable-region-exclude-func-file-list=../../../../apps/common/movable/exclude.txt \
 	--plugin-opt=-pi32v2-large-program=true \
 	--start-group \
+	../../../../cpu/wl82/liba/libodmp.a \
 	../../../../cpu/wl82/liba/event.a \
 	../../../../cpu/wl82/liba/system.a \
 	../../../../cpu/wl82/liba/cfg_tool.a \
