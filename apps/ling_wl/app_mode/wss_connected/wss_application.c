@@ -1326,7 +1326,7 @@ bool wss_application_loop(struct websocket_struct *websockets_info)
     } else {
         wss_application_normal_loop(websockets_info);
     }
-r
+
     if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
         if (wss_ping_send(websockets_info) != 0) {
             wss_application_exception_exit();
