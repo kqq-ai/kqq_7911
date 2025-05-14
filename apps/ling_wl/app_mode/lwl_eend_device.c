@@ -30,4 +30,17 @@ void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
     memcpy(dev->sn, sn, SN_SIZE);
     dev->adv_match = adv_match_impl;
     dev->get_string = get_string_impl;
+
+    os_mutex_create(&dev->distance_info.mutex);
+    dev->distance_info.rssi = -128;
+    dev->distance_info.rssi_sample_count = 0;
+    memset(dev->distance_info.rssi_samples, -128, sizeof(dev->distance_info.rssi_samples));
+
+    os_mutex_create(&dev->handshake_info.mutex);
+    dev->handshake_info.alive = 0;
+    dev->handshake_info.alive_hs_fail_cnt = 0;
+    dev->handshake_info.handshake_flag = 0;
+    memset(&dev->handshake_info.cache_buf, 0, (sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM));
+    
+    my_blocking_queue_init_static(&dev->handshake_info.cmd_buffer, dev->handshake_info.cache_buf, sizeof(bka_cmd_t), KEEP_ALIVE_CMD_NUM);
 }

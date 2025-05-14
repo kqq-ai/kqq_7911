@@ -124,17 +124,12 @@ static void app_lingwl_main(void)
     log_i("Hello World2!\r\n");
     log_i("Version: 12\r\n");
     log_i("%s %s\r\n", __DATE__, __TIME__);
-    
+
     lwl_app_core_init();
     
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
     lwl_event_handler_add(base_lwl_event_handler);
-
-    /* 初始化E端设备 */
-    lwl_eend_dev_init(sn1, &context->eend_dev_list[0]);
-    lwl_eend_dev_init(sn2, &context->eend_dev_list[1]);
-    lwl_eend_dev_init(sn3, &context->eend_dev_list[2]);
     
     /* 初始化数据通信串口 */
     uart0_hdl = app_uart_dev_init("uart0");
@@ -146,7 +141,7 @@ static void app_lingwl_main(void)
 
     // 取消静音
 #if 1
-    gpio_direction_output(IO_PORTA_00, 1);   //
+    gpio_direction_output(IO_PORTA_00, 1);  //
 #else 
     gpio_direction_output(IO_PORTB_02, 1);  // 
 #endif
@@ -163,24 +158,15 @@ static void app_lingwl_main(void)
     /* 创建线程池 */
     pool = threadpool_create(4, 10);
     context->threadpool = pool;
-
-    /* 初始化E端BLE握手处理任务 */
-    ble_keep_alive_init();
-
-    /* 默认开启SCAN */
-    // threadpool_add_task(pool, open_scan_delay, NULL);
     
     /* 初始化RSSI测距 */
     monitor_init();
 
-    /* 注册监听的设备 */
-    for (int i = 0; i < EEND_MAX_CNT; ++i) {
-        monitor_register_device(&context->eend_dev_list[i]);
-        ble_keep_alive_device_add(&context->eend_dev_list[i]);
-    }
-
     /* 开始RSSI测距 */
     monitor_start();
+
+    /* 初始化E端BLE握手处理任务 */
+    ble_keep_alive_init();
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
@@ -191,8 +177,6 @@ static void app_lingwl_main(void)
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
-
-    
 
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);

@@ -27,6 +27,61 @@ static void init_app_context(lwl_app_context_t* context)
     memset(s_app_context, 0, sizeof(lwl_app_context_t));
     s_app_context->active_eend_idx = -1;
 
+    Map *map = map_create();
+    
+    // 测试插入和查找
+    map_insert(map, "banana", (void*)2);
+    map_insert(map, "apple", (void*)1);
+    map_insert(map, "cherry", (void*)3);
+    
+    ASSERT(map_size(map) == 3);
+    
+    ASSERT(map_find(map, "apple") == (void*)1);
+    ASSERT(map_find(map, "banana") == (void*)2);
+    ASSERT(map_find(map, "cherry") == (void*)3);
+    ASSERT(map_find(map, "nonexistent") == NULL);
+
+    // 测试更新
+    map_insert(map, "banana", (void*)20);
+    ASSERT(map_find(map, "banana") == (void*)20);
+    map_insert(map, "banana", (void*)2);
+    
+    // 测试迭代器顺序
+    MapIterator it = map_begin(map);
+    MapIterator end = map_end(map);
+    
+    ASSERT(!map_iterator_equal(it, end));
+    ASSERT(strcmp(map_iterator_key(it), "apple") == 0);
+    ASSERT(map_iterator_value(it) == (void*)1);
+    
+    map_iterator_next(&it);
+    ASSERT(strcmp(map_iterator_key(it), "banana") == 0);
+    ASSERT(map_iterator_value(it) == (void*)2);
+    
+    map_iterator_next(&it);
+    ASSERT(strcmp(map_iterator_key(it), "cherry") == 0);
+    ASSERT(map_iterator_value(it) == (void*)3);
+    
+    map_iterator_next(&it);
+    ASSERT(map_iterator_equal(it, end));
+    map_iterator_unlock(it);
+    
+    // 测试删除
+    ASSERT(map_erase(map, "banana"));
+    ASSERT(map_size(map) == 2);
+    ASSERT(map_find(map, "banana") == NULL);
+    
+    // 测试删除不存在的键
+    ASSERT(!map_erase(map, "nonexistent"));
+    ASSERT(map_size(map) == 2);
+
+    // 清空测试数据
+    ASSERT(map_erase(map, "apple"));
+    ASSERT(map_erase(map, "cherry"));
+    ASSERT(map_size(map) == 0);
+
+    s_app_context->dev_map = map;
+
     my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY);
 
     thread_fork("lwl_event_scheduler", 15, 512, 0, 0, lwl_simple_event_scheduler, NULL);
@@ -61,17 +116,25 @@ void lwl_app_core_destroy()
 }
 
 /**
- * @brief 获取当前激活的设备对象引用
- * 
- * @return 设备对象引用，如果未找到返回 NULL
+ * @brief 添加新的E端设备信息到设备信息表中
+ * @param [in] sn 序列号
+ * @return 设备对象引用
  */
-lwl_eend_dev_t* find_eend_dev_active()
+lwl_eend_dev_t *add_new_eend_dev(u8 *sn)
 {
     ASSERT(s_app_context != NULL);
-    os_mutex_pend(&g_mutex, 0);
-    lwl_eend_dev_t *p = (s_app_context->active_eend_idx == -1) ? NULL : &s_app_context->eend_dev_list[s_app_context->active_eend_idx];
-    os_mutex_post(&g_mutex);
-    return p;
+    ASSERT(strlen(sn) == SN_SIZE - 1);
+
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)malloc(sizeof(lwl_eend_dev_t));
+    ASSERT(pdev != NULL);
+    lwl_eend_dev_init(sn, pdev);
+    
+    log_i("DDDDDDDDDDDDDDDD");
+    ASSERT(map_insert(s_app_context->dev_map, sn, pdev) == true);
+
+    log_i("EEEEEEEEEEEEEEEE");
+
+    return pdev;
 }
 
 /**
@@ -83,35 +146,54 @@ lwl_eend_dev_t* find_eend_dev_active()
 lwl_eend_dev_t* find_eend_dev_by_sn(u8 *sn)
 {
     ASSERT(s_app_context != NULL);
-    os_mutex_pend(&g_mutex, 0);
-    int i;
-    for (i = 0; i < EEND_MAX_CNT; ++i) {
-        if (memcmp(s_app_context->eend_dev_list[i].sn, sn, SN_SIZE) == 0) {
-            break;
-        }
-    }
-    lwl_eend_dev_t *p = (i != EEND_MAX_CNT) ? &s_app_context->eend_dev_list[i] : NULL;
-    os_mutex_post(&g_mutex);
-    return p;
+    return (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn);
 }
 
 /**
- * @brief 设置当前激活的E端设备
+ * @brief 遍历所有E端设备
  * 
- * @param [in] pdev 设备对象引用
+ * @param [in] callback 回调函数
+ * @param [in] priv 回调函数私有数据
+ * @note 回调函数的参数为设备对象引用和私有数据
  */
-void set_eend_dev_active(lwl_eend_dev_t *pdev)
+void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv)
 {
     ASSERT(s_app_context != NULL);
-    os_mutex_pend(&g_mutex, 0);
-    int i;
-    for (i = 0; i < EEND_MAX_CNT; ++i) {
-        if (&s_app_context->eend_dev_list[i] == pdev) {
-            break;
+
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        callback((lwl_eend_dev_t *)map_iterator_value(it), priv);
+    }
+    
+    map_iterator_unlock(it); // 释放锁
+}
+
+/**
+ * @brief 查找信号最强的E端设备
+ * @return 信号最强的设备对象引用，如果未找到返回 NULL
+ */
+lwl_eend_dev_t *find_eend_dev_closest(void)
+{
+    ASSERT(s_app_context != NULL);
+    
+    lwl_eend_dev_t *result = NULL;
+    s8 rssi = -128;
+
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+        if (rssi < dev->distance_info.rssi) {
+            rssi = dev->distance_info.rssi;
+            result = dev;
         }
     }
-    s_app_context->active_eend_idx = (i == EEND_MAX_CNT) ? -1 : i;
-    os_mutex_post(&g_mutex);
+    map_iterator_unlock(it); // 释放锁
+
+    return result;
 }
 
 /**

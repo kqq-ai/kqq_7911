@@ -4,6 +4,8 @@
 #include "cpu.h"
 #include "app_mode/lwl_eend_device.h"
 
+#define KEEP_ALIVE_HANDSHAKE_LOST_CNT 10
+
 typedef enum {
     BKACODE_Success = 0,
     BKACODE_Dev_Not_Found = -1,
@@ -14,24 +16,12 @@ typedef enum {
 typedef enum {
     BKA_CMD_CODE_COMPL,
     BKA_CMD_CODE_DEVLOST,
+    BKA_CMD_CODE_BUFFER_FULL,
+    BKA_CMD_CODE_BIG_CONNECTION_TIMEOUT,
     BKA_CMD_CODE_UNEXPECTED,
 } bka_cmd_code_e;
 
-typedef void (*bka_cmd_cb_funp_t)(bka_cmd_code_e code, void *);
-
 void ble_keep_alive_init(void);
-
-/**
- * @brief 添加一个握手设备
- * @param[in] p_eend_dev 设备引用
- */
-void ble_keep_alive_device_add(lwl_eend_dev_t *p_eend_dev);
-
-/**
- * @brief 移除一个已添加的设备
- * @param[in] p_eend_dev 设备引用
- */
-void ble_keep_alive_device_remove(lwl_eend_dev_t *p_eend_dev);
 
 /**
  * 

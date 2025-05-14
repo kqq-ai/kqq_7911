@@ -10,6 +10,7 @@
 #include "lwl_eend_device.h"
 #include "app_lfs.h"
 #include "util/cqueue.h"
+#include "util/tree_map.h"
 
 #define EEND_MAX_CNT 3 /**< Maximum number of EEND devices supported */
 
@@ -72,8 +73,9 @@ typedef struct {
     void *uartdev;                   /**< UART device handle */
     lfs_t *lfs_hdl;                  /**< LittleFS filesystem handle */
     int active_eend_idx;             /**< Index of active EEND device */
-    lwl_eend_dev_t eend_dev_list[EEND_MAX_CNT]; /**< List of EEND devices */
-    
+
+    Map *dev_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
+
     MyBlockingQueue event_queue;     /**< Event queue (queue<lwl_event_t>) */
     lwl_event_handler_cb_t event_handlers[LWL_EVENT_HANDLER_MAX_CNT]; /**< Registered event handlers */
 } lwl_app_context_t;
@@ -97,10 +99,20 @@ void lwl_app_core_init();
 void lwl_app_core_destroy();
 
 /**
- * @brief Find the currently active EEND device
- * @return Pointer to the active EEND device, or NULL if none active
+ * @brief 添加新的E端设备信息到设备信息表中
+ * @param [in] sn 序列号
+ * @return 设备对象引用
  */
-lwl_eend_dev_t* find_eend_dev_active();
+lwl_eend_dev_t *add_new_eend_dev(u8 *sn);
+
+/**
+ * @brief 遍历所有E端设备
+ * 
+ * @param [in] callback 回调函数
+ * @param [in] priv 回调函数私有数据
+ * @note 回调函数的参数为设备对象引用和私有数据
+ */
+void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv);
 
 /**
  * @brief Find an EEND device by its serial number
@@ -110,10 +122,10 @@ lwl_eend_dev_t* find_eend_dev_active();
 lwl_eend_dev_t* find_eend_dev_by_sn(u8 *sn);
 
 /**
- * @brief Set the active EEND device
- * @param pdev Pointer to the EEND device to make active
+ * @brief 查找信号最强的E端设备
+ * @return 信号最强的设备对象引用，如果未找到返回 NULL
  */
-void set_eend_dev_active(lwl_eend_dev_t *pdev);
+lwl_eend_dev_t *find_eend_dev_closest(void);
 
 /**
  * @brief Add an event handler callback

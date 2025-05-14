@@ -88,15 +88,19 @@ static const char *const phy_result[] = {
 static int ble_conn_event_user_handler_cnt = 0;
 static int ble_disconn_event_user_handler_cnt = 0;
 static int ble_adv_report_event_user_handler_cnt = 0;
+static int ble_client_report_data_event_user_handler_cnt = 0;
 static void *ble_conn_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void *ble_disconn_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void *ble_adv_report_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
+static void *ble_client_report_data_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void (*ble_conn_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(uint8_t *packet, void *priv);
 static void (*ble_disconn_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(uint8_t *packet, void *priv);
 static void (*ble_adv_report_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(adv_report_t *report_pt, u16 len, void *priv);
+static void (*ble_client_report_data_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(att_data_report_t *report_data, void *priv);
 static void ble_conn_user_handler(uint8_t *packet);
 static void ble_disconn_user_handler(uint8_t *packet);
 static void ble_adv_report_user_handler(adv_report_t *report_pt, u16 len);
+static void ble_client_report_data_user_handler(att_data_report_t *report_data);
 
 static int client_create_connect_api(u8 *addr, u8 addr_type);
 static int client_create_cannel_api(void);
@@ -217,6 +221,8 @@ void user_client_report_data_callback(att_data_report_t *report_data)
     switch (report_data->packet_type) {
     case GATT_EVENT_NOTIFICATION://notify
 //        log_info("\n-notify_rx(%d):",report_data->blob_length);
+        ble_client_report_data_user_handler(report_data);
+        break;
     case GATT_EVENT_INDICATION://indicate
     case GATT_EVENT_CHARACTERISTIC_VALUE_QUERY_RESULT://read
     case GATT_EVENT_LONG_CHARACTERISTIC_VALUE_QUERY_RESULT://read long
@@ -926,6 +932,15 @@ static void ble_adv_report_user_handler(adv_report_t *report_pt, u16 len)
     }
 }
 
+static void ble_client_report_data_user_handler(att_data_report_t *report_data)
+{
+    for (int i = 0; i < ble_client_report_data_event_user_handler_cnt; ++i) {
+        if (ble_client_report_data_event_user_handler[i]) {
+            ble_client_report_data_event_user_handler[i](report_data, ble_client_report_data_event_user_handler_priv[i]);
+        }
+    }
+}
+
 void ble_conn_event_user_handler_add(void (*handler)(uint8_t *, void *), void *priv) 
 {
     ASSERT(ble_conn_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
@@ -949,6 +964,16 @@ void ble_adv_report_event_user_handler_add(void (*handler)(adv_report_t *, u16, 
     ble_adv_report_event_user_handler[ble_adv_report_event_user_handler_cnt] = handler;
     ble_adv_report_event_user_handler_cnt++;
 }
+
+void ble_client_report_data_event_user_handler_add(void (*handler)(att_data_report_t *, void *), void *priv)
+{
+    ASSERT(ble_client_report_data_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
+    ble_client_report_data_event_user_handler_priv[ble_client_report_data_event_user_handler_cnt] = priv;
+    ble_client_report_data_event_user_handler[ble_client_report_data_event_user_handler_cnt] = handler;
+    ble_client_report_data_event_user_handler_cnt++;
+}
+
+
 
 //主机请求更新连接参数
 static void ble_simple_client_send_conn_param_update(void)

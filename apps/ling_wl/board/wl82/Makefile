@@ -291,9 +291,11 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/util/cjson_util.c \
 	../../../../apps/ling_wl/util/ring_queue.c \
 	../../../../apps/ling_wl/util/cqueue.c \
+	../../../../apps/ling_wl/util/rwlock.c \
 	../../../../apps/ling_wl/util/ringbuffer.c \
 	../../../../apps/ling_wl/util/threadpool.c \
 	../../../../apps/ling_wl/util/threadpool_tasks.c \
+	../../../../apps/ling_wl/util/tree_map.c \
 	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
 	../../../../apps/ling_wl/protocol/cp/c_uart_p.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \

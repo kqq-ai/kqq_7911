@@ -627,8 +627,7 @@ static void wss_asr_data_to_server(struct websocket_struct *websockets_info, Asr
 #else
     uint8_t *pdata = (uint8_t *)asr_data;
     wss_server_send_bin(websockets_info, pdata, ASR_DATA_CHUNK_SIZE);
-    // log_d("%d %02X %02X %02X %02X ...", ASR_DATA_CHUNK_SIZE, pdata[0], pdata[1], pdata[2], pdata[3]);
-    log_i_buf(pdata, ASR_DATA_CHUNK_SIZE);
+    // log_i_buf(pdata, ASR_DATA_CHUNK_SIZE);
 #endif
     log_d("--");
 }
@@ -659,24 +658,24 @@ static void wss_asr_data_to_console(AsrData *asr_data)
 //=================================================================================================
 // Distance measurement
 //=================================================================================================
-void app_function(disatance_info_t *distance_info)
+void app_function(lwl_eend_dev_t *p_eend_dev)
 {
     log_i("notify_function my\n");
 
-    int idx = find_edev_idx(distance_info->p_eend_dev);
+    int idx = find_edev_idx(p_eend_dev);
     g_edev_closest_idx = idx;
 }
 
-void self_function(disatance_info_t *distance_info, int distance_type)
+void self_function(lwl_eend_dev_t *p_eend_dev, int distance_type)
 {
-    log_i("distance_type: %d %d\n", distance_type, distance_info->average_rssi);
+    log_i("distance_type: %d %d\n", distance_type, p_eend_dev->distance_info.rssi);
 
-    int idx = find_edev_idx(distance_info->p_eend_dev);
+    int idx = find_edev_idx(p_eend_dev);
     if (idx == -1) {
         return;
     }
     g_edev_table[idx].distance_type = distance_type;
-    g_edev_table[idx].rssi = distance_info->functions_rssi;
+    g_edev_table[idx].rssi = p_eend_dev->distance_info.rssi;
 }
 
 //=================================================================================================
@@ -1186,8 +1185,8 @@ void wss_application_init()
     ring_queue_init_static(&g_audio_data_queue, g_audio_data_queue_buffer, sizeof(g_audio_data_queue_buffer));
 
     g_app_ctx = lwl_app_core_context_get_instance();
-    add_edev(&g_app_ctx->eend_dev_list[0], 45);
-    add_edev(&g_app_ctx->eend_dev_list[1], 5);
+    // add_edev(&g_app_ctx->eend_dev_list[0], 45);
+    // add_edev(&g_app_ctx->eend_dev_list[1], 5);
 
     g_hdl = dev_open("uart2", NULL);
     if (!g_hdl) {
@@ -1338,8 +1337,8 @@ bool wss_application_loop(struct websocket_struct *websockets_info)
         if (context && context->recorder) {
             pp = recorder_get_play_pause_state(context->recorder);
         }
-        log_i("%d %d %d %d %d %d %d", g_test_mode, g_mode_state, 
-            g_session_create_state, g_playintro_state, g_oneonone_state, g_oneonmany_state, pp);
+        log_i("%d %d %d %d %d %d %d %d", g_test_mode, g_mode_state, 
+            g_session_create_state, g_playintro_state, g_oneonone_state, g_oneonmany_state, g_test_mode, pp);
 
         g_heat_timer = g_curr_time;
     }

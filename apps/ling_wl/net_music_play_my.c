@@ -275,7 +275,7 @@ int my_stream_download_read(void *file, void *buf, u32 len)
         return -1;
     } else {
         stream_cnt2 += ret;
-        log_i_buf(buf, len);
+        log_d_buf(buf, len);
         
         log_d("[DEC] cbuf file read: len = %d, ret = %d, total: %d\n", len, ret, stream_cnt2);
         return ret;

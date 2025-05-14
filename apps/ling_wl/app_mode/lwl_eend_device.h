@@ -3,16 +3,62 @@
 
 #include "cpu.h"
 
+#include "os/os_api.h"
+#include "util/cqueue.h"
 #include "btstack/le/le_common_define.h"
 #include "bt_ble/client/ble_att_util.h"
 
 #define SN_SIZE 16 /**< Size of the serial number buffer */
+
+#define MAX_SAMPLES 1000 /**< Size of the RSSI sample array */
+
+typedef struct {
+    int rssi_sample_count;
+    s8 rssi_samples[MAX_SAMPLES];
+    s8 rssi;
+    OS_MUTEX mutex;
+} distance_info_t;
+
+
+typedef void (*bka_cmd_cb_funp_t)(int code, void *);
+
+#define KEEP_ALIVE_CMD_DATA_SIZE 16
+#define KEEP_ALIVE_CMD_NUM 32
+
+typedef struct {
+    uint32_t cmd_id;
+    uint8_t data[KEEP_ALIVE_CMD_DATA_SIZE];
+    uint8_t size;
+    bka_cmd_cb_funp_t cb;
+    void *priv;
+} bka_cmd_t;
+
+typedef struct {
+    bool alive;
+    bool handshake_flag;    // 握手标志，0表示没有握手，1表示已握手
+    uint8_t alive_hs_fail_cnt;  // 保活判断中，连续握手失败的次数
+    uint8_t address_type;  //冗余 用于连接 对方地址类型：0--public address,1--random address 
+    uint8_t address[6];    //冗余 用于连接 peer_address 
+
+    MyBlockingQueue cmd_buffer; // queue<bka_cmd_t>
+#if 1
+    uint8_t cache_buf[(sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM)]__attribute__((aligned(4)));
+#else
+    bka_cmd_t cache_buf[KEEP_ALIVE_CMD_NUM]__attribute__((aligned(4)));
+#endif
+    OS_MUTEX mutex;
+} bka_eend_dev_handshake_info_t;
 
 /**
  * @brief Structure representing an LWL EEND device
  */
 typedef struct {
     u8 sn[SN_SIZE];                     /**< Serial number of the device */
+
+    distance_info_t distance_info;      /**< Distance information */
+
+    bka_eend_dev_handshake_info_t handshake_info; /**< Handshake information */
+
     /**
      * @brief Callback to match advertisement data
      * @param __this Pointer to the device instance
