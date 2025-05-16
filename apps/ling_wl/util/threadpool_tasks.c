@@ -30,6 +30,7 @@ void init_download_params(struct net_download_parm *parm, const char *url)
 /* 根据 role名字 来保存 opening文件 */
 void save_role_opening_file_task(void *args) {
     /* 0. 初始化准备 */
+    int all_file_size = 0;
     void *net_file = NULL;
     struct net_download_parm net_parm;
     int err;
@@ -72,7 +73,7 @@ void save_role_opening_file_task(void *args) {
         log_e("lfs_file_open fail! err code : %d\n", err);
         goto cleanup;
     }
-
+    printf("file_size : %d\r\n",net_download_get_file_len(net_file));
     /* 6. 检查下载是否准备好 */
     while (!net_download_check_ready(net_file)) {
         log_i("Waiting for download to be ready...\n");
@@ -86,6 +87,8 @@ void save_role_opening_file_task(void *args) {
         goto cleanup;
     }
     int bytes_read;
+    all_file_size = net_download_get_file_len(net_file);
+    printf("2. file_size : %d\r\n",all_file_size);
     while ((bytes_read = net_download_read(net_file, buffer, 1024)) > 0) {
         err = lfs_file_write(task_param->lfs, &lfs_file, buffer, bytes_read);
         if (err < 0) {

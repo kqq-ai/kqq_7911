@@ -24,6 +24,7 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
+#include "protocol/cp/c_uart_p.h"
 
 #define INIT_SSID "hello"
 #define INIT_PWD  "88888888"
@@ -141,6 +142,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
+        /* 控制 led : 正在连接网络 褐色 */
+        uart_send_set_led_color(COLOR_BROWN);
+
         break;
 
     case WIFI_EVENT_MODULE_START_ERR:
@@ -192,6 +196,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
+
+        /* 控制 led : 网络连接失败 灰色 */
+        uart_send_set_led_color(COLOR_GRAY);
+
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -213,6 +221,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         {
             wifi_connect_fail_cb_func_pri(NULL);
         }
+
+        /* 控制 led : 网络连接失败 灰色 */
+        uart_send_set_led_color(COLOR_GRAY);
+
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
@@ -225,6 +237,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
+
+        /* 控制 led : 网络连接失败 灰色 */
+        uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -242,7 +257,11 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
 
-        set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
+        // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
+
+        /* 控制 led : 联网成功 紫色 */
+        uart_send_set_led_color(COLOR_PURPLE);
+        printf("the net connected enable led purple !\r\n");
 
         /* 存储 IP*/
         store_wifi_ip_info(NULL);
@@ -279,11 +298,13 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
-
+        
+        /* 控制 led : 网络连接失败 灰色 */
+        uart_send_set_led_color(COLOR_GRAY);
 
         wifi_set_sta_connect_best_ssid(1);
         wifi_enter_sta_mode(INIT_SSID,INIT_PWD);
-        //wifi_enter_smp_cfg_mode();    // 进入SMP模式
+ 
 
         break;
 

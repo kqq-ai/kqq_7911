@@ -13,6 +13,7 @@ void * g_iic_hdl = NULL;
 
 static void app_sc7a20_task(void * arg)
 {
+    printf("app_sc7a20_task !\r\n");
     /* 1.获取全局的iic 句柄 */
 
     while (ERASE_INTRRUPT_RNABLE)
