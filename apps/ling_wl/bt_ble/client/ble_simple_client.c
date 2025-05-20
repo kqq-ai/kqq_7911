@@ -47,7 +47,7 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 #define SET_SCAN_TYPE       SCAN_ACTIVE
 //搜索 周期大小
 #define SET_SCAN_INTERVAL   ADV_SCAN_MS(24) // unit: ms
-#define SET_SCAN_WINDOW     ADV_SCAN_MS(4) // unit: ms
+#define SET_SCAN_WINDOW     ADV_SCAN_MS(8) // unit: ms
 //连接周期
 #define SET_CONN_INTERVAL   (BASE_INTERVAL_MIN*8) //(unit:1.25ms)
 //连接latency
@@ -89,18 +89,22 @@ static int ble_conn_event_user_handler_cnt = 0;
 static int ble_disconn_event_user_handler_cnt = 0;
 static int ble_adv_report_event_user_handler_cnt = 0;
 static int ble_client_report_data_event_user_handler_cnt = 0;
+static int ble_search_completed_event_user_handler_cnt = 0;
 static void *ble_conn_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void *ble_disconn_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void *ble_adv_report_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void *ble_client_report_data_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
+static void *ble_search_completed_event_user_handler_priv[USER_EVENT_CALLBACK_MAX_NUM];
 static void (*ble_conn_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(uint8_t *packet, void *priv);
 static void (*ble_disconn_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(uint8_t *packet, void *priv);
 static void (*ble_adv_report_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(adv_report_t *report_pt, u16 len, void *priv);
 static void (*ble_client_report_data_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(att_data_report_t *report_data, void *priv);
+static void (*ble_search_completed_event_user_handler[USER_EVENT_CALLBACK_MAX_NUM])(void *priv);
 static void ble_conn_user_handler(uint8_t *packet);
 static void ble_disconn_user_handler(uint8_t *packet);
 static void ble_adv_report_user_handler(adv_report_t *report_pt, u16 len);
 static void ble_client_report_data_user_handler(att_data_report_t *report_data);
+static void ble_search_completed_user_handler();
 
 static int client_create_connect_api(u8 *addr, u8 addr_type);
 static int client_create_cannel_api(void);
@@ -175,6 +179,7 @@ void user_client_report_search_result(search_result_t *result_info)
 {
     if (result_info == (void *) -1) {
         log_info("client_report_search_result finish!!!\n");
+        ble_search_completed_user_handler();
         return;
     } 
 
@@ -531,11 +536,9 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 log_info("conn_interval = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet));
                 log_info("conn_latency = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet));
                 log_info("conn_timeout = %d\n", hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
-                // client_profile_start(client_con_handle);
+                client_profile_start(client_con_handle);
 
                 ble_conn_user_handler(packet);  /* process user handler */
-
-                set_ble_work_state(BLE_ST_CONNECT);
             }
             break;
 
@@ -565,11 +568,9 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 ble_op_multi_att_send_conn_handle(client_con_handle, 0, MULTI_ROLE_CLIENT);
 
                 connection_update_complete_success(handle, packet + 8);
-                // client_profile_start(client_con_handle);
+                client_profile_start(client_con_handle);
                 
                 ble_conn_user_handler(packet); /* process user handler */
-
-                set_ble_work_state(BLE_ST_CONNECT);
             }
             break;
 
@@ -941,6 +942,15 @@ static void ble_client_report_data_user_handler(att_data_report_t *report_data)
     }
 }
 
+static void ble_search_completed_user_handler()
+{
+    for (int i = 0; i < ble_search_completed_event_user_handler_cnt; ++i) {
+        if (ble_search_completed_event_user_handler[i]) {
+            ble_search_completed_event_user_handler[i](ble_search_completed_event_user_handler_priv[i]);
+        }
+    }
+}
+
 void ble_conn_event_user_handler_add(void (*handler)(uint8_t *, void *), void *priv) 
 {
     ASSERT(ble_conn_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
@@ -971,6 +981,14 @@ void ble_client_report_data_event_user_handler_add(void (*handler)(att_data_repo
     ble_client_report_data_event_user_handler_priv[ble_client_report_data_event_user_handler_cnt] = priv;
     ble_client_report_data_event_user_handler[ble_client_report_data_event_user_handler_cnt] = handler;
     ble_client_report_data_event_user_handler_cnt++;
+}
+
+void ble_search_completed_event_user_handler_add(void (*handler)(void *), void *priv)
+{
+    ASSERT(ble_search_completed_event_user_handler_cnt != USER_EVENT_CALLBACK_MAX_NUM);
+    ble_search_completed_event_user_handler_priv[ble_search_completed_event_user_handler_cnt] = priv;
+    ble_search_completed_event_user_handler[ble_search_completed_event_user_handler_cnt] = handler;
+    ble_search_completed_event_user_handler_cnt++;
 }
 
 

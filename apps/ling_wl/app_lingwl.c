@@ -55,9 +55,10 @@ const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 static void simple_play_prompt(const char *fname) 
 {
     // g_music_player.play_voice_prompt = 1;
+    log_i("play: %s", fname);
     int err = app_music_play_local_music_with_callback(&g_music_player, fname, NULL, NULL);
     if (err) {
-        key_event_enable();
+        // key_event_enable();
         // g_music_player.play_voice_prompt = 0;
     }
 }
@@ -158,7 +159,7 @@ static void app_lingwl_main(void)
     /* 创建线程池 */
     pool = threadpool_create(4, 10);
     context->threadpool = pool;
-    
+
     /* 初始化RSSI测距 */
     monitor_init();
 
@@ -176,7 +177,7 @@ static void app_lingwl_main(void)
     get_flash_app_cfg_data(context->lfs_hdl);
 
     /* APP_MDOE 开始 */
-    thread_fork("lwl_app_task", 15, 512 * 3, 0, 0, lwl_app_task, NULL);
+    thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
 
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);

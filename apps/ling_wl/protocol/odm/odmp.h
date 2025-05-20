@@ -60,6 +60,8 @@ enum ORX_EVENT_TYPE {
     OR_AUDIO_STATUS,
     OR_INITIAL_SETUP_RESPONSE,
     OR_DEVICE_SWITCH_RESPONSE,
+    OR_MESSAGE_TEXT,
+    OR_EXECUTION_TIME,
     OR_PONG,
 };
 
@@ -89,8 +91,21 @@ typedef struct {
     char *c_id;
     int type;
     int event;
+    int has_audio_param;
     odmp_audio_param_t audio_param;
 } odmp_pkg_audio_status_t;
+
+typedef struct {
+    char *c_id;
+    char *send_id;
+    char *text;
+    int type;
+} odmp_pkg_message_text_t;
+
+typedef struct {
+    char *event;
+    int execution_time;
+} odmp_pkg_execution_time_t;
 
 typedef struct {
 } odmp_pkg_pong_t;
@@ -107,6 +122,8 @@ typedef struct {
         odmp_pkg_tts_bind_t tts_bind;
         odmp_pkg_initial_setup_response_t initial_setup_response;
         odmp_pkg_device_switch_response_t device_switch_response;
+        odmp_pkg_message_text_t message_text;
+        odmp_pkg_execution_time_t execution_time;
         odmp_pkg_pong_t pong;
     };
 } odmp_package_t;

@@ -29,7 +29,7 @@ static pthread_mutex_t g_mutex;
  */
 static OS_SEM g_conn_sem;   // 连接成功信号量
 static OS_SEM g_eend_big_connected_sem;  // E端BLE Audio连接成功信号
-static bool g_handshake_is_ongoing = false;
+bool g_handshake_is_ongoing = false;
 
 
 // 0000fff0-0000-1000-8000-00805f9b34fb
@@ -103,6 +103,7 @@ static void handshake_task(void *priv)
     if (has_cmd) { /* send cmd */
         if (cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {   /* 开机指令需要等待回复 */
             os_sem_set(&g_eend_big_connected_sem, 0);
+
             if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size)) {
                 log_e("[BKA]Failed to send cmd, ble buffer full.");
                 call_cmd_cb(&cmd, BKA_CMD_CODE_BUFFER_FULL);
@@ -140,7 +141,7 @@ __finish:
     g_handshake_is_ongoing = false;
 }
 
-static void start_handshake(bka_eend_dev_handshake_info_t *pdev_info)
+void start_handshake(bka_eend_dev_handshake_info_t *pdev_info)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (!threadpool_add_task(context->threadpool, handshake_task, pdev_info)) {
@@ -171,55 +172,12 @@ static void ble_conn_event_handler(uint8_t *packet)
             ASSERT(0);
             break;
     }
-    
-    // u8 tmp[2] = { 0x00, 0x01 };
-    // log_info("write_ntf_ccc:%04x\n", notify_handle);
-    // client_operation_send(notify_handle + 1, tmp, 2, ATT_OP_WRITE);
-
-    os_sem_post(&g_conn_sem);
 }
 
 static void ble_disconn_event_handler(uint8_t *packet)
 {
     u16 handle = hci_event_disconnection_complete_get_connection_handle(packet);
     log_i("[BKA]ble_conn_event_handler: %0x\n", handle);
-}
-
-static void ble_adv_report_event_handler(adv_report_t *report_pt, u16 len)
-{
-    if (!adv_pre_match_impl(report_pt->data, report_pt->length)) {
-        return;
-    }
-
-    s8 rssi = report_pt->rssi;
-    
-    uint8_t buffer[32];
-    int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
-    char *sn = (char *)buffer + 2;
-    sn[15] = '\0'; // 确保字符串以 null 结尾
-    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(sn);
-    if (pdev == NULL) {
-        pdev = add_new_eend_dev(sn);
-    }
-
-    os_mutex_pend(&pdev->handshake_info.mutex, 0);
-
-    if (pdev->handshake_info.handshake_flag == 1) { /* 已经握手过了 */
-        os_mutex_post(&pdev->handshake_info.mutex);
-        return;
-    }
-    
-    /* 更新状态 */
-    pdev->handshake_info.alive = 1;
-    pdev->handshake_info.alive_hs_fail_cnt = 0;
-    pdev->handshake_info.address_type = report_pt->address_type;
-    memcpy(pdev->handshake_info.address, report_pt->address, 6);
-
-    if (!g_handshake_is_ongoing) {
-        /* 如果没有正在进行的握手任务，就启动一次握手流程 */
-        start_handshake(&pdev->handshake_info);
-    }
-    os_mutex_post(&pdev->handshake_info.mutex);
 }
 
 static void ble_client_report_data_event_handler(att_data_report_t *report_data, void *priv)
@@ -235,6 +193,17 @@ static void ble_client_report_data_event_handler(att_data_report_t *report_data,
         log_i("E BIG connected!");
         os_sem_post(&g_eend_big_connected_sem);
     }
+}
+
+static void ble_search_completed_event_handler(void *priv)
+{
+    log_i("GATT profile search completed.");
+
+    u16 tmp_16 = 0x01; //fixed
+    log_i("write_ntf_ccc:%04x\n", notify_handle);
+    ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2);
+
+    os_sem_post(&g_conn_sem);
 }
 
 static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
@@ -281,7 +250,7 @@ static void ble_keep_alive_task(void *priv)
 {
     while (1) {
         ble_keep_alive_start_handshake();
-        mdelay(5000);
+        mdelay(10000);
     }
 }
 
@@ -296,8 +265,8 @@ void ble_keep_alive_init(void)
     
     ble_conn_event_user_handler_add(ble_conn_event_handler, NULL);
     ble_disconn_event_user_handler_add(ble_disconn_event_handler, NULL);
-    ble_adv_report_event_user_handler_add(ble_adv_report_event_handler, NULL);
     ble_client_report_data_event_user_handler_add(ble_client_report_data_event_handler, NULL);
+    ble_search_completed_event_user_handler_add(ble_search_completed_event_handler, NULL);
 }
 
 /**

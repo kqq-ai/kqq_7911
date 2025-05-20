@@ -1,139 +1,65 @@
 #include "wss_app_util.h"
 
 #include "wss/wss_client.h"
-#include "protocol/lingos/loswssp.h"
+#include "protocol/odm/odmp.h"
+#include "app_mode/lwl_app_core.h"
 
-int communication_talk_message(struct websocket_struct *websockets_info, char *content)
+int send_audio_status(const char *c_id, int type, int event) 
 {
-    // char *send_data = NULL;
-    // loswssp_create_message_event_message_text("abcdefg-123456", content, &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL)
+        return -1;
+
+    char *send_data = odmp_audio_status(c_id, type, event);
+
+    if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        
+        ctx->websockets_info = NULL;
+        return -1;
+    }
+    free(send_data);
     return 0;
 }
 
-int communication_init_role(struct websocket_struct *websockets_info, int ip_id)
+int send_req_message(const char *c_id, const char *send_id, bool is_play, int event_type) 
 {
-    // char *send_data = NULL;
-    // loswssp_create_message_event_session("abcdefg-123456", 
-    //     ip_id, 
-    //     "esp32-testss", 
-    //     true, 
-    //     &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL)
+        return -1;
+
+    char **targets = NULL;
+    int targets_num = 0;
+    make_5m_edev_targets(&targets, &targets_num);
+
+    char *send_data = odmp_req_message(targets, targets_num, c_id, send_id, is_play, event_type);
+
+    if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        free_5m_edev_targets(targets, targets_num);
+
+        ctx->websockets_info = NULL;
+        return -1;
+    }
+    free(send_data);
+    free_5m_edev_targets(targets, targets_num);
     return 0;
 }
 
-int wss_2ip_switch(struct websocket_struct *websockets_info, int session_id, int ip_id)
+int send_bin_data(uint8_t *data, uint32_t len)
 {
-    // char *send_data = NULL;
-    // loswssp_create_message_event_session_switch("abcdefg-123456", 
-    //     session_id, 
-    //     ip_id, 
-    //     "esp32-testss", 
-    //     true, 
-    //     true, 
-    //     &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
-    return 0;
-}
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL)
+        return -1;
 
-int communication_message_asr(struct websocket_struct *websockets_info)
-{
-    // char *send_data = NULL;
-    // loswssp_create_message_event_message_asr("abcdefg-123456", &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
-    return 0;
-}
-
-int communication_message_asr_start(struct websocket_struct *websockets_info)
-{
-    // char *send_data = NULL;
-    // loswssp_create_message_event_message_asr_start("abcdefg-123456", &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
-    return 0;
-}
-
-int communication_message_asr_end(struct websocket_struct *websockets_info)
-{
-    // char *send_data = NULL;
-    // loswssp_create_message_event_message_asr_end("abcdefg-123456", &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
-    return 0;
-}
-
-int communication_message_asr_data(struct websocket_struct *websockets_info, char *data_base64)
-{
-    // char *send_data = NULL;
-    // loswssp_create_message_event_message_asr_data("abcdefg-123456", data_base64, &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // loswssp_destroy_message(send_data);
-    return 0;
-}
-
-int communication_message_stop(struct websocket_struct *websockets_info)
-{
-    // char *send_data = NULL;
-    // loswssp_create_message_event_message_stop("abcdefg-123456", &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
-    return 0;
-}
-
-int wss_ping_send(struct websocket_struct *websockets_info)
-{
-    // char *send_data = NULL;
-    // loswssp_create_message_event_ping("abcdefg-123456", &send_data);
-    // if (FALSE == wss_server_send(websockets_info, send_data, strlen(send_data))) {
-    //     log_e("Error %s %d.", __FILE__, __LINE__);
-    //     loswssp_destroy_message(send_data);
-    //     return -1;
-    // }
-    // log_i(send_data);
-    // loswssp_destroy_message(send_data);
+    if (FALSE == wss_server_send_bin(ctx->websockets_info, data, len)) {
+        log_e("Error %s %d.", __FILE__, __LINE__);
+        ctx->websockets_info = NULL;
+        return -1;
+    }
     return 0;
 }

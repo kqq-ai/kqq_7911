@@ -13,13 +13,6 @@
 #define NOTIFY_APP_TIME 5000 // 5s
 #define NOTIFY_SELF_TIME 10000 // 10S
 
-enum distance_type {
-    DISTANCE_0, // 小于2米
-    DISTANCE_1, // 2米到5米
-    DISTANCE_2, // 大于5米
-    DISTANCE_3, // RSSI等于-128或没有检测到
-};
-
 // 开始检测RSSI
 void monitor_init(void);
 

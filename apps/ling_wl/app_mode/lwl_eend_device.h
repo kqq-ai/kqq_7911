@@ -12,10 +12,19 @@
 
 #define MAX_SAMPLES 1000 /**< Size of the RSSI sample array */
 
+enum distance_type {
+    DISTANCE_0, // 小于2米
+    DISTANCE_1, // 2米到5米
+    DISTANCE_2, // 大于5米
+    DISTANCE_3, // RSSI等于-128或没有检测到
+};
+
 typedef struct {
     int rssi_sample_count;
     s8 rssi_samples[MAX_SAMPLES];
     s8 rssi;
+    int distance_type;
+    int distance_type_last;
     OS_MUTEX mutex;
 } distance_info_t;
 

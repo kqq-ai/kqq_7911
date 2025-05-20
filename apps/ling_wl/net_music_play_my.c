@@ -20,6 +20,7 @@ static const struct music_dec_ops cbuf_music_dec_ops;
 // 定义文件系统的全局句柄
 extern lfs_t g_lfs;
 
+
 static void led_ui_post_msg(const char *msg, ...) {
     // nothing to do
 }
@@ -266,20 +267,14 @@ static const struct music_dec_ops lfs_music_dec_ops = {
  *======================================================================================================================*/
 int my_stream_download_read(void *file, void *buf, u32 len)
 {
-    int ret = ring_queue_try_read(file, buf, len);
+    int ret = ring_queue_try_read_timeout(file, buf, len, 1000);
 
-    static int stream_cnt2 = 0;
+    log_d("[DEC] cbuf file read: len = %d, ret = %d\n", len, ret);
 
     if (RINGQUEUE_Is_Empty == ret) {
-        log_i("[DEC] cbuf file read: len = %d, ret = %d, total: %d\n", len, ret, stream_cnt2);
         return -1;
-    } else {
-        stream_cnt2 += ret;
-        log_d_buf(buf, len);
-        
-        log_d("[DEC] cbuf file read: len = %d, ret = %d, total: %d\n", len, ret, stream_cnt2);
-        return ret;
     }
+    return ret;
 }
 int my_stream_download_seek(void *file, u32 offset, int origin)
 {
@@ -299,7 +294,7 @@ static const struct audio_vfs_ops cbuf_audio_dec_vfs_ops = {
 static int __stream_download_ready(void *priv)
 {
     music_player *player = (music_player *)priv;
-    RingQueue *queue = player->queue;
+    RingQueue *queue = &player->queue;
     if (0x3000 < ring_queue_size(queue)) {
         return 1;
     }
@@ -311,7 +306,7 @@ static int __stream_music_dec_file(music_player *player)
     int err;
     union audio_req req = {0};
 
-    RingQueue *queue = player->queue;
+    RingQueue *queue = &player->queue;
 
     req.dec.dec_type = "mp3";
     req.dec.cmd = AUDIO_DEC_OPEN;
@@ -366,7 +361,7 @@ static int __stream_music_dec_file(music_player *player)
     player->cmp_file = queue;
 }
 
-static int stream_music_dec_file(music_player *player, RingQueue *queue)
+static int stream_music_dec_file(music_player *player)
 {
     log_i("app_stream_music_dec_file\n");
 
@@ -379,7 +374,6 @@ static int stream_music_dec_file(music_player *player, RingQueue *queue)
             player->dec_end_cb = NULL;
         }
     }
-    player->queue = queue;
 
     /*
      * 异步等待网络下载ready，防止网络阻塞导致app卡住
@@ -406,9 +400,6 @@ static int stream_music_dec_stop(music_player *player)
 
     int resume_play = 0;
 
-    if (!player->queue) {
-        return 0;
-    }
 
     log_i("cbuf_music_dec_stop\n");
 
@@ -420,13 +411,13 @@ static int stream_music_dec_stop(music_player *player)
 
     int argv[2];
     argv[0] = AUDIO_SERVER_EVENT_END;
-    argv[1] = (int)player->queue;
+    argv[1] = (int)&player->queue;
     server_event_handler_del(player->dec_server, 2, argv);
 
     /* 关闭文件 */
     printf("cbuf_music_dec_stop: suss\n");
 
-    player->queue = NULL;
+    ring_queue_clear(&player->queue);
 
     return 0;
 }
@@ -880,14 +871,22 @@ int app_music_play_lfs_music_with_callback(music_player *player, void *fname, ap
     player->dec_with_cb = 1;
     return 0;
 }
-int app_music_play_stream_music_with_callback(music_player *player, RingQueue *queue, app_music_play_end_cb_t cb, void *priv)
+int app_music_play_stream_music_with_callback(music_player *player, app_music_play_end_cb_t cb, void *priv)
 {
-    stream_music_dec_file(player, queue);
+    stream_music_dec_file(player);
     player->dec_end_cb = cb;
     player->dec_end_cb_priv = priv;
     player->dec_with_cb = 1;
     return 0;
 }
+int app_music_play_stream_write(music_player *player, void *buf, int len)
+{
+    if (player->dec_ops == &cbuf_music_dec_ops) {
+        return ring_queue_write(&player->queue, buf, len);
+    }
+    return 0;
+}
+
 int app_music_play_local_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv)
 {
     local_music_dec_file(player, fname);
@@ -936,6 +935,8 @@ int music_player_init(music_player *player)
 {
     memset(player, 0, sizeof(music_player));
     player->dec_ops = NULL;
+    ring_queue_init_static(&player->queue, player->queue_buffer, sizeof(player->queue_buffer));
+
 
 #ifdef CONFIG_STORE_VOLUME
     if (syscfg_read(CFG_MUSIC_VOL, &player->volume, sizeof(player->volume)) < 0 ||

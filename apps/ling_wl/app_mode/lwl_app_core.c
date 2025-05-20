@@ -129,11 +129,7 @@ lwl_eend_dev_t *add_new_eend_dev(u8 *sn)
     ASSERT(pdev != NULL);
     lwl_eend_dev_init(sn, pdev);
     
-    log_i("DDDDDDDDDDDDDDDD");
     ASSERT(map_insert(s_app_context->dev_map, sn, pdev) == true);
-
-    log_i("EEEEEEEEEEEEEEEE");
-
     return pdev;
 }
 
@@ -194,6 +190,114 @@ lwl_eend_dev_t *find_eend_dev_closest(void)
     map_iterator_unlock(it); // 释放锁
 
     return result;
+}
+
+/**
+ * @brief 获取2米范围内的E端设备数量
+ * @return 2米范围内的E端设备数量
+ */
+int get_2m_edev_count(void)
+{
+    ASSERT(s_app_context != NULL);
+    
+    int count = 0;
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+
+        if (dev->distance_info.distance_type == DISTANCE_0) {
+            count++;
+        }
+    }
+    map_iterator_unlock(it); // 释放锁
+    return count;
+}
+
+/**
+ * @brief 获取5米范围内的E端设备数量
+ * @return 5米范围内的E端设备数量
+ */
+int get_5m_edev_count()
+{
+    ASSERT(s_app_context != NULL);
+    
+    int count = 0;
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+
+        if (dev->distance_info.distance_type == DISTANCE_0 ||
+            dev->distance_info.distance_type == DISTANCE_1) {
+            count++;
+        }
+    }
+    map_iterator_unlock(it); // 释放锁
+    return count;
+}
+
+/**
+ * @brief 获取5米范围内的E端设备序列号列表
+ * @param [out] targets 序列号列表
+ * @param [out] targets_num 序列号数量
+ */
+void make_5m_edev_targets(char ***targets, int *targets_num)
+{
+    ASSERT(s_app_context != NULL);
+
+    os_mutex_pend(&g_mutex, 0);
+    
+    char **target_list = NULL;
+    int num = get_5m_edev_count();
+
+    if (num == 0) {
+        *targets = NULL;
+        *targets_num = 0;
+        os_mutex_post(&g_mutex);
+        return;
+    }
+
+    target_list = malloc(num * sizeof(char *));
+
+    int i = 0;
+
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        char *sn = (char *)map_iterator_key(it);
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+
+        if (dev->distance_info.distance_type == DISTANCE_0 || dev->distance_info.distance_type == DISTANCE_1) {
+            target_list[i] = malloc(strlen(sn) + 1);
+            strcpy(target_list[i], sn);
+            i++;
+        }
+    }
+    ASSERT(i == num);
+
+    *targets = target_list;
+    *targets_num = num;
+    
+    map_iterator_unlock(it); // 释放锁
+
+    os_mutex_post(&g_mutex);
+}
+
+/**
+ * @brief 释放5米范围内的E端设备序列号列表
+ * @param [in] targets 序列号列表
+ * @param [in] targets_num 序列号数量
+ */
+void free_5m_edev_targets(char **targets, int targets_num)
+{
+    for (int i = 0; i < targets_num; i++) {
+        free(targets[i]);
+    }
+    free(targets);
 }
 
 /**

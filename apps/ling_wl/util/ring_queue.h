@@ -116,6 +116,19 @@ int ring_queue_read(RingQueue *queue, char *data, int len);
 int ring_queue_try_read(RingQueue *queue, char *data, int len);
 
 /**
+ * @name    ring_queue_try_read
+ * @brief   尝试从队列读取数据(非阻塞)
+ * 
+ * @param   queue    指向环形队列结构的指针
+ * @param   data     存储读取数据的缓冲区
+ * @param   len      要读取的长度
+ * @param   timeout_ms 超时时间，单位毫秒
+ * 
+ * @return  实际读取的长度，负数见RingQueueErrorType
+ */
+int ring_queue_try_read_timeout(RingQueue *queue, char *data, int len, int timeout_ms);
+
+/**
  * @name    ring_queue_peek
  * @brief   查看队列中的数据但不移除(非阻塞)
  * 

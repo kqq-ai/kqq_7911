@@ -220,6 +220,50 @@ int ring_queue_try_read(RingQueue *queue, char *data, int len)
     return read_len;
 }
 
+int ring_queue_try_read_timeout(RingQueue *queue, char *data, int len, int timeout_ms) 
+{
+    if (!queue || !data) return RINGQUEUE_Null_Pointer;
+    if (len <= 0) return RINGQUEUE_Invalid_Length;
+
+    pthread_mutex_lock(&queue->mutex);
+
+    struct timespec ts;
+    ts.tv_sec = timeout_ms / 1000;
+    ts.tv_nsec = (timeout_ms % 1000) * 1000000;
+
+    while (queue->size == 0) {
+        if (ETIMEDOUT == pthread_cond_timedwait(&queue->not_empty, &queue->mutex, &ts)) {
+            pthread_mutex_unlock(&queue->mutex);
+            return RINGQUEUE_Is_Empty;
+        }
+    }
+
+    // 计算实际可读取的长度（取请求长度和可用长度的较小值）
+    int read_len = (len < queue->size) ? len : queue->size;
+    
+    int first_part = queue->capacity - queue->front;
+    if (first_part >= read_len) {
+        // 不需要绕环的情况
+        memcpy(data, queue->data + queue->front, read_len);
+        queue->front += read_len;
+    } else {
+        // 需要绕环的情况
+        memcpy(data, queue->data + queue->front, first_part);
+        memcpy(data + first_part, queue->data, read_len - first_part);
+        queue->front = read_len - first_part;
+    }
+
+    if (queue->front == queue->capacity) {
+        queue->front = 0;
+    }
+
+    queue->size -= read_len;
+    pthread_cond_signal(&queue->not_full);
+    pthread_mutex_unlock(&queue->mutex);
+
+    return read_len;
+}
+
 int ring_queue_peek(RingQueue *queue, char *data, int len) 
 {
     if (!queue || !data) return RINGQUEUE_Null_Pointer;

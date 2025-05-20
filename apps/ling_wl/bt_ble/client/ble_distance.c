@@ -37,7 +37,6 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv);
 static void clear_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
 {
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
-    p_eend_dev->distance_info.rssi = -128;
     p_eend_dev->distance_info.rssi_sample_count = 0;
     memset(p_eend_dev->distance_info.rssi_samples, 0, sizeof(p_eend_dev->distance_info.rssi_samples));
     os_mutex_post(&p_eend_dev->distance_info.mutex);
@@ -57,7 +56,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
 
 
-    log_d("[MEASDIST]===process_rssi   %s  sample_count : %d          ======\r\n",sn_string,info->sample_count);
+    log_d("[MEASDIST]===process_rssi   %s  sample_count : %d          ======\r\n", sn_string, p_eend_dev->distance_info.rssi_sample_count);
     // 计算原始平均RSSI
     int sum = 0;
     for (int i = 0; i < p_eend_dev->distance_info.rssi_sample_count; ++i) {
@@ -90,7 +89,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     }
     p_eend_dev->distance_info.rssi = sum ? (s8)(sum / filtered_count) : -128;
 
-    log_d("[MEASDIST]%s  Average RSSI: %d\n", sn_string, p_eend_dev->rssi);
+    log_d("[MEASDIST]%s  Average RSSI: %d\n", sn_string, p_eend_dev->distance_info.rssi);
     os_mutex_post(&p_eend_dev->distance_info.mutex);
 }
 
@@ -171,6 +170,8 @@ void monitor_stop(void)
     log_i("[MEASDIST]monitor_stop : stop measure the blue distance\n");
 }
 
+extern bool g_handshake_is_ongoing;
+
 static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 {
     if (!adv_pre_match_impl(report_pt->data, report_pt->length)) {
@@ -181,14 +182,14 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     
     uint8_t buffer[32];
     int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
-    char *sn = (char *)buffer + 2;
+    char *sn = (char *)buffer + 3;
     sn[15] = '\0'; // 确保字符串以 null 结尾
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {
         log_i("[MEASDIST]add new device: %s\n", sn);
         dev = add_new_eend_dev(sn);
     }
-    // log_d("[MEASDIST]RSSI = %d", rssi);
+    log_d("[MEASDIST]RSSI = %d", rssi);
 
     os_mutex_pend(&dev->distance_info.mutex, 0);
     // Store the RSSI value
@@ -197,20 +198,29 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
         dev->distance_info.rssi_sample_count = 0;
     }
     os_mutex_post(&dev->distance_info.mutex);
-}
-static void scan_rssi_cb(void *priv)
-{
-    log_i("[MEASDIST]start scan RSSI call over\n");
-}
+    
 
-__attribute__((weak)) void app_function(lwl_eend_dev_t *pdev)
-{
-    log_i("[MEASDIST]notify_function\n");
-}
+    os_mutex_pend(&dev->handshake_info.mutex, 0);
 
-__attribute__((weak)) void self_function(lwl_eend_dev_t *pdev, int distance_type)
-{
-    log_i("[MEASDIST]self_function\n");
+    if (dev->handshake_info.handshake_flag == 1) { /* 已经握手过了 */
+        os_mutex_post(&dev->handshake_info.mutex);
+        return;
+    }
+    
+    /* 更新状态 */
+    dev->handshake_info.alive = 1;
+    dev->handshake_info.alive_hs_fail_cnt = 0;
+    dev->handshake_info.address_type = report_pt->address_type;
+    memcpy(dev->handshake_info.address, report_pt->address, 6);
+
+    if (!g_handshake_is_ongoing) {
+        /* 如果没有正在进行的握手任务，就启动一次握手流程 */
+        extern void start_handshake(bka_eend_dev_handshake_info_t *pdev_info);
+        start_handshake(&dev->handshake_info);
+    }
+    os_mutex_post(&dev->handshake_info.mutex);
+
+    log_d("[MEASDIST]over");
 }
 
 static void get_closest_devive(lwl_eend_dev_t *p_eend_dev, void *priv)
@@ -227,31 +237,33 @@ static void blue_distance_notify_app()
         return;
     }
 
-    app_function(p_eend_dev);
-
-    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-    p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-    log_i("[MEASDIST]ble index : %d --- ble name  : %s closer ! =========================\n", p_eend_dev->distance_info.rssi, sn_string);
+    lwl_event_t e;
+    e.event_type = LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE;
+    e.distance_change.pdev = p_eend_dev;
+    lwl_event_notify(&e);
 }
 
 static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *priv)
 {
     s8 rssi = p_eend_dev->distance_info.rssi;
-    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-    p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-    log_i("[MEASDIST] %s: %d\r\n", sn_string, p_eend_dev->distance_info.rssi);
+
+    p_eend_dev->distance_info.distance_type_last = p_eend_dev->distance_info.distance_type;
+
     if (rssi >= BLUE_DISTANCE_TWO_METER && rssi != -128) {
-        self_function(p_eend_dev, DISTANCE_0);
-        log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
+        p_eend_dev->distance_info.distance_type = DISTANCE_0;
     } else if (rssi < BLUE_DISTANCE_TWO_METER && rssi >= BLUE_DISTANCE_FIVE_METER && rssi != -128) {
-        self_function(p_eend_dev, DISTANCE_1);
-        log_d("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
+        p_eend_dev->distance_info.distance_type = DISTANCE_1;
     } else if (rssi < BLUE_DISTANCE_FIVE_METER && rssi != -128) {
-        self_function(p_eend_dev, DISTANCE_2);
-        log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
+        p_eend_dev->distance_info.distance_type = DISTANCE_2;
     } else {
-        self_function(p_eend_dev, DISTANCE_3);
-        log_d("[MEASDIST] not found ---%s\r\n", sn_string);
+        p_eend_dev->distance_info.distance_type = DISTANCE_3;
+    }
+
+    if (p_eend_dev->distance_info.distance_type != p_eend_dev->distance_info.distance_type_last) {
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
+        e.distance_change.pdev = p_eend_dev;
+        lwl_event_notify(&e);
     }
 }
 

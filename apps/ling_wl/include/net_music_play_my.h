@@ -13,6 +13,7 @@
 #define INIT_VOLUME_VALUE   70         /**< Initial volume value */
 
 #define DEC_BUF_LEN      12 * 1024     /**< Decoder buffer length (12KB) */
+#define STREAM_BUF_LEN   200 * 1024    /**< Stream buffer length (200KB) */
 
 /**
  * @brief Forward declaration of music player structure
@@ -50,13 +51,15 @@ typedef struct _music_player {
  
     FILE *file;                         /**< File pointer */
     lfs_file_t *lfs_file;               /**< LittleFS file pointer */
-    RingQueue *queue;                   /**< RingQueue file pointer */  
 
     struct server *dec_server;          /**< Audio decoder server instance */
 
     u8 dec_with_cb;                     /**< Flag: decode with callback */
     app_music_play_end_cb_t dec_end_cb; /**< Playback completion callback */
     void *dec_end_cb_priv;              /**< Private data for completion callback */
+
+    RingQueue queue;
+    u8 queue_buffer[STREAM_BUF_LEN]__attribute__((aligned(4))); /**< Buffer for ring queue */
 } music_player;
 
 /**
@@ -132,7 +135,16 @@ int app_music_play_lfs_music_with_callback(music_player *player, void *fname, ap
  * @param priv Private data to pass to callback
  * @return 0 on success
  */
-int app_music_play_stream_music_with_callback(music_player *player, RingQueue *queue, app_music_play_end_cb_t cb, void *priv);
+int app_music_play_stream_music_with_callback(music_player *player, app_music_play_end_cb_t cb, void *priv);
+
+/**
+ * @brief Write data to the music player stream
+ * @param player Pointer to music player instance
+ * @param buf Pointer to data buffer
+ * @param len Length of data to write
+ * @return 0 on success
+ */
+int app_music_play_stream_write(music_player *player, void *buf, int len);
 
 /**
  * @brief Play music from local filesystem(VM) with completion callback

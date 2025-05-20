@@ -27,6 +27,9 @@ typedef enum {
     LWL_EVENT_TYPE_UART_SHUTDOWN,              /**< System shutdown event */
     LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER, /**< Movement detection event */
 
+    LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE,   /**< EEND device distance change event */
+    LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE,    /**< Closest EEND device change event */
+
     LWL_EVENT_TYPE_NET_DISCONNECTED,           /**< Network disconnected event */
     LWL_EVENT_TYPE_BACKEND_DISCONNECTED,       /**< Backend service disconnected event */
 } LWL_EVENT_TYPE;
@@ -40,12 +43,20 @@ typedef struct {
 } lwl_event_uart_cmd_sync_t;
 
 /**
+ * @brief EEND device distance change event data structure
+ */
+typedef struct {
+    lwl_eend_dev_t *pdev; /**< Pointer to the EEND device */
+} lwl_event_eend_dev_distance_change_t;
+
+/**
  * @brief Generic LWL event structure
  */
 typedef struct {
     u8 event_type;  /**< Type of the event (from LWL_EVENT_TYPE) */
     union {
         lwl_event_uart_cmd_sync_t uart_cmd_sync; /**< UART sync command data */
+        lwl_event_eend_dev_distance_change_t distance_change;   /**< EEND device distance change data */
     };
 } lwl_event_t;
 
@@ -126,6 +137,32 @@ lwl_eend_dev_t* find_eend_dev_by_sn(u8 *sn);
  * @return 信号最强的设备对象引用，如果未找到返回 NULL
  */
 lwl_eend_dev_t *find_eend_dev_closest(void);
+
+/**
+ * @brief 获取2米范围内的E端设备数量
+ * @return 2米范围内的E端设备数量
+ */
+int get_2m_edev_count(void);
+
+/**
+ * @brief 获取5米范围内的E端设备数量
+ * @return 5米范围内的E端设备数量
+ */
+int get_5m_edev_count();
+
+/**
+ * @brief 获取5米范围内的E端设备序列号列表
+ * @param [out] targets 序列号列表
+ * @param [out] targets_num 序列号数量
+ */
+void make_5m_edev_targets(char ***targets, int *targets_num);
+
+/**
+ * @brief 释放5米范围内的E端设备序列号列表
+ * @param [in] targets 序列号列表
+ * @param [in] targets_num 序列号数量
+ */
+void free_5m_edev_targets(char **targets, int targets_num);
 
 /**
  * @brief Add an event handler callback

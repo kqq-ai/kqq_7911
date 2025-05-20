@@ -33,6 +33,7 @@ void ble_conn_event_user_handler_add(void (*handler)(uint8_t *, void *), void *p
 void ble_disconn_event_user_handler_add(void (*handler)(uint8_t *, void *), void *priv);
 void ble_adv_report_event_user_handler_add(void (*handler)(adv_report_t *, u16, void *), void *priv);
 void ble_client_report_data_event_user_handler_add(void (*handler)(att_data_report_t *, void *), void *priv);
+void ble_search_completed_event_user_handler_add(void (*handler)(void *), void *priv);
 
 void set_scan_adv_callback(void (*cb)(void *priv, char *dev_name, u16 dev_name_len, s8 rssi), void *priv);
 

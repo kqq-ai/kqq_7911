@@ -298,6 +298,8 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/util/tree_map.c \
 	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
 	../../../../apps/ling_wl/protocol/cp/c_uart_p.c \
+	../../../../apps/ling_wl/protocol/odm/odm_util.c \
+	../../../../apps/ling_wl/protocol/odm/odmp.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
 	../../../../apps/ling_wl/bt_ble/ble_data.c \
 	../../../../apps/ling_wl/bt_ble/ble_combined.c \
@@ -380,7 +382,6 @@ LFLAGS := \
 	--plugin-opt=-movable-region-exclude-func-file-list=../../../../apps/common/movable/exclude.txt \
 	--plugin-opt=-pi32v2-large-program=true \
 	--start-group \
-	../../../../cpu/wl82/liba/libodmp.a \
 	../../../../cpu/wl82/liba/event.a \
 	../../../../cpu/wl82/liba/system.a \
 	../../../../cpu/wl82/liba/cfg_tool.a \

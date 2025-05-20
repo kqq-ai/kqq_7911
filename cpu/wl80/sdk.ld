@@ -18,6 +18,119 @@ sdfile_vfs_ops
 nor_sdfile_vfs_ops
 clock_timer1
 clock_port
+
+
+clock_sdx
+fat_vfs_ops
+audio_server_info
+
+
+
+pcm_decoder_ops
+
+
+subdev_pcm_enc
+pcm_package_ops
+
+
+
+adpcm_decoder_ops
+
+
+subdev_adpcm_enc
+adpcm_package_ops
+
+
+
+wav_decoder
+
+
+wav_package_ops
+mp3_decoder
+
+
+subdev_mp3_enc
+mp3_package_ops
+
+
+
+
+
+
+wma_decoder
+
+
+
+subdev_aac_enc
+aac_package_ops
+
+
+
+
+
+
+
+m4a_decoder
+
+
+
+speex_decoder
+
+
+subdev_speex_enc
+spx_package_ops
+
+
+
+amr_decoder
+
+
+subdev_amr_enc
+amr_package_ops
+
+
+
+ape_decoder
+
+
+
+flac_decoder
+
+
+
+dts_decoder
+
+
+
+opus_decoder
+
+
+subdev_ogg_enc
+ogg_package_ops
+
+subdev_opus_enc
+opus_package_ops
+
+
+
+vir_dev_sub
+
+
+
+subdev_vad_enc
+
+
+
+subdev_dns_enc
+
+
+
+ogg_vorbis_decoder
+
+
+
+subdev_aec_enc
+dlna_sdk_api
 );
 
 
@@ -90,6 +203,114 @@ SECTIONS
         *(.jlsp_code)
         . = ALIGN(4);
         *(.jlsp_const)
+
+
+        . = ALIGN(4);
+        *(.dns_common_data)
+        . = ALIGN(4);
+        *(.dns_16k_data)
+        . = ALIGN(4);
+        *(.dns_8k_data)
+        . = ALIGN(4);
+        *(.dns_param_data_single)
+        . = ALIGN(4);
+        *(.dns_param_data_dual)
+
+
+
+        *(.sms_code)
+        *(.sms_sparse_code)
+        . = ALIGN(4);
+        *(.opcore_maskrom)
+        . = ALIGN(4);
+        *(.sms_const)
+
+
+
+        *(.echo_cal_code)
+        *(.echo_cal_const)
+        *(.reverb_cal_code)
+        *(.reverb_cal_const)
+        *(.reverb0_code)
+        *(.reverb0_const)
+        *(.platereverb_code)
+        *(.platereverb_const)
+        *(.reverb_cal_sparse_code)
+        *(.howlings_phf_sparse_code)
+        *(.howlings_phf_code)
+        *(.howlings_phf_const)
+        . = ALIGN(4);
+        *(.lc3_codec_c_const)
+        *(.lc3_codec_ari_c_const)
+
+        *(.lc3_codec_c_sparse_code)
+        *(.lc3_codec_ari_c_code)
+        *(.lc3_codec_d_code)
+        *(.lc3_codec_c_code)
+        *(.lc3_codec_e_code)
+
+        *(.lc3_codec_t8k_code)
+        *(.lc3_codec_t16k_code)
+        *(.lc3_codec_t24k_code)
+        *(.lc3_codec_t32k_code)
+        *(.lc3_codec_t441k_code)
+
+
+
+        *(.adpcm_encode_code)
+        *(.adpcm_encode_sparse_code)
+        *(.adpcm_encode_const)
+        *(.adpcm_encode_sparse_const)
+
+
+
+        *(.dts_dec_code)
+        *(.dts_dec_const)
+        *(.dts_dec_ff_const)
+        *(.dts_dec_sparse_code)
+        *(.dts_dec_sparse_const)
+
+
+
+        *(.wtgv2dec_code)
+        *(.wtg_decv2_sparse_code)
+        *(.wtgv2dec_const)
+        *(.wtgv2dec_str)
+
+
+
+        *(.mp3_dec_sparse_code)
+        *(.mp3_dec_sparse_const)
+        *(.mp3_dec_code)
+        *(.mp3_dec_const)
+
+
+
+        *(.flac_dec_sparse_code)
+        *(.flac_dec_sparse_const)
+        *(.flac_dec_code)
+        *(.flac_dec_const)
+
+
+
+        *(.wav_dec_sparse_code)
+        *(.wav_dec_sparse_const)
+        *(.wav_dec_code)
+        *(.wav_dec_const)
+
+
+
+        *(.wma_dec_code)
+        *(.wma_dec_const)
+        *(.wma_dec_sparse_code)
+        *(.wma_dec_sparse_const)
+
+
+
+        *(.ape_dec_code)
+        *(.ape_dec_const)
+        *(.ape_dec_sparse_code)
+        *(.ape_dec_sparse_const)
 
 
 
@@ -271,43 +492,6 @@ SECTIONS
 
 
         BTSTACK_CODE_TOTAL_SIZE = btstack_code_end - btstack_code_start;
-
-
-        . = ALIGN(4);
-        *(.sbc_eng_code)
-
-        . = ALIGN(4);
-        *(.h4_const)
-
-        . = ALIGN(4);
-        crypto_begin = .;
-        *(.crypto_ecdh_code)
-        *(.crypto_ecdh_const)
-
-        *(.crypto_bigint_code)
-        *(.crypto_bigint_const)
-
-        *(.crypto_code)
-        *(.crypto_const)
-
-        *(.ECDH_sample_code)
-        *(.ECDH_sample_const)
-
-        *(.uECC_code)
-        *(.uECC_const)
-
-        *(.hmac_code)
-        *(.hmac_const)
-
-        *(.hash_sample_code)
-        *(.hash_sample_const)
-
-        *(.aes_cmac_sample_code)
-        *(.aes_cmac_sample_const)
-        crypto_end = .;
-        crypto_size = . - crypto_begin;
-
-
         . = ALIGN(4);
         *(.update_const)
         *(.update_code)
@@ -618,8 +802,8 @@ SECTIONS
         *(.os_port_data)
 
 
-
-
+        . = ALIGN(4);
+        *(.jlsp_data)
 
         . = ALIGN(4);
 
@@ -726,18 +910,18 @@ SECTIONS
         acl_tx_pool = .;
         *(.bredr_tx_bulk)
 
-        acl_tx_pool_end = acl_tx_pool + 0;
 
 
+        acl_tx_pool_end = acl_tx_pool;
 
         . = acl_tx_pool_end;
 
         acl_rx_pool = .;
         *(.bredr_rx_bulk)
 
-        acl_rx_pool_end = acl_rx_pool + 0;
 
 
+        acl_rx_pool_end = acl_rx_pool;
 
         . = acl_rx_pool_end;
 

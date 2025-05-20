@@ -140,7 +140,7 @@ static void ble_start_scan_rssi(void *priv, void *cb)
 }
 
 static const u8 cmd_turn_off[] = {0xA0, 0x00};
-static const u8 cmd_turn_on[] = {0xA0, 0x01};
+static const u8 cmd_turn_on[] = {0xA0, 0x01, 0x3A, 0x91, 0x4F, 0xC2, 0x7D, 0xE6};
 
 static void let_eend_turn_off_cb(bka_cmd_code_e code, void *priv)
 {
