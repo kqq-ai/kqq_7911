@@ -100,8 +100,8 @@ static OS_MUTEX mutex;             //
 static void (*app_ble_state_callback)(void *priv, ble_state_e state) = NULL;
 static void (*ble_resume_send_wakeup)(void) = NULL;
 
-static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_type);
-static int send_return_json_data(const uint8_t * return_json_data,u16 handle, u8 handle_type);
+static int app_send_user_data(u16 conn_handle, u16 handle, u8 *data, u16 len, u8 handle_type);
+static int send_return_json_data(const uint8_t * return_json_data);
 
 // Complete Local Name  默认的蓝牙名字
 
@@ -134,18 +134,15 @@ static void check_connetion_updata_deal(void)
     }
 }
 
-static void connection_update_complete_success(u8 *packet)
+static void connection_update_complete_success(u16 conn_handle, u8 *packet)
 {
-    int con_handle, conn_interval, conn_latency, conn_timeout;
+    int conn_interval, conn_latency, conn_timeout;
 
-    con_handle = hci_subevent_le_connection_update_complete_get_connection_handle(packet);
     conn_interval = hci_subevent_le_connection_update_complete_get_conn_interval(packet);
     conn_latency = hci_subevent_le_connection_update_complete_get_conn_latency(packet);
     conn_timeout = hci_subevent_le_connection_update_complete_get_supervision_timeout(packet);
 
-    log_info("conn_interval = %d\n", conn_interval);
-    log_info("conn_latency = %d\n", conn_latency);
-    log_info("conn_timeout = %d\n", conn_timeout);
+    log_info("c = %d, i = %d, l = %d, t = %d\n", conn_handle, conn_interval, conn_latency, conn_timeout);
 }
 
 static void set_ble_work_state(ble_state_e state)
@@ -167,7 +164,7 @@ static ble_state_e get_ble_work_state(void)
 static void can_send_now_wakeup(void)
 {
     /* putchar('E'); */
-    printf("-------------------------now can send datas -----------------------------\r\n");
+    log_info("-------------------------now can send datas -----------------------------\r\n");
     if (ble_resume_send_wakeup) {
         ble_resume_send_wakeup();
     }
@@ -200,11 +197,25 @@ static void server_profile_start(u16 con_handle)
     /* set_connection_data_phy(CONN_SET_CODED_PHY, CONN_SET_CODED_PHY); */
 }
 
-static int get_buffer_vaild_len(void *priv)
+static int get_buffer_vaild_len()
 {
     u32 vaild_len = 0;
-    ble_op_att_get_remain(&vaild_len);
+    ble_op_multi_att_get_remain(server_con_handle, &vaild_len);
     return vaild_len;
+}
+
+static int app_send_user_data_do(u8 *data, u16 len)
+{
+    return app_send_user_data(server_con_handle, ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, data, len, ATT_OP_AUTO_READ_CCC);
+}
+
+static int app_send_user_data_check(u16 len)
+{
+    u32 buf_space = get_buffer_vaild_len();
+    if (len <= buf_space) {
+        return 1;
+    }
+    return 0;
 }
 
 _WEAK_
@@ -255,27 +266,45 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                     // 开启高占空比定向回连广播时，若在持续的1.28秒内没有成功回连，则会进入此判断分支
                     log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
                     set_ble_work_state(BLE_ST_DISCONN);
+                    bt_ble_adv_enable(1);
                     break;
                 }
                 server_con_handle = hci_subevent_le_enhanced_connection_complete_get_connection_handle(packet);
                 log_info("HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE : %0x\n", server_con_handle);
-                log_info("conn_interval = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet));
-                log_info("conn_latency = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet));
-                log_info("conn_timeout = %d\n", hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
+
+                connection_update_cnt = 0;
+                ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
+                log_info("i = %d, l = %d, t = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet)
+                        , hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet)
+                        , hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
                 server_profile_start(server_con_handle);
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
+                status = hci_subevent_le_connection_complete_get_status(packet);
+                if (status) {
+                    // 开启高占空比定向回连广播时，若在持续的1.28秒内没有成功回连，则会进入此判断分支
+                    log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
+                    set_ble_work_state(BLE_ST_DISCONN);
+                    bt_ble_adv_enable(1);
+                    break;
+                }
                 server_con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
                 log_info("HCI_SUBEVENT_LE_CONNECTION_COMPLETE: %0x\n", server_con_handle);
-                connection_update_complete_success(packet + 8);
+
+                connection_update_cnt = 0;
+                ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
+                connection_update_complete_success(server_con_handle, packet + 8);
                 server_profile_start(server_con_handle);
                 break;
 
-            case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
+            case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE: {
                 // 连接参数更新事件
-                connection_update_complete_success(packet);
-                break;
+                u16 tmp_handle = hci_subevent_le_connection_update_complete_get_connection_handle(packet);
+                if (tmp_handle == server_con_handle) {
+                    connection_update_complete_success(tmp_handle, packet);
+                }
+            }   break;
 
             case HCI_SUBEVENT_LE_DATA_LENGTH_CHANGE:
                 log_info("APP HCI_SUBEVENT_LE_DATA_LENGTH_CHANGE\n");
@@ -291,44 +320,52 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
             }
             break;
 
-        case HCI_EVENT_DISCONNECTION_COMPLETE:
+        case HCI_EVENT_DISCONNECTION_COMPLETE: {
+            u16 tmp_handle = hci_event_disconnection_complete_get_connection_handle(packet);
+            if (tmp_handle != server_con_handle) {
+                log_info("unknown_handle:%04x\n", tmp_handle);
+                break;
+            }
+
             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
+            multi_att_clear_ccc_config(tmp_handle);
             server_con_handle = INVALID_HANDLE;
-            // ble_op_att_send_init(server_con_handle, 0, 0, 0);
+
             set_ble_work_state(BLE_ST_DISCONN);
+            ble_op_multi_att_send_conn_handle(0, 0, MULTI_ROLE_SERVER);
 
-            // if (!ble_update_get_ready_jump_flag()) {
-                // os_mutex_pend(&mutex, 0);
-                bt_ble_adv_enable(1);
-            //     os_mutex_post(&mutex);
-            // }
-            connection_update_cnt = 0;
-            // ble_auto_shut_down_enable(1);
-            break;
+            bt_ble_adv_enable(1);
+        }   break;
 
-        case ATT_EVENT_MTU_EXCHANGE_COMPLETE:
+        case ATT_EVENT_MTU_EXCHANGE_COMPLETE: {
             // MTU 更新事件
-            mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
-            log_d("ATT MTU = %u\n", mtu);
-            ble_op_att_set_send_mtu(mtu);
-            /* set_connection_data_length(251, 2120); */
-            break;
+            u16 tmp_handle = att_event_mtu_exchange_complete_get_handle(packet);
+            if (tmp_handle == server_con_handle) {
+                mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
+                log_d("ATT MTU = %u\n", mtu);
+                ble_op_multi_att_set_send_mtu(tmp_handle, mtu);
+                /* set_connection_data_length(251, 2120); */
+            }
+        }   break;
 
         case HCI_EVENT_VENDOR_REMOTE_TEST:
             log_info("--- HCI_EVENT_VENDOR_REMOTE_TEST\n");
             break;
 
-        case L2CAP_EVENT_CONNECTION_PARAMETER_UPDATE_RESPONSE:
-            tmp = little_endian_read_16(packet, 4);
-            log_info("-update_rsp: %02x\n", tmp);
-            if (tmp) {
-                connection_update_cnt++;
-                log_info("remoter reject!!!\n");
-                check_connetion_updata_deal();
-            } else {
-                connection_update_cnt = CONN_PARAM_TABLE_CNT;
+        case L2CAP_EVENT_CONNECTION_PARAMETER_UPDATE_RESPONSE: {
+            u16 tmp_handle = l2cap_event_connection_parameter_update_response_get_handle(packet);
+            if (tmp_handle == server_con_handle) {
+                tmp = l2cap_event_connection_parameter_update_response_get_result(packet);
+                log_info("-update_rsp: %02x\n", tmp);
+                if (tmp) {
+                    connection_update_cnt++;
+                    log_info("remoter reject!!!\n");
+                    check_connetion_updata_deal();
+                } else {
+                    connection_update_cnt = CONN_PARAM_TABLE_CNT;
+                }
             }
-            break;
+        }   break;
 
         case HCI_EVENT_ENCRYPTION_CHANGE:
             log_info("HCI_EVENT_ENCRYPTION_CHANGE= %d\n", packet[2]);
@@ -410,25 +447,23 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
     case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_CLIENT_CONFIGURATION_HANDLE:
     
         log_info("\n------write ccc:%04x,%02x\n", handle, buffer[0]);
-        att_set_ccc_config(handle, buffer[0]);
+        multi_att_set_ccc_config(connection_handle, handle, buffer[0]);
         break;
     case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         ret = parse_and_assemble(buffer, buffer_size, json_data);
         if (0 == ret) {
             ret = parse_and_dispatch_json(json_data,return_json_data);
-            if (0 == ret)
-            {
-                memset(json_data,0,BUFFER_SIZE);
+            if (0 == ret) {
+                memset(json_data, 0, BUFFER_SIZE);
             }
-            printf("return_json_data: %s\n",return_json_data);
-            ret = send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
-            if (0 == ret)
-            {
-                memset(return_json_data,0,BUFFER_SIZE);
+            log_info("return_json_data: %s\n",return_json_data);
+            ret = send_return_json_data(return_json_data);
+            if (0 == ret) {
+                memset(return_json_data, 0, BUFFER_SIZE);
+            } else {
+                memset(return_json_data, 0, BUFFER_SIZE);
             }
-            else
-                memset(return_json_data,0,BUFFER_SIZE);
-            printf("return_json_data: %s\n",return_json_data);
+            log_info("return_json_data: %s\n",return_json_data);
         }
         break;
     default:
@@ -441,71 +476,37 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
 //=BLE ATT send======================================================================================================
 // BLE ATT send
 //=BLE ATT send======================================================================================================
-static int app_send_user_data(u16 handle, const u8 *data, u16 len, u8 handle_type)
+static int app_send_user_data(u16 conn_handle, u16 handle, u8 *data, u16 len, u8 handle_type)
 {
     u32 ret = APP_BLE_NO_ERROR;
 
-    if (server_con_handle == INVALID_HANDLE) {
+    if (!conn_handle) {
         return APP_BLE_OPERATION_ERROR;
     }
 
-    if (!att_get_ccc_config(handle + 1)) {
+    if (!multi_att_get_ccc_config(conn_handle, handle + 1)) {
         log_info("fail,no write ccc!!!,%04x\n", handle + 1);
         return APP_BLE_NO_WRITE_CCC;
     }
 
-    ret = ble_op_att_send_data(handle, data, len, handle_type);
-    if (ret) {
-        log_info("app_send_user_data app_send_fail:%d !!!!!!\n", ret);
-    }
+    ret = ble_op_multi_att_send_data(conn_handle, handle, data, len, handle_type);
 
     if (ret == BLE_BUFFER_FULL) {
-        printf(" app_send_user_data   ble_buffer_full\n");
         ret = APP_BLE_BUFF_FULL;
     }
 
-    return ret;
-}
-
-/*
-    !!!!!!! 这两个参数需根据实际应用场景设置 !!!!!!!
-    根据 send_return_json_data 这个函数调用的地方，来参照
-    handle:      ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE
-    handle_type: ATT_OP_AUTO_READ_CCC
-*/
-int app_send_user_data_external(u16 handle, u8 *data, u16 len, u8 handle_type)
-{
-    u32 ret = APP_BLE_NO_ERROR;
-
-    if (server_con_handle == INVALID_HANDLE) {
-        return APP_BLE_OPERATION_ERROR;
-    }
-
-    if (!att_get_ccc_config(handle + 1)) {
-        log_info("fail,no write ccc!!!,%04x\n", handle + 1);
-        return APP_BLE_NO_WRITE_CCC;
-    }
-
-    ret = ble_op_att_send_data(handle, data, len, handle_type);
-
     if (ret) {
-        log_info("app_send_user_data_external app_send_fail:%d !!!!!!\n", ret);
+        log_info("app_send_fail:%d !!!\n", ret);
     }
-
-    if (ret == BLE_BUFFER_FULL) {
-        printf(" app_send_user_data_external   ble_buffer_full\n");
-        ret = APP_BLE_BUFF_FULL;
-    }
-
     return ret;
 }
 
 
-static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u8 handle_type)
+static int send_return_json_data(const uint8_t * return_json_data)
 {
 
     if (return_json_data == NULL || return_json_data[0] == '\0' || strnlen((const char *)return_json_data, BUFFER_SIZE + 1) > BUFFER_SIZE) {
-        printf("Error: Empty or NULL return_json_data or return_json_data_size over maxlen\n");
+        log_info("Error: Empty or NULL return_json_data or return_json_data_size over maxlen\n");
         return -1;
     }
 
@@ -517,7 +518,7 @@ static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u
     // 计算总分包数
     size_t num_packets = (data_length + payload_size - 1) / payload_size;
     if (num_packets > max_packets) {
-        printf("Error: Too much data to fit in %d packets\n", max_packets);
+        log_info("Error: Too much data to fit in %d packets\n", max_packets);
         return -1;
     }
 
@@ -533,7 +534,7 @@ static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u
 
         // 确保当前分包号和总分包数正确设置
         if (strlen((const char *)packet) != 4) {
-            printf("Error: Failed to format packet numbers correctly\n");
+            log_info("Error: Failed to format packet numbers correctly\n");
             return -1;
         }
 
@@ -546,14 +547,14 @@ static int send_return_json_data(const uint8_t * return_json_data, u16 handle, u
             memset(&packet[4 + copy_size], 0x00, payload_size - copy_size);
         }
         
-        printf("send_packet: %s\r\n", packet);
+        log_info("send_packet: %s\r\n", packet);
         // if ((i % 15) == 0)
         // {
         //     ble_op_att_clear_send_data();   
         // }
         // 发送完整的分包数据
-        if (app_send_user_data(handle, packet, total_packet_size, handle_type) != 0) {
-            printf("Error: Failed to send packet %d\n", i + 1);
+        if (app_send_user_data_do(packet, total_packet_size) != 0) {
+            log_info("Error: Failed to send packet %d\n", i + 1);
             return -1;
         }
     }
@@ -710,7 +711,7 @@ void server_deal_passkey_input(u32 *key)
         newkey = newkey - 999999; //不能大于999999
     }
     *key = newkey; //小于或等于六位数
-    printf("set new_key= %06u\n", *key);
+    log_info("set new_key= %06u\n", *key);
 #else
     *key = 123456; //for debug
 #endif
@@ -883,7 +884,7 @@ int notify_app_wifi_ip_succ(void *pri)
     if (root == NULL)
     {
         ret = 1;
-        printf("Error: Failed to create cJSON object\n");
+        log_info("Error: Failed to create cJSON object\n");
         goto cleanup;
     }
 
@@ -896,17 +897,16 @@ int notify_app_wifi_ip_succ(void *pri)
     if (return_json_str == NULL)
     {
         ret = 1;
-        printf("Error: Failed to print cJSON object\n");
+        log_info("Error: Failed to print cJSON object\n");
         cJSON_Delete(root);
         goto cleanup;
     }
 
     memcpy(return_json_data, return_json_str, strlen(return_json_str));
-    send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
-    //app_send_user_data_external(ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE,return_json_str,strlen(return_json_str),ATT_OP_AUTO_READ_CCC);
+    send_return_json_data(return_json_data);
 
     free(return_json_str);
-    printf("notify  app  the wifi ip is ok   return_json_str:%s\r\n",return_json_str);
+    log_info("notify  app  the wifi ip is ok   return_json_str:%s\r\n",return_json_str);
 cleanup:
     return ret;
 }
@@ -927,7 +927,7 @@ int notify_app_wifi_mqtt_succ(void *pri)
     if (root == NULL)
     {
         ret = 1;
-        printf("Error: Failed to create cJSON object\n");
+        log_info("Error: Failed to create cJSON object\n");
         goto cleanup;
     }
 
@@ -938,16 +938,15 @@ int notify_app_wifi_mqtt_succ(void *pri)
     if (return_json_str == NULL)
     {
         ret = 1;
-        printf("Error: Failed to print cJSON object\n");
+        log_info("Error: Failed to print cJSON object\n");
         cJSON_Delete(root);
         goto cleanup;
     }
     memcpy(return_json_data, return_json_str, strlen(return_json_str));
-    send_return_json_data(return_json_data,ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE, ATT_OP_AUTO_READ_CCC);
-    //app_send_user_data_external(ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE,return_json_str,strlen(return_json_str),ATT_OP_AUTO_READ_CCC);
+    send_return_json_data(return_json_data);
 
     free(return_json_str);
-    printf("notify app the wifi task ok ---- return_json_str:%s\r\n",return_json_data);
+    log_info("notify app the wifi task ok ---- return_json_str:%s\r\n",return_json_data);
 
     msleep(500);
     /* 发送完毕，使其断开连接 */
