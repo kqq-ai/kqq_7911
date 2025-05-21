@@ -1530,7 +1530,6 @@
             "cppStandard": "c++11",
             "defines": [
                 "SUPPORT_MS_EXTENSIONS",
-                // "CONFIG_RELEASE_ENABLE",
                 "CONFIG_CPU_WL82",
                 "CONFIG_JLFAT_ENABLE",
                 "CONFIG_FREE_RTOS_ENABLE",
@@ -1623,7 +1622,9 @@
                 "${workspaceFolder}/apps/common/ble/include",
                 "${workspaceFolder}/include_lib/utils/btmesh",
                 "${workspaceFolder}/include_lib/utils/btmesh/adaptation",
-                "C:/JL/pi32/pi32v2-include"
+                "C:/JL/pi32/pi32v2-include",
+                "${workspaceFolder}/apps/wifi_camera/include",
+                "${workspaceFolder}/apps/ling_wl/protocol"
             ],
             "intelliSenseMode": "clang-x86",
             "name": "AC791N_LING_WL"

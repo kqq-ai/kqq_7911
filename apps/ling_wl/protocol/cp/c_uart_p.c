@@ -164,3 +164,20 @@ int uart_send_move_detect_en(uint8_t en)
     send_payload[1] = en;
     return uart_send_inquiry(send_payload, 2);
 }
+
+/* 4. 设置LED颜色 的发送函数 */
+int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b)
+{
+    uint8_t send_led_payload[7];
+    memset(send_led_payload, 0, sizeof(send_led_payload));
+    send_led_payload[0] = UART_CMD_SET_LED_COLOR;   
+    /* 小端序 */
+    send_led_payload[1] = r & 0xFF;        // r 低字节
+    send_led_payload[2] = (r >> 8) & 0xFF; // r 高字节
+    send_led_payload[3] = g & 0xFF;        // g 低字节
+    send_led_payload[4] = (g >> 8) & 0xFF; // g 高字节
+    send_led_payload[5] = b & 0xFF;        // b 低字节
+    send_led_payload[6] = (b >> 8) & 0xFF; // b 高字节
+
+    return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
+}

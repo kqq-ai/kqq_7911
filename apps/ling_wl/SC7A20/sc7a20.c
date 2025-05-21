@@ -185,6 +185,7 @@ exit:
     {
         dev_close(iic_hdl);
     }
+    return NULL;
 }
 void sc7a20_exit(void * iic_hdl)
 {
@@ -194,7 +195,7 @@ void sc7a20_exit(void * iic_hdl)
     }
 }
 
-int get_interrupt_status(void * iic_hdl)
+int sc7a20_interrupt_detect(void * iic_hdl)
 {
     uint8_t int_status;
     if (iic_read_one_byte(iic_hdl, SC7A20H_INT1_SRC, &int_status) == 0)
@@ -212,7 +213,7 @@ int get_interrupt_status(void * iic_hdl)
         return -1;
     }
 }
-int clear_interrupt(void * iic_hdl)
+int sc7a20_clear_interrupt(void * iic_hdl)
 {
     if (iic_write_one_byte(iic_hdl, SC7A20H_AOI1_SRC, 0x00) != 0)
     {

@@ -53,6 +53,6 @@ void sc7a20_exit(void *iic_hdl);
     返回值 0 ：not happend
     返回值 -1 ：iic error
 */
-int get_interrupt_status(void *iic_hdl);
+int sc7a20_interrupt_detect(void *iic_hdl);
 
-int clear_interrupt(void *iic_hdl);
+int sc7a20_clear_interrupt(void *iic_hdl);
