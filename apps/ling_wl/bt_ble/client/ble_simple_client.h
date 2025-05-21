@@ -22,6 +22,7 @@ int  ble_simple_client_create_connection(u8 *addr, u8 addr_type);
 int  ble_simple_client_create_cannel(void);
 int  ble_simple_client_disconnect(void);
 void ble_simple_client_disconnect_block(void);
+void ble_simple_client_profile_start(void);
 
 int  ble_simple_client_write_send(void *priv, uint16_t handle, u8 *data, u16 len);
 int  ble_simple_client_write_without_respond_send(void *priv, uint16_t handle, u8 *data, u16 len);

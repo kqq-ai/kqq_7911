@@ -23,6 +23,7 @@ typedef enum {
     UART_CMD_MOVE_DETECT_EN    = 0xA5, // 使能移动检测
     UART_CMD_MOVE_OVER_A_METER = 0xA6, // 通知检测距离大于一米
     UART_CMD_SET_LED_COLOR     = 0xA7, // 设置LED颜色
+    UART_CMD_OPEN_LE_AUDIO     = 0xA8, // 通知打开LE Audio
 } uart_cmd_t;
 
 // 返回码表
@@ -92,5 +93,7 @@ int uart_send_move_detect_en(uint8_t en);
 #define COLOR_PURPLE      (4980),  (10000), (4980)    // 紫色(128,0,128)
 #define COLOR_GRAY        (4980),  (4980),  (4980)    // 灰色(128,128,128)
 int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b);
+
+int uart_send_open_le_audio(uint8_t *mac);
 
 #endif

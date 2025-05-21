@@ -1,3 +1,4 @@
+
 #include "async_msg_loop.h"
 
 #include "util/cqueue.h"
@@ -13,7 +14,7 @@
 enum
 {
     MY_TASK_MESSAGE_SWITCH_PLAY,
-    MY_TASK_MESSAGE_SWITCH_ONLY,
+    MY_TASK_MESSAGE_TURN_ON_EDEV,
     MY_TASK_MESSAGE_TURN_OFF_EDEV,
     MY_TASK_MESSAGE_PLAY_ONE,
     MY_TASK_MESSAGE_PLAY_ONE_LINGOS,
@@ -29,7 +30,7 @@ typedef struct {
     int timeout;
     pl_switch_cb_func_t cb;
     void *priv;
-} MyMessageSwitchOnly;
+} MyMessageTurnOnEDev;
 
 typedef struct {
     char sn[SN_SIZE];
@@ -65,7 +66,7 @@ typedef struct
     int msg;
     union
     {
-        MyMessageSwitchOnly switch_only;
+        MyMessageTurnOnEDev turn_on_edev;
         MyMessageTurnOffEDev turn_off_edev;
         MyMessagePlayOne play_one;
         MyMessagePlayOneLingOS play_one_lingos;
@@ -81,7 +82,7 @@ static MyBlockingQueue g_message_queue; // MyBlockingQueue<MyTaskMessageType>
 
 extern music_player g_music_player;
 
-static void switch_only_sync(MyTaskMessageType *message);
+static void turn_on_sync(MyTaskMessageType *message);
 static void turn_off_sync(MyTaskMessageType *message);
 static void play_one_sync(MyTaskMessageType *message);
 static void play_one_lingos_sync(MyTaskMessageType *message);
@@ -106,8 +107,8 @@ static void my_task(void *priv)
 
         switch (message.msg)
         {
-        case MY_TASK_MESSAGE_SWITCH_ONLY:
-            switch_only_sync(&message);
+        case MY_TASK_MESSAGE_TURN_ON_EDEV:
+            turn_on_sync(&message);
             break;
         case MY_TASK_MESSAGE_TURN_OFF_EDEV:
             turn_off_sync(&message);
@@ -139,9 +140,6 @@ static void ble_start_scan_rssi(void *priv, void *cb)
     ble_simple_client_module_enable(1);
 }
 
-static const u8 cmd_turn_off[] = {0xA0, 0x00};
-static const u8 cmd_turn_on[] = {0xA0, 0x01, 0x3A, 0x91, 0x4F, 0xC2, 0x7D, 0xE6};
-
 static void let_eend_turn_off_cb(bka_cmd_code_e code, void *priv)
 {
     if (code == BKA_CMD_CODE_COMPL) {
@@ -171,13 +169,12 @@ static void turn_off_sync(MyTaskMessageType *message)
     MyMessageTurnOffEDev *param = &message->turn_off_edev;
 
     uart_send_set_sn("000000000000000");
-
-    pl_switch_info_t switch_info;
-    switch_info.sn = param->sn;
     
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(param->sn);
     if (pdev == NULL)
         return;
+
+    const u8 cmd_turn_off[] = {0xA0, 0x00};
 
     uint32_t cmd_id = 0;
     int r = ble_keep_alive_device_push_cmd(pdev, cmd_turn_off, sizeof(cmd_turn_off), 
@@ -185,7 +182,7 @@ static void turn_off_sync(MyTaskMessageType *message)
     if (r != BKACODE_Success) {
         log_e("[SWITCH]failed to push cmd(turn off): %d", r);
         if (param->cb != NULL) {
-            param->cb(SWITCH_ONLY_CODE_UNEXPECTED_ERROR, &switch_info, param->priv);
+            param->cb(CODE_EDEV_CMD_UNEXPECTED_ERROR, param->priv);
         }
         return;
     }
@@ -195,30 +192,31 @@ static void turn_off_sync(MyTaskMessageType *message)
             log_e("[SWITCH]failed to remove cmd(turn off): %d", r);
         }
         if (param->cb != NULL) {
-            param->cb(SWITCH_ONLY_CODE_TURNOFF_TIMEOUT, &switch_info, param->priv); /* 通知关机超时 */
+            param->cb(CODE_EDEV_CMD_TIMEOUT, param->priv); /* 通知关机超时 */
         }
         return;
     }
     if (param->cb != NULL) {
-        param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv); /* 执行任务完成回调 */
+        param->cb(CODE_EDEV_CMD_SUCCESS, param->priv); /* 执行任务完成回调 */
     }
 }
 
-static void switch_only_sync(MyTaskMessageType *message)
+static void turn_on_sync(MyTaskMessageType *message)
 {
-    ASSERT(message->msg == MY_TASK_MESSAGE_SWITCH_ONLY);
-    MyMessageSwitchOnly *param = &message->switch_only;
+    ASSERT(message->msg == MY_TASK_MESSAGE_TURN_ON_EDEV);
+    MyMessageTurnOnEDev *param = &message->turn_on_edev;
 
     /* 切换设备 */
     /* 设置C2广播 */
     uart_send_set_sn(param->sn);
 
-    pl_switch_info_t switch_info;
-    switch_info.sn = param->sn;
-
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(param->sn);
     if (pdev == NULL)
         return;
+
+    u8 cmd_turn_on[] = {0xA0, 0x01, 0x3A, 0x91, 0x4F, 0xC2, 0x7D, 0xE6};
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    memcpy(&cmd_turn_on[2], ctx->mac, 6);
 
     uint32_t cmd_id = 0;
     int r = ble_keep_alive_device_push_cmd(pdev, cmd_turn_on, sizeof(cmd_turn_on), 
@@ -226,7 +224,7 @@ static void switch_only_sync(MyTaskMessageType *message)
     if (r != BKACODE_Success) {
         log_e("[SWITCH]failed to push turn on cmd(turn on): %d", r);
         if (param->cb != NULL) {
-            param->cb(SWITCH_ONLY_CODE_UNEXPECTED_ERROR, &switch_info, param->priv);
+            param->cb(CODE_EDEV_CMD_UNEXPECTED_ERROR, param->priv);
         }
         return;
     }
@@ -236,12 +234,12 @@ static void switch_only_sync(MyTaskMessageType *message)
             log_e("[SWITCH]failed to remove cmd(turn on): %d", r);
         }
         if (param->cb != NULL) {
-            param->cb(SWITCH_ONLY_CODE_TURNON_TIMEOUT, &switch_info, param->priv); /* 通知开机超时 */
+            param->cb(CODE_EDEV_CMD_TIMEOUT, param->priv); /* 通知命令执行超时 */
         }
         return;
     }
     if (param->cb != NULL) {
-        param->cb(SWITCH_ONLY_CODE_SUCCESS, &switch_info, param->priv); /* 执行任务完成回调 */
+        param->cb(CODE_EDEV_CMD_SUCCESS, param->priv); /* 执行任务完成回调 */
     }
 }
 
@@ -257,24 +255,13 @@ static void play_one_sync(MyTaskMessageType *message)
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE);
     MyMessagePlayOne *param = &message->play_one;
 
-    pl_music_info_t music_info;
-    music_info.name = param->audio_url;
-
     if (param->audio_enable) {
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_BEFORE_DEC_START, &music_info, param->priv);
-
-        /* 播放音频 */
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_BEFORE_DEC_START, param->priv);
         app_music_play_net_music_with_callback(&g_music_player, param->audio_url, play_end_callback, NULL);
-
-        /* 等待播放结束 */
-        os_sem_pend(&sem_net_music_dec_end, 0);
-        
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_AFTER_DEC_END, &music_info, param->priv);
+        os_sem_pend(&sem_net_music_dec_end, 0); /* 等待播放结束 */
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_AFTER_DEC_END, param->priv);
     } else {
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_CANCEL, &music_info, param->priv);
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_CANCEL, param->priv);
     }
 }
 
@@ -284,24 +271,13 @@ static void play_one_lingos_sync(MyTaskMessageType *message)
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE_LINGOS);
     MyMessagePlayOneLingOS *param = &message->play_one_lingos;
 
-    pl_music_info_t music_info;
-    music_info.name = param->audio_url;
-
     if (param->audio_enable) {
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_BEFORE_DEC_START, &music_info, param->priv);
-
-        /* 播放音频 */
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_BEFORE_DEC_START, param->priv);
         app_music_play_net_music_with_callback(&g_music_player, param->audio_url, play_end_callback, NULL);
-
-        /* 等待播放结束 */
-        os_sem_pend(&sem_net_music_dec_end, 0);
-        
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_AFTER_DEC_END, &music_info, param->priv);
+        os_sem_pend(&sem_net_music_dec_end, 0); /* 等待播放结束 */
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_AFTER_DEC_END, param->priv);
     } else {
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_CANCEL, &music_info, param->priv);
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_CANCEL, param->priv);
     }
 }
 
@@ -310,24 +286,13 @@ static void play_one_lfs_sync(MyTaskMessageType *message)
     ASSERT(message->msg == MY_TASK_MESSAGE_PLAY_ONE_LFS);
     MyMessagePlayOneLFS *param = &message->play_one;
 
-    pl_music_info_t music_info;
-    music_info.name = param->audio_fname;
-    
     if (param->audio_enable) {
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_BEFORE_DEC_START, &music_info, param->priv);
-
-        /* 播放音频 */
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_BEFORE_DEC_START, param->priv);
         app_music_play_lfs_music_with_callback(&g_music_player, param->audio_fname, play_end_callback, NULL);
-
-        /* 等待播放结束 */
-        os_sem_pend(&sem_net_music_dec_end, 0);
-        
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_AFTER_DEC_END, &music_info, param->priv);
+        os_sem_pend(&sem_net_music_dec_end, 0); /* 等待播放结束 */
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_AFTER_DEC_END, param->priv);
     } else {
-        /* 执行回调 */
-        if (param->cb != NULL) param->cb(PLAY_AUDIO_STATE_CANCEL, &music_info, param->priv);
+        if (param->cb != NULL) param->cb(CODE_PLAY_AUDIO_STATE_CANCEL, param->priv);
     }
 }
 
@@ -342,26 +307,26 @@ void printf_dev_name(char *name, u16 len)
 }
 
 /**
- * @name my_task_switch_only
+ * @name my_task_turn_on_edev
  * @brief This function is used to create a specific task message and enqueue it into a message queue.
  *
  * @param sn      Pointer to a character string indicating the E-end sequence number.
  * @param timeout Switch timeout, 等待超时（时钟节拍），取0时无限等待
- * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
+ * @param cb      A pointer to a callback function, see TURN_ON_EDEV_CODE_.
  * @param priv    A pointer to user-defined private data.
  */
-void my_task_switch_only(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv)
+void my_task_turn_on_edev(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv)
 {
     /* 创建消息 */
     MyTaskMessageType message;
-    message.msg = MY_TASK_MESSAGE_SWITCH_ONLY;
-    memcpy(message.switch_only.sn, sn, SN_SIZE);
-    message.switch_only.timeout = timeout;
-    message.switch_only.priv = priv;
-    message.switch_only.cb = cb;
+    message.msg = MY_TASK_MESSAGE_TURN_ON_EDEV;
+    memcpy(message.turn_on_edev.sn, sn, SN_SIZE);
+    message.turn_on_edev.timeout = timeout;
+    message.turn_on_edev.priv = priv;
+    message.turn_on_edev.cb = cb;
     printf("Put message: %d\n", message.msg);
     printf("sn         : ");
-    printf_dev_name(message.switch_only.sn, SN_SIZE);
+    printf_dev_name(message.turn_on_edev.sn, SN_SIZE);
     printf("\n");
     /* 消息入队 */
     my_blocking_queue_enqueue(&g_message_queue, &message);
@@ -373,7 +338,7 @@ void my_task_switch_only(char *sn, int timeout, pl_switch_cb_func_t *cb, void *p
  *
  * @param name    Pointer to a character string indicating the E-end sequence number.
  * @param timeout Switch timeout, 等待超时（时钟节拍），取0时无限等待
- * @param cb      A pointer to a callback function, see SWITCH_ONLY_CODE_.
+ * @param cb      A pointer to a callback function, see TURN_ON_EDEV_CODE_.
  * @param priv    A pointer to user-defined private data.
  */
 void my_task_turn_off_edev(char *sn, int timeout, pl_switch_cb_func_t *cb, void *priv)

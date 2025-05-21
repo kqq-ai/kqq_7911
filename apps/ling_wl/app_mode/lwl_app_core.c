@@ -1,5 +1,7 @@
 #include "lwl_app_core.h"
 #include "os/os_api.h"
+#include "syscfg_id.h"
+#include "wifi/wifi_connect.h"
 
 static lwl_app_context_t* s_app_context = NULL;
 static OS_MUTEX g_mutex;
@@ -26,6 +28,8 @@ static void init_app_context(lwl_app_context_t* context)
 {
     memset(s_app_context, 0, sizeof(lwl_app_context_t));
     s_app_context->active_eend_idx = -1;
+
+    wifi_get_mac(s_app_context->mac);
 
     Map *map = map_create();
     

@@ -174,6 +174,26 @@ extern bool g_handshake_is_ongoing;
 
 static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 {
+#define FORTEST 0
+#if FORTEST
+    uint8_t buffer[32];
+    memset(buffer, 0, sizeof(buffer));
+
+    int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_COMPLETE_LOCAL_NAME, buffer);
+    if (r == -1) {
+        return;
+    }
+    char *name = buffer;
+    buffer[r] = '\0';
+
+    log_i("%s %d", name, r);
+
+    if (r != 7 || strcmp(name, "AIFANTA") != 0) {
+        return;
+    }
+    char *sn = "WCCN24H28FEEEF7";
+    s8 rssi = report_pt->rssi;
+#else
     if (!adv_pre_match_impl(report_pt->data, report_pt->length)) {
         return;
     }
@@ -184,10 +204,15 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
     char *sn = (char *)buffer + 3;
     sn[15] = '\0'; // 确保字符串以 null 结尾
+#endif
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {
         log_i("[MEASDIST]add new device: %s\n", sn);
         dev = add_new_eend_dev(sn);
+
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
+        lwl_event_notify(&e);
     }
     log_d("[MEASDIST]RSSI = %d", rssi);
 

@@ -88,7 +88,7 @@ static int g_wait_resp_flag = false;
 /* Test context */
 static int g_test_state = STATE_TEST_STEP_1;
 static int g_setup_complete = false;
-static int g_tts_bind_flag = false;
+
 static int g_audio_playing = false;
 static int g_audio_ready = false;
 static int g_audio_play_ok = false;
@@ -111,7 +111,6 @@ static int g_message_stop_message_id = 0;
  * E switch context
  *=================================================================================================*/
 static int g_backend_switch_session_ok = false;
-static int g_ble_edev_switch_ok = false;
 static lwl_eend_dev_t *g_curr_edev = NULL;
 static lwl_eend_dev_t *g_next_edev = NULL;
 
@@ -158,15 +157,29 @@ static bool wss_application_check_exit()
 }
 
 
-static void switch_end_callback(int code, pl_switch_info_t *switch_info, void *priv)
+static void switch_end_callback(int code, void *priv)
 {
     switch (code) {
-    case SWITCH_ONLY_CODE_TURNOFF_TIMEOUT:
-    case SWITCH_ONLY_CODE_TURNON_TIMEOUT:
-    case SWITCH_ONLY_CODE_UNEXPECTED_ERROR:
-    case SWITCH_ONLY_CODE_SUCCESS:
-        log_i("Switch PortE OK %d\n", code);
-        g_ble_edev_switch_ok = true;
+    case CODE_EDEV_CMD_SUCCESS:
+        log_i("Switch PortE OK\n");
+        if (send_req_message("CC1CC1CC1CC1", g_edev_closest ? g_edev_closest->sn : "", false, ORMET_SWITCH_SUCCESS)) {
+            wss_application_exception_exit();
+            return;
+        }
+        break;
+    case CODE_EDEV_CMD_TIMEOUT:
+        log_i("Switch PortE Timeout\n");
+        if (send_req_message("CC1CC1CC1CC1", g_edev_closest ? g_edev_closest->sn : "", false, ORMET_SWITCH_FAILED)) {
+            wss_application_exception_exit();
+            return;
+        }
+        break;
+    case CODE_EDEV_CMD_UNEXPECTED_ERROR:
+        log_i("Switch PortE Error\n");
+        if (send_req_message("CC1CC1CC1CC1", g_edev_closest ? g_edev_closest->sn : "", false, ORMET_SWITCH_FAILED)) {
+            wss_application_exception_exit();
+            return;
+        }
         break;
     }
 }
@@ -197,7 +210,14 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
-        g_tts_bind_flag = true;
+
+        // send_id 和E端序列号的关系?
+        // 1. 把 send_id 默认为E端的序列号
+        // 2. 把 send_id 映射为E端的序列号
+
+        char *sn = pkg->tts_bind.send_id;
+        my_task_turn_on_edev(sn, 0, switch_end_callback, NULL);
+
         break;
     case OR_AUDIO_STATUS:
         log_i("AUDIO_STATUS\n");
@@ -266,7 +286,8 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
             log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
-            if (send_req_message("CC1CC1CC1CC1", p_eend_dev->sn, false, ORMET_SWITCH_SUCCESS)) {
+
+            if (send_req_message("CC1CC1CC1CC1", g_edev_closest ? g_edev_closest->sn : "", false, ORMET_NEAR_TRIGGER)) {
                 wss_application_exception_exit();
                 return;
             }
@@ -279,14 +300,26 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
             break;
         case DISTANCE_3:
             log_d("[MEASDIST] not found ---%s\r\n", sn_string);
+            
+            if (send_req_message("CC1CC1CC1CC1", g_edev_closest ? g_edev_closest->sn : "", false, ORMET_DEVICE_LEAVE)) {
+                wss_application_exception_exit();
+                return;
+            }
             break;
         }
     }   break;
+    case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
+        log_i("NEW_DEV_IN");
+        if (send_req_message("CC1CC1CC1CC1", g_edev_closest ? g_edev_closest->sn : "", false, ORMET_NEW_DEVICE_IN)) {
+            wss_application_exception_exit();
+            return;
+        }
+        break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK: {
         log_i("SHORT_CLICK");
 
         if (g_edev_closest != NULL) {
-            my_task_switch_only(g_edev_closest->sn, 0, switch_end_callback, NULL);
+            my_task_turn_on_edev(g_edev_closest->sn, 0, switch_end_callback, NULL);
         }
 
     }   break;
@@ -649,13 +682,12 @@ void wss_application_init()
     g_session_create_idx = 0;
 
     log_i("IDLE -> CREATE_SESSION\n");
-    g_mode_state = STATE_MODE_CREATE_SESSION;
+    g_mode_state = STATE_MODE_CREATE_SESSION;wi
 #endif
 
-    char *send_data = odmp_req_message_initial_setup(NULL, 0, "CC1CC1CC1CC1", "");
-    wss_server_send(g_app_ctx->websockets_info, send_data, strlen(send_data));
-    log_i("%s", send_data);
-    free(send_data);
+    if (send_req_message("CC1CC1CC1CC1", "", false, ORMET_INITIAL_SETUP)) {
+        wss_application_exception_exit();
+    }
 
     g_mode_state = STATE_MODE_TEST;
     g_setup_complete = false;

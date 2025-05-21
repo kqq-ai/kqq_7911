@@ -144,6 +144,9 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
 
     log_d("uart_send_inquiry: \r\n");
     log_d_buf(send_packet, 6 + len);
+
+    if (g_dev_uart_hdl == NULL) 
+        return -1;
     // 发送响应包
     return dev_write(g_dev_uart_hdl, send_packet, 6 + len);
 }
@@ -180,4 +183,12 @@ int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b)
     send_led_payload[6] = (b >> 8) & 0xFF; // b 高字节
 
     return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
+}
+
+int uart_send_open_le_audio(uint8_t *mac)
+{
+    uint8_t payload[1 + 6] = {0};
+    payload[0] = UART_CMD_OPEN_LE_AUDIO;
+    memcpy(payload + 1, mac, 6);
+    return uart_send_inquiry(payload, sizeof(payload));
 }

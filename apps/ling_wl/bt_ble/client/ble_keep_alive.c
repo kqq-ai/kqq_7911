@@ -28,6 +28,7 @@ static pthread_mutex_t g_mutex;
  * 只有当前没有正在进行的握手任务时，才能启动一个新的握手任务
  */
 static OS_SEM g_conn_sem;   // 连接成功信号量
+static OS_SEM g_search_sem; // 搜索服务完毕信号量
 static OS_SEM g_eend_big_connected_sem;  // E端BLE Audio连接成功信号
 bool g_handshake_is_ongoing = false;
 
@@ -39,8 +40,8 @@ const uint8_t uuid_server[]  = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 
 const uint8_t uuid_char_tx[] = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xf3, 0xff, 0x00, 0x00};
 const uint8_t uuid_char_rx[] = {0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80, 0x00, 0x10, 0x00, 0x00, 0xf4, 0xff, 0x00, 0x00};
 
-const uint16_t notify_handle = 0x20;    // fixed GATT profile
-const uint16_t write_handle = 0x1E;     // fixed GATT profile
+const uint16_t notify_handle = 0x05;    // fixed GATT profile
+const uint16_t write_handle =0x03;     // fixed GATT profile
 
 /**
  * @brief 生成命令ID
@@ -65,11 +66,12 @@ static uint32_t generate_cmd_id(const char *sn)
 }
 
 static inline void call_cmd_cb(bka_cmd_t *cmd, int code) {
-    if (cmd->cb) cmd->cb(BKA_CMD_CODE_BUFFER_FULL, cmd->priv);
+    if (cmd->cb) cmd->cb(code, cmd->priv);
 }
 
 static void handshake_task(void *priv)
 {
+    int ret = 0;
     bka_eend_dev_handshake_info_t *pdev_info = (bka_eend_dev_handshake_info_t *)priv;
     if (pdev_info == NULL) {
         log_e("[BKA]Error pdev_info is null!!!");
@@ -96,14 +98,35 @@ static void handshake_task(void *priv)
     if (my_blocking_queue_try_dequeue(&pdev_info->cmd_buffer, &cmd) == MYERROR_Success) {
         has_cmd = true;
     }
+    log_i("has cmd: %d %02X %02X", has_cmd, cmd.data[0], cmd.data[1]);
+
+    /* 开机指令需要等待回复 */
+    if (has_cmd && cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {
+        os_sem_set(&g_search_sem, 0);
+        ble_simple_client_profile_start();
+        if (os_sem_pend(&g_search_sem, 1000) == OS_TIMEOUT) {
+            log_e("[BKA]Error search server timeout!!!");
+            ble_simple_client_disconnect();
+            goto __finish;
+        }
+        log_i("[BKA]Search server completed\n");
+
+        u16 tmp_16 = 0x01; //fixed
+        ret = ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2);
+        log_i("write_ntf_ccc:%04x %d\n", notify_handle, ret);
+        if (ret) {
+            log_e("[BKA]Unexpected Error !!!");
+            ble_simple_client_disconnect();
+            goto __finish;
+        }
+    }
 
     int code = BKA_CMD_CODE_COMPL;
     /* 发送握手数据 */
-    int ret = 0;
     if (has_cmd) { /* send cmd */
         if (cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {   /* 开机指令需要等待回复 */
+            log_i_buf(cmd.data, cmd.size);
             os_sem_set(&g_eend_big_connected_sem, 0);
-
             if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size)) {
                 log_e("[BKA]Failed to send cmd, ble buffer full.");
                 call_cmd_cb(&cmd, BKA_CMD_CODE_BUFFER_FULL);
@@ -114,6 +137,7 @@ static void handshake_task(void *priv)
                 call_cmd_cb(&cmd, BKA_CMD_CODE_COMPL);
             }
         } else {    /* 其他指令不需要等待回复 */
+            log_i_buf(cmd.data, cmd.size);
             if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size)) {
                 log_e("[BKA]Failed to send cmd, ble buffer full.");
                 call_cmd_cb(&cmd, BKA_CMD_CODE_BUFFER_FULL);
@@ -123,6 +147,7 @@ static void handshake_task(void *priv)
             }
         }
     } else { /* send dummy */
+        log_i_buf(handshake_dummy_data, sizeof(handshake_dummy_data));
         if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, handshake_dummy_data, sizeof(handshake_dummy_data))) {
             log_e("[BKA]Failed to send cmd, ble buffer full.");
         } else {
@@ -172,12 +197,13 @@ static void ble_conn_event_handler(uint8_t *packet)
             ASSERT(0);
             break;
     }
+    os_sem_post(&g_conn_sem);
 }
 
 static void ble_disconn_event_handler(uint8_t *packet)
 {
     u16 handle = hci_event_disconnection_complete_get_connection_handle(packet);
-    log_i("[BKA]ble_conn_event_handler: %0x\n", handle);
+    log_i("[BKA]ble_disconn_event_handler: %0x\n", handle);
 }
 
 static void ble_client_report_data_event_handler(att_data_report_t *report_data, void *priv)
@@ -189,7 +215,7 @@ static void ble_client_report_data_event_handler(att_data_report_t *report_data,
     uint8_t *data = report_data->blob;
     uint16_t len = report_data->blob_length;
 
-    if (len == 8 && data[0] == 0xA0 && data[1] == 0x01) {
+    if (len == 3 && data[0] == 0xA0 && data[1] == 0x01 && data[2] == 0x00) {
         log_i("E BIG connected!");
         os_sem_post(&g_eend_big_connected_sem);
     }
@@ -197,13 +223,7 @@ static void ble_client_report_data_event_handler(att_data_report_t *report_data,
 
 static void ble_search_completed_event_handler(void *priv)
 {
-    log_i("GATT profile search completed.");
-
-    u16 tmp_16 = 0x01; //fixed
-    log_i("write_ntf_ccc:%04x\n", notify_handle);
-    ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2);
-
-    os_sem_post(&g_conn_sem);
+    os_sem_post(&g_search_sem);
 }
 
 static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
@@ -224,9 +244,7 @@ static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
             /* 清空所有cmd */
             bka_cmd_t cmd;
             while (my_blocking_queue_try_dequeue(&pdev->handshake_info.cmd_buffer, &cmd) == MYERROR_Success) {
-                if (cmd.cb) {
-                    cmd.cb(BKA_CMD_CODE_DEVLOST, cmd.priv);
-                }
+                if (cmd.cb) cmd.cb(BKA_CMD_CODE_DEVLOST, cmd.priv);
             }
         }
     }
@@ -258,15 +276,17 @@ void ble_keep_alive_init(void)
 {
     pthread_mutex_init(&g_mutex, NULL);
     os_sem_create(&g_conn_sem, 0);
+    os_sem_create(&g_search_sem, 0);
     os_sem_create(&g_eend_big_connected_sem, 0);
 
     int r = thread_fork("ble_keep_alive_task", 15, 512 * 3, 0, 0, ble_keep_alive_task, NULL);
     ASSERT(r == 0);
     
     ble_conn_event_user_handler_add(ble_conn_event_handler, NULL);
-    ble_disconn_event_user_handler_add(ble_disconn_event_handler, NULL);
-    ble_client_report_data_event_user_handler_add(ble_client_report_data_event_handler, NULL);
     ble_search_completed_event_user_handler_add(ble_search_completed_event_handler, NULL);
+    ble_disconn_event_user_handler_add(ble_disconn_event_handler, NULL);
+
+    ble_client_report_data_event_user_handler_add(ble_client_report_data_event_handler, NULL);
 }
 
 /**

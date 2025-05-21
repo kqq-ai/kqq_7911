@@ -123,16 +123,16 @@ static bool timeout_timer_is_timeout()
 //=================================================================================================
 // Async task callback
 //=================================================================================================
-static void audio_play_end_callback(int state, pl_music_info_t *music_info, void *priv)
+static void audio_play_end_callback(int state, void *priv)
 {
     switch (state) {
-    case PLAY_AUDIO_STATE_BEFORE_DEC_START:
+    case CODE_PLAY_AUDIO_STATE_BEFORE_DEC_START:
         log_i("Audio play begin\n");
         break;
-    case PLAY_AUDIO_STATE_AFTER_DEC_END:
+    case CODE_PLAY_AUDIO_STATE_AFTER_DEC_END:
         log_i("Audio play over\n");
         break;
-    case PLAY_AUDIO_STATE_CANCEL:
+    case CODE_PLAY_AUDIO_STATE_CANCEL:
         log_i("Audio play cancel\n");
         break;
     }
@@ -161,13 +161,12 @@ static void net_active_task(void *priv)
 }
 
 
-static void switch_end_callback(int code, pl_switch_info_t *switch_info, void *priv)
+static void switch_end_callback(int code, void *priv)
 {
     switch (code) {
-    case SWITCH_ONLY_CODE_TURNOFF_TIMEOUT:
-    case SWITCH_ONLY_CODE_TURNON_TIMEOUT:
-    case SWITCH_ONLY_CODE_UNEXPECTED_ERROR:
-    case SWITCH_ONLY_CODE_SUCCESS:
+    case CODE_EDEV_CMD_SUCCESS:
+    case CODE_EDEV_CMD_TIMEOUT:
+    case CODE_EDEV_CMD_UNEXPECTED_ERROR:
         log_i("Switch PortE OK %d\n", code);
         g_ble_edev_switch_ok = true;
         break;
@@ -282,7 +281,7 @@ static void wss_application_normal_loop()
             if (timeout_timer_is_timeout()) {
 
                 g_ble_edev_switch_ok = false;
-                my_task_switch_only(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+                my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
 
                 log_i("[AUTO_TEST_RUNNING] HANDSHAKE -> TUENON");
                 g_auto_test_running_state = STATE_AUTO_TEST_TURNON;
@@ -292,7 +291,7 @@ static void wss_application_normal_loop()
             if (g_ble_edev_switch_ok == true) {
 
                 // g_ble_edev_switch_ok = false;
-                // my_task_switch_only(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+                // my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
 
                 // log_i("[AUTO_TEST_RUNNING] HANDSHAKE -> TUENON");
                 // g_auto_test_running_state = STATE_AUTO_TEST_TURNON;
@@ -333,7 +332,7 @@ static void wss_application_normal_loop()
             if (timeout_timer_is_timeout()) {
 
                 g_ble_edev_switch_ok = false;
-                my_task_switch_only(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+                my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
                 
                 log_i("[AUTO_TEST_RUNNING] WAIT -> TUENON");
                 g_auto_test_running_state = STATE_AUTO_TEST_TURNON;

@@ -29,6 +29,7 @@ typedef enum {
 
     LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE,   /**< EEND device distance change event */
     LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE,    /**< Closest EEND device change event */
+    LWL_EVENT_TYPE_EEND_DEV_NEW_IN,            /**< New EEND device in */
 
     LWL_EVENT_TYPE_NET_DISCONNECTED,           /**< Network disconnected event */
     LWL_EVENT_TYPE_BACKEND_DISCONNECTED,       /**< Backend service disconnected event */
@@ -76,6 +77,7 @@ typedef struct {
     char lw_ota_md5[33];             /**< OTA update MD5 checksum */
     int  lw_ota_ver_code;            /**< OTA version code */
     char lw_ota_ver_name[33];        /**< OTA version name */
+    uint8_t mac[6];                  /**< MAC */
     char *wss_url;                   /**< WebSocket server URL */
     struct websocket_struct *websockets_info; /**< WebSocket connection info */
     recorder_hdl *recorder;          /**< Audio recorder handle */

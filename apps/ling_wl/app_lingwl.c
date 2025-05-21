@@ -24,7 +24,8 @@
 #include "wait.h"
 #include "app_mode/7911_uart_7016/app_uart_task.h"
 #include "bt_ble/client/ble_keep_alive.h"
-#include "SC7A20/app_sc7a20_task.h"
+#include "SC7A20/app_sc7a20_task.h"x
+#include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_framework.h"
 
 #include "app_mode/lwl_app_core.h"
@@ -136,6 +137,9 @@ static void app_lingwl_main(void)
     uart0_hdl = app_uart_dev_init("uart0");
     context->uartdev = uart0_hdl;
 
+    /* UART指令开启C端le audio */
+    uart_send_open_le_audio(context->mac);
+
     // 初始化录音
     recorder_mode_init(&g_recorder);
     context->recorder = &g_recorder;
@@ -241,19 +245,19 @@ static int app_music_key_click(struct key_event *key)
         // }
 
         // if (en == 0) {
-        //     my_task_switch_only(sn1, NULL, switch_completed);
+        //     my_task_turn_on_edev(sn1, NULL, switch_completed);
         // } else if (en == 1) {
-        //     my_task_switch_only(sn2, NULL, switch_completed);
+        //     my_task_turn_on_edev(sn2, NULL, switch_completed);
         // } else if (en == 2) {
-        //     my_task_switch_only(sn3, NULL, switch_completed);
+        //     my_task_turn_on_edev(sn3, NULL, switch_completed);
         // }
 
 
         if (en) {
-            my_task_switch_only(sn2, 200, NULL, switch_completed);
+            my_task_turn_on_edev(sn2, 200, NULL, switch_completed);
             en = 0;
         } else {
-            my_task_switch_only(ns_null, 200, NULL, switch_completed);
+            my_task_turn_on_edev(ns_null, 200, NULL, switch_completed);
             en = 1;
         }
 

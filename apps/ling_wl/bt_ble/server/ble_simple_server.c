@@ -164,7 +164,7 @@ static ble_state_e get_ble_work_state(void)
 static void can_send_now_wakeup(void)
 {
     /* putchar('E'); */
-    log_info("-------------------------now can send datas -----------------------------\r\n");
+    log_d("-------------------------now can send datas -----------------------------\r\n");
     if (ble_resume_send_wakeup) {
         ble_resume_send_wakeup();
     }
