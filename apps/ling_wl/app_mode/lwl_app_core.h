@@ -85,12 +85,13 @@ typedef struct {
     threadpool_t *threadpool;        /**< Thread pool for asynchronous tasks */
     void *uartdev;                   /**< UART device handle */
     lfs_t *lfs_hdl;                  /**< LittleFS filesystem handle */
-    int active_eend_idx;             /**< Index of active EEND device */
 
     Map *dev_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
+    OS_SEM dev_map_mutex;
 
     MyBlockingQueue event_queue;     /**< Event queue (queue<lwl_event_t>) */
     lwl_event_handler_cb_t event_handlers[LWL_EVENT_HANDLER_MAX_CNT]; /**< Registered event handlers */
+    OS_SEM event_handlers_mutex;
 } lwl_app_context_t;
 
 /**

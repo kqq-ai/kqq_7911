@@ -14,20 +14,19 @@ static void lwl_simple_event_scheduler(void *priv)
     while (true) {
         my_blocking_queue_dequeue(&s_app_context->event_queue, &event);
         
-        os_mutex_pend(&g_mutex, 0);
+        os_mutex_pend(&s_app_context->event_handlers_mutex, 0);
         for (int i = 0; i < LWL_EVENT_HANDLER_MAX_CNT; ++i) {
             if (s_app_context->event_handlers[i] != NULL) {
                 s_app_context->event_handlers[i](&event);
             }
         }
-        os_mutex_post(&g_mutex);
+        os_mutex_post(&s_app_context->event_handlers_mutex);
     }
 }
 
 static void init_app_context(lwl_app_context_t* context)
 {
     memset(s_app_context, 0, sizeof(lwl_app_context_t));
-    s_app_context->active_eend_idx = -1;
 
     wifi_get_mac(s_app_context->mac);
 
@@ -85,8 +84,10 @@ static void init_app_context(lwl_app_context_t* context)
     ASSERT(map_size(map) == 0);
 
     s_app_context->dev_map = map;
+    os_mutex_create(&s_app_context->dev_map_mutex);
 
     my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY);
+    os_mutex_create(&s_app_context->event_handlers_mutex);
 
     thread_fork("lwl_event_scheduler", 15, 512, 0, 0, lwl_simple_event_scheduler, NULL);
 }
@@ -252,7 +253,7 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
 {
     ASSERT(s_app_context != NULL);
 
-    os_mutex_pend(&g_mutex, 0);
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
     
     char **target_list = NULL;
     int num = get_5m_edev_count();
@@ -260,7 +261,7 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
     if (num == 0) {
         *targets = NULL;
         *targets_num = 0;
-        os_mutex_post(&g_mutex);
+        os_mutex_post(&s_app_context->dev_map_mutex);
         return;
     }
 
@@ -288,7 +289,7 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
     
     map_iterator_unlock(it); // 释放锁
 
-    os_mutex_post(&g_mutex);
+    os_mutex_post(&s_app_context->dev_map_mutex);
 }
 
 /**
@@ -313,7 +314,7 @@ void lwl_event_handler_add(lwl_event_handler_cb_t *handler)
 {
     ASSERT(s_app_context != NULL);
 
-    os_mutex_pend(&g_mutex, 0);
+    os_mutex_pend(&s_app_context->event_handlers_mutex, 0);
     int i;
     for (i = 0; i < LWL_EVENT_HANDLER_MAX_CNT; ++i) {
         if (s_app_context->event_handlers[i] == NULL) {
@@ -325,7 +326,7 @@ void lwl_event_handler_add(lwl_event_handler_cb_t *handler)
     } else {
         s_app_context->event_handlers[i] = handler;
     }
-    os_mutex_post(&g_mutex);
+    os_mutex_post(&s_app_context->event_handlers_mutex);
 }
 
 /**
@@ -337,7 +338,7 @@ void lwl_event_handler_remove(lwl_event_handler_cb_t *handler)
 {
     ASSERT(s_app_context != NULL);
 
-    os_mutex_pend(&g_mutex, 0);
+    os_mutex_pend(&s_app_context->event_handlers_mutex, 0);
     int i;
     for (i = 0; i < LWL_EVENT_HANDLER_MAX_CNT; ++i) {
         if (s_app_context->event_handlers[i] == handler) {
@@ -349,7 +350,7 @@ void lwl_event_handler_remove(lwl_event_handler_cb_t *handler)
     } else {
         s_app_context->event_handlers[i] = NULL;
     }
-    os_mutex_post(&g_mutex);
+    os_mutex_post(&s_app_context->event_handlers_mutex);
 }
 
 /**
