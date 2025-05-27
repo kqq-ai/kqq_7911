@@ -126,6 +126,19 @@ int my_blocking_queue_try_dequeue(MyBlockingQueue *queue, void *data);
 int my_blocking_queue_try_peek(MyBlockingQueue *queue, void *data);
 
 /**
+ * @name    my_blocking_queue_push_front
+ * @brief   Push an element to the front of the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure.
+ * @param   data        A pointer to the element to be pushed into the queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ * @note    This function allows inserting elements at the front (reverse order).
+ * @warning May block if the queue is full until space becomes available.
+ */
+int my_blocking_queue_push_front(MyBlockingQueue *queue, const void *data);
+
+/**
  * @name    my_blocking_queue_traverse
  * @brief   Traverse the custom blocking queue and execute a callback function for each element.
  * 

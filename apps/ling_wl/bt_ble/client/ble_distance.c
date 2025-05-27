@@ -212,6 +212,7 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
+        e.new_in.pdev = dev;
         lwl_event_notify(&e);
     }
     log_d("[MEASDIST]RSSI = %d", rssi);

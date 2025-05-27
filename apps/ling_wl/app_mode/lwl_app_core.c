@@ -28,7 +28,12 @@ static void init_app_context(lwl_app_context_t* context)
 {
     memset(s_app_context, 0, sizeof(lwl_app_context_t));
 
-    wifi_get_mac(s_app_context->mac);
+    int ret = syscfg_read(CFG_USER_MAC, s_app_context->mac, 6);
+    if (ret < 0) {
+        wifi_get_mac(s_app_context->mac);
+        syscfg_write(CFG_USER_MAC, s_app_context->mac, 6);
+    }
+    log_i_buf(s_app_context->mac, 6);
 
     Map *map = map_create();
     
@@ -86,7 +91,7 @@ static void init_app_context(lwl_app_context_t* context)
     s_app_context->dev_map = map;
     os_mutex_create(&s_app_context->dev_map_mutex);
 
-    my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY);
+    ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY));
     os_mutex_create(&s_app_context->event_handlers_mutex);
 
     thread_fork("lwl_event_scheduler", 15, 512, 0, 0, lwl_simple_event_scheduler, NULL);

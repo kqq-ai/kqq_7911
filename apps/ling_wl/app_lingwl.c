@@ -24,7 +24,7 @@
 #include "wait.h"
 #include "app_mode/7911_uart_7016/app_uart_task.h"
 #include "bt_ble/client/ble_keep_alive.h"
-#include "SC7A20/app_sc7a20_task.h"x
+#include "SC7A20/app_sc7a20_task.h"
 #include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_framework.h"
 

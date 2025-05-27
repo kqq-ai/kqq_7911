@@ -27,8 +27,10 @@
 #include "log.h"
 #include "ota/http_ota.h"
 
-#include "protocol/odm/odmp.h"
-#include "protocol/odm/odm_util.h"
+// #include "protocol/odm/odmp.h"
+// #include "protocol/odm/odm_util.h"
+
+#include "protocol/lingos/loswssp.h"
 
 #include "wss/wss_client.h"
 
@@ -40,8 +42,8 @@ int app_net_connected_event_handler(struct application *app, struct sys_event *e
 /**** websoket "ws://"  websokets "wss://"  *****/
 //#define OBJ_URL 	"wss://lingos.mo.ling.space/ws/chat?x-key=FK3HRefdoeRGBl7BvlME&x-service=chat&x-version=1.0&x-time=1735125777&x-sign=9803adbaf97fc15477ec4fd58f34f764&x-client-type=web&x-client-id=TESTCLIENT&authorization=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0aW1lU3RhbXAiOjE3MzM4MTA1NTU3MjUsInVzZXJfaWQiOiJ3bF90ZXN0IiwiZXhwIjoxNzQxNTg2NTU1fQ._xbl1hmKo3KPZhAep4te6L3ax3UWTClaq2zGtoQJE2s" //远程服务器测试
 //#define OBJ_URL 	"wss://lingos.mo.ling.space/ws/chat?x-key=FK3HRefdoeRGBl7BvlME&x-service=chat&x-version=1.0&x-time=1737433533&x-sign=9803adbaf97fc15477ec4fd58f34f764&x-client-type=web&x-client-id=TESTCLIENT&authorization=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0aW1lU3RhbXAiOjE3Mzc0MzI1NTcwODcsImRldmljZV9pZCI6IkMwMDEiLCJ1c2VyX2lkIjoiMSIsImV4cCI6MTczODI5NjU1N30.V9qTjpPbsoLBdgtCiNjE8oO3tXeCetyBzKmFDOH505M" //远程服务器测试
-//#define OBJ_URL 	"wss://lingos.mo.ling.space/ws/chat?x-key=FK3HRefdoeRGBl7BvlME&x-service=chat&x-version=1.0&x-time=1738743343&x-sign=5325d317208bcd41c9ba1d5398f026ca&x-client-type=web&x-client-id=TESTCLIENT&authorization=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0aW1lU3RhbXAiOjE3Mzg3NDMzMzQwMzMsInVzZXJfaWQiOiJ3bC10ZXN0IiwiZXhwIjoxNzcwMjc5MzM0fQ.41i12uDxkGknn-9SiW8MrVsg8zB8vdr1kWFAJqAdWPc" //远程服务器测试
-#define OBJ_URL 	"wss://coolqq.com/api/socket?deviceId=CC1CC1CC1CC1&token=GBXBQmXrC1GIKy0h0J2QF" //远程服务器测试
+#define OBJ_URL 	"wss://lingos.mo.ling.space/ws/chat?x-key=FK3HRefdoeRGBl7BvlME&x-service=chat&x-version=1.0&x-time=1738743343&x-sign=5325d317208bcd41c9ba1d5398f026ca&x-client-type=web&x-client-id=TESTCLIENT&authorization=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0aW1lU3RhbXAiOjE3Mzg3NDMzMzQwMzMsInVzZXJfaWQiOiJ3bC10ZXN0IiwiZXhwIjoxNzcwMjc5MzM0fQ.41i12uDxkGknn-9SiW8MrVsg8zB8vdr1kWFAJqAdWPc" //远程服务器测试
+//#define OBJ_URL 	"wss://coolqq.com/api/socket?deviceId=CC1CC1CC1CC1&token=GBXBQmXrC1GIKy0h0J2QF" //远程服务器测试
 //#define OBJ_URL 	"wss://www.lingxilink.com:3000" //远程服务器测试
 //#define OBJ_URL 	"ws://82.157.123.54:9010/ajaxchattest" //远程服务器测试
 //#define OBJ_URL 	"ws://121.40.165.18:8800"
@@ -63,13 +65,14 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     
         } else {
             // odmp process
-            odmp_rsp_handler(buf, len);
+            // odmp_rsp_handler(buf, len);
+            loswssp_rsp_handler(buf, len);
         }
         break;
     case WS_BIN_FRAME: // binary frame
         log_i("wbs recv msg : %d\n", len);
         // log_i_buf(buf, len);
-        odmp_audio_data_handler(buf, len);
+        // odmp_audio_data_handler(buf, len);
         break;
     }
 }

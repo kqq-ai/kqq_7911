@@ -298,6 +298,36 @@ int my_blocking_queue_try_peek(MyBlockingQueue *queue, void *data)
 }
 
 /**
+ * @name    my_blocking_queue_push_front
+ * @brief   Push an element to the front of the custom blocking queue.
+ * 
+ * @param   queue       A pointer to the MyBlockingQueue structure.
+ * @param   data        A pointer to the element to be pushed into the queue.
+ * 
+ * @return  0 if success, see MyErrorType
+ * @note    This function allows inserting elements at the front (reverse order).
+ * @warning May block if the queue is full until space becomes available.
+ */
+int my_blocking_queue_push_front(MyBlockingQueue *queue, const void *data)
+{
+    pthread_mutex_lock(&queue->mutex);
+
+    while (queue->size == queue->capacity) {
+        pthread_cond_wait(&queue->not_full, &queue->mutex);
+    }
+
+    queue->front = (queue->front == 0) ? queue->capacity - 1 : queue->front - 1;
+
+    memcpy(&queue->data[queue->front * queue->element_size], data, queue->element_size);
+    queue->size++;
+
+    pthread_cond_signal(&queue->not_empty);
+
+    pthread_mutex_unlock(&queue->mutex);
+    return MYERROR_Success;
+}
+
+/**
  * @name    my_blocking_queue_traverse
  * @brief   Traverse the custom blocking queue and execute a callback function for each element.
  * 

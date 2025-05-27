@@ -49,11 +49,11 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 #define SET_SCAN_INTERVAL   ADV_SCAN_MS(24) // unit: ms
 #define SET_SCAN_WINDOW     ADV_SCAN_MS(8) // unit: ms
 //连接周期
-#define SET_CONN_INTERVAL   (BASE_INTERVAL_MIN*8) //(unit:1.25ms)
+#define SET_CONN_INTERVAL   (80) //(unit:1.25ms)
 //连接latency
 #define SET_CONN_LATENCY    0  //(unit:conn_interval)
 //连接超时
-#define SET_CONN_TIMEOUT    400 //(unit:10ms)
+#define SET_CONN_TIMEOUT    800 //(unit:10ms)
 
 //----------------------------------------------------------------------------
 static u8 scan_ctrl_en;

@@ -29,7 +29,8 @@ static pthread_mutex_t g_mutex;
  */
 static OS_SEM g_conn_sem;   // 连接成功信号量
 static OS_SEM g_search_sem; // 搜索服务完毕信号量
-static OS_SEM g_eend_big_connected_sem;  // E端BLE Audio连接成功信号
+static OS_SEM g_eend_turn_on_resp_sem;      // 接收E端开机指令回复信号
+static uint8_t g_eend_turn_on_resp_status;   // E 端开机指令返回状态
 bool g_handshake_is_ongoing = false;
 
 
@@ -69,15 +70,108 @@ static inline void call_cmd_cb(bka_cmd_t *cmd, int code) {
     if (cmd->cb) cmd->cb(code, cmd->priv);
 }
 
+static int handshake_task_prepare(bool need_resp)
+{
+    if (need_resp) {
+        /* 查询GATT服务 */
+        os_sem_set(&g_search_sem, 0);
+        ble_simple_client_profile_start();
+        if (os_sem_pend(&g_search_sem, 1000) == OS_TIMEOUT) {
+            log_e("[BKA]Error search server timeout!!!");
+            return -1;
+        }
+        /* 订阅特征 */
+        u16 tmp_16 = 0x01; //fixed
+        if (ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2)) {
+            log_e("[BKA]Unexpected Error !!!");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static bka_cmd_code_e handshake_task_execute_cmd_normal(bka_cmd_t *cmd)
+{
+    /* 其他指令不需要等待回复 */
+    log_i_buf(cmd->data, cmd->size);
+    if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd->data, cmd->size)) {
+        log_e("[BKA]Failed to send cmd, ble buffer full.");
+        return BKA_CMD_CODE_BUFFER_FULL;
+    }
+
+    mdelay(300); // 等待3个连接事件(connection interval: 100ms)
+    return BKA_CMD_CODE_COMPL;
+}
+
+static bka_cmd_code_e handshake_task_execute_cmd_turn_on(bka_cmd_t *cmd)
+{
+    /* 查询GATT服务 */
+    os_sem_set(&g_search_sem, 0);
+    ble_simple_client_profile_start();
+    if (os_sem_pend(&g_search_sem, 1000) == OS_TIMEOUT) {
+        log_e("[BKA]Error search server timeout!!!");
+        return BKA_CMD_CODE_SEARCH_PROFILE_TIMEOUT;
+    }
+
+    /* 订阅特征 */
+    u16 tmp_16 = 0x01; //fixed
+    if (ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2)) {
+        log_e("[BKA]Unexpected Error !!!");
+        return BKA_CMD_CODE_UNEXPECTED;
+    }
+
+    /* 开机指令需要等待回复 */
+    os_sem_set(&g_eend_turn_on_resp_sem, 0);
+    if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd->data, cmd->size)) {
+        log_e("[BKA]Failed to send cmd, ble buffer full.");
+        return BKA_CMD_CODE_BUFFER_FULL;
+    }
+
+    /* 等待E端回复 */
+    if (os_sem_pend(&g_eend_turn_on_resp_sem, 2000) == OS_TIMEOUT) {
+        log_e("[BKA]Error E BIG connection timeout!!!");
+        return BKA_CMD_CODE_E_TURN_ON_TIMEOUT;
+    }
+
+    /* 根据E端回复做不同处理 */
+    switch (g_eend_turn_on_resp_status) {
+    case BKA_TURN_ON_SUCCESS:
+        log_i("[BKA]E BIG connected!");
+        return BKA_CMD_CODE_COMPL;
+    case BKA_TURN_ON_FAILED_ALREADY_BOUND:
+        log_i("[BKA]E is already bound by another C");
+        return BKA_CMD_CODE_E_TURN_ON_ALREADY_BOUND;
+    default:
+        log_i("[BKA]Unexcepted turn on resp status: %02X", g_eend_turn_on_resp_status);
+        return BKA_CMD_CODE_UNEXPECTED;
+    }
+}
+
+static bka_cmd_code_e handshake_task_execute_cmd(bka_cmd_t *cmd)
+{
+    if (cmd->data[0] == 0xA0 && cmd->data[1] == 0x01) {
+        log_i_buf(cmd->data, cmd->size);
+        return handshake_task_execute_cmd_turn_on(cmd);
+    }
+    return handshake_task_execute_cmd_normal(cmd);
+}
+
+static void handshake_task_send_dummy()
+{
+    log_i_buf(handshake_dummy_data, sizeof(handshake_dummy_data));
+    if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, handshake_dummy_data, sizeof(handshake_dummy_data))) {
+        log_e("[BKA]Failed to send cmd, ble buffer full.");
+    } else {
+        mdelay(300); // 等待3个连接事件(connection interval: 100ms)
+    }
+}
+
 static void handshake_task(void *priv)
 {
     int ret = 0;
     bka_eend_dev_handshake_info_t *pdev_info = (bka_eend_dev_handshake_info_t *)priv;
-    if (pdev_info == NULL) {
-        log_e("[BKA]Error pdev_info is null!!!");
-        goto __finish;
-    }
-
+    ASSERT(pdev_info != NULL);
+    os_mutex_pend(&pdev_info->mutex, 0);
 
     /* 建立连接 */
     os_sem_set(&g_conn_sem, 0);
@@ -100,69 +194,25 @@ static void handshake_task(void *priv)
     }
     log_i("has cmd: %d %02X %02X", has_cmd, cmd.data[0], cmd.data[1]);
 
-    /* 开机指令需要等待回复 */
-    if (has_cmd && cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {
-        os_sem_set(&g_search_sem, 0);
-        ble_simple_client_profile_start();
-        if (os_sem_pend(&g_search_sem, 1000) == OS_TIMEOUT) {
-            log_e("[BKA]Error search server timeout!!!");
-            ble_simple_client_disconnect();
-            goto __finish;
-        }
-        log_i("[BKA]Search server completed\n");
-
-        u16 tmp_16 = 0x01; //fixed
-        ret = ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2);
-        log_i("write_ntf_ccc:%04x %d\n", notify_handle, ret);
-        if (ret) {
-            log_e("[BKA]Unexpected Error !!!");
-            ble_simple_client_disconnect();
-            goto __finish;
-        }
-    }
-
-    int code = BKA_CMD_CODE_COMPL;
-    /* 发送握手数据 */
+    bka_cmd_code_e code = BKA_CMD_CODE_COMPL;
     if (has_cmd) { /* send cmd */
-        if (cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {   /* 开机指令需要等待回复 */
-            log_i_buf(cmd.data, cmd.size);
-            os_sem_set(&g_eend_big_connected_sem, 0);
-            if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size)) {
-                log_e("[BKA]Failed to send cmd, ble buffer full.");
-                call_cmd_cb(&cmd, BKA_CMD_CODE_BUFFER_FULL);
-            } else if (os_sem_pend(&g_eend_big_connected_sem, 2000) == OS_TIMEOUT) { /* 等待E端回复 */
-                log_e("[BKA]Error E BIG connection timeout!!!");
-                call_cmd_cb(&cmd, BKA_CMD_CODE_BIG_CONNECTION_TIMEOUT);
-            } else {
-                call_cmd_cb(&cmd, BKA_CMD_CODE_COMPL);
-            }
-        } else {    /* 其他指令不需要等待回复 */
-            log_i_buf(cmd.data, cmd.size);
-            if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, cmd.data, cmd.size)) {
-                log_e("[BKA]Failed to send cmd, ble buffer full.");
-                call_cmd_cb(&cmd, BKA_CMD_CODE_BUFFER_FULL);
-            } else {
-                mdelay(200); // 等待3个连接事件(connection interval: 60ms)
-                call_cmd_cb(&cmd, BKA_CMD_CODE_COMPL);
-            }
-        }
+        code = handshake_task_execute_cmd(&cmd);
+        call_cmd_cb(&cmd, code);
     } else { /* send dummy */
-        log_i_buf(handshake_dummy_data, sizeof(handshake_dummy_data));
-        if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, handshake_dummy_data, sizeof(handshake_dummy_data))) {
-            log_e("[BKA]Failed to send cmd, ble buffer full.");
-        } else {
-            mdelay(200); // 等待3个连接事件(connection interval: 60ms)
-        }
+        handshake_task_send_dummy();
     }
 
     /* 断开连接 */
     ble_simple_client_disconnect();
-    /* handshake completed */
-    os_mutex_pend(&pdev_info->mutex, 0);
-    pdev_info->handshake_flag = 1;
-    os_mutex_post(&pdev_info->mutex);
+
+    /* 本次握手通信成功 */
+    if (code == BKA_CMD_CODE_COMPL) {
+        pdev_info->handshake_flag = 1;
+        pdev_info->alive_hs_fail_cnt = 0;
+    }
 
 __finish:
+    os_mutex_post(&pdev_info->mutex);
     g_handshake_is_ongoing = false;
 }
 
@@ -215,9 +265,10 @@ static void ble_client_report_data_event_handler(att_data_report_t *report_data,
     uint8_t *data = report_data->blob;
     uint16_t len = report_data->blob_length;
 
-    if (len == 3 && data[0] == 0xA0 && data[1] == 0x01 && data[2] == 0x00) {
-        log_i("E BIG connected!");
-        os_sem_post(&g_eend_big_connected_sem);
+    // 开机指令
+    if (len == 3 && data[0] == 0xA0 && data[1] == 0x01) {
+        g_eend_turn_on_resp_status = data[2];
+        os_sem_post(&g_eend_turn_on_resp_sem);
     }
 }
 
@@ -244,7 +295,7 @@ static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
             /* 清空所有cmd */
             bka_cmd_t cmd;
             while (my_blocking_queue_try_dequeue(&pdev->handshake_info.cmd_buffer, &cmd) == MYERROR_Success) {
-                if (cmd.cb) cmd.cb(BKA_CMD_CODE_DEVLOST, cmd.priv);
+                call_cmd_cb(&cmd, BKA_CMD_CODE_DEVLOST);
             }
         }
     }
@@ -277,7 +328,7 @@ void ble_keep_alive_init(void)
     pthread_mutex_init(&g_mutex, NULL);
     os_sem_create(&g_conn_sem, 0);
     os_sem_create(&g_search_sem, 0);
-    os_sem_create(&g_eend_big_connected_sem, 0);
+    os_sem_create(&g_eend_turn_on_resp_sem, 0);
 
     int r = thread_fork("ble_keep_alive_task", 15, 512 * 3, 0, 0, ble_keep_alive_task, NULL);
     ASSERT(r == 0);
@@ -300,9 +351,11 @@ void ble_keep_alive_init(void)
  * @param[in]  priv 用户私有数据
  * @param[out] cmd_id_out 指令ID
  * 
- * @return BKACODE_Success       : 指令添加成功, 
- *         BKACODE_Not_Found     : 设备列表中未找到指定sn的设备, 
+ * @return BKACODE_Success       : 指令添加成功
  *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
+ * 
+ * @note 执行cb时可能会持有部分锁
+ *       - p_eend_dev->handshake_info.mutex
  */
 int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buffer, uint32_t size, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out) 
 {
@@ -345,7 +398,6 @@ static int bka_device_remove_cmd_condition(void *pcmd_data, void *priv) {
  * @param[in] cmd_id 指定指令ID
  * 
  * @return BKACODE_Success : 删除成功
- *         BKACODE_Dev_Not_Found : 设备列表中未找到指定设备引用
  *         BKACODE_Cmd_Not_Found : 设备的控制指令队列中未找到指定指令ID的指令
  */
 int ble_keep_alive_device_remove_cmd(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id)
@@ -362,3 +414,68 @@ int ble_keep_alive_device_remove_cmd(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id
     os_mutex_post(&p_eend_dev->handshake_info.mutex);
     return ret;
 }
+
+/**
+ * @brief 往指定设备的控制指令队列中添加一条开机指令
+ * 
+ * @param[in]  p_eend_dev 设备引用
+ * @param[in]  cb 函数指针，控制指令传输完成时的回调
+ * @param[in]  priv 用户私有数据
+ * @param[out] cmd_id_out 指令ID
+ * 
+ * @return BKACODE_Success       : 指令添加成功
+ *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
+ * 
+ * @note 执行cb时可能会持有部分锁
+ *       - p_eend_dev->handshake_info.mutex
+ */
+int bka_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out) 
+{
+    ASSERT(p_eend_dev != NULL);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+
+    uart_send_set_sn(p_eend_dev->sn);
+
+    u8 cmd_turn_on[] = {0xA0, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    memcpy(cmd_turn_on + 2, ctx->mac, 6);
+
+    return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_on, sizeof(cmd_turn_on), cb, priv, cmd_id_out);
+}
+
+/**
+ * @brief 往指定设备的控制指令队列中添加一条关机指令
+ * 
+ * @param[in]  p_eend_dev 设备引用
+ * @param[in]  cb 函数指针，控制指令传输完成时的回调
+ * @param[in]  priv 用户私有数据
+ * @param[out] cmd_id_out 指令ID
+ * 
+ * @return BKACODE_Success       : 指令添加成功
+ *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
+ * 
+ * @note 执行cb时可能会持有部分锁
+ *       - p_eend_dev->handshake_info.mutex
+ */
+int bka_e_turn_off(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out) 
+{
+    ASSERT(p_eend_dev != NULL);
+    uart_send_set_sn("000000000000000");
+    const u8 cmd_turn_off[] = {0xA0, 0x00};
+    return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_off, sizeof(cmd_turn_off), cb, priv, cmd_id_out);
+}
+
+/**
+ * @brief 删除指定设备的控制指令队列中的指定指令
+ * 
+ * @param[in] p_eend_dev 指定设备引用
+ * @param[in] cmd_id 指定指令ID
+ * 
+ * @return BKACODE_Success : 删除成功
+ *         BKACODE_Cmd_Not_Found : 设备的控制指令队列中未找到指定指令ID的指令
+ */
+int bka_cmd_remove(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id) 
+{
+    return ble_keep_alive_device_remove_cmd(p_eend_dev, cmd_id);
+}
+
+

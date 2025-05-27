@@ -51,6 +51,13 @@ typedef struct {
 } lwl_event_eend_dev_distance_change_t;
 
 /**
+ * @brief EEND device new in event data structure
+ */
+typedef struct {
+    lwl_eend_dev_t *pdev; /**< Pointer to the EEND device */
+} lwl_event_eend_dev_new_in_t;
+
+/**
  * @brief Generic LWL event structure
  */
 typedef struct {
@@ -58,6 +65,7 @@ typedef struct {
     union {
         lwl_event_uart_cmd_sync_t uart_cmd_sync; /**< UART sync command data */
         lwl_event_eend_dev_distance_change_t distance_change;   /**< EEND device distance change data */
+        lwl_event_eend_dev_new_in_t new_in;
     };
 } lwl_event_t;
 

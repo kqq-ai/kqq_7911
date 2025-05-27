@@ -58,6 +58,7 @@ int app_wss_conncted_event_handler(struct application *app, struct sys_event *ev
 
 static int wss_connected_init(void)
 {
+#if 0
     if (!get_ble_app_disconnect_flag()) {
         lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
         /* 通知 APP(小程序) 我已经与wss握手成功 */
@@ -75,6 +76,11 @@ static int wss_connected_init(void)
         }
     }
     printf("wss_connected_init exit ! \r\n");
+#else
+    ble_simple_server_module_enable(0);
+    ble_simple_client_module_enable(1);
+    wss_application_init();
+#endif
     return 0;
 }
 
@@ -102,8 +108,7 @@ void app_wss_connected_mode(void)
         if (wss_application_loop(context->websockets_info)) {
             lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         }
-        
-        mdelay(10);
+        mdelay(100);
         if (lwl_app_mode_exitting()) {
             wss_connected_unint();
             return;
