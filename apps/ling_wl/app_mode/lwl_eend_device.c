@@ -39,6 +39,7 @@ void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
     memset(dev->distance_info.rssi_samples, -128, sizeof(dev->distance_info.rssi_samples));
 
     os_mutex_create(&dev->handshake_info.mutex);
+    dev->handshake_info.need_handshake = false;
     dev->handshake_info.alive = 0;
     dev->handshake_info.alive_hs_fail_cnt = 0;
     dev->handshake_info.handshake_flag = 0;
