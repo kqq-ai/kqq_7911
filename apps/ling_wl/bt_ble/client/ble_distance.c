@@ -204,6 +204,7 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
     char *sn = (char *)buffer + 3;
     sn[15] = '\0'; // 确保字符串以 null 结尾
+    uint8_t bat_level = buffer[2];
 #endif
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {
@@ -215,7 +216,8 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
         e.new_in.pdev = dev;
         lwl_event_notify(&e);
     }
-    log_d("[MEASDIST]RSSI = %d", rssi);
+    log_d("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
+    dev->bat_level = bat_level;
 
     os_mutex_pend(&dev->distance_info.mutex, 0);
     // Store the RSSI value
@@ -226,25 +228,28 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     os_mutex_post(&dev->distance_info.mutex);
     
 
-    os_mutex_pend(&dev->handshake_info.mutex, 0);
+    // 握手通信相关处理
+    if (dev->handshake_info.need_handshake) {
+        os_mutex_pend(&dev->handshake_info.mutex, 0);
 
-    if (dev->handshake_info.handshake_flag == 1) { /* 已经握手过了 */
+        if (dev->handshake_info.handshake_flag == 1) { /* 已经握手过了 */
+            os_mutex_post(&dev->handshake_info.mutex);
+            return;
+        }
+        
+        /* 更新状态 */
+        dev->handshake_info.alive = 1;
+        dev->handshake_info.alive_hs_fail_cnt = 0;
+        dev->handshake_info.address_type = report_pt->address_type;
+        memcpy(dev->handshake_info.address, report_pt->address, 6);
+
+        if (!g_handshake_is_ongoing) {
+            /* 如果没有正在进行的握手任务，就启动一次握手流程 */
+            extern void start_handshake(bka_eend_dev_handshake_info_t *pdev_info);
+            start_handshake(&dev->handshake_info);
+        }
         os_mutex_post(&dev->handshake_info.mutex);
-        return;
     }
-    
-    /* 更新状态 */
-    dev->handshake_info.alive = 1;
-    dev->handshake_info.alive_hs_fail_cnt = 0;
-    dev->handshake_info.address_type = report_pt->address_type;
-    memcpy(dev->handshake_info.address, report_pt->address, 6);
-
-    if (!g_handshake_is_ongoing) {
-        /* 如果没有正在进行的握手任务，就启动一次握手流程 */
-        extern void start_handshake(bka_eend_dev_handshake_info_t *pdev_info);
-        start_handshake(&dev->handshake_info);
-    }
-    os_mutex_post(&dev->handshake_info.mutex);
 
     log_d("[MEASDIST]over");
 }

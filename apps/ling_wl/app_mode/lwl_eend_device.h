@@ -73,6 +73,7 @@ typedef struct {
 } bka_cmd_t;
 
 typedef struct {
+    bool need_handshake;   //!< 是否需要进行握手通信
     bool alive;
     bool handshake_flag;    // 握手标志，0表示没有握手，1表示已握手
     uint8_t alive_hs_fail_cnt;  // 保活判断中，连续握手失败的次数
@@ -92,11 +93,13 @@ typedef struct {
  * @brief Structure representing an LWL EEND device
  */
 typedef struct {
-    u8 sn[SN_SIZE];                     /**< Serial number of the device */
+    u8 sn[SN_SIZE];                               //!< Serial number of the device
+          
+    u8 bat_level;                                 //!< E端设备电量
+          
+    distance_info_t distance_info;                //!< Distance information
 
-    distance_info_t distance_info;      /**< Distance information */
-
-    bka_eend_dev_handshake_info_t handshake_info; /**< Handshake information */
+    bka_eend_dev_handshake_info_t handshake_info; //!< Handshake information
 
     /**
      * @brief Callback to match advertisement data

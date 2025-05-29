@@ -471,6 +471,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
         for (int i = 0; i < g_session_size; ++i) {
             if (memcmp(g_session[i].sn, pdev->sn, SN_SIZE) == 0) {
                 g_session[i].pdev = pdev;
+                g_session[i].pdev->handshake_info.need_handshake = true;
                 log_i("Find session dev: %d", i);
                 break;
             }
@@ -730,7 +731,7 @@ static bool app_playintro_loop()
             g_audio_play_ongoing_num = 0;
 
             gpio_direction_output(IO_PORTA_00, 0);  //
-            
+
             /* 播放开场白 */
             char fname[16];
             snprintf(fname, sizeof(fname), "opening_%d.mp3", g_session[g_curr_edev_idx].ip_id);
