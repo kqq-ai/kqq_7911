@@ -94,9 +94,13 @@ typedef struct {
  */
 typedef struct {
     u8 sn[SN_SIZE];                               //!< Serial number of the device
-          
+
     u8 bat_level;                                 //!< E端设备电量
-          
+
+    u8 power_on_state;                            //!< E端开机状态
+
+    u8 bound_mac[6];                              //!< E端绑定的C端MAC
+
     distance_info_t distance_info;                //!< Distance information
 
     bka_eend_dev_handshake_info_t handshake_info; //!< Handshake information

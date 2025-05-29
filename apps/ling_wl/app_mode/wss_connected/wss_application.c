@@ -111,7 +111,7 @@ static lwl_eend_dev_t *g_edev_closest = NULL;
 static communication_session_t g_session[] = {
     [0] = {
         .pdev = NULL,
-        .sn = "WCCN24H28FEEEFP",
+        .sn = "WCCN24H28FEEEFS",
         .ip_id = 5,
         .session_id = 0,
         .session_create_ok = false,
@@ -119,7 +119,7 @@ static communication_session_t g_session[] = {
     },
     [1] = {
         .pdev = NULL,
-        .sn = "WCCN24H28FEEEFS",
+        .sn = "000000000000000",
         .ip_id = 45,
         .session_id = 0,
         .session_create_ok = false,
@@ -502,8 +502,6 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
 //=================================================================================================
 static void recorder_vad_cb(void* priv, int type)
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    
     switch (type) {
     case 0: /* VAD speaker stop */
         if (g_recording == true) {
@@ -877,6 +875,18 @@ static bool app_oneonone_loop()
             g_audio_play_end = false;
             g_audio_play_ongoing_num = 0;
             g_backend_message_end_ok = false;
+
+            ASSERT(g_session[g_curr_edev_idx].pdev != NULL);
+            if (g_session[g_curr_edev_idx].pdev->power_on_state) {
+                log_i("bat_level: %d, bound mac: %02X:%02X:%02X:%02X:%02X:%02X",
+                    g_session[g_curr_edev_idx].pdev->bat_level,
+                    g_session[g_curr_edev_idx].pdev->bound_mac[0], 
+                    g_session[g_curr_edev_idx].pdev->bound_mac[1], 
+                    g_session[g_curr_edev_idx].pdev->bound_mac[2], 
+                    g_session[g_curr_edev_idx].pdev->bound_mac[3], 
+                    g_session[g_curr_edev_idx].pdev->bound_mac[4], 
+                    g_session[g_curr_edev_idx].pdev->bound_mac[5]);
+            }
 
             log_i("[ONEONONE] RECORDING -> PLAYING\n");
             g_oneonone_state = STATE_ONEONONE_PLAYING;

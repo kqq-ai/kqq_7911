@@ -200,11 +200,16 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 
     s8 rssi = report_pt->rssi;
     
+    /*
+    关机广播格式：2(固定前缀) + 1(电量) + 16(序列号)
+    开机广播格式：2(固定前缀) + 1(电量) + 16(序列号) + 6(绑定的C端MAC)
+    */
     uint8_t buffer[32];
     int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
     char *sn = (char *)buffer + 3;
     sn[15] = '\0'; // 确保字符串以 null 结尾
     uint8_t bat_level = buffer[2];
+    uint8_t eend_power_state = (r == 25) ? 1 : 0;
 #endif
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {
@@ -218,6 +223,12 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     }
     log_d("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
     dev->bat_level = bat_level;
+    dev->power_on_state = eend_power_state;
+    if (dev->power_on_state) {
+        memcpy(dev->bound_mac, buffer + 19, sizeof(dev->bound_mac));
+    } else {
+        memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
+    }
 
     os_mutex_pend(&dev->distance_info.mutex, 0);
     // Store the RSSI value
@@ -245,8 +256,8 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 
         if (!g_handshake_is_ongoing) {
             /* 如果没有正在进行的握手任务，就启动一次握手流程 */
-            extern void start_handshake(bka_eend_dev_handshake_info_t *pdev_info);
-            start_handshake(&dev->handshake_info);
+            extern void start_handshake(lwl_eend_dev_t *pdev);
+            start_handshake(dev);
         }
         os_mutex_post(&dev->handshake_info.mutex);
     }

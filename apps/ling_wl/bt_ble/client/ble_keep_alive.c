@@ -169,7 +169,9 @@ static void handshake_task_send_dummy()
 static void handshake_task(void *priv)
 {
     int ret = 0;
-    bka_eend_dev_handshake_info_t *pdev_info = (bka_eend_dev_handshake_info_t *)priv;
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)priv;
+    ASSERT(pdev != NULL);
+    bka_eend_dev_handshake_info_t *pdev_info = &pdev->handshake_info;
     ASSERT(pdev_info != NULL);
     os_mutex_pend(&pdev_info->mutex, 0);
 
@@ -197,6 +199,10 @@ static void handshake_task(void *priv)
     bka_cmd_code_e code = BKA_CMD_CODE_COMPL;
     if (has_cmd) { /* send cmd */
         code = handshake_task_execute_cmd(&cmd);
+        if (code == BKA_CMD_CODE_COMPL) {
+            pdev->power_on_state = true;
+            memcpy(pdev->bound_mac, lwl_app_core_context_get_instance()->mac, 6);
+        }
         call_cmd_cb(&cmd, code);
     } else { /* send dummy */
         handshake_task_send_dummy();
@@ -216,10 +222,10 @@ __finish:
     g_handshake_is_ongoing = false;
 }
 
-void start_handshake(bka_eend_dev_handshake_info_t *pdev_info)
+void start_handshake(lwl_eend_dev_t *pdev)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (!threadpool_add_task(context->threadpool, handshake_task, pdev_info)) {
+    if (!threadpool_add_task(context->threadpool, handshake_task, pdev)) {
         log_e("[BKA]Failed to add task: handshake_task\n");
         return;
     } 
