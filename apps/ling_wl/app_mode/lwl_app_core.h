@@ -137,6 +137,11 @@ lwl_eend_dev_t *add_new_eend_dev(u8 *sn);
 void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv);
 
 /**
+ * @brief 打印所有E端设备信息
+ */
+void dump_all_eend_info();
+
+/**
  * @brief Find an EEND device by its serial number
  * @param sn Pointer to the serial number to search for
  * @return Pointer to the matching EEND device, or NULL if not found

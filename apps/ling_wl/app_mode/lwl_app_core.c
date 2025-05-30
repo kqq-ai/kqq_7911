@@ -176,6 +176,30 @@ void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv)
     map_iterator_unlock(it); // 释放锁
 }
 
+void dump_all_eend_info()
+{
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    /**
+     * 
+     */
+
+    log_i("+-----------------+-----+---+-------------------+");
+    log_i("|       sn        | bat | P |     bound_mac     |");
+    log_i("+-----------------+-----+---+-------------------+");
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
+
+        log_i("| %15.15s | %3d | %1d | %02X:%02X:%02X:%02X:%02X:%02X |", pdev->sn, pdev->bat_level, pdev->power_on_state, pdev->bound_mac[0], pdev->bound_mac[1], pdev->bound_mac[2], pdev->bound_mac[3], pdev->bound_mac[4], pdev->bound_mac[5]);
+    }
+    log_i("+-----------------+-----+---+-------------------+");
+
+    
+    map_iterator_unlock(it); // 释放锁
+}
+
 /**
  * @brief 查找信号最强的E端设备
  * @return 信号最强的设备对象引用，如果未找到返回 NULL

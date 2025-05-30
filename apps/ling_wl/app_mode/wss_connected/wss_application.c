@@ -778,8 +778,11 @@ static bool app_playintro_loop()
             return true;
 
         } else if (g_curr_time - g_wait_vad_timer >= WAIT_VAD_TIMEOUT) {  /* VAD 超时 */
-            int around_edev_count = get_2m_session_edev_count();
-            if (around_edev_count == 1) {   /* 周围只有一个设备，进入一对一对话 （TODO: 是否是当前对话的这一个？） */
+            int around_edev_count = get_5m_session_edev_count();
+            if (around_edev_count == 0) {
+                log_i("PLAYINTRO -> IDLE\n");
+                g_mode_state = STATE_MODE_IDLE;
+            } else if (around_edev_count == 1) {   /* 周围只有一个设备，进入一对一对话 （TODO: 是否是当前对话的这一个？） */
                 log_i("PLAYINTRO -> ONEONONE(WAIT_VAD)\n");
                 g_mode_state = STATE_MODE_ONEONONE;
                 g_oneonone_state = STATE_ONEONONE_WAIT_VAD;
@@ -1089,6 +1092,8 @@ bool wss_application_loop(struct websocket_struct *websockets_info)
         }
         log_i("%d %d %d %d %d %d %d", g_test_mode, g_mode_state, 
             g_session_create_state, g_playintro_state, g_oneonone_state, g_oneonmany_state, pp);
+
+        dump_all_eend_info();
 
         g_heat_timer = g_curr_time;
     }
