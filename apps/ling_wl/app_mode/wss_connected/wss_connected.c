@@ -108,7 +108,7 @@ void app_wss_connected_mode(void)
         if (wss_application_loop(context->websockets_info)) {
             lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         }
-        mdelay(100);
+        mdelay(10);
         if (lwl_app_mode_exitting()) {
             wss_connected_unint();
             return;
