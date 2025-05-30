@@ -32,6 +32,16 @@ static int recv_argv[30] = {0};
 
 static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv);
 
+static const char *distance_type_text[] = {
+    [DISTANCE_0] = "e < 2    ",
+    [DISTANCE_1] = "2 < e < 5",
+    [DISTANCE_2] = "5 < e    ",
+    [DISTANCE_3] = "out range",
+};
+
+inline const char *distance_type_to_text(enum distance_type type) {
+    return distance_type_text[type];
+}
 
 // 清空RSSI样本
 static void clear_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)

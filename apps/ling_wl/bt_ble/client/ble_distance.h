@@ -13,6 +13,9 @@
 #define NOTIFY_APP_TIME 5000 // 5s
 #define NOTIFY_SELF_TIME 10000 // 10S
 
+
+const char *distance_type_to_text(enum distance_type type);
+
 // 开始检测RSSI
 void monitor_init(void);
 
