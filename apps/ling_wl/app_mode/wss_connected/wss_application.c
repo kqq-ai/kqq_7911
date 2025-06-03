@@ -111,7 +111,7 @@ static lwl_eend_dev_t *g_edev_closest = NULL;
 static communication_session_t g_session[] = {
     [0] = {
         .pdev = NULL,
-        .sn = "WCCN24H28FEEEFS",
+        .sn = "000000000000000",
         .ip_id = 5,
         .session_id = 0,
         .session_create_ok = false,
@@ -119,7 +119,7 @@ static communication_session_t g_session[] = {
     },
     [1] = {
         .pdev = NULL,
-        .sn = "000000000000000",
+        .sn = "WCCN24H28FEEEFA",
         .ip_id = 45,
         .session_id = 0,
         .session_create_ok = false,
@@ -157,6 +157,22 @@ int get_5m_session_edev_count(void)
     return sum;
 }
 
+int get_session_edev_closest_idx(void)
+{
+    s8 max_rssi = -128;
+    int closest_idx = -1;
+    for (int i = 0; i < g_session_size; ++i) {
+        if (g_session[i].pdev == NULL) {
+            continue;
+        }
+        if (max_rssi < g_session[i].pdev->distance_info.rssi) {
+            max_rssi = g_session[i].pdev->distance_info.rssi;
+            closest_idx = i;
+        }
+    }
+    return closest_idx;
+}
+
 int is_edev_far_away(int session_dev_index) 
 {
     if (g_session[session_dev_index].pdev == NULL) {
@@ -188,6 +204,7 @@ static int g_ble_edev_switch_ok = false;
 static int g_curr_edev_idx = -1;
 static int g_next_edev_idx = -1;
 static int g_edev_closest_idx = -1;
+static int g_turn_on_retry_cnt = 0;
 
 /*=================================================================================================
  * Audio dec app context
@@ -258,6 +275,8 @@ static void audio_play_end_callback(int state, void *priv)
     }
 }
 
+static void start_turn_on(communication_session_t *session_dev);
+
 static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
 {
     switch(code) {
@@ -271,6 +290,9 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
     case BKA_CMD_CODE_BUFFER_FULL:
         log_i("Switch PortE BLE TX Buffer Full\n");
         break;
+    case BKA_CMD_CODE_SEARCH_PROFILE_TIMEOUT:
+        log_i("Switch PoertE search GATT timeout\n");
+        break;
     case BKA_CMD_CODE_E_TURN_ON_TIMEOUT:
         log_i("Switch PortE Timeout\n");
         break;
@@ -281,6 +303,31 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
         log_i("Switch PortE Error\n");
         break;
     }
+
+    if (code != BKA_CMD_CODE_COMPL) {
+        log_i("retry %d", g_turn_on_retry_cnt++);
+        start_turn_on(&g_session[g_next_edev_idx]);
+    }
+}
+
+static void do_turn_on(void *priv)
+{
+    communication_session_t *session_dev = (communication_session_t *)priv;
+    ASSERT(session_dev != NULL);
+    lwl_eend_dev_t *p_eend_dev = session_dev->pdev;
+
+    /* 切换E端 */
+    if (p_eend_dev == NULL) {
+        g_ble_edev_switch_ok = true;
+        uart_send_set_sn(session_dev->sn); /* 只切换广播 */
+    } else {
+        bka_e_turn_on(p_eend_dev, e_turn_on_cb, NULL, &g_current_cmd_id);
+    }
+}
+
+static void start_turn_on(communication_session_t *session_dev)
+{
+    threadpool_add_task(g_app_ctx->threadpool, do_turn_on, session_dev);
 }
 
 //=================================================================================================
@@ -430,18 +477,18 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE: {
         lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-        
-        g_edev_closest = p_eend_dev;
+
+        char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
+        p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
+        log_i("[MEASDIST]ble rssi: %d --- ble name  : %s closer ! =========================\n", p_eend_dev->distance_info.rssi, sn_string);
 
         for (int i = 0; i < g_session_size; ++i) {
             if (memcmp(g_session[i].sn, p_eend_dev->sn, SN_SIZE) == 0) {
                 g_edev_closest_idx = i;
+                g_edev_closest = p_eend_dev;
             }
         }
         
-        char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-        p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST]ble rssi: %d --- ble name  : %s closer ! =========================\n", p_eend_dev->distance_info.rssi, sn_string);
     }   break;
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE: {
         lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
@@ -632,12 +679,15 @@ static void wss_asr_data_to_console(AsrData *asr_data)
 static bool app_idle_loop()
 {
     if (0 < get_5m_session_edev_count()) {
-        g_next_edev_idx = g_edev_closest_idx;
-        /* 初始化 playintro 任务上下文 */
-        g_playintro_state = STATE_PLAYINTRO_STARTUP;
-    
-        log_i("IDLE -> PLAYINTRO\n");
-        g_mode_state = STATE_MODE_PLAYINTRO;
+        g_next_edev_idx = get_session_edev_closest_idx();
+
+        if (g_next_edev_idx != -1) {
+            /* 初始化 playintro 任务上下文 */
+            g_playintro_state = STATE_PLAYINTRO_STARTUP;
+        
+            log_i("IDLE -> PLAYINTRO\n");
+            g_mode_state = STATE_MODE_PLAYINTRO;
+        }
     }
     return false;
 }
@@ -704,14 +754,9 @@ static bool app_playintro_loop()
             return true;
         }
 
-        /* 切换 E端 */
-        if (g_session[g_next_edev_idx].pdev == NULL) {
-            g_ble_edev_switch_ok = true;
-            uart_send_set_sn(g_session[g_next_edev_idx].sn); /* 只切换广播 */
-        } else {
-            g_ble_edev_switch_ok = false;
-            bka_e_turn_on(g_session[g_next_edev_idx].pdev, e_turn_on_cb, NULL, &g_current_cmd_id);
-        }
+        g_turn_on_retry_cnt = 0;
+        g_ble_edev_switch_ok = false;
+        start_turn_on(&g_session[g_next_edev_idx]);
 
         log_i("[PLAYINTRO] STARTUP -> SWITCH (%d -> %d)\n", g_curr_edev_idx, g_next_edev_idx);
         g_playintro_state = STATE_PLAYINTRO_SWITCH;

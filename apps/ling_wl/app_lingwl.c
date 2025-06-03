@@ -137,9 +137,6 @@ static void app_lingwl_main(void)
     uart0_hdl = app_uart_dev_init("uart0");
     context->uartdev = uart0_hdl;
 
-    /* UART指令开启C端le audio */
-    uart_send_open_le_audio(context->mac);
-
     // 初始化录音
     recorder_mode_init(&g_recorder);
     context->recorder = &g_recorder;
