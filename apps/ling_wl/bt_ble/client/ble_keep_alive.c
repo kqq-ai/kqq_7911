@@ -53,7 +53,7 @@ static uint32_t generate_cmd_id(const char *sn)
 {
     ASSERT(strlen(sn) == SN_SIZE - 1);
     // 获取当前时间戳（低24位）
-    uint32_t timestamp = (uint32_t)time(NULL) & 0x00FFFFFF;
+    uint32_t timestamp = timer_get_ms() & 0x00FFFFFF;
     
     // 计算字符串简单哈希（取前8位）
     uint8_t str_hash = 0;
