@@ -860,6 +860,7 @@ static bool app_oneonone_loop()
             return true;
         }
         if (g_recording == true) {
+            uart_send_set_led_color(COLOR_DARK_YELLOW);
             my_blocking_queue_clear(&g_asr_data_queue); /* 清空asr data queue */
 
             wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
@@ -906,6 +907,7 @@ static bool app_oneonone_loop()
         }
 
         if (g_recording == false) { /* VAD结束 */
+            uart_send_set_led_color(COLOR_DARK_BLUE);
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
             
             if (communication_message_asr_end() != 0) { /* 发送asr end */
@@ -958,7 +960,7 @@ static bool app_oneonone_loop()
             log_i("[ONEONONE] wait audio response timeout.\n");
 
             uart_send_set_led_color(COLOR_RED);
-            msleep(10);
+            msleep(100);
             uart_send_set_led_color(COLOR_BLACK);
 
             g_recording = false;
@@ -967,6 +969,7 @@ static bool app_oneonone_loop()
         }
         
         if (g_backend_message_end_ok && g_audio_play_end && g_audio_play_ongoing_num == 0) { /* 音频播放完毕 */
+            uart_send_set_led_color(COLOR_GREEN);
             g_recording = false;
             log_i("[ONEONONE] PLAYING -> WAIT_VAD\n");
             g_oneonone_state = STATE_ONEONONE_WAIT_VAD;
