@@ -14,6 +14,7 @@
 
 #include "ota/http_ota.h"
 #include "uart.h"
+#include "protocol/cp/c_uart_p.h"
 
 static void wss_app_recorder_data_upstream(recorder_data_cb_t cb);
 static void recorder_data_to_data_queue(void* priv, void *data, u32 size);
@@ -955,6 +956,11 @@ static bool app_oneonone_loop()
 
         if ((g_wait_resp_flag == false) && (g_curr_time - g_wait_audio_resp_timer >= WAIT_AUDIO_RESP_TIMEOUT)) { /* 等待回复超时，直接结束 */
             log_i("[ONEONONE] wait audio response timeout.\n");
+
+            uart_send_set_led_color(COLOR_RED);
+            msleep(10);
+            uart_send_set_led_color(COLOR_BLACK);
+
             g_recording = false;
             log_i("[ONEONONE] PLAYING -> WAIT_VAD\n");
             g_oneonone_state = STATE_ONEONONE_WAIT_VAD;
