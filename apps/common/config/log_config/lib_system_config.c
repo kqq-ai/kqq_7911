@@ -22,7 +22,7 @@ const int config_printf_time         = 1;
 #ifdef CONFIG_RELEASE_ENABLE
 const int config_asser         = 1;
 #else
-const int config_asser         = 0;
+const int config_asser         = 1;
 #endif
 
 const int config_system_info   = 0;

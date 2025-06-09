@@ -34,6 +34,8 @@
 
 #include "wss/wss_client.h"
 
+#include "protocol/odm/odm_secure.h"
+
 int app_net_connected_event_handler(struct application *app, struct sys_event *event)
 {
     return false;
@@ -65,14 +67,14 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     
         } else {
             // odmp process
-            // odmp_rsp_handler(buf, len);
-            loswssp_rsp_handler(buf, len);
+            odmp_rsp_handler(buf, len);
+            // loswssp_rsp_handler(buf, len);
         }
         break;
     case WS_BIN_FRAME: // binary frame
         log_i("wbs recv msg : %d\n", len);
         // log_i_buf(buf, len);
-        // odmp_audio_data_handler(buf, len);
+        odmp_audio_data_handler(buf, len);
         break;
     }
 }
@@ -87,12 +89,13 @@ static int net_connected_init(void)
         return 0;
     }
 
-
-
 #if 0
     auto_test_application_init();
 #else
-    struct websocket_info_t *websockets_info = wss_server_connect(url, wss_recv_callback);
+
+    char *secure_url = get_wss_connection_url(); // TODO: 释放资源
+
+    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback);
 
     if (websockets_info == NULL) {
         log_i("websockets init failed\n");
@@ -101,7 +104,7 @@ static int net_connected_init(void)
     } else {
         /* 将websocket_info保存到全局上下文 */
         lwl_app_context_t *context = lwl_app_core_context_get_instance();
-        context->wss_url = url;
+        context->wss_url = secure_url;
         context->websockets_info = websockets_info;
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     }

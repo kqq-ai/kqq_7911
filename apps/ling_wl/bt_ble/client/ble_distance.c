@@ -216,10 +216,19 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     */
     uint8_t buffer[32];
     int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
+#if 1
+    char sn[16] = "";
+    memcpy(sn, buffer + 3, 15);
+#else
     char *sn = (char *)buffer + 3;
+#endif
     sn[15] = '\0'; // 确保字符串以 null 结尾
     uint8_t bat_level = buffer[2];
     uint8_t eend_power_state = (r == 25) ? 1 : 0;
+
+    if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
+        strcpy(sn, "WECNC4H06CPLJE7");
+    }
 #endif
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {

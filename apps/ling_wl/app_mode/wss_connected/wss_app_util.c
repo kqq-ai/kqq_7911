@@ -313,6 +313,7 @@ int send_audio_status(const char *c_id, int type, int event)
         }
         return -1;
     }
+    log_i("wbs send msg : %s", send_data);
     free(send_data);
     return 0;
 }
@@ -341,6 +342,7 @@ int send_req_message(const char *c_id, const char *send_id, bool is_play, int ev
         }
         return -1;
     }
+    log_i("wbs send msg : %s", send_data);
     free(send_data);
     free_5m_edev_targets(targets, targets_num);
     return 0;
