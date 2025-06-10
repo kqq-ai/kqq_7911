@@ -224,6 +224,7 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
 void app_music_play_end_cb(void *priv)
 {
     log_i("app_music_play_end_cb");
+    uart_send_set_sn("000000000000000");
     // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_PLAY_END)) {
     //     wss_application_exception_exit();
     //     return;
