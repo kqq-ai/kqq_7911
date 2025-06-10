@@ -78,6 +78,8 @@ static int g_exception_exit = false;
 static lwl_app_context_t *g_app_ctx = NULL;
 
 static lwl_eend_dev_t *g_edev_closest = NULL;
+static lwl_eend_dev_t *g_edev_last = NULL;
+static lwl_eend_dev_t *g_edev_target = NULL;
 
 
 /* Task state */
@@ -159,16 +161,17 @@ static bool wss_application_check_exit()
     return g_exception_exit;
 }
 
+int vad_start_time = 0;
+int vad_timeout = 0;
+
 static void wait_vad_task(void *priv)
 {
-    int a = timer_get_ms();
-    int b = a;
     g_recording = false;
+    wss_app_recorder_en(ENABLE);
     log_i("Wait VAD start\n");
 
-    while (a + 10000 >= b) {
-        b = timer_get_ms();
-        msleep(100);
+    while (vad_timeout >= timer_get_ms()) {
+        msleep(10);
 
         if (g_recording == true) {
             threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
@@ -177,7 +180,10 @@ static void wait_vad_task(void *priv)
     }
 
     log_i("Wait VAD timeout.");
-    // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_VAD_SPEAKER_END)) {
+    wss_app_recorder_en(DISABLE);
+    g_recording = false;
+    g_edev_last = NULL;
+    // if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_VAD_SPEAKER_END)) {
     //     wss_application_exception_exit();
     //     return;
     // }
@@ -185,12 +191,22 @@ static void wait_vad_task(void *priv)
 
 static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
 {
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    
+    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
+    if (pdev) {
+        pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    }
     switch(code) {
     case BKA_CMD_CODE_COMPL:
-        log_i("Switch PortE OK\n");
-        if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_SWITCH_SUCCESS)) {
-            wss_application_exception_exit();
-            return;
+
+        log_i("Switch PortE %s OK\n", sn_string);
+        if (g_edev_target == pdev) {
+            g_edev_last = pdev;
+            if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_SWITCH_SUCCESS)) {
+                wss_application_exception_exit();
+                return;
+            }
         }
         break;
     case BKA_CMD_CODE_DEVLOST:
@@ -214,22 +230,28 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
     }
 
     if (code != BKA_CMD_CODE_COMPL) {
-        if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_SWITCH_FAILED)) {
+        if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_SWITCH_FAILED)) {
             wss_application_exception_exit();
             return;
         }
+        if(g_edev_target == pdev) g_edev_target = NULL;
+        g_edev_last = NULL;
     }
 }
 
 void app_music_play_end_cb(void *priv)
 {
-    log_i("app_music_play_end_cb");
-    uart_send_set_sn("000000000000000");
-    // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_PLAY_END)) {
-    //     wss_application_exception_exit();
-    //     return;
-    // }
+    log_i("g_audio_playing End");
+    g_audio_playing = false;
+    // uart_send_set_sn("000000000000000");
+    if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_PLAY_END)) {
+        wss_application_exception_exit();
+        return;
+    }
     // 等待 VAD 超时
+    log_i("ENABLE VAD");
+    vad_start_time = timer_get_ms();
+    vad_timeout = vad_start_time + 5000;
     threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
 }
 
@@ -255,6 +277,12 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
 
+        if (pkg->tts_bind.wait_time > 0) {
+            vad_timeout = vad_start_time + pkg->tts_bind.wait_time;
+
+        }
+        
+
         // send_id 和E端序列号的关系?
         // 1. 把 send_id 默认为E端的序列号
         // 2. 把 send_id 映射为E端的序列号
@@ -266,8 +294,14 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
 
         if (pdev == NULL) {
             log_e("dev not exists: %s", sn);
-        } else {
+        } if (pdev == g_edev_last) {
+            if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_SWITCH_SUCCESS)) {
+                wss_application_exception_exit();
+                break;
+            }
+        }else {
             uint32_t cmd_id;
+            g_edev_target = pdev;
             bka_e_turn_on(pdev, e_turn_on_cb, pdev, &cmd_id);
             log_d("turn on cmd_id: %d", cmd_id);
         }
@@ -286,17 +320,21 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START\n");
+                g_audio_playing = true;
                 app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
             } else if (pkg->audio_status.event == OASE_ABNORMAL) {
+                if (g_audio_playing) {
+                    // TODO STOP talking
+                }
             } else if (pkg->audio_status.event == OASE_SENTENCE_START) {
             } else if (pkg->audio_status.event == OASE_SENTENCE_END) {
             }
         }
         break;
     case OR_MESSAGE_TEXT:
-        log_i("MESSAGE_TEXT %s %s\n", pkg->message_text.send_id, pkg->message_text.text);
+        log_i("MESSAGE_TEXT %s %s\n", pkg->message_text.c_id, pkg->message_text.text);
         break;
     case OR_EXECUTION_TIME:
         log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
@@ -323,26 +361,32 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE: {
         lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-        
-        g_edev_closest = p_eend_dev;
-        
-        char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-        p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST]ble rssi: %d --- ble name  : %s closer ! =========================\n", p_eend_dev->distance_info.rssi, sn_string);
-    }   break;
+        if (vad_timeout < timer_get_ms()) {
+            g_edev_closest = p_eend_dev;
+        }
+    }
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE: {
         lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
         char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST] %s: %d\r\n", sn_string, p_eend_dev->distance_info.rssi);
+        log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
 
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
             log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
 
-            if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_NEAR_TRIGGER)) {
-                wss_application_exception_exit();
-                return;
+            if (!g_audio_playing && !g_recording && p_eend_dev == g_edev_closest && g_edev_last != p_eend_dev) { // Not Talking
+                g_edev_last = p_eend_dev;
+                if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_NEAR_TRIGGER)) {
+                    wss_application_exception_exit();
+                    return;
+                }
+            // } else if (p_eend_dev != g_edev_closest && g_edev_last != p_eend_dev) { // 加入对话
+            //     if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_NEW_DEVICE_IN)) {
+            //         wss_application_exception_exit();
+            //         return;
+            //     }
             }
             break;
         case DISTANCE_1:
@@ -350,20 +394,35 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
             break;
         case DISTANCE_2:
             log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
+
+            if (p_eend_dev == g_edev_last) {
+                if (g_audio_playing) {
+                    // TODO STOP talking
+                }
+                if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_DEVICE_LEAVE)) {
+                    wss_application_exception_exit();
+                    return;
+                }
+                g_edev_last = NULL;
+            } 
             break;
         case DISTANCE_3:
             log_d("[MEASDIST] not found ---%s\r\n", sn_string);
             
-            if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_DEVICE_LEAVE)) {
-                wss_application_exception_exit();
-                return;
+            if (p_eend_dev == g_edev_last) {
+                if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_DEVICE_LEAVE)) {
+                    wss_application_exception_exit();
+                    return;
+                }
+                g_edev_last = NULL;
             }
             break;
         }
     }   break;
     case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
         log_i("NEW_DEV_IN");
-        if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_NEW_DEVICE_IN)) {
+        if(g_edev_last == NULL) break;
+        if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_NEW_DEVICE_IN)) {
             wss_application_exception_exit();
             return;
         }
@@ -507,11 +566,6 @@ static void start_audio_upload(void *priv)
     log_i("Start audio upload.");
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-
-    // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_VAD_SPEAKER_START)) {
-    //     wss_application_exception_exit();
-    //     return;
-    // }
     if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_START)) {
         wss_application_exception_exit();
         return;
@@ -530,11 +584,10 @@ static void start_audio_upload(void *priv)
         // }
 
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
-        log_i("AAA");
         if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
-            log_i("BBB"); wss_asr_data_to_server(&asr_data_frame);
+            wss_asr_data_to_server(&asr_data_frame);
         } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
-            log_i("CCC"); wss_asr_data_to_server(&asr_data_frame);
+            wss_asr_data_to_server(&asr_data_frame);
         }
         recording_upload_package_index++;
 
@@ -573,14 +626,15 @@ void wss_application_init()
     /* 默认不设置录音上传回调 */
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
     /* 开启录音 */
-    wss_app_recorder_en(ENABLE);
+    wss_app_recorder_en(DISABLE);
+    g_audio_playing = false;
 
     /* 重置 */
     g_exception_exit = false;
     
     ASSERT(g_mode_state == STATE_MODE_IDLE);
 
-    if (send_req_message(DEVICE_ID, "", false, ORMET_INITIAL_SETUP)) {
+    if (send_req_message(DEVICE_ID, "", g_audio_playing, ORMET_INITIAL_SETUP)) {
         wss_application_exception_exit();
     }
 }
