@@ -25,6 +25,7 @@ static void recorder_data_to_ringbuffer(void* priv, void *data, u32 size);
 static void wss_asr_data(void *data, u32 size);
 static void app_record_task_start();
 static void app_task_break();
+static void start_audio_upload();
 
 #define ENABLE 1
 #define DISABLE 0
@@ -158,6 +159,29 @@ static bool wss_application_check_exit()
     return g_exception_exit;
 }
 
+static void wait_vad_task(void *priv)
+{
+    int a = timer_get_ms();
+    int b = a;
+    g_recording = false;
+    log_i("Wait VAD start\n");
+
+    while (a + 10000 >= b) {
+        b = timer_get_ms();
+        msleep(100);
+
+        if (g_recording == true) {
+            threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
+            return;
+        }
+    }
+
+    log_i("Wait VAD timeout.");
+    // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_VAD_SPEAKER_END)) {
+    //     wss_application_exception_exit();
+    //     return;
+    // }
+}
 
 static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
 {
@@ -200,6 +224,12 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
 void app_music_play_end_cb(void *priv)
 {
     log_i("app_music_play_end_cb");
+    // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_PLAY_END)) {
+    //     wss_application_exception_exit();
+    //     return;
+    // }
+    // 等待 VAD 超时
+    threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
 }
 
 //=================================================================================================
@@ -344,7 +374,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
-        uart_response_synch_status(g_mode_state != STATE_MODE_IDLE, 8);
+        uart_response_synch_status(1, 8);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");
@@ -471,27 +501,32 @@ static void wss_asr_data_to_console(AsrData *asr_data)
     }
 }
 
-static void start_audio_upload()
+static void start_audio_upload(void *priv)
 {
+    log_i("Start audio upload.");
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
 
+    // if (send_req_message(DEVICE_ID, g_edev_closest ? g_edev_closest->sn : "", false, ORMET_VAD_SPEAKER_START)) {
+    //     wss_application_exception_exit();
+    //     return;
+    // }
     if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_START)) {
         wss_application_exception_exit();
         return;
     }
 
     while (true) {
-        if (is_edev_far_away(g_curr_edev)) { /* 当前设备距离 > 5 */
-            wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
-            if (recording_upload_package_index > 0) { /* 已经上传了部分asr data时，发送message stop事件结束 */
-                if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_END)) {
-                    wss_application_exception_exit();
-                    return;
-                }
-            }
-            return;
-        }
+        // if (is_edev_far_away(g_curr_edev)) { /* 当前设备距离 > 5 */
+        //     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
+        //     if (recording_upload_package_index > 0) { /* 已经上传了部分asr data时，发送message stop事件结束 */
+        //         if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_END)) {
+        //             wss_application_exception_exit();
+        //             return;
+        //         }
+        //     }
+        //     return;
+        // }
 
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
         log_i("AAA");
@@ -509,7 +544,9 @@ static void start_audio_upload()
                 wss_application_exception_exit();
                 return;
             }
+            return;
         }
+        msleep(10);
     }
 }
 
