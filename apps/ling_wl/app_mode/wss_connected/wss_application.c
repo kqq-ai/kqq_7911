@@ -77,9 +77,10 @@ static int g_exception_exit = false;
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
-static lwl_eend_dev_t *g_edev_closest = NULL;
-static lwl_eend_dev_t *g_edev_last = NULL;
-static lwl_eend_dev_t *g_edev_target = NULL;
+static lwl_eend_dev_t *g_edev_closest = NULL; // C 本地维护
+static lwl_eend_dev_t *g_edev_last = NULL; // C 本地维护
+static lwl_eend_dev_t *g_edev_target = NULL; // 服务器维护
+static lwl_eend_dev_t *g_edev_connected = NULL; // E 已连接
 
 
 /* Task state */
@@ -201,13 +202,13 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
     case BKA_CMD_CODE_COMPL:
 
         log_i("Switch PortE %s OK\n", sn_string);
-        if (g_edev_target == pdev) {
+        // if (g_edev_target == pdev) {
             g_edev_last = pdev;
             if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_SWITCH_SUCCESS)) {
                 wss_application_exception_exit();
                 return;
             }
-        }
+        // }
         break;
     case BKA_CMD_CODE_DEVLOST:
         log_i("Switch PortE Dev Lost\n");
@@ -281,7 +282,6 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
             vad_timeout = vad_start_time + pkg->tts_bind.wait_time;
 
         }
-        
 
         // send_id 和E端序列号的关系?
         // 1. 把 send_id 默认为E端的序列号
@@ -294,11 +294,11 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
 
         if (pdev == NULL) {
             log_e("dev not exists: %s", sn);
-        } if (pdev == g_edev_last) {
-            if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_SWITCH_SUCCESS)) {
-                wss_application_exception_exit();
-                break;
-            }
+        // } if (pdev == g_edev_last) {
+        //     if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, ORMET_SWITCH_SUCCESS)) {
+        //         wss_application_exception_exit();
+        //         break;
+        //     }
         }else {
             uint32_t cmd_id;
             g_edev_target = pdev;
@@ -619,6 +619,7 @@ void wss_application_init()
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(wss_app_lwl_event_handler_cb);
     /* 注册odmp事件回调 */
+
     odmp_register_rsp_cbk(odmp_rsp_cbk);
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); /* 注册音频数据回调 */
     /* 设置VAD回调 */
