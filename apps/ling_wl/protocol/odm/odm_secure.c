@@ -10,8 +10,10 @@
 
 #define BUF_SIZE 128
 
-char *kqqToken;
 #define HTTP_POSTTK_DEMO_URL  "https://test.coolqq.com/api/signature"
+#define HTTP_POSTTK_DEMO_API  "wss://test.coolqq.com/api/socket?deviceId=%s&token=%s"
+
+char *kqqToken;
 static bool https_post_gettk_task(char* context)// void *priv
 {
     int ret = 0;
@@ -212,7 +214,7 @@ static void prepare_signature()
 
         if (https_post_gettk_task(post_sign_time)) break;
         printf("https_post_gettk_task false");
-        msleep(100);
+        msleep(3000);
     }
 }
 
@@ -222,7 +224,7 @@ char *get_wss_connection_url()
 
     char * url = (char *)malloc(BUF_SIZE);
 
-    snprintf(url, BUF_SIZE, "wss://test.coolqq.com/api/socket?deviceId=%s&token=%s", DEVICE_ID, kqqToken);
+    snprintf(url, BUF_SIZE, HTTP_POSTTK_DEMO_API, DEVICE_ID, kqqToken);
 
     printf(" f link: %s  ~\n", url);
     
