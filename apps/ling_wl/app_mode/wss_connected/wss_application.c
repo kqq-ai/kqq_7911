@@ -38,6 +38,8 @@ static u32 g_heat_timer = 0;
 #define WAIT_AUDIO_RESP_TIMEOUT 5000
 static u32 g_wait_audio_resp_timer = 0;
 
+static int reci_text_len =0;
+
 static bool g_test_mode = false;
 
 static int g_exception_exit = false;
@@ -316,9 +318,12 @@ static void wss_asr_data_to_console(AsrData *asr_data)
     }
 }
 
+static void wait_vad_task(void *priv);
+
 static void start_audio_upload(void *priv)
 {
     log_i("Start audio upload.");
+    reci_text_len = 0;
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_START)) {
@@ -353,7 +358,8 @@ static void start_audio_upload(void *priv)
                 wss_application_exception_exit();
                 return;
             }
-            wss_app_recorder_en(DISABLE);
+            // wss_app_recorder_en(DISABLE);
+            threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
             return;
         }
         msleep(10);
@@ -362,10 +368,11 @@ static void start_audio_upload(void *priv)
 
 static void wait_vad_task(void *priv)
 {
-    wss_app_recorder_en(ENABLE);
-    log_i("Wait VAD start %d\n", vad_timeout - timer_get_ms());
+    // wss_app_recorder_en(ENABLE);
+    log_i("Wait VAD start %d\n", vad_timeout);
+    vad_start_time = timer_get_ms();
 
-    while (vad_timeout >= timer_get_ms()) {
+    while (vad_start_time + vad_timeout >= timer_get_ms()) {
         msleep(10);
 
         if (g_recording == true) {
@@ -378,7 +385,8 @@ static void wait_vad_task(void *priv)
     wss_app_recorder_en(DISABLE);
     g_recording = false;
     // g_edev_last = NULL;
-    wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
+    // wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
+    wss_application_event_to_req(g_edev_last, ORMET_SWITCH_SUCCESS);
 }
 
 static int odmp_audio_data_cbk(uint8_t *data, uint32_t len)
@@ -395,7 +403,7 @@ static int odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 void app_music_play_end_cb(void *priv)
 {
     log_i("g_audio_playing End");
-    // uart_send_set_sn("000000000000000");
+    wss_app_recorder_en(ENABLE);
     wss_application_event_to_req(NULL, ORMET_PLAY_END);
 }
 
@@ -484,8 +492,8 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
 
         if (pkg->tts_bind.wait_time > 0) {
-            vad_timeout = vad_start_time + pkg->tts_bind.wait_time;
-        }
+            vad_timeout = pkg->tts_bind.wait_time;
+        } else vad_timeout = 500;
 
         // send_id 和E端序列号的关系?
         // 1. 把 send_id 默认为E端的序列号
@@ -502,14 +510,17 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         }else {
             uint32_t cmd_id;
             g_edev_target = pdev;
+            int state = g_mode_state;
             STEP_TO_NEXT_STEP(STATE_ONLINE,                 STATE_ONEONONE_SWITCH);// Turn to One on one mode when use C
             // STEP_TO_NEXT_STEP(STATE_ONLINE,                 STATE_PLAYINTRO_SWITCH);
             STEP_TO_NEXT_STEP(STATE_PLAYINTRO_VAD,          STATE_ONEONONE_SWITCH);
             STEP_TO_NEXT_STEP(STATE_ONEONONE_VAD,           STATE_ONEONONE_SWITCH);
             // bka_e_turn_on(pdev, e_turn_on_cb, pdev, &cmd_id);
             // log_d("turn on cmd_id: %d", cmd_id);
-            log_i("Switch PortC OK\n");
-            wss_application_event_to_req(pdev, ORMET_SWITCH_SUCCESS);
+            if (state == STATE_ONLINE) {
+                log_i("Switch PortC OK\n");
+                wss_application_event_to_req(pdev, ORMET_SWITCH_SUCCESS);
+            }
         }
     }   break;
     case OR_AUDIO_STATUS:
@@ -526,6 +537,7 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START\n");
+                reci_text_len = 0;
                 g_audio_playing = true;
                 STEP_TO_NEXT_STEP(STATE_PLAYINTRO_SWITCH,   STATE_PLAYINTRO_PLAYING);
                 STEP_TO_NEXT_STEP(STATE_ONEONONE_SWITCH,    STATE_ONEONONE_PLAYING);
@@ -542,7 +554,11 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         }
         break;
     case OR_MESSAGE_TEXT:
-        log_i("MESSAGE_TEXT %s %s\n", pkg->message_text.c_id, pkg->message_text.text);
+        reci_text_len+=strlen(pkg->message_text.text);
+        if (pkg->message_text.type == 1)
+            log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
+        if (pkg->message_text.type == 2)
+            log_i("TTS_TEXT %d %s\n", pkg->message_text.c_id, pkg->message_text.text);
         break;
     case OR_EXECUTION_TIME:
         log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
