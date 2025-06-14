@@ -106,27 +106,23 @@ static double https_get_timestamp(char* url)
     ctx->priv = &http_body_buf;
     ctx->connection = "close";
 
-    printf("httpcli_get start\n\n");
     int ret = httpcli_get(ctx);
 
     double time_stamp_web = 0;
 
     if (ret != HERROR_OK) {
-        printf("httpcli_get false\n");
         free(http_body_buf.p);
         free(ctx);
         return 0;
     } else {
         if (http_body_buf.recv_len > 0) {
-            printf("JSON:%s  ~~~~~\n", http_body_buf.p);
             const cJSON *nroot = cjson_parse(http_body_buf.p);
 
             cJSON *item = cJSON_GetObjectItem(nroot, "timestamp");
             if (cJSON_IsNumber(item)) {
                 time_stamp_web = item->valuedouble;
-                printf("timestamp: %.0f\n", time_stamp_web);
             } else {
-                printf("Item is not a number.\n");
+                printf("[https_get_timestamp]Item is not a number.\n");
                 return 0;
             }
         }
@@ -225,8 +221,6 @@ char *get_wss_connection_url()
     char * url = (char *)malloc(BUF_SIZE);
 
     snprintf(url, BUF_SIZE, HTTP_POSTTK_DEMO_API, DEVICE_ID, kqqToken);
-
-    printf(" f link: %s  ~\n", url);
     
     return url;
 }

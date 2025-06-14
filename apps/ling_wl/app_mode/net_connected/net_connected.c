@@ -89,16 +89,13 @@ static int net_connected_init(void)
         return 0;
     }
 
-#if 0
-    auto_test_application_init();
-#else
-
     char *secure_url = get_wss_connection_url(); // TODO: 释放资源
 
     struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback);
 
     if (websockets_info == NULL) {
         log_i("websockets init failed\n");
+        free(websockets_info);
         // TODO 尝试重连WSS
         // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     } else {
@@ -108,16 +105,15 @@ static int net_connected_init(void)
         context->websockets_info = websockets_info;
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     }
-#endif
     return 0;
 }
 
+
 static int net_connected_unint(void)
 {
-#if 0
-    auto_test_application_uninit();
-#else
-#endif
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    free(context->wss_url);
+    context->wss_url = NULL;
     return 0;
 }
 

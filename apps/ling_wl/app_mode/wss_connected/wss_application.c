@@ -797,8 +797,9 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
     case STATE_COMMAND_WAITING:
         break;
     }
-    if (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, msg_event)) {
-        wss_application_exception_exit();
-        return;
+    while (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, msg_event)) {
+        wss_server_reconnect();
+        // wss_application_exception_exit();
+        // return;
     }
 }
