@@ -353,6 +353,7 @@ static void start_audio_upload(void *priv)
                 wss_application_exception_exit();
                 return;
             }
+            wss_app_recorder_en(DISABLE);
             return;
         }
         msleep(10);
@@ -361,7 +362,6 @@ static void start_audio_upload(void *priv)
 
 static void wait_vad_task(void *priv)
 {
-    g_recording = false;
     wss_app_recorder_en(ENABLE);
     log_i("Wait VAD start %d\n", vad_timeout - timer_get_ms());
 
@@ -703,7 +703,7 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
             msg_event != ORMET_NEAR_TRIGGER) return;
             STEP_TO_NEXT_STEP(STATE_IDLE,                   STATE_ONLINE);// TODO
             gpio_direction_output(IO_PORTA_00, 1);  //enable C speaker
-            gpio_direction_output(IO_PORTB_02, 0);
+            gpio_direction_output(IO_PORTB_02, 0);  // disable E speaker
         break;
     case STATE_ONLINE:
         if (msg_event != ORMET_BUTTON_TRIGGER &&

@@ -166,7 +166,7 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
         req.enc.vad_auto_refresh = 1; //VAD自动刷新
     }
     if (req.enc.use_vad == 1) {
-        req.enc.vad_start_threshold = 1000;    //ms
+        req.enc.vad_start_threshold = 120;    //ms
         req.enc.vad_stop_threshold  = 500;    //ms
     }
     if (req.enc.dns_enable == 1) //降噪的配置
