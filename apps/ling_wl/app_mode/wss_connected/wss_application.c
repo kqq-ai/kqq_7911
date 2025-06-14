@@ -377,7 +377,7 @@ static void wait_vad_task(void *priv)
     log_i("Wait VAD timeout.");
     wss_app_recorder_en(DISABLE);
     g_recording = false;
-    g_edev_last = NULL;
+    // g_edev_last = NULL;
     wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
 }
 
@@ -502,11 +502,14 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         }else {
             uint32_t cmd_id;
             g_edev_target = pdev;
-            STEP_TO_NEXT_STEP(STATE_ONLINE,                 STATE_PLAYINTRO_SWITCH);
+            STEP_TO_NEXT_STEP(STATE_ONLINE,                 STATE_ONEONONE_SWITCH);// Turn to One on one mode when use C
+            // STEP_TO_NEXT_STEP(STATE_ONLINE,                 STATE_PLAYINTRO_SWITCH);
             STEP_TO_NEXT_STEP(STATE_PLAYINTRO_VAD,          STATE_ONEONONE_SWITCH);
             STEP_TO_NEXT_STEP(STATE_ONEONONE_VAD,           STATE_ONEONONE_SWITCH);
-            bka_e_turn_on(pdev, e_turn_on_cb, pdev, &cmd_id);
-            log_d("turn on cmd_id: %d", cmd_id);
+            // bka_e_turn_on(pdev, e_turn_on_cb, pdev, &cmd_id);
+            // log_d("turn on cmd_id: %d", cmd_id);
+            log_i("Switch PortC OK\n");
+            wss_application_event_to_req(pdev, ORMET_SWITCH_SUCCESS);
         }
     }   break;
     case OR_AUDIO_STATUS:
@@ -724,8 +727,8 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
         } 
         if (msg_event == ORMET_SWITCH_SUCCESS) {
             g_edev_last = p_dev;
-            gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-            gpio_direction_output(IO_PORTB_02, 1);
+            // gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+            // gpio_direction_output(IO_PORTB_02, 1);
         }
             
         // if (!g_edev_target == p_dev) return;
