@@ -27,6 +27,11 @@
 
 static char server_url[BUF_SIZE];
 
+
+void get_SN(char* target){
+    snprintf(target, 16, "%s", DEVICE_SN);
+}
+
 char *get_url_api(char* url, char* format)
 {
     char * api = (char *)malloc(BUF_SIZE);
