@@ -13,7 +13,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE 12 
+#define LOCAL_VERSION_CODE "v0.0.16" 
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -171,21 +171,21 @@ int request_ota_info(char **pota_info)
         free(ctx);
         return OTAERROR_Malloc_Failed;
     }
-
-    ctx->url = "http://lw-ota.test.ling.space/v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c";
+    ctx->url = "https://kqq.tos-cn-beijing.volces.com/kqq_ota.json";
+    //ctx->url = "http://lw-ota.test.ling.space/v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c";
     ctx->timeout_millsec = 5000;
     ctx->priv = &http_body_buf;
     ctx->connection = "close";
-    ctx->user_http_header = "GET /v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c HTTP/1.1\r\n"\
-                            "Accept: */*\r\n" \
-                            "X-Device-Code: WL00000001\r\n"\
+    //ctx->user_http_header = "GET /v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c HTTP/1.1\r\n"\
+                            //"Accept: */*\r\n" \
+                            /*"X-Device-Code: WL00000001\r\n"\
                             "Connection: close\r\n"\
                             "Date: Mon, 11 Mar 2025 08:00:00 GMT\r\n" \
                             "Host: lw-ota.test.ling.space\r\n" \
                             "User-Agent: Apifox/1.0.0 (https://apifox.com)\r\n" \
                             "Accept-Encoding: identity\r\n"\
                             "Cache-Control: no-cache\r\n"\
-                            "\r\n";
+                            "\r\n"; */
 
 
     log_i("http get ota info start\n\n");
@@ -196,7 +196,7 @@ int request_ota_info(char **pota_info)
         ret = OTAERROR_Net_Error;
     } else {
         if (http_body_buf.recv_len > 0) {
-            log_i("\nReceive %d Bytes\n", http_body_buf.recv_len);
+            log_i("\nOTA Receive %d Bytes\n", http_body_buf.recv_len);
             ret = http_body_buf.recv_len;
             *pota_info = (char *)malloc(http_body_buf.recv_len + 1);
             if (*pota_info == NULL) {
@@ -233,7 +233,7 @@ int parse_ota_info(const cJSON *nroot, ota_info_t *pota_info)
     }
     memset(pota_info, 0, sizeof(ota_info_t));
 
-    if (cjson_get_integer_value(nroot, "errno", &pota_info->_errno))
+   /* if (cjson_get_integer_value(nroot, "errno", &pota_info->_errno))
         goto error_ret;
 
     pota_info->errmsg = cjson_get_string_value(nroot, "errmsg");
@@ -257,49 +257,50 @@ int parse_ota_info(const cJSON *nroot, ota_info_t *pota_info)
         goto error_ret;
 
     if (cjson_get_integer_value(ndata, "file_size", &pota_info->file_size))
-        goto error_ret;
+        goto error_ret;*/
 
-    pota_info->file_url = cjson_get_string_value(ndata, "file_url");
+    pota_info->file_url = cjson_get_string_value(nroot, "file");
     if (pota_info->file_url == NULL)
         goto error_ret;
     
-    if (cjson_get_integer_value(ndata, "is_force", &pota_info->is_force))
-        goto error_ret;
+    //if (cjson_get_integer_value(nroot, "is_force", &pota_info->is_force))
+    //    goto error_ret;
 
-    pota_info->package_name = cjson_get_string_value(ndata, "package_name");
+    pota_info->package_name = cjson_get_string_value(nroot, "file_md5");
     if (pota_info->package_name == NULL)
         goto error_ret;
 
-    pota_info->release = cjson_get_string_value(ndata, "release");
+    /*pota_info->release = cjson_get_string_value(ndata, "release");
     // if (pota_info->release == NULL)
     //     goto error_ret;
 
     pota_info->release_date = cjson_get_string_value(ndata, "release_date");
     if (pota_info->release_date == NULL)
-        goto error_ret;
+        goto error_ret; 
 
-    if (cjson_get_integer_value(ndata, "version_code", &pota_info->version_code))
-        goto error_ret;
+    if (cjson_get_integer_value(nroot, "version_code", &pota_info->version_code))
+        goto error_ret;*/
 
-    pota_info->version_name = cjson_get_string_value(ndata, "version_name");
+    pota_info->version_name = cjson_get_string_value(nroot, "version");
     if (pota_info->version_name == NULL)
-        goto error_ret;
+        goto error_ret; 
 
-    log_i("errno       : %d", pota_info->_errno);
-    log_i("errmsg      : %s", pota_info->errmsg);
-    log_i("debug       : %s", pota_info->debug);
+    //log_i("errno       : %d", pota_info->_errno);
+    //log_i("errmsg      : %s", pota_info->errmsg);
+    //log_i("debug       : %s", pota_info->debug);
 
     log_i("file_md5    : %s", pota_info->file_md5);
     log_i("file_size   : %d", pota_info->file_size);
     log_i("file_url    : %s", pota_info->file_url);
-    log_i("is_force    : %d", pota_info->is_force);
+    //log_i("is_force    : %d", pota_info->is_force);
     log_i("package_name: %s", pota_info->package_name);
     if (pota_info->release != NULL) {
         log_i("release     : %s", pota_info->release);
     } else {
         log_i("release     : null");
     }
-    log_i("release_date: %s", pota_info->release_date);
+    //log_i("release_date: %s", pota_info->release_date);
+    pota_info->version_code = pota_info->version_name[strlen(pota_info->version_name) - 1]  - '0' ;
     log_i("version_code: %d", pota_info->version_code);
     log_i("version_name: %s", pota_info->version_name);
 
@@ -307,6 +308,54 @@ int parse_ota_info(const cJSON *nroot, ota_info_t *pota_info)
 
 error_ret:
     return OTAERROR_Parse_Error;
+}
+
+// 解析版本号字符串为三个整数部分
+int parse_version(const char* version_str, int* major, int* minor, int* patch) {
+    if (version_str == NULL || *version_str != 'v') {
+        return 0; // 无效格式
+    }
+    
+    // 跳过'v'字符
+    const char* p = version_str + 1;
+    
+    // 解析主版本号
+    *major = strtol(p, (char**)&p, 10);
+    if (*p != '.') return 0;
+    p++;
+    
+    // 解析次版本号
+    *minor = strtol(p, (char**)&p, 10);
+    if (*p != '.') return 0;
+    p++;
+    
+    // 解析修订号
+    *patch = strtol(p, NULL, 10);
+    
+    return 1; // 解析成功
+}
+
+// 比较两个版本号
+int compare_versions(const char* ver1, const char* ver2) {
+    int major1, minor1, patch1;
+    int major2, minor2, patch2;
+    
+    if (!parse_version(ver1, &major1, &minor1, &patch1) ||
+        !parse_version(ver2, &major2, &minor2, &patch2)) {
+        return -2; // 解析失败
+    }
+    
+    // 逐级比较版本号
+    if (major1 > major2) return 1;
+    if (major1 < major2) return -1;
+    
+    if (minor1 > minor2) return 1;
+    if (minor1 < minor2) return -1;
+    
+    if (patch1 > patch2) return 1;
+    if (patch1 < patch2) return -1;
+    
+    return 0; // 版本相同
 }
 
 int do_check_and_ota()
@@ -317,7 +366,7 @@ int do_check_and_ota()
         log_e("[UPGRADE]failed to request OTA info: %d", ret);
         return -1;
     }
-    log_i("ota_info: %s", ota_info_json);
+    log_i("ota_info  22222: %s", ota_info_json);
 
     const cJSON *nroot = cjson_parse(ota_info_json);
     if (nroot == NULL) {
@@ -329,8 +378,10 @@ int do_check_and_ota()
         goto error_ret;
     }
 
-    if (LOCAL_VERSION_CODE < ota_info.version_code) {
-        log_i("%d < %d, need OTA.", LOCAL_VERSION_CODE, ota_info.version_code);
+    int net_ver_big = compare_versions(ota_info.version_name, LOCAL_VERSION_CODE);
+    if ( 0 == net_ver_big) { log_i("net ===== LOCAL_VERSION_CODE:%s \r\n", ota_info.version_name);}
+    if ( 1 == net_ver_big) { //< ota_info.version_code) {
+        log_i("%s < %s, need OTA.", LOCAL_VERSION_CODE, ota_info.version_name);
         log_i("download %s", ota_info.file_url);
 
         size_t url_len = strlen(ota_info.file_url);

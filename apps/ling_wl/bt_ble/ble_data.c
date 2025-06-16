@@ -231,6 +231,11 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
     }
 
     cJSON_AddStringToObject(root, "cmd_name", "wifi_scan");
+    extern char pt[35];  // 声明外部变量（不分配内存）
+        char sn_C_to_phone[16] = {0};
+        strncpy(sn_C_to_phone, pt, 15);
+        sn_C_to_phone[15] = '\0';
+    cJSON_AddStringToObject(root, "sn", sn_C_to_phone);
     cJSON_AddNumberToObject(root, "return_code", ret);
     cJSON_AddStringToObject(root, "return_errstr", return_errstr);
 
