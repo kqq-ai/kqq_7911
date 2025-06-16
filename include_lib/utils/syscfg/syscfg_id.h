@@ -152,6 +152,7 @@ typedef enum JL_CONFIG_ERR_TABLE {
 //=================================================================================//
 #define    CFG_USER_DEFINE_BEGIN        1
 #define    CFG_USER_MAC                 2
+#define    CFG_USER_C_SN                32
 #define    CFG_USER_DEFINE_END          59
 
 //=================================================================================//

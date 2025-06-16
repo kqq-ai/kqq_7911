@@ -7,6 +7,7 @@
 #include "time.h"
 
 #include "util/cjson_util.h"
+#include "syscfg_id.h"
 
 #define BUF_SIZE 128
 
@@ -26,10 +27,12 @@
 #define HTTP_POSTTK_API  "https://%s/signature"
 
 static char server_url[BUF_SIZE];
+char snInVm[25] = "KCCNC5F12YEEEL5|";
+char pt[35] = DEVICE_SN;
 
 
 void get_SN(char* target){
-    snprintf(target, 16, "%s", DEVICE_SN);
+    snprintf(target, 16, "%s", snInVm);
 }
 
 char *get_url_api(char* url, char* format)
@@ -165,15 +168,14 @@ static double https_get_timestamp(char* url)
 
 static void prepare_signature()
 {
-    char key[64] = {0x49, 0x56, 0x4f, 0x75, 0x52, 0x33, 0x6b, 0x52, 0x4a, 0x30, 0x6b, 0x30, 0x30, 0x47, 0x47, 0x4f};
+    char key[64] = { 0x4c, 0x34, 0x33, 0x47, 0x71, 0x66, 0x73, 0x72, 0x33, 0x6f, 0x4c, 0x68, 0x66, 0x59, 0x62, 0x6f};
+    ///{0x49, 0x56, 0x4f, 0x75, 0x52, 0x33, 0x6b, 0x52, 0x4a, 0x30, 0x6b, 0x30, 0x30, 0x47, 0x47, 0x4f
 
     const size_t iv_len = 12;
     static const unsigned char iv[12] = {
         0x75, 0x00, 0x52, 0x56, 0xdb, 0x21, 0xcc, 0xc7, 0x90, 0x55, 0x28, 0x1b  };
 
     const size_t pt_len = 29;
-    char sn_E1[] = DEVICE_SN;
-    char pt[35] = DEVICE_SN;
     pt[15] = '|';
     unsigned char buf[BUF_SIZE];
     unsigned char tag_buf[BUF_SIZE];
@@ -187,6 +189,23 @@ static void prepare_signature()
 
     mbedtls_gcm_context ctx;
     mbedtls_cipher_id_t cipher = MBEDTLS_CIPHER_ID_AES;
+
+    /// get SN from VM
+    int lenSN = syscfg_read(CFG_USER_C_SN, snInVm, 15);
+    if( ('K' != snInVm[0] ) || ('C' != snInVm[1]) ){
+        ///新设备，首次运行，临时代码（正式代码有专门首次运行及测试）
+        log_i(" syscfg_write snInVm!!! \n");
+        lenSN = syscfg_write(CFG_USER_C_SN, pt, 15);
+    }else{
+        memcpy(pt , snInVm, 15);
+    } ///已经得到 SN
+
+    if('T' == snInVm[2])
+        log_i(" T == snInVm[2]\n");
+    memcpy(snInVm, pt , 15);
+    snInVm[15] = '\0';
+    log_i("   snInVm = %s \n",snInVm );
+
 
     log_i("aes GCM init begin\n");
 
@@ -229,7 +248,7 @@ static void prepare_signature()
         memset(&post_sign_time, 0x0, sizeof(post_sign_time));
         cJSON *root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "sign", base64_buf);
-        cJSON_AddStringToObject(root, "sn", sn_E1);
+        cJSON_AddStringToObject(root, "sn", snInVm);
         double time_stamp_double = time_web;
         cJSON_AddNumberToObject(root, "timestamp", time_stamp_double );
         char *json_str = cJSON_PrintUnformatted(root);
