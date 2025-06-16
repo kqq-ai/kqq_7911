@@ -101,7 +101,11 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
         return NULL;
     }
     /* 1 . register */
-    websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback);
+    if (url[2] == 's') {
+        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback);
+    } else {
+        websockets_client_reg(websockets_info, WEBSOCKET_MODE, websockets_callback);
+    }
 
     /* 2 . init */
     err = websockets_client_init(websockets_info, url, origin_str);
