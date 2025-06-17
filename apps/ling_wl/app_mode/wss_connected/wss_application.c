@@ -318,12 +318,9 @@ static void wss_asr_data_to_console(AsrData *asr_data)
     }
 }
 
-static void wait_vad_task(void *priv);
-
 static void start_audio_upload(void *priv)
 {
     log_i("Start audio upload.");
-    reci_text_len = 0;
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_START)) {

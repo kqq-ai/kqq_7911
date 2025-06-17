@@ -1,6 +1,5 @@
 #include "odm_secure.h"
 
-
 #include "http/http_cli.h"
 #include "cJSON_common/cJSON.h"
 #include "mbedtls/gcm.h"
@@ -17,17 +16,17 @@
 #define SERVER_API  "%s://%s/"
 
 
-
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
 #define FORMAT_API  "%s://%s/socket?deviceId=%s&token=%s"
 
 
 #define HTTP_POSTTK_API  "https://%s/signature"
-#define HTTP_POSTTK_API  "https://%s/signature"
 
 static char server_url[BUF_SIZE];
-char snInVm[25] = "KCCNC5F12YEEEL5|";
+char snInVm[25] = "KCCNC5F12BEEEJ5|";
+char keyInVm[20] = { 0x5a, 0x31, 0x33, 0x73, 0x76, 0x52, 0x6c, 0x46, 0x6d, 0x4e, 0x79, 0x59, 0x46, 0x68, 0x79, 0x42};
+///{ 0x4c, 0x34, 0x33, 0x47, 0x71, 0x66, 0x73, 0x72, 0x33, 0x6f, 0x4c, 0x68, 0x66, 0x59, 0x62, 0x6f};
 char pt[35] = DEVICE_SN;
 
 
@@ -168,7 +167,6 @@ static double https_get_timestamp(char* url)
 
 static void prepare_signature()
 {
-    char key[64] = { 0x4c, 0x34, 0x33, 0x47, 0x71, 0x66, 0x73, 0x72, 0x33, 0x6f, 0x4c, 0x68, 0x66, 0x59, 0x62, 0x6f};
     ///{0x49, 0x56, 0x4f, 0x75, 0x52, 0x33, 0x6b, 0x52, 0x4a, 0x30, 0x6b, 0x30, 0x30, 0x47, 0x47, 0x4f
 
     const size_t iv_len = 12;
@@ -196,8 +194,10 @@ static void prepare_signature()
         ///新设备，首次运行，临时代码（正式代码有专门首次运行及测试）
         log_i(" syscfg_write snInVm!!! \n");
         lenSN = syscfg_write(CFG_USER_C_SN, pt, 15);
+        lenSN = syscfg_write(CFG_REMOTE_DB_01, keyInVm, 16);
     }else{
         memcpy(pt , snInVm, 15);
+        lenSN = syscfg_read(CFG_REMOTE_DB_01, keyInVm, 16);
     } ///已经得到 SN
 
     if('T' == snInVm[2])
@@ -218,7 +218,7 @@ static void prepare_signature()
     size_t actual_length = strlen(timestamp_str);
     memcpy(pt + 16, timestamp_str, actual_length);  // SN + 1
     mbedtls_gcm_init(&ctx);
-    mbedtls_gcm_setkey(&ctx, cipher, key, 128);
+    mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
 
     
     int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
