@@ -12,7 +12,7 @@
 
 
 #define DEVICE_SN "ZLCNC5E21QEEFE1"
-#define SERVER_DOMAIN  "test.coolqq.com/api"
+#define SERVER_DOMAIN  "coolqq.com/api"
 #define SERVER_API  "%s://%s/"
 
 
