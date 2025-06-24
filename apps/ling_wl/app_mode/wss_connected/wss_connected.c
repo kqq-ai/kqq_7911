@@ -30,6 +30,8 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
 
+#include "bt_ble/app_wifi_manage.h"
+
 static int wss_app_net_event_handler(struct net_event *event)
 {
     if (!ASCII_StrCmp(event->arg, "net", 4)) {
@@ -106,8 +108,26 @@ void app_wss_connected_mode(void)
     while (1) {
         // 应用代码
         if (wss_application_loop(context->websockets_info)) {
-            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+            
+            if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
+                lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            } else {
+                lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+            }
         }
+/*         if( NULL == context->websockets_info ){
+            if( WIFI_CONNECT_DHCP_SUCC == get_wifi_connect_status(NULL))
+                lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        }
+        else if (wss_application_loop(context->websockets_info)) {
+            ///if( WIFI_CONNECT_DHCP_SUCC == get_wifi_connect_status(NULL))
+            {
+                printf("wss_ddddddconnected_AASSERT to APP_NET_CONNECTED_MODE \r\n");
+                lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            }
+            ///else
+            ///    lwl_app_mode_switch_to(APP_DEFAULT_MODE); */
+        ///}
         mdelay(10);
         if (lwl_app_mode_exitting()) {
             wss_connected_unint();

@@ -20,6 +20,8 @@
 #include "bt_ble/client/ble_simple_client.h"
 #include "log.h"
 
+static OS_MUTEX wss_mutex_bin;             //
+
 static user_wss_recv_cb_t wss_cb_handler = NULL;
 
 /*******************************************************************************
@@ -78,18 +80,32 @@ int wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
     //SSL加密时一次发送数据不能超过16K，用户需要自己分包
     //确认存在大于16K的数据包时，请修改发送逻辑
-    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    // return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ws_ret = websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    os_mutex_post(&wss_mutex_bin);
+    return ws_ret;
 }
 
 int wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
-    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    // return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ws_ret =  websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    os_mutex_post(&wss_mutex_bin);
+    return ws_ret;
 }
 
 struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback)
 {
     int err;
     const char *origin_str = "jl791n://localhost";
+    
+    if (!os_mutex_valid(&wss_mutex_bin)) {
+        os_mutex_create(&wss_mutex_bin);
+    }
+    // os_mutex_pend(&wss_mutex_bin, 0);
+    // os_mutex_post(&wss_mutex_bin);
     
     log_i(" . ----------------- Client Websocket ------------------\r\n");
     wss_cb_handler = websockets_callback;

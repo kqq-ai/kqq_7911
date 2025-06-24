@@ -152,7 +152,8 @@ static void app_lingwl_main(void)
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
 
-    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+    // simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+    uart_send_set_led_color(7500, 7000, 6000); /// on LED after power ON
 
     /* 创建异步任务处理任务 */
     start_async_msg_loop();
@@ -392,6 +393,7 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
+            uart_send_set_led_color(7500, 7000, 6000); /// Net Succ
             simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器

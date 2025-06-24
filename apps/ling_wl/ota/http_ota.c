@@ -13,7 +13,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE "v0.0.16" 
+#define LOCAL_VERSION_CODE "v0.0.30" 
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -29,7 +29,7 @@ struct download_hdl {
 struct download_parm {
     char *url;  //下载链接
 };
-
+int OTA_download_running = 0;
 //http回调函数
 static int http_user_cb(void *ctx, void *buf, unsigned int size, void *priv, httpin_status status)
 {
@@ -383,10 +383,12 @@ int do_check_and_ota()
     if ( 1 == net_ver_big) { //< ota_info.version_code) {
         log_i("%s < %s, need OTA.", LOCAL_VERSION_CODE, ota_info.version_name);
         log_i("download %s", ota_info.file_url);
+        uart_send_set_led_color(7000, 7000, 10000); /// Net Succ
 
         size_t url_len = strlen(ota_info.file_url);
         char *ufw_url = malloc(url_len + 1);
         strncpy(ufw_url, ota_info.file_url, url_len + 1);
+        OTA_download_running = 1;   /// reset after OTA
 
         http_create_download_task(ufw_url);
         ret = 1;

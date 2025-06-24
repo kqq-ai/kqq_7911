@@ -62,6 +62,7 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
         break;
     case WS_BIN_FRAME: // binary frame
         log_i("wbs recv msg : %d\n", len);
+        uart_send_set_led_color(10000, 10000, 6000); /// PLAY
         // log_i_buf(buf, len);
         odmp_audio_data_handler(buf, len);
         break;

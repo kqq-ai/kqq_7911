@@ -238,8 +238,10 @@ static void wss_app_recorder_en(u8 en)
     if (context && context->recorder) {
         if (en && recorder_get_play_pause_state(context->recorder) == 0) {
             recorder_start(context->recorder); /* 开启录音编码 */
+            uart_send_set_led_color(7500, 7000, 9500);//开启麦克风
         } else if(!en && recorder_get_play_pause_state(context->recorder) == 1) {
             recorder_stop(context->recorder); /* 停止录音编码 */
+            uart_send_set_led_color((7500, 7000, 6000));//关闭麦克风
         }
     }
 }
@@ -317,6 +319,7 @@ static void wss_asr_data_to_console(AsrData *asr_data)
         cpu_reset();
     }
 }
+static void wait_vad_task(void *priv);
 
 static void start_audio_upload(void *priv)
 {
@@ -327,7 +330,7 @@ static void start_audio_upload(void *priv)
         wss_application_exception_exit();
         return;
     }
-
+    uart_send_set_led_color(10000, 6000, 10000);
     while (true) {
         // if (is_edev_far_away(g_curr_edev)) { /* 当前设备距离 > 5 */
         //     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
@@ -355,6 +358,7 @@ static void start_audio_upload(void *priv)
                 wss_application_exception_exit();
                 return;
             }
+            uart_send_set_led_color(7500, 7000, 6000); /// baby talk finish
             // wss_app_recorder_en(DISABLE);
             threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
             return;
@@ -381,6 +385,7 @@ static void wait_vad_task(void *priv)
     log_i("Wait VAD timeout.");
     wss_app_recorder_en(DISABLE);
     g_recording = false;
+    vad_timeout = 0;
     // g_edev_last = NULL;
     // wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
     wss_application_event_to_req(g_edev_last, ORMET_SWITCH_SUCCESS);
@@ -490,7 +495,7 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
 
         if (pkg->tts_bind.wait_time > 0) {
             vad_timeout = pkg->tts_bind.wait_time;
-        } else vad_timeout = 500;
+        } else vad_timeout = 0;
 
         // send_id 和E端序列号的关系?
         // 1. 把 send_id 默认为E端的序列号
@@ -575,7 +580,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE: {
-        if (vad_timeout < timer_get_ms()) {
+        if (vad_timeout == 0) {
             g_edev_closest = p_eend_dev;
         }
     }
@@ -626,7 +631,9 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
-        uart_response_synch_status(1, 12);
+        if(e->uart_cmd_sync.battery < 30 )
+            uart_send_set_led_color(6000, 10000, 10000); //red~ low power
+        uart_response_synch_status(1, 12);/// 音量 E only
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");
@@ -756,7 +763,7 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
             // 等待 VAD 超时
             log_i("ENABLE VAD");
             vad_start_time = timer_get_ms();
-            vad_timeout = vad_start_time + 5000;
+            vad_timeout = 5000;
             threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
             STEP_TO_NEXT_STEP(STATE_PLAYINTRO_PLAYING,      STATE_PLAYINTRO_VAD);
         }
