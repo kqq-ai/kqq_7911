@@ -180,6 +180,7 @@ static void app_lingwl_main(void)
 
     /* 创建sc7a20 task */
     app_sc7a20_init();
+    uart_send_set_led_color(7500, 7000, 6000); /// on LED after power ON
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
@@ -392,6 +393,7 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
+            uart_send_set_led_color(7500, 7000, 6000); /// Net Succ
             simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器

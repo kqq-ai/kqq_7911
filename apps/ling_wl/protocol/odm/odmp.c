@@ -15,6 +15,7 @@ enum ParseErrorCode {
 
 g_odmp_cbk_t g_odmp_cbk = NULL;
 g_odmp_audio_data_cbk_t g_odmp_audio_data_cbk = NULL;
+g_odmp_disconnect_cbk_t g_odmp_disconnect_cbk = NULL;
 
 static const char *odmp_et_str[] = {
     [OET_REQ_MESSAGE]           = "req_message",
@@ -452,6 +453,10 @@ void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk)
 {
     g_odmp_audio_data_cbk = odmp_audio_data_cbk;
 }
+void odmp_register_disconnect_cbk(g_odmp_disconnect_cbk_t odmp_disconnect_cbk)
+{
+    g_odmp_disconnect_cbk = odmp_disconnect_cbk;
+}
 
 struct odmp_rsp_cb_entry_t {
     const char* event_name;
@@ -535,5 +540,11 @@ void odmp_audio_data_handler(u8 *buf, u32 len)
 {
     if (g_odmp_audio_data_cbk) {
         g_odmp_audio_data_cbk(buf, len);
+    }
+}
+void odmp_disconnect_handler(void)
+{
+    if (g_odmp_disconnect_cbk) {
+        g_odmp_disconnect_cbk();
     }
 }

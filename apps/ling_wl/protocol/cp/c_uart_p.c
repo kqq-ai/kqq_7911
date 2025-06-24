@@ -32,6 +32,11 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     }   break;
     case UART_CMD_POWER_OFF:{ // 关机控制
         log_i("the UART_CMD_POWER_OFF !\r\n");
+        extern int OTA_download_running;
+        if( OTA_download_running > 0){
+            break; /// reset after OTA
+        }
+        uart_send_set_led_color(10000, 10000, 10000); /// off LED before power Off
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
         lwl_event_notify(&e);

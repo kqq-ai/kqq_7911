@@ -36,7 +36,7 @@
 
 #include "protocol/odm/odm_secure.h"
 
-// #define TEST_LOCOL_MODE
+/// #define TEST_LOCOL_MODE
 
 int app_net_connected_event_handler(struct application *app, struct sys_event *event)
 {
@@ -52,6 +52,7 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     case WS_TXT_FRAME: // text frame
     
         log_i("wbs recv msg : %s\n", buf);
+        ///uart_send_set_led_color(7000, 7000, 7000); 
         if (strcmp(buf, "client ping") == 0) {
     
         } else {
@@ -62,13 +63,20 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
         break;
     case WS_BIN_FRAME: // binary frame
         log_i("wbs recv msg : %d\n", len);
+        uart_send_set_led_color(10000, 10000, 6000); /// PLAY
         // log_i_buf(buf, len);
         odmp_audio_data_handler(buf, len);
         break;
     }
 }
 
-static int net_connected_init(void)
+int wss_exit_callback(struct websocket_struct *websocket_info)
+{
+    log_i("websocket exit!!!!!");
+    odmp_disconnect_handler();
+}
+
+int net_connected_init(void)
 {
     // OTA check version
     int ret = do_check_and_ota();
@@ -76,13 +84,12 @@ static int net_connected_init(void)
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 0;
     }
-
 #ifdef TEST_LOCOL_MODE
     char *secure_url = get_wss_test_url(); // TODO: 释放资源
-    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback);
+    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback, wss_exit_callback);
 #else
     char *secure_url = get_wss_connection_url(); // TODO: 释放资源
-    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback);
+    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback, wss_exit_callback);
 #endif
 
     if (websockets_info == NULL) {

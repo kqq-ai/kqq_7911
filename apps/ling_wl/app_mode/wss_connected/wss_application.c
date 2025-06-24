@@ -19,6 +19,8 @@
 
 #include "protocol/odm/odm_secure.h"
 
+static OS_MUTEX wss_mutex;             //
+
 static void wss_app_recorder_data_upstream(recorder_data_cb_t cb);
 static void recorder_data_to_data_queue(void* priv, void *data, u32 size);
 static void recorder_data_to_ringbuffer(void* priv, void *data, u32 size);
@@ -74,7 +76,7 @@ static int g_mode_state = STATE_IDLE;
 
 #define STEP_TO_NEXT_STEP(cur,next) if (g_mode_state == cur) {g_mode_state = next;wss_application_print_state("STEP_TO");}
 
-static int g_audio_playing = false;
+ int g_audio_playing = false;
 static int g_audio_ready = false;
 static int g_audio_play_ok = false;
 
@@ -238,8 +240,10 @@ static void wss_app_recorder_en(u8 en)
     if (context && context->recorder) {
         if (en && recorder_get_play_pause_state(context->recorder) == 0) {
             recorder_start(context->recorder); /* 开启录音编码 */
+            uart_send_set_led_color(7500, 7000, 9500);//开启麦克风
         } else if(!en && recorder_get_play_pause_state(context->recorder) == 1) {
             recorder_stop(context->recorder); /* 停止录音编码 */
+            uart_send_set_led_color((7500, 7000, 6000));//关闭麦克风
         }
     }
 }
@@ -289,9 +293,11 @@ static void wss_asr_data_to_server(AsrData *asr_data)
 
     log_d(">>");
     uint8_t *pdata = (uint8_t *)asr_data;
+    os_mutex_pend(&wss_mutex, 0);
     if (send_bin_data(pdata, ASR_DATA_CHUNK_SIZE)) {
         wss_application_exception_exit();
     }
+    os_mutex_post(&wss_mutex);
     log_d("--");
 }
 
@@ -323,10 +329,14 @@ static void start_audio_upload(void *priv)
     log_i("Start audio upload.");
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
+    os_mutex_pend(&wss_mutex, 0);
     if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_START)) {
+        os_mutex_post(&wss_mutex);
         wss_application_exception_exit();
         return;
     }
+    os_mutex_post(&wss_mutex);
+    uart_send_set_led_color(10000, 6000, 10000);
 
     while (true) {
         // if (is_edev_far_away(g_curr_edev)) { /* 当前设备距离 > 5 */
@@ -351,10 +361,14 @@ static void start_audio_upload(void *priv)
         if (g_recording == false) { /* VAD结束 */
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
             
+            os_mutex_pend(&wss_mutex, 0);
             if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_END)) {
+                os_mutex_post(&wss_mutex);
                 wss_application_exception_exit();
                 return;
             }
+            os_mutex_post(&wss_mutex);
+            uart_send_set_led_color(7500, 7000, 6000); /// baby talk finish
             // wss_app_recorder_en(DISABLE);
             threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
             return;
@@ -391,6 +405,11 @@ static int odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     int ret = app_music_play_stream_write(g_app_ctx->music_player, data, len);
     log_d("stream write: %d\n", ret);
     return 0;
+}
+static int odmp_disconnect_cbk(void)
+{
+    log_i("odmp disconnect!!!");
+    wss_application_exception_exit();
 }
 
 
@@ -626,7 +645,11 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
-        uart_response_synch_status(1, 12);
+        if(e->uart_cmd_sync.battery < 30 )
+            uart_send_set_led_color(6000, 10000, 10000); //red~ low power
+        ///if(e->uart_cmd_sync.battery == 100 )
+        ///    uart_send_set_led_color(7500, 7000, 9500); //red~ low power
+        uart_response_synch_status(1, 2);  /// 音量 E only
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");
@@ -649,6 +672,14 @@ void wss_application_init()
 
     g_app_ctx = lwl_app_core_context_get_instance();
 
+    
+
+    if (!os_mutex_valid(&wss_mutex)) {
+        os_mutex_create(&wss_mutex);
+    }
+    os_mutex_pend(&wss_mutex, 0);
+    os_mutex_post(&wss_mutex);
+
     /* UART指令开启C端le audio */
     uart_send_open_le_audio(g_app_ctx->mac);
 
@@ -658,6 +689,7 @@ void wss_application_init()
 
     odmp_register_rsp_cbk(odmp_rsp_cbk);
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); /* 注册音频数据回调 */
+    odmp_register_disconnect_cbk(odmp_disconnect_cbk);
     /* 设置VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
     /* 默认不设置录音上传回调 */
@@ -810,9 +842,11 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
     case STATE_COMMAND_WAITING:
         break;
     }
+    os_mutex_pend(&wss_mutex, 0);
     while (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, msg_event)) {
         wss_server_reconnect();
         // wss_application_exception_exit();
         // return;
     }
+    os_mutex_post(&wss_mutex);
 }

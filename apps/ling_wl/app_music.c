@@ -3026,6 +3026,9 @@ static int _play_voice_prompt(const char *fname, void *dec_end_handler)
  */
 static int app_music_play_voice_prompt(const char *fname, void *dec_end_handler)
 {
+    extern int g_audio_playing;
+    if(g_audio_playing ==  true)
+        return 0;
 #ifndef CONFIG_AUDIO_ENABLE
     if (dec_end_handler) {
         return ((int (*)(int))dec_end_handler)(0);

@@ -130,7 +130,7 @@ typedef struct {
 
 typedef int (*g_odmp_cbk_t)(int pkg_type, odmp_package_t *pkg);
 typedef int (*g_odmp_audio_data_cbk_t)(uint8_t *data, uint32_t len);
-
+typedef int (*g_odmp_disconnect_cbk_t)(void);
 
 const char *odmp_et_to_text(int event_type);
 const char *odmp_ast_to_text(int audio_status_type);
@@ -165,8 +165,8 @@ char *odmp_req_message_play_end(const char **targets, int targets_num, const cha
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk);
 void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);
-
+void odmp_register_disconnect_cbk(g_odmp_disconnect_cbk_t odmp_disconnect_cbk);
 void odmp_rsp_handler(u8 *buf, u32 len);
 void odmp_audio_data_handler(u8 *buf, u32 len);
-
+void odmp_disconnect_handler(void);
 #endif /*__ODMP_H__*/

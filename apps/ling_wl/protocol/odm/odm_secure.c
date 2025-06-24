@@ -11,8 +11,8 @@
 #define BUF_SIZE 128
 
 
-#define DEVICE_SN "ZLCNC5E21QEEFE1"
-#define SERVER_DOMAIN  "coolqq.com/api"
+#define DEVICE_SN "KCCNC5F12BEEEJ5"
+#define SERVER_DOMAIN  "test.coolqq.com/api"
 #define SERVER_API  "%s://%s/"
 
 
@@ -25,7 +25,7 @@
 
 static char server_url[BUF_SIZE];
 char snInVm[25] = "KCCNC5F12BEEEJ5|";
-char keyInVm[20] = { 0x5a, 0x31, 0x33, 0x73, 0x76, 0x52, 0x6c, 0x46, 0x6d, 0x4e, 0x79, 0x59, 0x46, 0x68, 0x79, 0x42};
+char keyInVm[20] = {  0x5a, 0x31, 0x33, 0x73, 0x76, 0x52, 0x6c, 0x46, 0x6d, 0x4e, 0x79, 0x59, 0x46, 0x68, 0x79, 0x42 };
 ///{ 0x4c, 0x34, 0x33, 0x47, 0x71, 0x66, 0x73, 0x72, 0x33, 0x6f, 0x4c, 0x68, 0x66, 0x59, 0x62, 0x6f};
 char pt[35] = DEVICE_SN;
 
@@ -162,6 +162,7 @@ static double https_get_timestamp(char* url)
             }
         }
     }
+    printf("~ https://coolqq.com/api/timestamp %f  \n\n", time_stamp_web );
     return time_stamp_web;
 }
 
@@ -205,6 +206,7 @@ static void prepare_signature()
     memcpy(snInVm, pt , 15);
     snInVm[15] = '\0';
     log_i("   snInVm = %s \n",snInVm );
+    log_i("   keyInVm = 0x%02x,0x%02x \n",keyInVm[0] ,keyInVm[15] );
 
 
     log_i("aes GCM init begin\n");

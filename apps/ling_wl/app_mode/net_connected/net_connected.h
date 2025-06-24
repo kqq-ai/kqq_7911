@@ -5,5 +5,5 @@
 
 int app_net_connected_event_handler(struct application *app, struct sys_event *event);
 void app_net_connected_mode(void);
-
+ int net_connected_init(void);
 #endif

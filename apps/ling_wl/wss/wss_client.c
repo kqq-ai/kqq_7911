@@ -20,12 +20,15 @@
 #include "bt_ble/client/ble_simple_client.h"
 #include "log.h"
 
+static OS_MUTEX wss_mutex_bin;             //
+
 static user_wss_recv_cb_t wss_cb_handler = NULL;
+static user_wss_recv_cb_t wss_exit_notify_handler = NULL;
 
 /*******************************************************************************
 *   Websocket Client api
 *******************************************************************************/
-static void websockets_client_reg(struct websocket_struct *websockets_info, char mode, user_wss_recv_cb_t websockets_callback)
+static void websockets_client_reg(struct websocket_struct *websockets_info, char mode, user_wss_recv_cb_t websockets_callback, user_wss_exit_cb_t websockets_exit_notify_callback)
 {
     memset(websockets_info, 0, sizeof(struct websocket_struct));
     websockets_info->_init           = websockets_client_socket_init;
@@ -35,6 +38,7 @@ static void websockets_client_reg(struct websocket_struct *websockets_info, char
     websockets_info->_recv_thread    = websockets_client_socket_recv_thread;
     websockets_info->_heart_thread   = websockets_client_socket_heart_thread;
     websockets_info->_recv_cb        = websockets_callback;
+    websockets_info->_exit_notify    = websockets_exit_notify_callback;
     websockets_info->_recv           = NULL;
 
     websockets_info->websocket_mode  = mode;
@@ -76,23 +80,36 @@ static void websockets_client_exit(struct websocket_struct *websockets_info)
 
 int wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
+    os_mutex_pend(&wss_mutex_bin, 0);
     //SSL加密时一次发送数据不能超过16K，用户需要自己分包
     //确认存在大于16K的数据包时，请修改发送逻辑
-    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    int ws_ret = websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    os_mutex_post(&wss_mutex_bin);
+    return ws_ret;
 }
 
 int wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
-    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ws_ret =  websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    os_mutex_post(&wss_mutex_bin);
+    return ws_ret;
 }
 
-struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback)
+struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback, user_wss_exit_cb_t websockets_exit_notify_callback)
 {
     int err;
     const char *origin_str = "jl791n://localhost";
     
+    if (!os_mutex_valid(&wss_mutex_bin)) {
+        os_mutex_create(&wss_mutex_bin);
+    }
+    os_mutex_pend(&wss_mutex_bin, 0);
+    os_mutex_post(&wss_mutex_bin);
+
     log_i(" . ----------------- Client Websocket ------------------\r\n");
     wss_cb_handler = websockets_callback;
+    wss_exit_notify_handler = websockets_exit_notify_callback;
     
     /* 0 . malloc buffer */
     struct websocket_struct *websockets_info = malloc(sizeof(struct websocket_struct));
@@ -102,9 +119,9 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
     }
     /* 1 . register */
     if (url[2] == 's') {
-        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback);
+        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback, websockets_exit_notify_callback);
     } else {
-        websockets_client_reg(websockets_info, WEBSOCKET_MODE, websockets_callback);
+        websockets_client_reg(websockets_info, WEBSOCKET_MODE, websockets_callback, websockets_exit_notify_callback);
     }
 
     /* 2 . init */
@@ -168,7 +185,7 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
         lwl_app_context_t *context = lwl_app_core_context_get_instance();
         char *secure_url = context->wss_url;
 
-        struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_cb_handler);
+        struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_cb_handler,wss_exit_notify_handler);
 
         if (websockets_info == NULL) {
             log_i("websockets init failed\n");

@@ -11,6 +11,11 @@
  * @param type Type of the WebSocket frame
  */
 typedef void (*user_wss_recv_cb_t)(u8 *buf, u32 len, u8 type);
+/**
+ * @brief Callback function type for WebSocket exit notify
+ * @param websocket_info Pointer to the websocket handler structure
+ */
+typedef int (*user_wss_exit_cb_t)(struct websocket_struct *websocket_info);
 
 /**
  * @brief Establishes a WebSocket connection to a server
@@ -18,7 +23,7 @@ typedef void (*user_wss_recv_cb_t)(u8 *buf, u32 len, u8 type);
  * @param websockets_callback Callback function to handle incoming data
  * @return Pointer to the websocket_struct on success, NULL on failure
  */
-struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback);
+struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback, user_wss_exit_cb_t websockets_exit_notify_callback);
 
 /**
  * @brief Sends data through an established WebSocket connection
