@@ -324,6 +324,8 @@ static void wss_asr_data_to_console(AsrData *asr_data)
     }
 }
 
+static void wait_vad_task(void *priv);
+
 static void start_audio_upload(void *priv)
 {
     log_i("Start audio upload.");
