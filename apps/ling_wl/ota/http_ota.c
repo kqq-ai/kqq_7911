@@ -13,7 +13,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE "v0.0.30" 
+#define LOCAL_VERSION_CODE "v0.0.34" 
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -352,7 +352,7 @@ int compare_versions(const char* ver1, const char* ver2) {
     if (minor1 > minor2) return 1;
     if (minor1 < minor2) return -1;
     
-    if (patch1 > patch2) return 1;
+    if (patch1 == (patch2 +1)) return 1; //如果前面两位相等，这个大于1，才升级
     if (patch1 < patch2) return -1;
     
     return 0; // 版本相同
@@ -379,7 +379,7 @@ int do_check_and_ota()
     }
 
     int net_ver_big = compare_versions(ota_info.version_name, LOCAL_VERSION_CODE);
-    if ( 0 == net_ver_big) { log_i("net ===== LOCAL_VERSION_CODE:%s \r\n", ota_info.version_name);}
+    if ( 0 == net_ver_big) { log_i("net:%s ===== LOCAL_VERSION_CODE:%s \r\n", ota_info.version_name, LOCAL_VERSION_CODE);}
     if ( 1 == net_ver_big) { //< ota_info.version_code) {
         log_i("%s < %s, need OTA.", LOCAL_VERSION_CODE, ota_info.version_name);
         log_i("download %s", ota_info.file_url);

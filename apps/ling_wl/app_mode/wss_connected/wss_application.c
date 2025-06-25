@@ -326,7 +326,9 @@ static void start_audio_upload(void *priv)
     log_i("Start audio upload.");
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-    if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_START)) {
+    char sn_c_id[25] = "KCCNC5F12BEEEJ5";
+    get_SN(&sn_c_id);
+    if (send_audio_status(sn_c_id, OAST_ASR, OASE_START)) {
         wss_application_exception_exit();
         return;
     }
@@ -354,7 +356,9 @@ static void start_audio_upload(void *priv)
         if (g_recording == false) { /* VAD结束 */
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
             
-            if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_END)) {
+            char sn_c_id[25] = "KCCNC5F12BEEEJ5";
+            get_SN(&sn_c_id);
+            if (send_audio_status(sn_c_id, OAST_ASR, OASE_END)) {
                 wss_application_exception_exit();
                 return;
             }
@@ -817,7 +821,9 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
     case STATE_COMMAND_WAITING:
         break;
     }
-    while (send_req_message(DEVICE_ID, g_edev_last ? g_edev_last->sn : "", g_audio_playing, msg_event)) {
+    char sn_c_id[25] = "KCCNC5F12BEEEJ5";
+    get_SN(&sn_c_id);
+    while (send_req_message(sn_c_id, g_edev_last ? g_edev_last->sn : "", g_audio_playing, msg_event)) {
         wss_server_reconnect();
         // wss_application_exception_exit();
         // return;
