@@ -225,6 +225,7 @@ static bool wss_application_check_exit()
 
 int vad_start_time = 0;
 int vad_timeout = 0;
+char sn_c_id[25];
 
 /**
  * @name wss_app_recorder_en
@@ -326,8 +327,6 @@ static void start_audio_upload(void *priv)
     log_i("Start audio upload.");
     int recording_upload_package_index = 0;
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-    char sn_c_id[25] = "KCCNC5F12BEEEJ5";
-    get_SN(&sn_c_id);
     if (send_audio_status(sn_c_id, OAST_ASR, OASE_START)) {
         wss_application_exception_exit();
         return;
@@ -356,8 +355,6 @@ static void start_audio_upload(void *priv)
         if (g_recording == false) { /* VAD结束 */
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
             
-            char sn_c_id[25] = "KCCNC5F12BEEEJ5";
-            get_SN(&sn_c_id);
             if (send_audio_status(sn_c_id, OAST_ASR, OASE_END)) {
                 wss_application_exception_exit();
                 return;
@@ -659,6 +656,8 @@ void wss_application_init()
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
 
     g_app_ctx = lwl_app_core_context_get_instance();
+    
+    get_SN(&sn_c_id);
 
     /* UART指令开启C端le audio */
     uart_send_open_le_audio(g_app_ctx->mac);
@@ -821,8 +820,6 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
     case STATE_COMMAND_WAITING:
         break;
     }
-    char sn_c_id[25] = "KCCNC5F12BEEEJ5";
-    get_SN(&sn_c_id);
     while (send_req_message(sn_c_id, g_edev_last ? g_edev_last->sn : "", g_audio_playing, msg_event)) {
         wss_server_reconnect();
         // wss_application_exception_exit();

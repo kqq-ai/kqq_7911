@@ -271,7 +271,7 @@ char *get_wss_connection_url()
     prepare_signature();
 
     char * url_api = (char *)malloc(BUF_SIZE);
-    snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, DEVICE_ID,  kqqToken);
+    snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, snInVm,  kqqToken);
     
     return url_api;
 }
@@ -343,7 +343,7 @@ char *get_wss_test_url()
     prepare_signature();
 
     char * url_api = (char *)malloc(BUF_SIZE);
-    snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, DEVICE_ID,  kqqToken);
+    snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, snInVm,  kqqToken);
     
     return url_api;
 }
