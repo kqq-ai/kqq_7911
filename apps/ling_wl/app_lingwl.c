@@ -137,6 +137,13 @@ static void app_lingwl_main(void)
     uart0_hdl = app_uart_dev_init("uart0");
     context->uartdev = uart0_hdl;
 
+    // 初始化lfs
+    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
+    ASSERT(lfs_hdl);
+    context->lfs_hdl = lfs_hdl;
+    //app_lfs_cfgfile_init(context->lfs_hdl);
+    get_flash_app_cfg_data(context->lfs_hdl);
+
     // 初始化录音
     recorder_mode_init(&g_recorder);
     context->recorder = &g_recorder;
@@ -170,13 +177,6 @@ static void app_lingwl_main(void)
 
     /* 初始化E端BLE握手处理任务 */
     ble_keep_alive_init();
-
-    // 初始化lfs
-    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
-    ASSERT(lfs_hdl);
-    context->lfs_hdl = lfs_hdl;
-    //app_lfs_cfgfile_init(context->lfs_hdl);
-    get_flash_app_cfg_data(context->lfs_hdl);
 
 
     /* 创建sc7a20 task */

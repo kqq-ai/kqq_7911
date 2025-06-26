@@ -7,11 +7,14 @@
 
 #include "util/cjson_util.h"
 #include "syscfg_id.h"
+#include "lfs.h"
+
+extern lfs_t g_lfs;
 
 #define BUF_SIZE 128
 
 
-#define DEVICE_SN "ZLCNC5E21QEEFE1"
+///#define DEVICE_SN "ZLCNC5E21QEEFE1"
 #define SERVER_DOMAIN  "test.coolqq.com/api"
 #define SERVER_API  "%s://%s/"
 
@@ -24,10 +27,10 @@
 #define HTTP_POSTTK_API  "https://%s/signature"
 
 static char server_url[BUF_SIZE];
-char snInVm[25] = "KCCNC5F12BEEEJ5|";
-char keyInVm[20] = { 0x5a, 0x31, 0x33, 0x73, 0x76, 0x52, 0x6c, 0x46, 0x6d, 0x4e, 0x79, 0x59, 0x46, 0x68, 0x79, 0x42};
+char snInVm[20] = "KCCNC5F12YEEFH2|";
+char pt[35]     = "KCCNC5F12YEEFH2|"; // new device SN !  pair with keyInVm.  v v v v v 
+char keyInVm[20] = { 0x63, 0x47, 0x6e, 0x6f, 0x4e, 0x65, 0x6d, 0x46, 0x37, 0x58, 0x6b, 0x71, 0x59, 0x70, 0x64, 0x74 };
 ///{ 0x4c, 0x34, 0x33, 0x47, 0x71, 0x66, 0x73, 0x72, 0x33, 0x6f, 0x4c, 0x68, 0x66, 0x59, 0x62, 0x6f};
-char pt[35] = DEVICE_SN;
 
 
 void get_SN(char* target){
@@ -188,23 +191,54 @@ static void prepare_signature()
     mbedtls_gcm_context ctx;
     mbedtls_cipher_id_t cipher = MBEDTLS_CIPHER_ID_AES;
 
-    /// get SN from VM
-    int lenSN = syscfg_read(CFG_USER_C_SN, snInVm, 15);
-    if( ('K' != snInVm[0] ) || ('C' != snInVm[1]) ){
-        ///新设备，首次运行，临时代码（正式代码有专门首次运行及测试）
-        log_i(" syscfg_write snInVm!!! \n");
-        lenSN = syscfg_write(CFG_USER_C_SN, pt, 15);
-        lenSN = syscfg_write(CFG_REMOTE_DB_01, keyInVm, 16);
+    /// get SN from LittleFS
+        // 1. 检查文件SN_KEY.bin是否存在
+    struct lfs_info info;
+    lfs_file_t file;
+    if (lfs_stat(&g_lfs, "SN_KEY.bin", &info) == LFS_ERR_OK) {
+        // 如果文件存在，读取
+        int ret = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", LFS_O_RDONLY);
+        if (ret < 0) {
+            lfs_remove(&g_lfs, "SN_KEY.bin");// 如果open失败，删除
+            log_e("Failed to open log file B: %d", ret);
+        }else{
+            lfs_ssize_t bytes_read = lfs_file_read(&g_lfs, &file, &snInVm, 15);
+            bytes_read = lfs_file_read(&g_lfs, &file, &keyInVm, 16);
+            log_i(" read LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_read ); //读取成功，第二次启动
+        }
     }else{
-        memcpy(pt , snInVm, 15);
-        lenSN = syscfg_read(CFG_REMOTE_DB_01, keyInVm, 16);
-    } ///已经得到 SN
+        // 新设备，写入pt 和 keyInVm
+        int err = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", 
+                    LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
+        /* 3. 写入数据 */
+        size_t bytes_written = lfs_file_write(&g_lfs, &file, snInVm, 15 );
+        bytes_written        = lfs_file_write(&g_lfs, &file, keyInVm, 16);
+        if (bytes_written != 16){
+            printf("lfs_file_write fail! err code : %zu\n", bytes_written);
+        }else{
+            log_i(" write LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_written ); //写入成功，第一次启动
+        }
+        lfs_file_close(&g_lfs, &file);
+    }
 
-    if('T' == snInVm[2])
-        log_i(" T == snInVm[2]\n");
-    memcpy(snInVm, pt , 15);
+    // int lenSN = syscfg_read(CFG_USER_C_SN, snInVm, 15);
+    // log_i(" read  snInVm = %s ,  len = %d \n", snInVm , lenSN );
+    // if( ('K' != snInVm[0] ) || ('C' != snInVm[1]) || (15 != lenSN) ){
+    //     ///新设备，首次运行，临时代码（正式代码有专门首次运行及测试）
+    //     log_i(" syscfg_write snInVm!!! NEW !!! \n");
+    //     lenSN = syscfg_write(CFG_USER_C_SN, pt, 15);  //写 pt到 FLASH
+    //     lenSN = syscfg_write(CFG_REMOTE_DB_01, keyInVm, 16);
+    // }else{
+    //     memcpy(pt , snInVm, 15); /// snInVm正确，复制到pt，用于登录
+    //     lenSN = syscfg_read(CFG_REMOTE_DB_01, keyInVm, 16);
+    // } ///已经得到 SN
+
+    // if('T' == snInVm[2])
+    //     log_i(" T == snInVm[2]\n");
+    //memcpy(snInVm, pt , 15);
     snInVm[15] = '\0';
-    log_i("   snInVm = %s \n",snInVm );
+    memcpy(pt , snInVm, 15); /// snInVm ，复制到pt，用于登录
+    log_i(" RUN  snInVm = %s \n",snInVm );
 
 
     log_i("aes GCM init begin\n");
@@ -271,7 +305,10 @@ char *get_wss_connection_url()
     prepare_signature();
 
     char * url_api = (char *)malloc(BUF_SIZE);
-    snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, DEVICE_ID,  kqqToken);
+    char sn_c_id[16] = "KCCNC5F12BEEEJ5";
+    get_SN(&sn_c_id);
+    sn_c_id[15] = '\0';
+    snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id,  kqqToken);
     
     return url_api;
 }
@@ -343,7 +380,10 @@ char *get_wss_test_url()
     prepare_signature();
 
     char * url_api = (char *)malloc(BUF_SIZE);
-    snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, DEVICE_ID,  kqqToken);
+    char sn_c_id[16] = "KCCNC5F12BEEEJ5";
+    get_SN(&sn_c_id);
+    sn_c_id[15] = '\0';
+    snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, sn_c_id,  kqqToken);
     
     return url_api;
 }

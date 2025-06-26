@@ -167,7 +167,7 @@ static void function_test_lwl_event_handler_cb(lwl_event_t *e)
 {
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("switch to test mode")
+        log_i("switch to test mode");
         /* 清空asr data queue */
         my_blocking_queue_clear(&g_asr_data_queue);
         /* 取消VAD回调 */

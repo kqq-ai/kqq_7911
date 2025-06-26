@@ -194,6 +194,7 @@ INCLUDES := \
 	-I../../../../apps/common/net/testbox/include \
 	-I../../../../apps/common/ble/include \
 	-I../../../../include_lib/utils/btmesh \
+	-I../../../../include_lib/system/generic/log_save \
 	-I../../../../include_lib/utils/btmesh/adaptation \
 	-I$(SYS_INC_DIR) \
 
@@ -323,6 +324,7 @@ c_SRC_FILES := \
 	../../../../cpu/wl82/iic.c \
 	../../../../cpu/wl82/key/adc_api.c \
 	../../../../cpu/wl82/port_waked_up.c \
+	../../../../include_lib/system/generic/log_save/log_save.c \
 	../../../../cpu/wl82/setup.c \
 
 

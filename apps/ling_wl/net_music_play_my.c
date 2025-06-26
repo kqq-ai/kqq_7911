@@ -666,7 +666,7 @@ static int __net_music_dec_file(void *priv)
 
     net_download_set_read_timeout(player->net_file, 1000);
 
-    log_i("volume: %d\n", player->volume)
+    log_i("volume: %d\n", player->volume);
 
     req.dec.cmd             = AUDIO_DEC_OPEN;
     req.dec.volume          = player->volume;

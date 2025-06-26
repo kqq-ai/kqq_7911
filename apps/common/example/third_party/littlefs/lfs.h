@@ -631,7 +631,7 @@ int lfs_dir_close(lfs_t *lfs, lfs_dir_t *dir);
 // Returns a positive value on success, 0 at the end of directory,
 // or a negative error code on failure.
 int lfs_dir_read(lfs_t *lfs, lfs_dir_t *dir, struct lfs_info *info);
-
+ bool lfs_mlist_isopen(struct lfs_mlist *head, struct lfs_mlist *node);
 // Change the position of the directory
 //
 // The new off must be a value previous returned from tell and specifies

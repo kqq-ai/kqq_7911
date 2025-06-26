@@ -461,7 +461,7 @@ static inline void lfs_superblock_tole32(lfs_superblock_t *superblock)
 }
 
 #ifndef LFS_NO_ASSERT
-static bool lfs_mlist_isopen(struct lfs_mlist *head,
+ bool lfs_mlist_isopen(struct lfs_mlist *head,
                              struct lfs_mlist *node)
 {
     for (struct lfs_mlist **p = &head; *p; p = &(*p)->next) {

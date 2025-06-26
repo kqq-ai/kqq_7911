@@ -294,14 +294,14 @@ int parse_ota_info(const cJSON *nroot, ota_info_t *pota_info)
     log_i("file_url    : %s", pota_info->file_url);
     //log_i("is_force    : %d", pota_info->is_force);
     log_i("package_name: %s", pota_info->package_name);
-    if (pota_info->release != NULL) {
-        log_i("release     : %s", pota_info->release);
-    } else {
-        log_i("release     : null");
-    }
+    // if (pota_info->release != NULL) {
+    //     log_i("release     : %s", pota_info->release);
+    // } else {
+    //     log_i("release     : null");
+    // }
     //log_i("release_date: %s", pota_info->release_date);
-    pota_info->version_code = pota_info->version_name[strlen(pota_info->version_name) - 1]  - '0' ;
-    log_i("version_code: %d", pota_info->version_code);
+    ///pota_info->version_code = pota_info->version_name[strlen(pota_info->version_name) - 1]  - '0' ;
+    ///log_i("version_code: %d", pota_info->version_code);
     log_i("version_name: %s", pota_info->version_name);
 
     return OTAERROR_Success;
