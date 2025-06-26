@@ -14,6 +14,7 @@ enum {
     APP_NET_CONNECTED_MODE      = 4, /**< Network successfully connected */
     APP_UPDATE_MODE             = 5, /**< Firmware update mode */
     APP_WSS_CONNECTED_MODE      = 6, /**< WebSocket successfully connected */
+    APP_DEVICE_CHECK_MODE       = 7, /**< Check device and write SN */
 };
 
 /**

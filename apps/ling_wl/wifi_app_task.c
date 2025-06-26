@@ -282,7 +282,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
             wifi_store_mode_info(STA_MODE, temp_wifi_info.ssid, temp_wifi_info.pwd);
         }
         /* 将APP切换到 APP的连接成功模式 */
-        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        // lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
 
         break;
 

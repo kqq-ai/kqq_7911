@@ -167,6 +167,11 @@ void lwl_app_mode_loop()
         app_wss_connected_mode();
         lwl_app_mode_exit_ok();
         break;
+    case APP_DEVICE_CHECK_MODE:
+        log_i("APP_DEVICE_CHECK_MODE\n");
+        app_wss_connected_mode();
+        lwl_app_mode_exit_ok();
+        break;
     }
 }
 

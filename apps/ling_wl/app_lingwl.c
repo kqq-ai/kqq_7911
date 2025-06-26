@@ -75,7 +75,8 @@ static void wifi_monitor_thread(void *priv)
 static void lwl_app_task(void *priv)
 {
     log_i("lwl_app_task");
-    lwl_app_init(APP_POWER_ON_MODE);
+    // lwl_app_init(APP_POWER_ON_MODE);
+    lwl_app_init(APP_DEFAULT_MODE);
     while (true) {
         lwl_app_mode_loop();
     }
@@ -152,7 +153,7 @@ static void app_lingwl_main(void)
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
 
-    // simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
     uart_send_set_led_color(7500, 7000, 6000); /// on LED after power ON
 
     /* 创建异步任务处理任务 */
@@ -179,8 +180,8 @@ static void app_lingwl_main(void)
     get_flash_app_cfg_data(context->lfs_hdl);
 
 
-    /* 创建sc7a20 task */
-    app_sc7a20_init();
+    /* 创建sc7a20 task 陀螺仪 */
+    // app_sc7a20_init();
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
@@ -394,7 +395,7 @@ static int app_music_net_event_handler(struct net_event *event)
         case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
             uart_send_set_led_color(7500, 7000, 6000); /// Net Succ
-            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
+            // simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
             // TODO: 可配置WIFI和BLE共存时的RF共存参数设置
