@@ -21,7 +21,7 @@ extern lfs_t g_lfs;
 char snInVm[SN_SIZE+1] = "KCCNC5F12JEEEF7";
 char keyInCHAR[KEY_SIZE*2] = "686771725153614a56514b307a617551";
 #else
-char snInVm[SN_SIZE+1];
+char snInVm[SN_SIZE+1]="\0";
 #endif
 
 char keyInVm[KEY_SIZE];
