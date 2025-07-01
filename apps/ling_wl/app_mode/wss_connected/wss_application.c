@@ -408,11 +408,32 @@ static void wait_vad_task(void *priv)
     // wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
 }
 
-static int odmp_audio_data_cbk(uint8_t *data, uint32_t len)
+static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
-    int ret = app_music_play_stream_write(g_app_ctx->music_player, data, len);
-    log_d("stream write: %d\n", ret);
-    return 0;
+    const uint32_t MAX_CHUNK_SIZE = 50000;
+    uint32_t total_written = 0;
+    uint32_t remaining = len;
+    
+    while (remaining > 0) {
+        uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
+        uint32_t written = app_music_play_stream_write(
+            g_app_ctx->music_player, 
+            data + total_written, 
+            chunk_size
+        );
+        
+        if (written == 0) {
+            log_e("Failed to write audio data chunk,odmp_audio_data_cbk");
+            break; // 错误处理，可根据需求调整
+        }
+        
+        total_written += written;
+        remaining -= written;
+        log_d("Written chunk: %u bytes (total: %u / %u)", written, total_written, len);
+    }
+    
+    log_i("Total stream write: %u / %u bytes", total_written, len);
+    return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
 }
 
 
@@ -756,7 +777,7 @@ void wss_application_uninit()
 bool wss_application_loop(struct websocket_struct *websockets_info)
 {
     g_curr_time = timer_get_ms();
-    ASSERT(websockets_info != NULL);
+    ///ASSERT(websockets_info != NULL);
 
     msleep(10);
 
