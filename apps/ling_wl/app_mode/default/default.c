@@ -1056,6 +1056,9 @@ void app_default_mode(void)
         
         // 检测按键状态（保留原有的GPIO按键检测功能）
         check_key_status();
+        if (false && WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
+            lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        }
         
         u32 g_curr_time = timer_get_ms();
 
