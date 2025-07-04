@@ -143,7 +143,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
         /* 控制 led : 正在连接网络 褐色 */
-        uart_send_set_led_color(COLOR_BROWN);
+        //uart_send_set_led_color(COLOR_BROWN);
 
         break;
 
@@ -198,7 +198,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         block_connect_sem_post(NULL); // 通知连接函数
 
         /* 控制 led : 网络连接失败 灰色 */
-        uart_send_set_led_color(COLOR_GRAY);
+        //todo play audo 罗天宇///////////////////////////////////
+        //uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -221,9 +222,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         {
             wifi_connect_fail_cb_func_pri(NULL);
         }
-
+        //todo play audo 罗天宇///////////////////////////////////
         /* 控制 led : 网络连接失败 灰色 */
-        uart_send_set_led_color(COLOR_GRAY);
+        //uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -237,9 +238,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
-
+        //   //todo play audo 罗天宇///////////////////////////////////
         /* 控制 led : 网络连接失败 灰色 */
-        uart_send_set_led_color(COLOR_GRAY);
+        //uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -260,7 +261,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
 
         /* 控制 led : 联网成功 紫色 */
-        uart_send_set_led_color(COLOR_PURPLE);
+        //uart_send_set_led_color(COLOR_PURPLE);
         printf("the net connected enable led purple !\r\n");
 
         /* 存储 IP*/
@@ -300,8 +301,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         block_connect_sem_post(NULL); // 通知连接函数
         
         /* 控制 led : 网络连接失败 灰色 */
-        uart_send_set_led_color(COLOR_GRAY);
-
+        //uart_send_set_led_color(COLOR_GRAY);
+        //todo play audo 罗天宇///////////////////////////////////
         wifi_set_sta_connect_best_ssid(1);
         wifi_enter_sta_mode(INIT_SSID,INIT_PWD);
  
@@ -410,9 +411,9 @@ static void wifi_app_task(void *priv) // 主要是create wifi 线程的
     wifi_on();
 }
 
-static int wireless_net_init(void) // 主要是create wifi 线程的
-{
-    puts("wireless_net_init \n\n");
-    return thread_fork("wifi_app_task", 10, 1792, 0, 0, wifi_app_task, NULL);
-}
+ static int wireless_net_init(void) // 主要是create wifi 线程的
+ {
+     puts("wireless_net_init \n\n");
+     return thread_fork("wifi_app_task", 10, 1792, 0, 0, wifi_app_task, NULL);
+} 
 late_initcall(wireless_net_init);

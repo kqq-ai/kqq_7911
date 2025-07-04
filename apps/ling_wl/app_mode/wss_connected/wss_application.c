@@ -190,8 +190,8 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
-        if(e->uart_cmd_sync.battery < 30 )
-            uart_send_set_led_color(6000, 10000, 10000); //red~ low power
+        //if(e->uart_cmd_sync.battery < 30 )
+            //uart_send_set_led_color(6000, 10000, 10000); //red~ low power
         uart_response_synch_status(1, 12);/// 音量 E only
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
