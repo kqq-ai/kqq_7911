@@ -181,7 +181,7 @@ static void app_lingwl_main(void)
 
 
     /* 创建sc7a20 task 陀螺仪 */
-    // app_sc7a20_init();
+    app_sc7a20_init();
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
