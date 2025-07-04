@@ -57,23 +57,32 @@ static int websockets_client_init(struct websocket_struct *websockets_info, u8 *
     if (err == FALSE) {
         return err;
     }
-    return websockets_info->_init(websockets_info);
+    int ret = websockets_info->_init(websockets_info);
+    return ret;
 }
 
 static int websockets_client_handshack(struct websocket_struct *websockets_info)
 {
-    return websockets_info->_handshack(websockets_info);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ret = websockets_info->_handshack(websockets_info);
+    os_mutex_post(&wss_mutex_bin);
+    return ret;
 }
 
 static int websockets_client_send(struct websocket_struct *websockets_info, u8 *buf, int len, char type)
 {
     //SSL加密时一次发送数据不能超过16K，用户需要自己分包
-    return websockets_info->_send(websockets_info, buf, len, type);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ret = websockets_info->_send(websockets_info, buf, len, type);
+    os_mutex_post(&wss_mutex_bin);
+    return ret;
 }
 
 static void websockets_client_exit(struct websocket_struct *websockets_info)
 {
+    os_mutex_pend(&wss_mutex_bin, 0);
     websockets_info->_exit(websockets_info);
+    os_mutex_post(&wss_mutex_bin);
 }
 
 int wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size)
@@ -81,18 +90,14 @@ int wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size)
     //SSL加密时一次发送数据不能超过16K，用户需要自己分包
     //确认存在大于16K的数据包时，请修改发送逻辑
     // return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
-    os_mutex_pend(&wss_mutex_bin, 0);
     int ws_ret = websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
-    os_mutex_post(&wss_mutex_bin);
     return ws_ret;
 }
 
 int wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
     // return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
-    os_mutex_pend(&wss_mutex_bin, 0);
     int ws_ret =  websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
-    os_mutex_post(&wss_mutex_bin);
     return ws_ret;
 }
 
@@ -104,8 +109,7 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
     if (!os_mutex_valid(&wss_mutex_bin)) {
         os_mutex_create(&wss_mutex_bin);
     }
-    // os_mutex_pend(&wss_mutex_bin, 0);
-    // os_mutex_post(&wss_mutex_bin);
+    os_mutex_pend(&wss_mutex_bin, 0);
     
     log_i(" . ----------------- Client Websocket ------------------\r\n");
     wss_cb_handler = websockets_callback;
@@ -114,6 +118,8 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
     struct websocket_struct *websockets_info = malloc(sizeof(struct websocket_struct));
     memset(websockets_info, 0, sizeof(struct websocket_struct));
     if (!websockets_info) {
+        os_mutex_post(&wss_mutex_bin);
+        os_mutex_del(&wss_mutex_bin, 0);
         return NULL;
     }
     /* 1 . register */
@@ -125,6 +131,7 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
 
     /* 2 . init */
     err = websockets_client_init(websockets_info, url, origin_str);
+    os_mutex_post(&wss_mutex_bin);
     if (FALSE == err) {
         log_i("  . ! Cilent websocket init error !!!\r\n");
         goto exit_ws;
@@ -161,10 +168,13 @@ exit_ws:
 
 void wss_server_disconnect(struct websocket_struct *websockets_info)
 {
+    os_mutex_pend(&wss_mutex_bin, 0);
     thread_kill(&websockets_info->ping_thread_id, KILL_REQ);
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
+    os_mutex_post(&wss_mutex_bin);
+    os_mutex_del(&wss_mutex_bin, 0);    
 }
 
 
