@@ -175,6 +175,17 @@ static const struct {
     {APP_LOCAL_PROMPT_ENTER_AUX_MUSIC_MODE,    "LineinMusic.mp3"},
     {APP_LOCAL_PROMPT_ENTER_BT_EMITTER_MODE,   "EmitterOn.mp3"},
     {APP_LOCAL_PROMPT_EXIT_BT_EMITTER_MODE,    "EmitterOff.mp3"},
+
+    {test_1hz5s,    "test_1hz5s.mp3"},
+    {test_start,    "test_start.mp3"},
+    {test_touchk,    "test_touchk.mp3"},
+    {test_led,    "test_led.mp3"},
+    {test_loud,    "test_loud.mp3"},
+    {test_micro,    "test_micro.mp3"},
+    {test_gyro,    "test_gyro.mp3"},
+    {test_bly,    "test_bly.mp3"},
+    {test_edev,    "test_edev.mp3"}
+
 };
 
 static const u8 dir_name_chars[][8] = {
