@@ -184,7 +184,12 @@ static const struct {
     {test_micro,    "test_micro.mp3"},
     {test_gyro,    "test_gyro.mp3"},
     {test_bly,    "test_bly.mp3"},
-    {test_edev,    "test_edev.mp3"}
+    {test_edev,    "test_edev.mp3"},
+
+
+    
+    {test_dev1,    "test_dev1.mp3"},
+    {test_dev2,    "test_dev2.mp3"},
 
 };
 

@@ -30,6 +30,11 @@
 #include "../../bt_ble/client/ble_distance.h"
 #include <sys_time.h>
 #include "key_event.h"
+#include "cJSON_common/cJSON.h"
+#include "bt_ble/app_wifi_manage.h"
+#include "http/http_cli.h"
+
+static void mode6_audio_callback(void *priv); // 声明提前到文件最前面
 
 // 为模式3麦克风VAD功能添加必要的头文件
 // 这些头文件可能需要根据实际的SDK结构进行调整
@@ -41,13 +46,6 @@
 #include "../../SC7A20/sc7a20.h"           // SC7A20陀螺仪头文件
 #include "../../SC7A20/app_sc7a20_task.h"  // SC7A20任务头文件
 
-// 补充缺少的颜色常量定义
-#ifndef COLOR_YELLOW
-#define COLOR_YELLOW      (0),     (5000),  (5000)    // 黄色(255,255,0) 
-#endif
-#ifndef COLOR_MAGENTA
-#define COLOR_MAGENTA     (0),     (10000), (0)       // 洋红(255,0,255)
-#endif
 
 // LED颜色设置辅助函数（使用系统预定义的颜色参数）
 static void set_led_color_rgb(uint16_t r, uint16_t g, uint16_t b)
@@ -60,8 +58,6 @@ static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
 static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
 static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
 static void set_led_cyan(void)       { uart_send_set_led_color(COLOR_CYAN); }
-static void set_led_yellow(void)     { uart_send_set_led_color(COLOR_YELLOW); }
-static void set_led_magenta(void)    { uart_send_set_led_color(COLOR_MAGENTA); }
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }
 static void set_led_black(void)      { uart_send_set_led_color(COLOR_BLACK); }
 static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
@@ -82,6 +78,7 @@ typedef enum {
     WORK_MODE_4,            // 模式4（麦克风VAD检测）
     WORK_MODE_5,            // 模式5（加速度传感器测试）
     WORK_MODE_6,            // 模式6（循环播放音频 - E端播放）
+    WORK_MODE_7,            // 模式7（预留，进入时播放test_bly.mp3）
     WORK_MODE_MAX           // 模式总数
 } work_mode_e;
 
@@ -120,6 +117,124 @@ static u32 g_large_motion_count = 0;           // 大幅晃动计数
 // 模式6 E端设备相关变量
 static int g_current_e_device_index = -1;      // 当前E端设备索引
 
+// ========== 模式6 串行状态机重构 ===========
+typedef enum {
+    MODE6_IDLE = 0,        // 空闲状态，未进行任何操作
+    MODE6_PLAY_PROMPT,     // 播放提示音（如开机提示、操作提示）
+    MODE6_CONNECT_1,       // 尝试连接第一个目标设备
+    MODE6_PLAY_1,          // 第一个设备连接成功后，进入播放状态
+    MODE6_CONNECT_2,       // 尝试连接第二个目标设备
+    MODE6_PLAY_2,          // 第二个设备连接成功后，进入播放状态
+    // 移除DISCONNECT状态 // 该状态已废弃，不再使用
+} mode6_state_e;
+
+static mode6_state_e g_mode6_state = MODE6_IDLE;
+static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
+static char *g_mode6_e_sn_list[2] = {"KPCNC5F10CEEEG5", "KPCNC5F10SEEEH1"};
+// 标志“模式6”相关动作是否正在进行
+// 1：有动作在执行（如连接、播放等），防止重复或并发操作
+// 0：无动作，允许推进新流程
+static u8 g_mode6_action_in_progress = 0;
+
+// ========== 模式6回调函数声明 ===========
+static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv);
+static void mode6_e_disconnect_cb(bka_cmd_code_e code, void *priv);
+static void mode6_audio_callback(void *priv);
+
+// 模式6推进函数
+static void mode6_try_next_step(void)
+{
+    if (g_mode6_action_in_progress) return;
+    g_mode6_action_in_progress = 1;
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    char *target_sn = g_mode6_e_sn_list[g_mode6_e_index];
+    lwl_eend_dev_t *pdev = NULL;
+    MapIterator it = map_begin(context->dev_map);
+    MapIterator end = map_end(context->dev_map);
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *tmp = (lwl_eend_dev_t *)map_iterator_value(it);
+        if (strncmp(tmp->sn, target_sn, 15) == 0) {
+            pdev = tmp;
+            break;
+        }
+    }
+    map_iterator_unlock(it);
+
+    switch (g_mode6_state) {
+    case MODE6_CONNECT_1:
+    case MODE6_CONNECT_2:
+        if (pdev) {
+            pdev->handshake_info.need_handshake = true;
+            uint cmd_id;
+            //发送开机命令到E端设备
+            bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id);
+        } else {
+            // 设备找不到，重试
+            g_mode6_action_in_progress = 0;
+        }
+        break;
+    case MODE6_PLAY_1:
+        gpio_direction_output(IO_PORTA_00, 0); // 关闭C端扬声器
+        app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev1.mp3",
+            mode6_audio_callback, NULL);
+        break;
+    case MODE6_PLAY_2:
+        gpio_direction_output(IO_PORTA_00, 0); // 关闭C端扬声器
+        app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev2.mp3",
+            mode6_audio_callback, NULL);
+        break;
+    default:
+        g_mode6_action_in_progress = 0;
+        break;
+    }
+}
+
+// 连接回调
+static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
+{
+    if (g_current_mode != WORK_MODE_6) return;
+    int dev_idx = g_mode6_e_index;
+    if ((g_mode6_state == MODE6_CONNECT_1 && dev_idx == 0) ||
+        (g_mode6_state == MODE6_CONNECT_2 && dev_idx == 1)) {
+        if (code == BKA_CMD_CODE_COMPL) {
+            g_mode6_action_in_progress = 0;
+            g_mode6_state = (dev_idx == 0) ? MODE6_PLAY_1 : MODE6_PLAY_2;
+            mode6_try_next_step();
+        } else {
+            // 连接失败，重试
+            g_mode6_action_in_progress = 0;
+            mode6_try_next_step();
+        }
+    }
+}
+
+// 音频播放回调
+static void mode6_audio_callback(void *priv)
+{
+    if (g_current_mode != WORK_MODE_6) return;
+    if (g_mode6_state == MODE6_PLAY_PROMPT) {
+        g_mode6_action_in_progress = 0;
+        g_mode6_state = MODE6_CONNECT_1;
+        mode6_try_next_step();
+    } else if (g_mode6_state == MODE6_PLAY_1) {
+        g_mode6_action_in_progress = 0;
+        // 播放完第1设备，直接连接第2设备
+        g_mode6_e_index = 1;
+        g_mode6_state = MODE6_CONNECT_2;
+        mode6_try_next_step();
+    } else if (g_mode6_state == MODE6_PLAY_2) {
+        g_mode6_action_in_progress = 0;
+        // 播放完第2设备，直接连接第1设备
+        g_mode6_e_index = 0;
+        g_mode6_state = MODE6_CONNECT_1;
+        mode6_try_next_step();
+    }
+}
+
 // 模式切换函数声明
 static void switch_to_mode(work_mode_e new_mode);
 static void process_mode_init(void);
@@ -129,10 +244,11 @@ static void process_mode_3(void);
 static void process_mode_4(void);
 static void process_mode_5(void);
 static void process_mode_6(void);
+static void process_mode_7(void); // 新增模式7处理函数声明
 static void default_play_music(const char *fname);
 static void mode1_audio_callback(void *priv);
 static void mode3_audio_callback(void *priv);
-static void mode6_audio_callback(void *priv);
+static void mode6_audio_callback(void *priv); // <-- 提前声明
 static void mode4_audio_callback(void *priv);
 static void mode5_audio_callback(void *priv);
 static void check_key_status(void);
@@ -158,7 +274,8 @@ static void (*mode_process_functions[])(void) = {
     process_mode_3,
     process_mode_4,
     process_mode_5,
-    process_mode_6
+    process_mode_6,
+    process_mode_7 // 新增模式7
 };
 
 // 模式名称数组（用于日志）
@@ -169,70 +286,9 @@ static const char *mode_names[] = {
     "MODE_3_AUDIO_LOOP_C",
     "MODE_4_MIC_VAD",
     "MODE_5_GSENSOR_TEST",
-    "MODE_6_AUDIO_LOOP_E"
+    "MODE_6_AUDIO_LOOP_E",
+    "MODE_7_BLY" // 新增模式7名称
 };
-
-static void e_turn_on_only(bka_cmd_code_e code, void *priv)
-{
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    
-    char sn_string[SN_SIZE] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    }
-    log_i("bka_e_turn_on code %d %s\n", code, sn_string);
-    /////////////////////////修改这里7.11罗天宇标记的我要添加处理的代码/////////////////////////////
-
-    
-}
-
-
-
-static void switch_to_e_target(char *target)
-{
-    // 设置默认目标值
-    char *default_target = "KPCNC5F11REEEH2";
-    char *used_target = (target != NULL) ? target : default_target;
-    
-    log_i("Switching to target: %s", used_target);
-    // 查找目标设备
-    lwl_app_context_t *scontext = lwl_app_core_context_get_instance();
-    MapIterator it = map_begin(scontext->dev_map); // 持有锁
-    MapIterator end = map_end(scontext->dev_map);
-    uint cmd_id;
-    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
-        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (strncmp(pdev->sn, used_target, 15) == 0) {
-            pdev->handshake_info.need_handshake = true;
-            bka_e_turn_on(pdev, e_turn_on_only, pdev, &cmd_id); // E ON~  start_handshake
-            // 找到目标设备，执行相关操作
-            // 例如：发送目标设置命令、更新设备状态等
-            break;
-        }
-    }
-    log_i("+-- -+");
-
-    map_iterator_unlock(it); // 释放锁
-    // 参考default_e_turn_on函数中的命令发送方式
-}
-
-static void turn_off_e_target(char *target)
-{
-    // 设置默认目标值
-    char *default_target = "KPCNC5F11REEEH2";
-    char *used_target = (target != NULL) ? target : default_target;
-    
-    log_i("turn off EEEEEEEEEEEE target: %s", used_target);
-    // 查找目标设备
-    uint cmd_id;
-    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(used_target);
-    pdev->handshake_info.need_handshake = true;
-    bka_e_turn_off(pdev, NULL, pdev, &cmd_id); // E OFF
-            // 找到目标设备，执行相关操作
-            // 例如：发送目标设置命令、更新设备状态等
-    log_i("+-- -+");
-    // 参考default_e_turn_on函数中的命令发送方式
-}
 
 // 模式切换函数
 static void switch_to_mode(work_mode_e new_mode)
@@ -343,7 +399,7 @@ static void switch_to_mode(work_mode_e new_mode)
         
         break;
     case WORK_MODE_4:
-        turn_off_e_target(NULL);
+
         gpio_direction_output(IO_PORTA_00, 1);  //Enable    C speaker
         set_led_green();  // 初始绿灯表示无语音
         g_audio_playing = 1;  // 设置为1，表示正在播放micro_test.mp3
@@ -376,20 +432,32 @@ static void switch_to_mode(work_mode_e new_mode)
         log_i("Playing test_gyro.mp3 for MODE 5 with callback");
         break;
     case WORK_MODE_6:
-        // 先启用C端扬声器播放提示音，然后切换到E端播放循环音频
-        gpio_direction_output(IO_PORTA_00, 1);  // Enable C speaker for prompt audio
-        set_led_magenta();  // 紫色LED表示模式6（E端音频播放）
-        g_audio_playing = 1;  // 设置为1，表示正在播放音频
-        g_mode6_playing_prompt = 1;  // 先播放提示音
-        g_current_e_device_index = -1;  // 重置E端设备索引
-        log_i("MODE 6: E-device audio loop mode started");
-        
-        lwl_app_context_t *context6 = lwl_app_core_context_get_instance();
-        app_music_play_local_music_with_callback(
-            context6->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_edev.mp3",
-            mode6_audio_callback, NULL);
-        log_i("Playing test_edev.mp3 for MODE 6 with callback (via C speaker)");
+        set_led_purple();
+        gpio_direction_output(IO_PORTA_00, 1);  // 启用C端扬声器
+        g_mode6_state = MODE6_PLAY_PROMPT;
+        g_mode6_e_index = 0;
+        g_mode6_action_in_progress = 0;
+        {
+            lwl_app_context_t *context6 = lwl_app_core_context_get_instance();
+            app_music_play_local_music_with_callback(
+                context6->music_player,
+                CONFIG_VOICE_PROMPT_FILE_PATH"test_edev.mp3",
+                mode6_audio_callback, NULL);
+            g_mode6_action_in_progress = 1;
+        }
+        log_i("MODE 6: 串行状态机启动");
+        break;
+    case WORK_MODE_7:
+        set_led_blue(); // 进入模式7时点亮蓝灯
+        log_i("MODE 7: 进入模式7，播放test_bly.mp3");
+        {
+            lwl_app_context_t *context7 = lwl_app_core_context_get_instance();
+            app_music_play_local_music_with_callback(
+                context7->music_player,
+                CONFIG_VOICE_PROMPT_FILE_PATH"test_bly.mp3",
+                NULL, NULL);
+        }
+        // 具体功能待定
         break;
     default:
         break;
@@ -495,7 +563,7 @@ static void process_mode_3(void)
     // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
     if (!g_mode3_playing_prompt && !g_audio_playing) {
         // 防止频繁重新播放，至少间隔100ms
-        if (current_time - last_play_time >= 100) {
+        if (current_time - last_play_time >= 5000) {
             log_i("MODE 3: Starting loop audio playback");
             
             // 播放循环测试音频，使用回调
@@ -535,48 +603,7 @@ static void mode3_audio_callback(void *priv)
     }
 }
 
-// 模式6音频播放回调函数 - E端播放
-static void mode6_audio_callback(void *priv)
-{
-    log_i("MODE 6: E端音频播放回调");
-    
-    if (g_mode6_playing_prompt) {
-        // 提示音播放完成（通过C端播放的），现在切换到E端播放循环音频
-        log_i("MODE 6: Prompt audio callback - finished, starting E-device loop audio");
-        g_mode6_playing_prompt = 0;
-        g_audio_playing = 0;
-        
-        // 禁用C端扬声器，准备E端播放
-        gpio_direction_output(IO_PORTA_00, 0);  // Disable C speaker
-        
-        // E端设备切换逻辑
-        static int e_device_index = 0;
-        if (e_device_index == 0) {
-            switch_to_e_target("KPCNC5F10CEEEG5");
-            e_device_index = 1;
-        } else {
-            switch_to_e_target("KPCNC5F10SEEEH1");
-            e_device_index = 0;
-        }
-    } else {
-        // 循环音频播放完成，准备重新播放（E端播放）
-        log_i("MODE 6: Loop audio callback - finished, will restart E-device playback");
-        g_audio_playing = 0;
-        
-        // 继续禁用C端扬声器
-        gpio_direction_output(IO_PORTA_00, 0);  // Disable C speaker
-        
-        // 切换E端设备
-        static int e_device_index = 0;
-        if (e_device_index == 0) {
-            switch_to_e_target("KPCNC5F10CEEEG5");
-            e_device_index = 1;
-        } else {
-            switch_to_e_target("KPCNC5F10SEEEH1");
-            e_device_index = 0;
-        }
-    }
-}
+
 
 // 模式4音频播放回调函数
 static void mode4_audio_callback(void *priv)
@@ -791,40 +818,102 @@ static void process_mode_5(void)
     }
 }
 
-// 模式6处理函数：循环播放音频 - E端播放
+// 模式6处理函数
 static void process_mode_6(void)
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    static u32 last_play_time = 0;
-    u32 current_time = timer_get_ms();
-    
-    // 检查context有效性
-    if (!context || !context->music_player) {
-        log_e("MODE 6: Context or music_player is NULL");
+    // 只需定期推进状态机
+    mode6_try_next_step();
+}
+
+// 新增模式7处理函数
+static void process_mode_7(void)
+{
+    static u8 has_run = 0;
+    if (has_run) return; // Only run once
+    has_run = 1;
+
+    set_led_green();
+
+    log_i("================================1Entering mode 7================================");
+    log_i("================================2Entering mode 7================================");
+
+    // Check WIFI connection status
+    WIFI_connect_STATUES wifi_status = get_wifi_connect_status(NULL);
+    log_i("==============================[MODE7] wifi_status: %d================================", wifi_status);
+    if (wifi_status != WIFI_CONNECT_SUCC && wifi_status != WIFI_CONNECT_DHCP_SUCC) {
+        log_i("===============:WIFI disconnected===============");
+        log_i("[MODE7] WIFI not connected, cannot request SN, process terminated");
         return;
     }
-    
-    // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
-    if (!g_mode6_playing_prompt && !g_audio_playing) {
-        // 防止频繁重新播放，至少间隔100ms
-        if (current_time - last_play_time >= 100) {
-            log_i("MODE 6: Starting loop audio playback");
-            
-            // 播放循环测试音频，使用回调
-            int err = app_music_play_local_music_with_callback(
-                context->music_player, 
-                CONFIG_VOICE_PROMPT_FILE_PATH"test_1hz5s.mp3", 
-                mode6_audio_callback, NULL);
-                
-            if (err == 0) {
-                g_audio_playing = 1;
-                last_play_time = current_time;
-                log_i("MODE 6: Loop audio started successfully");
-            } else {
-                log_e("MODE 6: Loop audio start failed, error: %d", err);
-            }
-        }
+    log_i("========================================== [MODE7] WIFI connected================================");
+
+    // Build POST request to https://test.coolqq.com/api/sn
+    const char *url = "https://test.coolqq.com/api/sn";
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "type", "C");
+    char *post_data = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    log_i("==========================================[MODE7]POST:%s================================", post_data);
+
+    http_body_obj http_body_buf;
+    httpcli_ctx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    memset(&http_body_buf, 0, sizeof(http_body_buf));
+
+    http_body_buf.recv_len = 0;
+    http_body_buf.buf_len = 4096;
+    http_body_buf.buf_count = 1;
+    http_body_buf.p = (char *)malloc(http_body_buf.buf_len * http_body_buf.buf_count);
+    if (!http_body_buf.p) {
+        log_i("===========================================");
+        log_i("[MODE7] Memory allocation failed, process terminated");
+        free(post_data);
+        return;
     }
+
+    ctx.url = url;
+    ctx.timeout_millsec = 5000;
+    ctx.priv = &http_body_buf;
+    ctx.connection = "close";
+    ctx.data_format = "application/json"; // Set Content-Type
+    ctx.post_data = post_data;
+    ctx.data_len = strlen(post_data);
+
+    log_i("========================Sending httpcli_post...=============");
+    int ret = httpcli_post(&ctx);
+    log_i("=======================[MODE7] httpcli_post return: %d, length: %d===========", ret, http_body_buf.recv_len);
+    free(post_data);
+
+    if (ret != HERROR_OK || http_body_buf.recv_len <= 0) {
+        log_i("==========================================MODE 7: HTTP request failed================================");
+        log_i("==========================================[MODE7] HTTP request failed, process terminated================================");
+        if (http_body_buf.p) free(http_body_buf.p);
+        return;
+    }
+
+    log_i("==========================================[MODE7] HTTP response: %s================================", http_body_buf.p);
+    // Parse JSON response
+    const cJSON *resp = cJSON_Parse(http_body_buf.p);
+    if (!resp) {
+        log_i("==========================================MODE 7: Response is not valid JSON================================");
+        log_i("==========================================[MODE7] Response is not valid JSON, process terminated================================");
+        free(http_body_buf.p);
+        return;
+    }
+    const cJSON *data = cJSON_GetObjectItem(resp, "data");
+    const cJSON *sn = data ? cJSON_GetObjectItem(data, "sn") : NULL;
+    const cJSON *key = data ? cJSON_GetObjectItem(data, "key") : NULL;
+    if (sn && key && cJSON_IsString(sn) && cJSON_IsString(key)) {
+        log_i("===============================[MODE7] SN: %s=======================", sn->valuestring);
+        log_i("===============================[MODE7] Key: %s=======================", key->valuestring);
+        set_led_red();
+        log_i("========================[MODE7] SN/Key obtained successfully, red LED is ON=================");
+    } else {
+        log_i("===============================[MODE7] Failed to get SN/Key, process terminated==========");
+        log_i("=============================MODE 7: SN/Key fetch failed================================");
+    }
+    cJSON_Delete(resp);
+    free(http_body_buf.p);
 }
 
 // 模式5音频播放回调函数
@@ -1077,7 +1166,8 @@ static void default_cb(bka_cmd_code_e code, void *priv)
     switch(code) {
     case BKA_CMD_CODE_COMPL:
         log_i("Switch PortE %s OK\n", sn_string);
-        default_play_music(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
+        ///////////////////////////////////////////
+        //default_play_music(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
         break;
     case BKA_CMD_CODE_DEVLOST:
         log_i("Switch PortE Dev Lost\n");
@@ -1176,8 +1266,11 @@ static void default_lwl_event_handler_cb(lwl_event_t *e)
             next_mode = WORK_MODE_6;
             break;
         case WORK_MODE_6:
+            next_mode = WORK_MODE_7;
+            break;
+        case WORK_MODE_7:
         default:
-            next_mode = WORK_MODE_INIT; // 模式6后回到初始模式，形成循环
+            next_mode = WORK_MODE_INIT; // 模式7后回到初始模式，形成循环
             break;
         }
         
@@ -1206,7 +1299,6 @@ static void default_lwl_event_handler_cb(lwl_event_t *e)
             log_i("MODE 1: Touch key detected - LED set to RED for 0.8s");
         } else {
             // 其他模式的触摸按键检测：设置黄灯（原有逻辑）
-            set_led_yellow();
             log_i("Touch key detected, LED set to YELLOW temporarily");
         }
         break;
@@ -1218,112 +1310,6 @@ static void default_lwl_event_handler_cb(lwl_event_t *e)
         break;
     }
 }
-
-
-
-int app_default_app_event_handler(struct application *app, struct sys_event *event)
-{
-    switch (event->type) {
-    case SYS_KEY_EVENT: {
-        struct key_event *key_event = (struct key_event *)event->payload;
-        log_i("=== SYS KEY EVENT DETECTED ===");
-        log_i("Key value: 0x%x", key_event->value);
-        log_i("Key action: %d", key_event->action);
-        log_i("Event timestamp: %d ms", timer_get_ms());
-        log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
-        
-        // 只处理按键点击事件来切换模式
-        if (key_event->action == KEY_EVENT_CLICK) {
-            work_mode_e next_mode;
-            switch (g_current_mode) {
-            case WORK_MODE_INIT:
-                next_mode = WORK_MODE_1;
-                break;
-            case WORK_MODE_1:
-                next_mode = WORK_MODE_2;
-                break;
-            case WORK_MODE_2:
-                next_mode = WORK_MODE_3;
-                break;
-            case WORK_MODE_3:
-                next_mode = WORK_MODE_4;
-                break;
-            case WORK_MODE_4:
-                next_mode = WORK_MODE_5;
-                break;
-            case WORK_MODE_5:
-                next_mode = WORK_MODE_6;
-                break;
-            case WORK_MODE_6:
-            default:
-                next_mode = WORK_MODE_INIT; // 模式6后回到初始模式
-                break;
-            }
-            switch_to_mode(next_mode);
-        }
-        
-        // 根据按键动作设置临时LED颜色（不影响模式运行）
-        switch (key_event->action) {
-        case KEY_EVENT_CLICK:
-            log_i("Key event: CLICK - Mode switched");
-            break;
-        case KEY_EVENT_LONG:
-            log_i("Key event: LONG PRESS");
-            break;
-        case KEY_EVENT_HOLD:
-            log_i("Key event: HOLD");
-            break;
-        case KEY_EVENT_UP:
-            log_i("Key event: RELEASE");
-            break;
-        default:
-            log_i("Key event: UNKNOWN (%d)", key_event->action);
-            break;
-        }
-        
-        // 根据不同按键值执行不同操作
-        switch (key_event->value) {
-        case KEY_OK:
-            log_i("OK key pressed");
-            break;
-        case KEY_1:
-            log_i("Key 1 pressed");
-            break;
-        case KEY_2:
-            log_i("Key 2 pressed");
-            break;
-        case KEY_3:
-            log_i("Key 3 pressed");
-            break;
-        case KEY_4:
-            log_i("Key 4 pressed");
-            break;
-        case KEY_VOLUME_INC:
-            log_i("Volume UP key pressed");
-            break;
-        case KEY_VOLUME_DEC:
-            log_i("Volume DOWN key pressed");
-            break;
-        default:
-            log_i("Unknown key pressed: 0x%x", key_event->value);
-            break;
-        }
-        return true; // 表示事件已处理
-    }
-    case SYS_DEVICE_EVENT:
-        log_i("=== SYS DEVICE EVENT DETECTED ===");
-        return false;
-    case SYS_NET_EVENT:
-        log_i("=== SYS NET EVENT DETECTED ===");
-        return false;
-    case SYS_BT_EVENT:
-        log_i("=== SYS BT EVENT DETECTED ===");
-        return false;
-    default:
-        return false;
-    }
-}
-
 static int default_init(void)
 {
     lwl_app_context_t *g_app_ctx = lwl_app_core_context_get_instance();
@@ -1399,10 +1385,6 @@ void app_default_mode(void)
         
         // 检测按键状态（保留原有的GPIO按键检测功能）
         check_key_status();
-        if (true && WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
-        ///    lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-        }
-        
         u32 g_curr_time = timer_get_ms();
 
         // 定期输出设备信息（减少频率以避免日志过多）
@@ -1432,26 +1414,6 @@ static void check_key_status(void)
     
     // 每100ms检查一次按键状态
     if (current_time - last_key_check_time >= 100) {
-        // 这里可以添加具体的按键GPIO检测
-        // 示例：检查某个GPIO引脚状态
-        // u8 current_key_state = gpio_read(KEY_GPIO_PIN);
-        
         last_key_check_time = current_time;
-        
-        // 如果需要检测GPIO按键，可以取消注释下面的代码
-        /*
-        if (current_key_state != last_key_state) {
-            if (current_key_state == 0) { // 按键按下（假设低电平有效）
-                log_i("=== GPIO KEY PRESSED ===");
-                log_i("Key press detected at: %d ms", current_time);
-                // GPIO按键按下时设置黄灯（所有模式）
-                set_led_yellow();
-            } else { // 按键释放
-                log_i("=== GPIO KEY RELEASED ===");
-                log_i("Key release detected at: %d ms", current_time);
-            }
-            last_key_state = current_key_state;
-        }
-        */
     }
 }
