@@ -276,6 +276,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
+	../../../../apps/ling_wl/app_mode/devices_check/devices_check.c \
 	../../../../apps/ling_wl/app_mode/update/update.c \
 	../../../../apps/ling_wl/app_mode/net_connected/net_connected.c \
 	../../../../apps/ling_wl/app_mode/net_connecting/net_connecting.c \

@@ -61,6 +61,9 @@ static int lwl_app_mode_switch_check(u8 app_mode)
 /*----------------------------------------------------------------------------*/
 int lwl_app_mode_switch_to(u8 app_mode)
 {
+    if (app_curr_mode == APP_DEVICE_CHECK_MODE) {
+        return false;
+    }
     if (app_curr_mode == app_mode) {
         return false;
     }
@@ -165,6 +168,11 @@ void lwl_app_mode_loop()
     case APP_WSS_CONNECTED_MODE:
         log_i("APP_WSS_CONNECTED_MODE\n");
         app_wss_connected_mode();
+        lwl_app_mode_exit_ok();
+        break;
+    case APP_DEVICE_CHECK_MODE:
+        log_i("APP_DEVICE_CHECK_MODE\n");
+        app_devices_check_mode();
         lwl_app_mode_exit_ok();
         break;
     }
