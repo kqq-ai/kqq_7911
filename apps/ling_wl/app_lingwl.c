@@ -75,8 +75,8 @@ static void wifi_monitor_thread(void *priv)
 static void lwl_app_task(void *priv)
 {
     log_i("lwl_app_task");
-    // lwl_app_init(APP_POWER_ON_MODE);
-    lwl_app_init(APP_DEFAULT_MODE);
+    lwl_app_init(APP_POWER_ON_MODE);
+    // lwl_app_init(APP_DEFAULT_MODE);
     while (true) {
         lwl_app_mode_loop();
     }
@@ -153,7 +153,7 @@ static void app_lingwl_main(void)
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
 
-    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"poweron.mp3");
     //uart_send_set_led_color(7500, 7000, 6000); /// on LED after power ON
 
     /* 创建异步任务处理任务 */

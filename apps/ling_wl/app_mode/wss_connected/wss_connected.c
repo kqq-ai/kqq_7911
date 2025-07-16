@@ -109,11 +109,11 @@ void app_wss_connected_mode(void)
         // 应用代码
         if (wss_application_loop(context->websockets_info)) {
             
-            // if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
-            //     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-            // } else {
-            //     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-            // }
+            if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
+                lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            } else {
+                lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+            }
         }
 /*         if( NULL == context->websockets_info ){
             if( WIFI_CONNECT_DHCP_SUCC == get_wifi_connect_status(NULL))

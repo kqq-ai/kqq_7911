@@ -13,7 +13,7 @@
 #define INIT_VOLUME_VALUE   70         /**< Initial volume value */
 
 #define DEC_BUF_LEN      12 * 1024     /**< Decoder buffer length (12KB) */
-#define STREAM_BUF_LEN   200 * 1024    /**< Stream buffer length (200KB) */
+#define STREAM_BUF_LEN   300 * 1024    /**< Stream buffer length (200KB) */
 
 /**
  * @brief Forward declaration of music player structure
@@ -144,7 +144,7 @@ int app_music_play_stream_music_with_callback(music_player *player, app_music_pl
  * @param len Length of data to write
  * @return 0 on success
  */
-int app_music_play_stream_write(music_player *player, void *buf, int len);
+int app_music_play_stream_write(music_player *player, void *buf, uint32_t len);
 
 /**
  * @brief Play music from local filesystem(VM) with completion callback

@@ -26,8 +26,8 @@
 #include "app_mode/lwl_app_framework.h"
 #include "protocol/cp/c_uart_p.h"
 
-#define INIT_SSID "1234567890"
-#define INIT_PWD  "1234567890"
+#define INIT_SSID "KQQ"
+#define INIT_PWD  "quickquick"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
@@ -143,7 +143,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
         /* 控制 led : 正在连接网络 褐色 */
-        //uart_send_set_led_color(COLOR_BROWN);
+        uart_send_set_led_color(COLOR_BROWN);
 
         break;
 
@@ -199,7 +199,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         /* 控制 led : 网络连接失败 灰色 */
         //todo play audo 罗天宇///////////////////////////////////
-        //uart_send_set_led_color(COLOR_GRAY);
+        uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -224,7 +224,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         }
         //todo play audo 罗天宇///////////////////////////////////
         /* 控制 led : 网络连接失败 灰色 */
-        //uart_send_set_led_color(COLOR_GRAY);
+        uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -240,7 +240,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         block_connect_sem_post(NULL); // 通知连接函数
         //   //todo play audo 罗天宇///////////////////////////////////
         /* 控制 led : 网络连接失败 灰色 */
-        //uart_send_set_led_color(COLOR_GRAY);
+        uart_send_set_led_color(COLOR_GRAY);
 
         break;
 
@@ -261,7 +261,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
 
         /* 控制 led : 联网成功 紫色 */
-        //uart_send_set_led_color(COLOR_PURPLE);
+        uart_send_set_led_color(COLOR_PURPLE);
         printf("the net connected enable led purple !\r\n");
 
         /* 存储 IP*/
@@ -283,7 +283,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
             wifi_store_mode_info(STA_MODE, temp_wifi_info.ssid, temp_wifi_info.pwd);
         }
         /* 将APP切换到 APP的连接成功模式 */
-        // lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
 
         break;
 
@@ -411,9 +411,9 @@ static void wifi_app_task(void *priv) // 主要是create wifi 线程的
     wifi_on();
 }
 
- static int wireless_net_init(void) // 主要是create wifi 线程的
- {
-     puts("wireless_net_init \n\n");
-     return thread_fork("wifi_app_task", 10, 1792, 0, 0, wifi_app_task, NULL);
+static int wireless_net_init(void) // 主要是create wifi 线程的
+{
+    puts("wireless_net_init \n\n");
+    return thread_fork("wifi_app_task", 10, 1792, 0, 0, wifi_app_task, NULL);
 } 
 late_initcall(wireless_net_init);
