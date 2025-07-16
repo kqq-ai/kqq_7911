@@ -189,6 +189,7 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
 
     // 开始扫描
     printf("----------------------wifi_scan_start--------------------------------\r\n");
+    uart_send_set_led_color(10000, 10000, 6000);
 
     /* 将WiFi 扫描任务添加到线程池中 */
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
@@ -231,6 +232,12 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
     }
 
     cJSON_AddStringToObject(root, "cmd_name", "wifi_scan");
+    extern char pt[35];  // 声明外部变量（不分配内存）
+        char sn_C_to_phone[16] = {0};
+        get_SN(sn_C_to_phone);
+        // strncpy(sn_C_to_phone, pt, 15);
+        sn_C_to_phone[15] = '\0';
+    cJSON_AddStringToObject(root, "sn", sn_C_to_phone);
     cJSON_AddNumberToObject(root, "return_code", ret);
     cJSON_AddStringToObject(root, "return_errstr", return_errstr);
 

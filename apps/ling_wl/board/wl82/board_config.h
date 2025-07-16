@@ -399,8 +399,8 @@
 #define CONFIG_PHONE_CALL_ADC_CHANNEL       1		//通话mic通道
 #define CONFIG_UAC_MIC_ADC_CHANNEL          1		//UAC mic通道
 #define CONFIG_AISP_LINEIN_ADC_CHANNEL      3		//本地唤醒LINEIN回采DAC通道
-#define CONFIG_AISP_MIC_ADC_GAIN            80		//本地唤醒mic增益
-#define CONFIG_AISP_LINEIN_ADC_GAIN         60		//本地唤醒LINEIN增益
+#define CONFIG_AISP_MIC_ADC_GAIN            99		//本地唤醒mic增益
+#define CONFIG_AISP_LINEIN_ADC_GAIN         99		//本地唤醒LINEIN增益
 #define CONFIG_AUDIO_LINEIN_CHANNEL         1		//LIENIN通道数
 #define CONFIG_AUDIO_LINEIN_CHANNEL_MAP     TCFG_LINEIN_CHANNEL_MAP
 #endif

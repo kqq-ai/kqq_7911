@@ -28,8 +28,8 @@ enum odmp_req_msg_event_type_e{
     ORMET_VAD_SPEAKER_START     = 51,
     ORMET_VAD_SPEAKER_END       = 52,
     // 状态
-    // ORMET_LOWER_POWER           = 61,
-    // ORMET_LOWER_BATTERY         = 62,
+    ORMET_LOWER_POWER           = 61,
+    ORMET_LOWER_BATTERY         = 62,
     ORMET_PLAY_START            = 53,
     ORMET_PLAY_NEAR_END         = 54,
     ORMET_PLAY_END              = 55,

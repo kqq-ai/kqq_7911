@@ -137,6 +137,13 @@ static void app_lingwl_main(void)
     uart0_hdl = app_uart_dev_init("uart0");
     context->uartdev = uart0_hdl;
 
+    // 初始化lfs
+    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
+    ASSERT(lfs_hdl);
+    context->lfs_hdl = lfs_hdl;
+    //app_lfs_cfgfile_init(context->lfs_hdl);
+    get_flash_app_cfg_data(context->lfs_hdl);
+
     // 初始化录音
     recorder_mode_init(&g_recorder);
     context->recorder = &g_recorder;
@@ -152,7 +159,8 @@ static void app_lingwl_main(void)
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
 
-    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+    // simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"PowerOn.mp3");
+    uart_send_set_led_color(7500, 7000, 6000); /// on LED after power ON
 
     /* 创建异步任务处理任务 */
     start_async_msg_loop();
@@ -169,13 +177,6 @@ static void app_lingwl_main(void)
 
     /* 初始化E端BLE握手处理任务 */
     ble_keep_alive_init();
-
-    // 初始化lfs
-    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
-    ASSERT(lfs_hdl);
-    context->lfs_hdl = lfs_hdl;
-    //app_lfs_cfgfile_init(context->lfs_hdl);
-    get_flash_app_cfg_data(context->lfs_hdl);
 
 
     /* 创建sc7a20 task */
@@ -392,6 +393,7 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
+            uart_send_set_led_color(7500, 7000, 6000); /// Net Succ
             simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器

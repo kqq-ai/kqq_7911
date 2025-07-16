@@ -4,6 +4,7 @@
 
 #include "generic/typedef.h"
 #include "generic/printf.h"
+#include "log_save/log_save.h"
 
 #define   __LOG_VERB      0
 #define   __LOG_DEBUG     1
@@ -53,10 +54,14 @@ struct logbuf {
 #define log_d_buf(data, size) printf_buf((data), (size))
 #endif
 
+
 #if __LOG_LEVEL > __LOG_INFO
 #define log_i(...)  do {} while (0)
 #elif defined __LOG_ENABLE
-#define log_i(...) log_print(__LOG_INFO, NULL, __VA_ARGS__);
+#define log_i(...) do { \
+    log_save(__LOG_INFO, NULL, __VA_ARGS__); \
+    log_print(__LOG_INFO, NULL, __VA_ARGS__); \
+} while(0)
 #else
 #define log_i(...) printf(__VA_ARGS__)
 #endif
@@ -70,7 +75,10 @@ struct logbuf {
 #if __LOG_LEVEL > __LOG_WARN
 #define log_w(...)  do {} while (0)
 #elif defined __LOG_ENABLE
-#define log_w(...) log_print(__LOG_WARN, NULL, __VA_ARGS__);
+#define log_w(...) do { \
+    log_print(__LOG_INFO, NULL, __VA_ARGS__); \
+    log_save(__LOG_INFO, NULL, __VA_ARGS__); \
+} while(0)
 #else
 #define log_w(...) printf(__VA_ARGS__)
 #endif
@@ -78,7 +86,10 @@ struct logbuf {
 #if __LOG_LEVEL > __LOG_ERROR
 #define log_e(...)  do {} while (0)
 #elif defined __LOG_ENABLE
-#define log_e(...) log_print(__LOG_ERROR, NULL, __VA_ARGS__);
+#define log_e(...) do { \
+    log_print(__LOG_INFO, NULL, __VA_ARGS__); \
+    log_save(__LOG_INFO, NULL, __VA_ARGS__); \
+} while(0)
 #else
 #define log_e(...) printf(__VA_ARGS__)
 #endif

@@ -20,6 +20,9 @@
 #include "bt_ble/client/ble_simple_client.h"
 #include "log.h"
 
+static OS_MUTEX wss_mutex_bin;             //
+
+static user_wss_recv_cb_t wss_cb_handler = NULL;
 
 /*******************************************************************************
 *   Websocket Client api
@@ -77,12 +80,20 @@ int wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
     //SSL加密时一次发送数据不能超过16K，用户需要自己分包
     //确认存在大于16K的数据包时，请修改发送逻辑
-    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    // return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ws_ret = websockets_client_send(websockets_info, (u8 *)buf, size, WCT_TXTDATA);
+    os_mutex_post(&wss_mutex_bin);
+    return ws_ret;
 }
 
 int wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size)
 {
-    return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    // return websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    os_mutex_pend(&wss_mutex_bin, 0);
+    int ws_ret =  websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
+    os_mutex_post(&wss_mutex_bin);
+    return ws_ret;
 }
 
 struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback)
@@ -90,7 +101,14 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
     int err;
     const char *origin_str = "jl791n://localhost";
     
+    if (!os_mutex_valid(&wss_mutex_bin)) {
+        os_mutex_create(&wss_mutex_bin);
+    }
+    // os_mutex_pend(&wss_mutex_bin, 0);
+    // os_mutex_post(&wss_mutex_bin);
+    
     log_i(" . ----------------- Client Websocket ------------------\r\n");
+    wss_cb_handler = websockets_callback;
     
     /* 0 . malloc buffer */
     struct websocket_struct *websockets_info = malloc(sizeof(struct websocket_struct));
@@ -99,7 +117,11 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
         return NULL;
     }
     /* 1 . register */
-    websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback);
+    if (url[2] == 's') {
+        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback);
+    } else {
+        websockets_client_reg(websockets_info, WEBSOCKET_MODE, websockets_callback);
+    }
 
     /* 2 . init */
     err = websockets_client_init(websockets_info, url, origin_str);
@@ -114,7 +136,6 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
         log_i("  . ! Handshake error !!!\r\n");
         goto exit_ws;
     }
-    log_i(" . Handshake success  %s \r\n",url);
 
     /* 4 . CreateThread */
     thread_fork("websocket_client_heart", 19, 512, 0,
@@ -144,4 +165,40 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
+}
+
+
+ void wss_server_reconnect()
+{
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if (context->wss_url == NULL) {
+        log_e("websockets has no URL!!!!\n");
+        return;
+    }
+    if (context->websockets_info != NULL) {
+        wss_server_disconnect(context->websockets_info);
+        context->websockets_info = NULL;
+    }
+    while (1) {
+        log_i("websockets try to reconnect\n");
+        lwl_app_context_t *context = lwl_app_core_context_get_instance();
+        char *secure_url = context->wss_url;
+
+        struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_cb_handler);
+
+        if (websockets_info == NULL) {
+            log_i("websockets init failed\n");
+            free(websockets_info);
+            // TODO 尝试重连WSS
+            // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+        } else {
+            /* 将websocket_info保存到全局上下文 */
+        log_i("websockets reconnected\n");
+            context->websockets_info = websockets_info;
+            return;
+            // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+        }
+        msleep(10);
+    }
+    return;
 }

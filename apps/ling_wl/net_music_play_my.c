@@ -666,7 +666,7 @@ static int __net_music_dec_file(void *priv)
 
     net_download_set_read_timeout(player->net_file, 1000);
 
-    log_i("volume: %d\n", player->volume)
+    log_i("volume: %d\n", player->volume);
 
     req.dec.cmd             = AUDIO_DEC_OPEN;
     req.dec.volume          = player->volume;
@@ -879,7 +879,7 @@ int app_music_play_stream_music_with_callback(music_player *player, app_music_pl
     player->dec_with_cb = 1;
     return 0;
 }
-int app_music_play_stream_write(music_player *player, void *buf, int len)
+int app_music_play_stream_write(music_player *player, void *buf, uint32_t len)
 {
     if (player->dec_ops == &cbuf_music_dec_ops) {
         return ring_queue_write(&player->queue, buf, len);
