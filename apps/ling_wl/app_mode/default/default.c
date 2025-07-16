@@ -1036,7 +1036,7 @@ static int default_unint(void)
 }
 
 #define HEAT_TIMEOUT 1000
-void app_default_mode(void)
+void app_default_mode1(void)
 {
     default_init();
     static u32 g_heat_timer;
@@ -1110,5 +1110,21 @@ static void check_key_status(void)
             last_key_state = current_key_state;
         }
         */
+    }
+}
+
+
+
+void app_default_mode(void)
+{
+    // power_on_init();
+
+    while (1) {
+        // 应用代码
+        mdelay(10);
+        if (lwl_app_mode_exitting()) {
+            default_unint();
+            return;
+        }
     }
 }

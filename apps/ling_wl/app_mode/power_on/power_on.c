@@ -32,17 +32,7 @@ int app_power_on_event_handler(struct application *app, struct sys_event *event)
 
 bool has_saved_wifi()
 {
-    
-
-
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    strcpy(context->wifi_ssid, "hello");
-    strcpy(context->wifi_passwd, "88888888");
-
-    strcpy(context->lw_ota_md5, "null");
-    strcpy(context->lw_x_dev_code, "WL00000001");
-    strcpy(context->lw_ota_ver_name, "null");
-    context->lw_ota_ver_code = 70;
+// TODO
     return true;
 }
 
