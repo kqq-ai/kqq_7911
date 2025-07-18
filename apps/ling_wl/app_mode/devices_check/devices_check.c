@@ -51,8 +51,6 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "http/http_cli.h"
 
-static void mode6_audio_callback(void *priv); // 声明提前到文件最前面
-
 // 为模式3麦克风VAD功能添加必要的头文件
 // 这些头文件可能需要根据实际的SDK结构进行调整
 // #include "audio/recorder.h"     // 录音器相关头文件
@@ -126,7 +124,8 @@ static u32 g_large_motion_count = 0;           // 大幅晃动计数
 
 // 模式6 E端设备相关变量
 static int g_current_e_device_index = -1;      // 当前E端设备索引
-
+lwl_eend_dev_t *target_pdev = NULL; // 当前目标E端设备指针
+lwl_eend_dev_t *current_pdev = NULL; // 当前连接的E端设备指针
 // ========== 模式6 串行状态机重构 ===========
 typedef enum {
     MODE6_IDLE = 0,        // 空闲状态，未进行任何操作
@@ -147,77 +146,87 @@ static char *g_mode6_e_sn_list[2] = {"KPCNC5F10CEEEG5", "KPCNC5F10SEEEH1"};
 static u8 g_mode6_action_in_progress = 0;
 
 // ========== 模式6回调函数声明 ===========
-static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv);
-static void mode6_e_disconnect_cb(bka_cmd_code_e code, void *priv);
 static void mode6_audio_callback(void *priv);
+
+static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
+{
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    char sn_string[SN_SIZE] = "(NULL)";
+    if (pdev) {
+        pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    }
+    log_i("bka_e_turn_on code %d %s\n", code, sn_string);
+
+    if (BKA_CMD_CODE_COMPL == code) {
+        current_pdev = pdev; // 设置当前连接的E端设备指针
+    } else {
+        uint cmd_id;
+        pdev->handshake_info.need_handshake = true;
+        // bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
+    }
+}
+static void switch_to_e_target(char *target)
+{
+    if (target == NULL) return;
+    log_i("Switching to target: %s", target);
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(target);  // 查找目标设备
+    if (pdev == NULL) return;
+    
+    uint cmd_id;
+    pdev->handshake_info.need_handshake = true;
+    bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
+    log_i("+-- -+");
+    // 参考default_e_turn_on函数中的命令发送方式
+}
+
+static void turn_off_e_target(char *target)
+{
+    if (target == NULL) return;
+    log_i("turn off EEEEEEEEEEEE target: %s", target);
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(target);  // 查找目标设备
+    if (pdev == NULL) return;
+    
+    uint cmd_id;
+    pdev->handshake_info.need_handshake = true;
+    bka_e_turn_off(pdev, NULL, pdev, &cmd_id); // E OFF
+    log_i("+-- -+");
+    // 参考default_e_turn_on函数中的命令发送方式
+}
 
 // 模式6推进函数
 static void mode6_try_next_step(void)
 {
-    if (g_mode6_action_in_progress) return;
-    g_mode6_action_in_progress = 1;
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    char *target_sn = g_mode6_e_sn_list[g_mode6_e_index];
-    lwl_eend_dev_t *pdev = NULL;
-    MapIterator it = map_begin(context->dev_map);
-    MapIterator end = map_end(context->dev_map);
-    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
-        lwl_eend_dev_t *tmp = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (strncmp(tmp->sn, target_sn, 15) == 0) {
-            pdev = tmp;
-            break;
-        }
-    }
-    map_iterator_unlock(it);
-
-    switch (g_mode6_state) {
-    case MODE6_CONNECT_1:
-    case MODE6_CONNECT_2:
-        if (pdev) {
-            pdev->handshake_info.need_handshake = true;
-            uint cmd_id;
-            //发送开机命令到E端设备
-            bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id);
-        } else {
-            // 设备找不到，重试
-            g_mode6_action_in_progress = 0;
-        }
-        break;
-    case MODE6_PLAY_1:
-        gpio_direction_output(IO_PORTA_00, 0); // 关闭C端扬声器
-        app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev1.mp3",
+    
+    // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
+    if (!g_mode6_playing_prompt && !g_audio_playing && target_pdev == current_pdev) {
+        log_i("MODE 6: Starting loop audio playback");
+        
+        // 播放循环测试音频，使用回调
+        static int e2 = 0;
+        int err = 0;
+        if( 0 == e2 ){
+            //switch_to_e_target("KPCNC5F10CEEEG5");
+            e2 = 3;
+            err = app_music_play_local_music_with_callback(
+            context->music_player, 
+            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev1.mp3", 
             mode6_audio_callback, NULL);
-        break;
-    case MODE6_PLAY_2:
-        gpio_direction_output(IO_PORTA_00, 0); // 关闭C端扬声器
-        app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev2.mp3",
+        }else{
+            //switch_to_e_target("KPCNC5F10SEEEH1");
+            e2 = 0;
+            err = app_music_play_local_music_with_callback(
+            context->music_player, 
+            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev2.mp3", 
             mode6_audio_callback, NULL);
-        break;
-    default:
-        g_mode6_action_in_progress = 0;
-        break;
-    }
-}
-
-// 连接回调
-static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
-{
-    if (g_current_mode != WORK_MODE_6) return;
-    int dev_idx = g_mode6_e_index;
-    if ((g_mode6_state == MODE6_CONNECT_1 && dev_idx == 0) ||
-        (g_mode6_state == MODE6_CONNECT_2 && dev_idx == 1)) {
-        if (code == BKA_CMD_CODE_COMPL) {
-            g_mode6_action_in_progress = 0;
-            g_mode6_state = (dev_idx == 0) ? MODE6_PLAY_1 : MODE6_PLAY_2;
-            mode6_try_next_step();
+        }
+        
+            
+        if (err == 0) {
+            g_audio_playing = 1;
+            log_i("MODE 6: Loop audio started successfully");
         } else {
-            // 连接失败，重试
-            g_mode6_action_in_progress = 0;
-            mode6_try_next_step();
+            log_i("MODE 6: Loop audio start failed, error: %d", err);
         }
     }
 }
@@ -225,23 +234,25 @@ static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
 // 音频播放回调
 static void mode6_audio_callback(void *priv)
 {
-    if (g_current_mode != WORK_MODE_6) return;
-    if (g_mode6_state == MODE6_PLAY_PROMPT) {
-        g_mode6_action_in_progress = 0;
-        g_mode6_state = MODE6_CONNECT_1;
-        mode6_try_next_step();
-    } else if (g_mode6_state == MODE6_PLAY_1) {
-        g_mode6_action_in_progress = 0;
-        // 播放完第1设备，直接连接第2设备
-        g_mode6_e_index = 1;
-        g_mode6_state = MODE6_CONNECT_2;
-        mode6_try_next_step();
-    } else if (g_mode6_state == MODE6_PLAY_2) {
-        g_mode6_action_in_progress = 0;
-        // 播放完第2设备，直接连接第1设备
-        g_mode6_e_index = 0;
-        g_mode6_state = MODE6_CONNECT_1;
-        mode6_try_next_step();
+    log_i("MODE E on: EEEEEEEEEEEE, starting loop audio");
+    gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
+    static int e2 = 0;
+    if( 0 == e2 ){
+        switch_to_e_target("KPCNC5F10CEEEG5");
+        e2 = 3;
+    }else{
+        switch_to_e_target("KPCNC5F10SEEEH1");
+        e2 = 0;
+    }
+    if (g_mode6_playing_prompt) {
+        // 提示音播放完成，开始播放循环音频
+        log_i("MODE 3: Prompt audio callback - finished, starting loop audio");
+        g_mode6_playing_prompt = 0;
+        g_audio_playing = 0;
+    } else {
+        // 循环音频播放完成，准备重新播放
+        log_i("MODE 3: Loop audio callback - finished, will restart");
+        g_audio_playing = 0;
     }
 }
 
@@ -612,8 +623,6 @@ static void mode3_audio_callback(void *priv)
         g_audio_playing = 0;
     }
 }
-
-
 
 // 模式4音频播放回调函数
 static void mode4_audio_callback(void *priv)

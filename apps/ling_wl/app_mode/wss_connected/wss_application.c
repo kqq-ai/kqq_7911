@@ -564,7 +564,7 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
             // 等待 VAD 超时
             log_i("ENABLE VAD");
             update_time();
-            vad_timeout = 5000;
+            vad_timeout = 10000;
             threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, &vad_timeout);
             STEP_TO_NEXT_STEP(STATE_PLAYINTRO_PLAYING,      STATE_PLAYINTRO_VAD);
         }

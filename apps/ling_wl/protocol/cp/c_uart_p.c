@@ -34,6 +34,7 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     }   break;
     case UART_CMD_POWER_OFF:{ // 关机控制
         log_i("the UART_CMD_POWER_OFF !\r\n");
+        break; /// fot test TODO
         extern int OTA_download_running;
         if( OTA_download_running > 0){
             break; /// reset after OTA
