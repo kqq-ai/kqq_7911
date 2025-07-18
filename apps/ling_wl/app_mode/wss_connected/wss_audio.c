@@ -128,6 +128,20 @@ static void wss_asr_data_to_server(AsrData *asr_data)
 
 
 
+/**
+ * @brief 音频上传主循环任务（VAD触发后调用）
+ * @details
+ *   1. 设置录音数据回调为 recorder_data_to_data_queue（数据进入 g_asr_data_queue）
+ *   2. 发送音频开始状态
+ *   3. 优先上传 ringbuffer 中残留数据，再上传 data queue 数据
+ *   4. 若检测到 g_recording == false（VAD结束），
+ *      - 切回 ringbuffer 回调
+ *      - 发送音频结束状态
+ *      - 设置 LED
+ *      - 投递 wait_vad_task 任务
+ *   5. 每轮循环 sleep 10ms
+ * @param priv 未使用
+ */
 static void start_audio_upload(void *priv)
 {
     log_i("Start audio upload.");
@@ -173,6 +187,13 @@ static void start_audio_upload(void *priv)
     }
 }
 
+/**
+ * @brief 等待VAD触发的独立线程
+ * @details
+ *   1. 等待 vad_timeout 毫秒内，如果检测到VAD有响应，则重新开始音频上传
+ *   2. 等待超时后，关闭录音，重置相关状态
+ * @param priv 指向 int 类型的 vad_timeout 毫秒数
+ */
 void wait_vad_task(void *priv)
 {
     int vad_timeout = *((int*)priv);
@@ -197,6 +218,17 @@ void wait_vad_task(void *priv)
     // wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
 }
 
+/**
+ * @brief 音频数据流回调（供ODM协议层注册）
+ * @details
+ *   当收到音频数据流（如TTS、ASR等）时，通过此回调将数据分片写入播放器进行流式播放。
+ *   - data: 指向音频数据的指针
+ *   - len:  音频数据长度（字节）
+ *   内部会自动分片写入播放器，支持大数据分段处理。
+ * @param data 音频数据指针
+ * @param len  音频数据长度
+ * @return 总是返回0（可根据需要返回写入状态）
+ */
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
     const uint32_t MAX_CHUNK_SIZE = 50000;
@@ -225,9 +257,16 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
 }
 
-//=================================================================================================
-// Recorder
-//=================================================================================================
+/**
+ * @brief 录音VAD（语音活动检测）回调
+ * @details
+ *   当录音模块检测到人声开始或结束时自动调用。
+ *   - type == 1：检测到人声开始（VAD start），设置 g_recording = true
+ *   - type == 0：检测到人声结束（VAD stop），设置 g_recording = false
+ *   该回调用于驱动音频上传流程的启动与终止。
+ * @param priv 未使用
+ * @param type 1=人声开始，0=人声结束
+ */
 static void recorder_vad_cb(void* priv, int type)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
@@ -255,15 +294,16 @@ void wss_audio_init()
     g_app_ctx = lwl_app_core_context_get_instance();
     
 
-    /* UART指令开启C端le audio */
+    /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);
 
-    /* 注册音频数据回调 */
+    /* 注册音频数据回调，用于本地播放 */
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
-    /* 设置VAD回调 */
+
+    /* 设置VAD回调，触发音频上传 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
 
-    /* 默认不设置录音上传回调 */
+    /* 循环录音数据写入回调，默认不上传 */
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
 
     /* 关闭录音 */

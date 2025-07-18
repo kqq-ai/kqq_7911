@@ -480,9 +480,6 @@ void wss_application_init()
     
     wss_audio_init();
 
-    /* UART指令开启C端le audio */
-    uart_send_open_le_audio(g_app_ctx->mac);
-
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(wss_app_lwl_event_handler_cb);
     /* 注册odmp事件回调 */
