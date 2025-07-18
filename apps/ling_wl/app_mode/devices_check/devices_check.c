@@ -139,7 +139,6 @@ typedef enum {
 
 static mode6_state_e g_mode6_state = MODE6_IDLE;
 static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
-static char *g_mode6_e_sn_list[2] = {"KPCNC5F10CEEEG5", "KPCNC5F10SEEEH1"};
 // 标志“模式6”相关动作是否正在进行
 // 1：有动作在执行（如连接、播放等），防止重复或并发操作
 // 0：无动作，允许推进新流程
@@ -147,6 +146,49 @@ static u8 g_mode6_action_in_progress = 0;
 
 // ========== 模式6回调函数声明 ===========
 static void mode6_audio_callback(void *priv);
+int devices_check_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out);
+static void devices_check_cb(bka_cmd_code_e code, void *priv);
+
+#define MAX_PDEV_LIST 16
+static lwl_eend_dev_t* pdev_list[MAX_PDEV_LIST] = {0};
+static int pdev_list_count = 0;
+
+// 判断pdev是否已在列表中
+static int is_pdev_in_list(lwl_eend_dev_t* pdev) {
+    for (int i = 0; i < pdev_list_count; ++i) {
+        if (pdev_list[i] == pdev) return 1;
+    }
+    return 0;
+}
+
+// 添加pdev到列表
+static void add_pdev_to_list(lwl_eend_dev_t* pdev) {
+    if (!pdev || is_pdev_in_list(pdev) || pdev_list_count >= MAX_PDEV_LIST) return;
+    pdev_list[pdev_list_count++] = pdev;
+    char sn_string[SN_SIZE] = "(NULL)";
+    pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    log_i("[PDEV_LIST] Added: %s, total: %d", sn_string, pdev_list_count);
+    
+    uint32_t cmd_id;
+    int ret = devices_check_e_turn_on(pdev, devices_check_cb, pdev, &cmd_id);
+    log_i("turn on cmd_id: %d", ret);
+}
+
+// 从列表中移除pdev
+static void remove_pdev_from_list(lwl_eend_dev_t* pdev) {
+    for (int i = 0; i < pdev_list_count; ++i) {
+        if (pdev_list[i] == pdev) {
+            for (int j = i; j < pdev_list_count - 1; ++j) {
+                pdev_list[j] = pdev_list[j + 1];
+            }
+            pdev_list[--pdev_list_count] = NULL;
+            char sn_string[SN_SIZE] = "(NULL)";
+            pdev->get_string(pdev, sn_string, sizeof(sn_string));
+            log_i("[PDEV_LIST] Removed: %s, total: %d", sn_string, pdev_list_count);
+            break;
+        }
+    }
+}
 
 static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
 {
@@ -165,13 +207,15 @@ static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
         // bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
     }
 }
-static void switch_to_e_target(char *target)
+static void switch_to_e_target(lwl_eend_dev_t* pdev)
 {
-    if (target == NULL) return;
-    log_i("Switching to target: %s", target);
-    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(target);  // 查找目标设备
     if (pdev == NULL) return;
+    char sn_string[SN_SIZE] = "(NULL)";
+    pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    log_i("Switching to target: %s", sn_string);
     
+    // 设置新的目标设备
+    target_pdev = pdev;
     uint cmd_id;
     pdev->handshake_info.need_handshake = true;
     bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
@@ -179,6 +223,7 @@ static void switch_to_e_target(char *target)
     // 参考default_e_turn_on函数中的命令发送方式
 }
 
+//TODO test
 static void turn_off_e_target(char *target)
 {
     if (target == NULL) return;
@@ -203,18 +248,13 @@ static void mode6_try_next_step(void)
         log_i("MODE 6: Starting loop audio playback");
         
         // 播放循环测试音频，使用回调
-        static int e2 = 0;
         int err = 0;
-        if( 0 == e2 ){
-            //switch_to_e_target("KPCNC5F10CEEEG5");
-            e2 = 3;
+        if((g_mode6_e_index&1) == 0 ){
             err = app_music_play_local_music_with_callback(
             context->music_player, 
             CONFIG_VOICE_PROMPT_FILE_PATH"test_dev1.mp3", 
             mode6_audio_callback, NULL);
         }else{
-            //switch_to_e_target("KPCNC5F10SEEEH1");
-            e2 = 0;
             err = app_music_play_local_music_with_callback(
             context->music_player, 
             CONFIG_VOICE_PROMPT_FILE_PATH"test_dev2.mp3", 
@@ -234,24 +274,18 @@ static void mode6_try_next_step(void)
 // 音频播放回调
 static void mode6_audio_callback(void *priv)
 {
-    log_i("MODE E on: EEEEEEEEEEEE, starting loop audio");
     gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
-    static int e2 = 0;
-    if( 0 == e2 ){
-        switch_to_e_target("KPCNC5F10CEEEG5");
-        e2 = 3;
-    }else{
-        switch_to_e_target("KPCNC5F10SEEEH1");
-        e2 = 0;
-    }
+    g_mode6_e_index++;
+    if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
+    switch_to_e_target(pdev_list[g_mode6_e_index]);
     if (g_mode6_playing_prompt) {
         // 提示音播放完成，开始播放循环音频
-        log_i("MODE 3: Prompt audio callback - finished, starting loop audio");
+        log_i("MODE 6: Prompt audio callback - finished, starting loop audio");
         g_mode6_playing_prompt = 0;
         g_audio_playing = 0;
     } else {
         // 循环音频播放完成，准备重新播放
-        log_i("MODE 3: Loop audio callback - finished, will restart");
+        log_i("MODE 6: Loop audio callback - finished, will restart");
         g_audio_playing = 0;
     }
 }
@@ -1225,8 +1259,6 @@ int devices_check_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, vo
     return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_on, sizeof(cmd_turn_on), cb, priv, cmd_id_out);
 }
 
-lwl_eend_dev_t *pdev;
-
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -1236,27 +1268,32 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE: {
-        log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE %d %d", pdev, p_eend_dev);
+        log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE %d %d", p_eend_dev, p_eend_dev);
         if (p_eend_dev != NULL) {
             char sn_string[SN_SIZE] = "(NULL)";
             p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
             log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE %s", sn_string);
-        }
-        if (pdev != p_eend_dev) {
-            pdev = p_eend_dev;
-            uint32_t cmd_id;
-            int ret = devices_check_e_turn_on(pdev, devices_check_cb, pdev, &cmd_id);
-            log_i("turn on cmd_id: %d", ret);
+            add_pdev_to_list(p_eend_dev); // 新增：维护pdev列表
         }
     }   break;
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE: {
         char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
         log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
+        if (p_eend_dev->distance_info.distance_type == DISTANCE_0) {
+            add_pdev_to_list(p_eend_dev); // 新增：维护pdev列表
+        } else if (p_eend_dev->distance_info.distance_type == DISTANCE_2 || p_eend_dev->distance_info.distance_type == DISTANCE_3) {
+            remove_pdev_from_list(p_eend_dev); // 新增：从列表中移除pdev
+        }
     }   break;
     case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
         log_i("ORMET_NEW_DEVICE_IN");
         break;
+    // case LWL_EVENT_TYPE_EEND_DEVLOST:
+    //     if (p_eend_dev != NULL) {
+    //         remove_pdev_from_list(p_eend_dev);
+    //     }
+        // break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK: {
         log_i("=== UART IO KEY SHORT CLICK DETECTED ===");
         log_i("Button pressed via UART interface");
