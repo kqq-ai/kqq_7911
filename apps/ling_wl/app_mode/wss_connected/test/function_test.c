@@ -229,17 +229,3 @@ void function_test_app_uninit()
     lwl_event_handler_remove(function_test_lwl_event_handler_cb);
 }
 
-static AsrData asr_data_frame;
-void function_test_app_loop()
-{
-    g_curr_time = timer_get_ms();
-
-    if (g_test_mode) {
-        if (!my_blocking_queue_is_empty(&g_asr_data_queue)) {
-            /* 从ASR缓冲取数据，不允许发生阻塞 */
-            my_blocking_queue_dequeue(&g_asr_data_queue, &asr_data_frame);
-            /* 日志输出 */
-            wss_asr_data_to_console(&asr_data_frame);
-        }
-    }
-}

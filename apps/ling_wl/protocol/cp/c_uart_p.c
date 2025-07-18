@@ -122,6 +122,10 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
     return dev_write(g_dev_uart_hdl, resp_packet, 8 + len);
 }
 
+/// @brief  调节音量
+/// @param busy_status 通常为 1
+/// @param volume 音量，范围 0-16
+/// @return 
 int uart_response_synch_status(uint8_t busy_status, uint8_t volume)
 {
     uint8_t busy_status_payload[2] = {busy_status, volume};

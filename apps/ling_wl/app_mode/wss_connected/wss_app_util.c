@@ -10,40 +10,16 @@
 #define UUID_FIXED "abcdef-123456"
 
 
-int communication_ping()
+char sn_c_id[25];
+
+int send_audio_status(int type, int event) 
 {
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL)
         return -1;
 
-    char uuid[LING_UUID_BUFSIZE];
-    generate_uuid_my(uuid);
-
-    char *send_data = NULL;
-    loswssp_create_message_event_ping(UUID_FIXED, &send_data);
-    if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("Error %s %d.", __FILE__, __LINE__);
-        loswssp_destroy_message(send_data);
-
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
-        return -1;
-    }
-    log_i(send_data);
-    loswssp_destroy_message(send_data);
-    return 0;
-}
-
-
-int send_audio_status(const char *c_id, int type, int event) 
-{
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL)
-        return -1;
-
-    char *send_data = odmp_audio_status(c_id, type, event);
+    get_SN(&sn_c_id);
+    char *send_data = odmp_audio_status(sn_c_id, type, event);
 
     if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);
@@ -61,7 +37,7 @@ int send_audio_status(const char *c_id, int type, int event)
     return 0;
 }
 
-int send_req_message(const char *c_id, const char *send_id, bool is_play, int event_type) 
+int send_req_message(const char *send_id, bool is_play, int event_type) 
 {
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL)
@@ -71,7 +47,8 @@ int send_req_message(const char *c_id, const char *send_id, bool is_play, int ev
     int targets_num = 0;
     make_5m_edev_targets(&targets, &targets_num);
 
-    char *send_data = odmp_req_message(targets, targets_num, c_id, send_id, is_play, event_type);
+    get_SN(&sn_c_id);
+    char *send_data = odmp_req_message(targets, targets_num, sn_c_id, send_id, is_play, event_type);
 
     if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);
