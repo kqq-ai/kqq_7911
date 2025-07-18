@@ -1,23 +1,40 @@
 /**
- * @author chuxuanhuang
+ * @author luotianyu
  * @brief 
  *   +----> IDLE
  *   |
- * POWER_ON -------> NET_CONNECTING <-------> NET_CONNECTED
- *   |                   ^    ^                     ^
- *   |                   |    |                     |
- *   +----> DEFAULT <----+    +---- WSS_CONNECTED <-+
+ * POWER_ON -------> INIT -------> MODE_1 -------> MODE_2 -------> MODE_3 -------> MODE_4 -------> MODE_5 -------> MODE_6(串行状态) -------> MODE_7
+ *   ^                                                                                                                        |
+ *   |------------------------------------------------------------------------------------------------------------------------+
  * 
- * POWER 上电模式
- * IDLE 空闲模式（无任务不代表低功耗）
- * DEFAULT 默认模式：
- *     默认开启BLE ADV，提供配网功能
- * NET_CONNECTING 连接模式
- *     尝试连接WIFI
- * NET_CONNECTED 已连接WIFI的模式
- *     尝试连接后端服务器
- * WSS_CONNECTED 后端服务器连接成功模式
- *     可以进行应用逻辑处理
+ * 模式说明：
+ * INIT         初始模式（绿灯常亮）
+ * MODE_1       触摸按键检测
+ * MODE_2       所有颜色循环闪烁
+ * MODE_3       循环播放音频（C端播放）
+ * MODE_4       麦克风VAD检测
+ * MODE_5       加速度传感器测试
+ * MODE_6       串行状态机（E端设备音频循环播放，含多子状态）
+ * MODE_7       预留，进入时播放test_bly.mp3
+ * 
+ * 按键短按依次切换模式，MODE_7后回到INIT，循环。
+ * 
+ * ── MODE_6 串行状态子状态机 ──
+ * 
+ *   +-------------------+
+ *   |                   v
+ * [IDLE] -> [PLAY_PROMPT] -> [CONNECT_1] -> [PLAY_1] -> [CONNECT_2] -> [PLAY_2]
+ *    ^                                                      |
+ *    +------------------------------------------------------+
+ * 
+ * 说明：
+ *   - IDLE         ：空闲
+ *   - PLAY_PROMPT  ：播放提示音
+ *   - CONNECT_1    ：连接第1个E端设备
+ *   - PLAY_1       ：第1设备连接成功后播放音频
+ *   - CONNECT_2    ：连接第2个E端设备
+ *   - PLAY_2       ：第2设备连接成功后播放音频
+ *   - PLAY_2后回到CONNECT_1，循环
  */
 #include "devices_check.h"
 #include "../lwl_app_framework.h"

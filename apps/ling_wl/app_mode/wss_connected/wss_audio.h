@@ -1,5 +1,5 @@
-#ifndef __WSS_APPLICATION_H__
-#define __WSS_APPLICATION_H__
+#ifndef __WSS_AUDIO_H__
+#define __WSS_AUDIO_H__
 
 #include "cpu.h"
 #include "wss/wss_client.h"

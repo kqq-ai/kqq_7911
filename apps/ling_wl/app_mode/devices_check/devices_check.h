@@ -1,5 +1,5 @@
-#ifndef __DEFAULT_H__
-#define __DEFAULT_H__
+#ifndef __DEVICE_CHECK_H__
+#define __DEVICE_CHECK_H__
 
 #include "app_core.h"
 

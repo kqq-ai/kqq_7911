@@ -32,10 +32,6 @@ static u32 g_heat_timer = 0;
 #define WAIT_AUDIO_RESP_TIMEOUT 5000
 static u32 g_wait_audio_resp_timer = 0;
 
-static int reci_text_len =0;
-
-static bool g_test_mode = false;
-
 static int g_exception_exit = false;
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -349,7 +345,6 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
             if (pkg->audio_status.event == OASE_START && !g_audio_playing) {
                 log_i("AUDIO_STATUS: OASE_START\n");
                 g_audio_play_end = false;
-                reci_text_len = 0;
                 STEP_TO_NEXT_STEP(STATE_PLAYINTRO_SWITCH,   STATE_PLAYINTRO_PLAYING);
                 STEP_TO_NEXT_STEP(STATE_ONEONONE_SWITCH,    STATE_ONEONONE_PLAYING);
                 g_audio_playing = true;
@@ -384,7 +379,6 @@ static int odmp_rsp_cbk(int type, odmp_package_t *pkg)
         }
         break;
     case OR_MESSAGE_TEXT:
-        reci_text_len+=strlen(pkg->message_text.text);
         if (pkg->message_text.type == 1)
             log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
         if (pkg->message_text.type == 2)
@@ -533,8 +527,6 @@ bool wss_application_loop(struct websocket_struct *websockets_info)
     }
     return false;
 }
-
-static void wait_vad_task(void *priv);
 
 static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
 {

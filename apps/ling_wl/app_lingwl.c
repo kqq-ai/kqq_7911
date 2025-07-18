@@ -103,10 +103,6 @@ void base_lwl_event_handler(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
         power_set_soft_poweroff();
         break;
-    // case LWL_EVENT_TYPE_UART_SYNC:
-    //     log_i("SYNC");
-    //     uart_response_synch_status(1);
-    //     break;
     }
 }
 
