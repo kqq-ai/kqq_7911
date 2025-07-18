@@ -3,7 +3,6 @@
 
 
 #include "cpu.h"
-#include "wss/wss_client.h"
 
 
 void function_test_app_init();

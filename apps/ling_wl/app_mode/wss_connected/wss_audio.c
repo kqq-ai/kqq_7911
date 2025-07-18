@@ -67,10 +67,10 @@ void wss_app_recorder_en(u8 en)
     if (context && context->recorder) {
         if (en && recorder_get_play_pause_state(context->recorder) == 0) {
             recorder_start(context->recorder); /* 开启录音编码 */
-            uart_send_set_led_color(7500, 7000, 9500);//开启麦克风
+            uart_send_set_led_color(7500, 7000, 9500);//麦克风开启时灯光变橙色
         } else if(!en && recorder_get_play_pause_state(context->recorder) == 1) {
             recorder_stop(context->recorder); /* 停止录音编码 */
-            uart_send_set_led_color((7500, 7000, 6000));//关闭麦克风
+            uart_send_set_led_color((7500, 7000, 6000));//麦克风关闭时灯光变白色
         }
     }
 }
@@ -151,7 +151,6 @@ static void start_audio_upload(void *priv)
         // wss_application_exception_exit();
         return;
     }
-    uart_send_set_led_color(10000, 6000, 10000);
     while (true) {
         // if (is_edev_far_away(g_curr_edev)) { /* 当前设备距离 > 5 */
         //     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
@@ -179,8 +178,6 @@ static void start_audio_upload(void *priv)
                 // wss_application_exception_exit();
                 return;
             }
-            uart_send_set_led_color(7500, 7000, 6000); /// baby talk finish
-            threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
             return;
         }
         msleep(10);

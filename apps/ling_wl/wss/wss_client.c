@@ -15,8 +15,6 @@
 
 #include "bt_ble/client/ble_distance.h"
 
-#include "protocol/lingos/loswssp.h"
-
 #include "bt_ble/client/ble_simple_client.h"
 #include "log.h"
 
@@ -178,7 +176,7 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
 }
 
 
- void wss_server_reconnect()
+void wss_server_reconnect()
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context->wss_url == NULL) {

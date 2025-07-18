@@ -23,14 +23,11 @@
 #include "../lwl_app_framework.h"
 #include "../lwl_app_core.h"
 #include "../wss_connected/wss_application.h"
-#include "../wss_connected/test/eend_battery_live_test.h"
 #include "log.h"
 #include "ota/http_ota.h"
 
 // #include "protocol/odm/odmp.h"
 // #include "protocol/odm/odm_util.h"
-
-#include "protocol/lingos/loswssp.h"
 
 #include "wss/wss_client.h"
 
@@ -57,7 +54,6 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
         } else {
             // odmp process
             odmp_rsp_handler(buf, len);
-            // loswssp_rsp_handler(buf, len);
         }
         break;
     case WS_BIN_FRAME: // binary frame

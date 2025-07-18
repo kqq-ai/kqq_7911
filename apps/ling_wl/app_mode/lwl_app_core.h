@@ -2,7 +2,6 @@
 #define __LWL_APP_CORE_H__
 
 #include "cpu.h"
-#include "wss/wss_client.h"
 #include "audio/recorder.h"
 #include "net_music_play_my.h"
 #include "os/os_api.h"

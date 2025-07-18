@@ -8,7 +8,6 @@
 #include "bt_ble/client/ble_distance.h"
 #include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
-#include "gpio.h"
 #include "device.h"
 #include "util/threadpool_tasks.h"
 
@@ -22,15 +21,9 @@
 
 static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event);
 
-#define ENABLE 1
-#define DISABLE 0
-
-
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
-#define WAIT_AUDIO_RESP_TIMEOUT 5000
-static u32 g_wait_audio_resp_timer = 0;
 
 static int g_exception_exit = false;
 
@@ -504,13 +497,16 @@ void wss_application_uninit()
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(NULL);
     /* 取消注册loswssp事件回调 */
-    loswssp_register_rsp_cbk(NULL);
+    odmp_register_rsp_cbk(NULL);
 }
 
 bool wss_application_loop(struct websocket_struct *websockets_info)
 {
     g_curr_time = timer_get_ms();
     ///ASSERT(websockets_info != NULL);
+    if (wss_application_check_exit() || websockets_info == NULL) {
+        return true;
+    }
 
     msleep(10);
 
@@ -519,9 +515,6 @@ bool wss_application_loop(struct websocket_struct *websockets_info)
         g_heat_timer = g_curr_time;
     }
 
-    if (wss_application_check_exit()) {
-        return true;
-    }
     return false;
 }
 
@@ -533,8 +526,6 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
         if (msg_event != ORMET_INITIAL_SETUP &&
             msg_event != ORMET_NEAR_TRIGGER) return;
             STEP_TO_NEXT_STEP(STATE_IDLE,                   STATE_ONLINE);// TODO
-            // gpio_direction_output(IO_PORTA_00, 1);  //enable C speaker
-            // gpio_direction_output(IO_PORTB_02, 0);  // disable E speaker
         break;
     case STATE_ONLINE:
         if (msg_event != ORMET_BUTTON_TRIGGER &&
@@ -556,8 +547,6 @@ static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event)
         if (msg_event == ORMET_SWITCH_SUCCESS) {
             g_edev_last = p_dev;
             log_i("Play intro switch success, E sn: %s", p_dev->sn);
-            gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-            gpio_direction_output(IO_PORTB_02, 1);
         }
             
         // if (!g_edev_target == p_dev) return;

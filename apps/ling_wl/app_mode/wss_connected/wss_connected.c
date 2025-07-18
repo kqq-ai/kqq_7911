@@ -29,6 +29,7 @@
 #include "bt_ble/ble_combined.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
+#include "gpio.h"
 
 #include "bt_ble/app_wifi_manage.h"
 
@@ -82,6 +83,8 @@ static int wss_connected_init(void)
     ble_simple_server_module_enable(0);
     ble_simple_client_module_enable(1);
     wss_application_init();
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
 #endif
     return 0;
 }
@@ -89,6 +92,8 @@ static int wss_connected_init(void)
 static int wss_connected_unint(void)
 {
     wss_application_uninit();
+    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
+    gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker
 
     /* 退出wss_connected模式时，关闭WSS连接，释放资源 */
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
@@ -115,19 +120,6 @@ void app_wss_connected_mode(void)
                 lwl_app_mode_switch_to(APP_DEFAULT_MODE);
             }
         }
-/*         if( NULL == context->websockets_info ){
-            if( WIFI_CONNECT_DHCP_SUCC == get_wifi_connect_status(NULL))
-                lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-        }
-        else if (wss_application_loop(context->websockets_info)) {
-            ///if( WIFI_CONNECT_DHCP_SUCC == get_wifi_connect_status(NULL))
-            {
-                printf("wss_ddddddconnected_AASSERT to APP_NET_CONNECTED_MODE \r\n");
-                lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-            }
-            ///else
-            ///    lwl_app_mode_switch_to(APP_DEFAULT_MODE); */
-        ///}
         mdelay(10);
         if (lwl_app_mode_exitting()) {
             wss_connected_unint();

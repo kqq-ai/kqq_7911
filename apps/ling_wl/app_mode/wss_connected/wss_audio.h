@@ -2,7 +2,6 @@
 #define __WSS_AUDIO_H__
 
 #include "cpu.h"
-#include "wss/wss_client.h"
 
 void wss_audio_init();
 void wss_audio_uninit();

@@ -1,8 +1,6 @@
 #include "wss_app_util.h"
 
-#include "wss/wss_client.h"
 #include "protocol/odm/odmp.h"
-#include "protocol/lingos/loswssp.h"
 #include "app_mode/lwl_app_core.h"
 
 #define LING_UUID_BUFSIZE 37

@@ -300,7 +300,6 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/util/tree_map.c \
 	../../../../apps/ling_wl/SC7A20/sc7a20.c \
 	../../../../apps/ling_wl/SC7A20/app_sc7a20_task.c \
-	../../../../apps/ling_wl/protocol/lingos/loswssp.c \
 	../../../../apps/ling_wl/protocol/odm/odm_secure.c \
 	../../../../apps/ling_wl/protocol/odm/odmp.c \
 	../../../../apps/ling_wl/protocol/odm/odm_util.c \

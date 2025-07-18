@@ -172,20 +172,9 @@ int request_ota_info(char **pota_info)
         return OTAERROR_Malloc_Failed;
     }
     ctx->url = "https://kqq.tos-cn-beijing.volces.com/kqq_ota.json";
-    //ctx->url = "http://lw-ota.test.ling.space/v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c";
     ctx->timeout_millsec = 5000;
     ctx->priv = &http_body_buf;
     ctx->connection = "close";
-    //ctx->user_http_header = "GET /v1/robot/packages?mode=img&target=dev&package_names=ai.ling.wl.learning&name=wl-c HTTP/1.1\r\n"\
-                            //"Accept: */*\r\n" \
-                            /*"X-Device-Code: WL00000001\r\n"\
-                            "Connection: close\r\n"\
-                            "Date: Mon, 11 Mar 2025 08:00:00 GMT\r\n" \
-                            "Host: lw-ota.test.ling.space\r\n" \
-                            "User-Agent: Apifox/1.0.0 (https://apifox.com)\r\n" \
-                            "Accept-Encoding: identity\r\n"\
-                            "Cache-Control: no-cache\r\n"\
-                            "\r\n"; */
 
 
     log_i("http get ota info start\n\n");
