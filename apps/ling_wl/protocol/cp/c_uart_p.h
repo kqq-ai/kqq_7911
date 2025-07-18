@@ -83,7 +83,8 @@ int uart_send_move_detect_en(uint8_t en);
 #define COLOR_WHITE       (7500),  (7000),  (6000)    // 白色(255,255,255)                      //√
 #define COLOR_GREEN       (10000), (0),     (10000)   // 绿色(0,255,0)                          //√
 #define COLOR_BLUE        (10000), (10000), (0)       // 蓝色(0,0,255)                          //√
-#define COLOR_ORANGE      (7500),   (7000),  (9500)    // 橙色(235,92,92)                       //√
+#define COLOR_YELLOW      (7000),   (7000),  (10000)  // 黄色(?,92,0)                           //√
+#define COLOR_ORANGE      (7500),   (7000),  (9500)   // 橙色(235,92,92)                        //×
 #define COLOR_PINK        (509),   (3882),  (3058)    // 粉红(242,156,177)
 #define COLOR_DARK_YELLOW (2980),  (4980),  (10000)   // 深黄(128,128,0)
 #define COLOR_MAROON      (4980),  (10000), (10000)   // 栗色(128,0,0)
@@ -93,6 +94,7 @@ int uart_send_move_detect_en(uint8_t en);
 #define COLOR_PURPLE      (4980),  (10000), (4980)    // 紫色(128,0,128)
 #define COLOR_GRAY        (4980),  (4980),  (4980)    // 灰色(128,128,128)
 int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b);
+void set_led_off(void);
 
 int uart_send_open_le_audio(uint8_t *mac);
 

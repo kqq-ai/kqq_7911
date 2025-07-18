@@ -8,7 +8,6 @@
 #include "power_on/power_on.h"
 #include "app_core.h"
 
-
 static u8 app_prev_mode = 0;
 static u8 app_curr_mode = 0;
 static u8 app_next_mode = 0;

@@ -5,6 +5,8 @@
 
 extern g_dev_uart_hdl;
 
+static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
+
 // 注册回调函数
 void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
 {
@@ -36,7 +38,7 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         if( OTA_download_running > 0){
             break; /// reset after OTA
         }
-        uart_send_set_led_color(10000, 10000, 10000); /// off LED before power Off
+        set_led_power_off(); // 控制 LED 关闭
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
         lwl_event_notify(&e);
@@ -197,6 +199,8 @@ int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b)
 
     return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
 }
+
+void set_led_off(void)          { uart_send_set_led_color(COLOR_BLACK); }   //结束对话时灯光关闭
 
 int uart_send_open_le_audio(uint8_t *mac)
 {

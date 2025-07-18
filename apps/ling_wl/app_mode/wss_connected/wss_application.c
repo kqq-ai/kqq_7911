@@ -18,6 +18,7 @@
 #include "protocol/odm/odm_util.h"
 
 #include "protocol/odm/odm_secure.h"
+#include "protocol/cp/c_uart_p.h"
 
 static void wss_application_event_to_req(lwl_eend_dev_t *p_dev, int msg_event);
 
@@ -34,6 +35,8 @@ static lwl_eend_dev_t *g_edev_last = NULL; // C 本地维护
 static lwl_eend_dev_t *g_edev_target = NULL; // 服务器维护
 static lwl_eend_dev_t *g_edev_connected = NULL; // E 已连接
 
+
+static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 
 /*=================================================================================================
  * Audio dec app context
@@ -450,7 +453,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
         log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
         if(e->uart_cmd_sync.battery < 30 )
-            uart_send_set_led_color(6000, 10000, 10000); //red~ low power
+            set_led_red_low_power();
         uart_response_synch_status(1, 12);/// 音量 E only
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:

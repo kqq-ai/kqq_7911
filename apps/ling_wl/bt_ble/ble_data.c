@@ -10,6 +10,7 @@
 #include "app_wifi_manage.h"
 #include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
+#include "protocol/cp/c_uart_p.h"
 
 char current_connected_ssid[MAX_SSID_LEN] = {0};
 char current_connected_password[MAX_SSID_LEN] = {0};
@@ -25,6 +26,9 @@ uint32_t g_wifi_connect_timeout_ms = 0;
 
 uint32_t g_wifi_scan_timeout = 0;
 uint32_t g_wifi_scan_flag = 1;
+
+
+static void set_led_wifi_scan(void)       { uart_send_set_led_color(COLOR_BLUE); } /* 控制 led : 正在扫描网络 蓝色 */
 
 void set_current_connected_ssid(char *ssid)
 {
@@ -189,7 +193,7 @@ int handle_wifi_scan(const char *cmd, cJSON *args, char *return_json_data)
 
     // 开始扫描
     printf("----------------------wifi_scan_start--------------------------------\r\n");
-    uart_send_set_led_color(10000, 10000, 6000);
+    set_led_wifi_scan(); // 控制 led : 正在扫描网络 蓝色
 
     /* 将WiFi 扫描任务添加到线程池中 */
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();

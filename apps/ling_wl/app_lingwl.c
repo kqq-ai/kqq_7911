@@ -53,6 +53,8 @@ const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 //"WCCN24H28FEEEFE"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
 
+static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }   /* 控制 led : 正常响应中 白色 */
+
 static void simple_play_prompt(const char *fname) 
 {
     // g_music_player.play_voice_prompt = 1;
@@ -150,7 +152,7 @@ static void app_lingwl_main(void)
     context->music_player = &g_music_player;
 
     simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"poweron.mp3");
-    //uart_send_set_led_color(7500, 7000, 6000); /// on LED after power ON
+    //set_led_white(); /// on LED after power ON
 
     /* 创建异步任务处理任务 */
     start_async_msg_loop();
@@ -390,7 +392,7 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
-            //uart_send_set_led_color(7500, 7000, 6000); /// Net Succ
+            //set_led_white();; /// Net Succ
             // simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器

@@ -18,8 +18,14 @@
 #include "protocol/odm/odm_util.h"
 
 #include "protocol/odm/odm_secure.h"
+#include "protocol/cp/c_uart_p.h"
 
 static lwl_app_context_t *g_app_ctx = NULL;
+            
+static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
+static void set_led_asr_upload(void)    { uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
+static void set_led_tts_wait(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
+static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频播放时灯光变蓝色
 
 /*=================================================================================================
  * Vad timer
@@ -67,10 +73,8 @@ void wss_app_recorder_en(u8 en)
     if (context && context->recorder) {
         if (en && recorder_get_play_pause_state(context->recorder) == 0) {
             recorder_start(context->recorder); /* 开启录音编码 */
-            uart_send_set_led_color(7500, 7000, 9500);//麦克风开启时灯光变橙色
         } else if(!en && recorder_get_play_pause_state(context->recorder) == 1) {
             recorder_stop(context->recorder); /* 停止录音编码 */
-            uart_send_set_led_color((7500, 7000, 6000));//麦克风关闭时灯光变白色
         }
     }
 }
@@ -145,34 +149,24 @@ static void wss_asr_data_to_server(AsrData *asr_data)
 static void start_audio_upload(void *priv)
 {
     log_i("Start audio upload.");
-    int recording_upload_package_index = 0;
+    set_led_asr_upload(); /* 音频上传时灯光变绿色 */
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     if (send_audio_status(OAST_ASR, OASE_START)) {
         // wss_application_exception_exit();
         return;
     }
     while (true) {
-        // if (is_edev_far_away(g_curr_edev)) { /* 当前设备距离 > 5 */
-        //     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
-        //     if (recording_upload_package_index > 0) { /* 已经上传了部分asr data时，发送message stop事件结束 */
-        //         if (send_audio_status(DEVICE_ID, OAST_ASR, OASE_END)) {
-        //             wss_application_exception_exit();
-        //             return;
-        //         }
-        //     }
-        //     return;
-        // }
-
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
         if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
             wss_asr_data_to_server(&asr_data_frame);
         } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
             wss_asr_data_to_server(&asr_data_frame);
         }
-        recording_upload_package_index++;
 
         if (g_recording == false) { /* VAD结束 */
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
+            set_led_tts_wait();
+            wss_app_recorder_en(DISABLE);
             
             if (send_audio_status(OAST_ASR, OASE_END)) {
                 // wss_application_exception_exit();
@@ -196,6 +190,7 @@ void wait_vad_task(void *priv)
     int vad_timeout = *((int*)priv);
     log_i("Wait VAD start %d\n", vad_timeout);
     update_time();
+    set_led_mic_on(); // 开启录音时灯光变橙色
 
     while (vad_start_time + vad_timeout >= timer_get_ms()) {
         msleep(10);
@@ -210,6 +205,7 @@ void wait_vad_task(void *priv)
     wss_app_recorder_en(DISABLE);
     g_recording = false;
     vad_timeout = 0;
+    set_led_tts_wait();
     // reply_tts_bind(g_edev_last);
     // g_edev_last = NULL;
     // wss_application_event_to_req(NULL, ORMET_VAD_SPEAKER_END);
@@ -231,6 +227,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     const uint32_t MAX_CHUNK_SIZE = 50000;
     uint32_t total_written = 0;
     uint32_t remaining = len;
+    set_led_tts_play();
     
     while (remaining > 0) {
         uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;

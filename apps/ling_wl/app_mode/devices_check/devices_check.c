@@ -63,13 +63,6 @@ static void mode6_audio_callback(void *priv); // 声明提前到文件最前面
 #include "../../SC7A20/sc7a20.h"           // SC7A20陀螺仪头文件
 #include "../../SC7A20/app_sc7a20_task.h"  // SC7A20任务头文件
 
-
-// LED颜色设置辅助函数（使用系统预定义的颜色参数）
-static void set_led_color_rgb(uint16_t r, uint16_t g, uint16_t b)
-{
-    uart_send_set_led_color(r, g, b);
-}
-
 // 使用系统预定义的颜色常量
 static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
 static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
@@ -1298,7 +1291,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
         // if(e->uart_cmd_sync.battery < 30 )
-        //     uart_send_set_led_color(6000, 10000, 10000); //red~ low power
+        //     set_led_red(); //red~ low power
         uart_response_synch_status(1, 12);/// 音量  e的声音 only
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:

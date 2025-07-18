@@ -10,10 +10,13 @@
 #include "app_config.h"
 #include "wifi/wifi_connect.h"
 #include "util/cjson_util.h"
+#include "protocol/cp/c_uart_p.h"
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
 #define LOCAL_VERSION_CODE "v0.0.36" 
+
+static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -372,7 +375,7 @@ int do_check_and_ota()
     if ( 1 == net_ver_big) { //< ota_info.version_code) {
         log_i("%s < %s, need OTA.", LOCAL_VERSION_CODE, ota_info.version_name);
         log_i("download %s", ota_info.file_url);
-        uart_send_set_led_color(7000, 7000, 10000); /// Net Succ
+        set_led_OTA_on();  // 控制 led : 正在升级 黄色
 
         size_t url_len = strlen(ota_info.file_url);
         char *ufw_url = malloc(url_len + 1);

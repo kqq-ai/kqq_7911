@@ -30,6 +30,7 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
 #include "gpio.h"
+#include "protocol/cp/c_uart_p.h"
 
 #include "bt_ble/app_wifi_manage.h"
 
