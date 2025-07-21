@@ -493,7 +493,6 @@ static void switch_to_mode(work_mode_e new_mode)
         g_mode6_state = MODE6_PLAY_PROMPT;
         g_mode6_e_index = 0;
         g_mode6_action_in_progress = 0;
-        pdev_list_count = 0; // 清空设备列表
         {
             lwl_app_context_t *context6 = lwl_app_core_context_get_instance();
             app_music_play_local_music_with_callback(
@@ -1382,6 +1381,7 @@ static int devices_check_init(void)
     /* UART指令开启C端le audio */
     uart_send_open_le_audio(g_app_ctx->mac);
 
+    pdev_list_count = 0; // 清空设备列表
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(devices_check_lwl_event_handler_cb);
     
