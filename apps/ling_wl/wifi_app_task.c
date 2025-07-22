@@ -147,7 +147,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
-        /* 控制 led : 正在连接网络 褐色 */
+        /* 控制 led : 正在连接网络 蓝色 */
         set_led_connecting();
 
         break;

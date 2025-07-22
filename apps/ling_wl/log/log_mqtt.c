@@ -12,9 +12,17 @@
 #include <stdlib.h>
 #include "cJSON_common/cJSON.h"
 #include "lwip/sockets.h"  // 或你实际用的 socket 头文件
+#include "os/os_api.h" // 添加互斥锁支持
 
 /* 全局MQTT客户端指针 */
 static Client* g_mqtt_client = NULL;
+
+
+char log_buffer[512];
+char time_str[20];
+char mqtt_payload[600];
+char sn[25];
+char token[256] = {0};
 
 /* MQTT连接配置结构体 */
 typedef struct {
@@ -50,6 +58,9 @@ static unsigned char mqtt_read_buf[2048];
 
 /* 连接状态 */
 static bool g_mqtt_connected = false;
+
+/* 互斥锁 */
+static OS_MUTEX g_log_mqtt_mutex;
 
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
@@ -201,9 +212,6 @@ int log_mqtt_connect(void) {
     }
 
     // 获取token,也就是password
-    char token[256] = {0};
-    char sn[25];
-    get_SN(sn);
     printf("SN: %s\n", sn);
     rc = fetch_mqtt_token(sn, token, sizeof(token));
 
@@ -249,6 +257,7 @@ int log_mqtt_connect(void) {
 void log_mqtt_disconnect(void) {
     if (g_mqtt_client != NULL && g_mqtt_connected) {
         MQTTDisconnect(g_mqtt_client);
+        g_mqtt_client = NULL;
         mqtt_network.disconnect(&mqtt_network);
         g_mqtt_connected = false;
         printf("MQTT connection disconnected\n");
@@ -291,11 +300,7 @@ int log_mqtt_send_message(const char* topic, const char* message) {
 
 /* 日志函数实现 */
 void log_mqtt_level(LogLevel level, const char* format, ...) {
-    char log_buffer[512];
-    char time_str[20];
-    char mqtt_payload[600];
-    char sn[25];
-    get_SN(&sn);
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
     uint32_t total_ms = timer_get_ms();
     uint32_t seconds = total_ms / 1000;
     uint32_t milliseconds = total_ms % 1000;
@@ -329,14 +334,12 @@ void log_mqtt_level(LogLevel level, const char* format, ...) {
             printf("MQTT log sending failed, error code: %d\n", result);
         }
     }
+
+    os_mutex_post(&g_log_mqtt_mutex);
 }
 
 void log_mqtt(const char* format, ...) {
-    char log_buffer[512];
-    char time_str[20];
-    char mqtt_payload[600];
-    char sn[25];
-    get_SN(&sn);
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
     uint32_t total_ms = timer_get_ms();
     uint32_t seconds = total_ms / 1000;
     uint32_t milliseconds = total_ms % 1000;
@@ -361,14 +364,19 @@ void log_mqtt(const char* format, ...) {
             printf("MQTT log sending failed, error code: %d\n", result);
         }
     }
+
+    os_mutex_post(&g_log_mqtt_mutex);
 }
 
 /* 启动MQTT日志系统 */
 int log_mqtt_start(void) {
+    os_mutex_create(&g_log_mqtt_mutex);
+    get_SN(&sn);
     return log_mqtt_connect();
 }
 
 /* 停止MQTT日志系统 */
 void log_mqtt_stop(void) {
     log_mqtt_disconnect();
+    os_mutex_del(&g_log_mqtt_mutex, 1);
 }

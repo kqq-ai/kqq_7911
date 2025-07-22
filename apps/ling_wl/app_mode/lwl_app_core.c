@@ -6,14 +6,16 @@
 static lwl_app_context_t* s_app_context = NULL;
 static OS_MUTEX g_mutex;
 
+static volatile int g_event_scheduler_exit = 0;
+
 static void lwl_simple_event_scheduler(void *priv)
 {
     ASSERT(s_app_context != NULL);
 
     lwl_event_t event;
-    while (true) {
+    while (!g_event_scheduler_exit) {
         my_blocking_queue_dequeue(&s_app_context->event_queue, &event);
-        
+
         os_mutex_pend(&s_app_context->event_handlers_mutex, 0);
         for (int i = 0; i < LWL_EVENT_HANDLER_MAX_CNT; ++i) {
             if (s_app_context->event_handlers[i] != NULL) {
@@ -22,6 +24,7 @@ static void lwl_simple_event_scheduler(void *priv)
         }
         os_mutex_post(&s_app_context->event_handlers_mutex);
     }
+    log_i("lwl_simple_event_scheduler thread exit.");
 }
 
 static void init_app_context(lwl_app_context_t* context)
@@ -35,60 +38,9 @@ static void init_app_context(lwl_app_context_t* context)
     }
     log_i_buf(s_app_context->mac, 6);
 
-    Map *map = map_create();
-    
-    // 测试插入和查找
-    map_insert(map, "banana", (void*)2);
-    map_insert(map, "apple", (void*)1);
-    map_insert(map, "cherry", (void*)3);
-    
-    ASSERT(map_size(map) == 3);
-    
-    ASSERT(map_find(map, "apple") == (void*)1);
-    ASSERT(map_find(map, "banana") == (void*)2);
-    ASSERT(map_find(map, "cherry") == (void*)3);
-    ASSERT(map_find(map, "nonexistent") == NULL);
+    g_event_scheduler_exit = 0;
 
-    // 测试更新
-    map_insert(map, "banana", (void*)20);
-    ASSERT(map_find(map, "banana") == (void*)20);
-    map_insert(map, "banana", (void*)2);
-    
-    // 测试迭代器顺序
-    MapIterator it = map_begin(map);
-    MapIterator end = map_end(map);
-    
-    ASSERT(!map_iterator_equal(it, end));
-    ASSERT(strcmp(map_iterator_key(it), "apple") == 0);
-    ASSERT(map_iterator_value(it) == (void*)1);
-    
-    map_iterator_next(&it);
-    ASSERT(strcmp(map_iterator_key(it), "banana") == 0);
-    ASSERT(map_iterator_value(it) == (void*)2);
-    
-    map_iterator_next(&it);
-    ASSERT(strcmp(map_iterator_key(it), "cherry") == 0);
-    ASSERT(map_iterator_value(it) == (void*)3);
-    
-    map_iterator_next(&it);
-    ASSERT(map_iterator_equal(it, end));
-    map_iterator_unlock(it);
-    
-    // 测试删除
-    ASSERT(map_erase(map, "banana"));
-    ASSERT(map_size(map) == 2);
-    ASSERT(map_find(map, "banana") == NULL);
-    
-    // 测试删除不存在的键
-    ASSERT(!map_erase(map, "nonexistent"));
-    ASSERT(map_size(map) == 2);
-
-    // 清空测试数据
-    ASSERT(map_erase(map, "apple"));
-    ASSERT(map_erase(map, "cherry"));
-    ASSERT(map_size(map) == 0);
-
-    s_app_context->dev_map = map;
+    s_app_context->dev_map = map_create();
     os_mutex_create(&s_app_context->dev_map_mutex);
 
     ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY));
@@ -116,10 +68,25 @@ void lwl_app_core_init()
     os_mutex_create(&g_mutex);
 }
 
+void lwl_app_context_free(lwl_app_context_t *ctx)
+{
+    if (!ctx) return;
+    if (ctx->dev_map) {
+        map_destroy(ctx->dev_map);
+        ctx->dev_map = NULL;
+    }
+    pthread_mutex_destroy(&ctx->dev_map_mutex);
+    pthread_mutex_destroy(&ctx->event_handlers_mutex);
+    my_blocking_queue_destroy(&ctx->event_queue);
+    free(ctx);
+}
+
 void lwl_app_core_destroy()
 {
+    g_event_scheduler_exit = 1; // 通知事件线程退出
+    msleep(20); // 等待线程安全退出（可根据实际情况调整等待时间）
     if (s_app_context != NULL) {
-        free(s_app_context);
+        lwl_app_context_free(s_app_context);
         s_app_context = NULL;
     }
     os_mutex_del(&g_mutex, 1);

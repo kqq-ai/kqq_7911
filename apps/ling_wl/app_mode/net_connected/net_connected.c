@@ -25,6 +25,7 @@
 #include "../wss_connected/wss_application.h"
 #include "log.h"
 #include "ota/http_ota.h"
+#include "log/log_mqtt.h"
 
 // #include "protocol/odm/odmp.h"
 // #include "protocol/odm/odm_util.h"
@@ -71,6 +72,7 @@ static int net_connected_init(void)
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 0;
     }
+    ret = log_mqtt_start();
 
 #ifdef TEST_LOCOL_MODE
     char *secure_url = get_wss_test_url(); // TODO: 释放资源
