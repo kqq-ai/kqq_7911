@@ -4,7 +4,14 @@
 
 #include "log_mqtt.h"
 #include <string.h>
+#include <netdb.h> // 添加域名解析支持
 #include "system/includes.h"  // 杰理芯片系统头文件
+#include "../protocol/odm/odm_secure.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "cJSON_common/cJSON.h"
+#include "lwip/sockets.h"  // 或你实际用的 socket 头文件
 
 /* 全局MQTT客户端指针 */
 static Client* g_mqtt_client = NULL;
@@ -27,8 +34,8 @@ static mqtt_log_config_t g_mqtt_config = {
     .server = "101.126.136.69",
     .port = 1883,
     .client_id = "12345|securemode=3,signmethod=hmacsha1|",
-    .username = "ZLCNC5E21XEEEF6",
-    .password = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkYXRhIjoiS0NDTkM1RjEyQkVFRUo1IiwiaWF0IjoxNzUwNzUyNTQxLCJpc3MiOiJ3b25kZXJsYW5kIiwic3ViIjoiand0LXRva2VuIiwibmJmIjoxNzUwNzUyNTQxfQ.8PTDptxKvY8vSsyzpYQmZkYn_zBrWz1g6YCl11XrRS8",
+    .username = "",
+    .password = "",
     .topic = "h-log",
     .keep_alive = 30,
     .use_tls = false,
@@ -44,22 +51,6 @@ static unsigned char mqtt_read_buf[2048];
 /* 连接状态 */
 static bool g_mqtt_connected = false;
 
-/* 日志级别字符串映射 */
-static const char* level_strings[] = {
-    "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
-};
-
-/* 设置MQTT连接参数 */
-void log_mqtt_set_config(const char* server, int port, const char* client_id, 
-                        const char* username, const char* password, const char* topic) {
-    if (server) strncpy(g_mqtt_config.server, server, sizeof(g_mqtt_config.server) - 1);
-    if (port > 0) g_mqtt_config.port = port;
-    if (client_id) strncpy(g_mqtt_config.client_id, client_id, sizeof(g_mqtt_config.client_id) - 1);
-    if (username) strncpy(g_mqtt_config.username, username, sizeof(g_mqtt_config.username) - 1);
-    if (password) strncpy(g_mqtt_config.password, password, sizeof(g_mqtt_config.password) - 1);
-    if (topic) strncpy(g_mqtt_config.topic, topic, sizeof(g_mqtt_config.topic) - 1);
-}
-
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
     // 初始化网络
@@ -74,6 +65,121 @@ static int init_mqtt_network(void) {
         return rc;
     }
     
+    return 0;
+}
+
+int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
+    const char* host = "test.coolqq.com";
+    int port = 80;
+    const char* api = "/api/jwt/permanentEncrypt";
+    
+    // 1. 动态构造请求体
+    char body[128];
+    int body_len = snprintf(body, sizeof(body), "{\"sn\":\"%s\"}", sn);
+    if (body_len < 0 || body_len >= sizeof(body)) {
+        printf("[fetch_mqtt_token] body construction failed\n");
+        return -1;
+    }
+
+    // 2. 动态构造请求头
+    char header[512];
+    int header_len = snprintf(header, sizeof(header),
+        "POST %s HTTP/1.1\r\n"
+        "Host: %s\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n\r\n",
+        api, host, body_len);
+    if (header_len < 0 || header_len >= sizeof(header)) {
+        printf("[fetch_mqtt_token] header construction failed\n");
+        return -1;
+    }
+
+    // 3. 域名解析
+    struct hostent *he = gethostbyname(host);
+    if (!he) {
+        printf("[fetch_mqtt_token] DNS resolution failed\n");
+        return -2;
+    }
+    struct in_addr **addr_list = (struct in_addr **)he->h_addr_list;
+    if (addr_list[0] == NULL) {
+        printf("[fetch_mqtt_token] no IP address found\n");
+        return -2;
+    }
+
+    // 4. 创建socket并连接
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        printf("[fetch_mqtt_token] socket create failed\n");
+        return -3;
+    }
+
+    struct sockaddr_in serv_addr;
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    serv_addr.sin_addr = *addr_list[0];
+
+    // 修复点1: 移除多余的右括号
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        printf("[fetch_mqtt_token] connect failed, errno=%d\n", errno);
+        close(sockfd);
+        return -4;
+    }
+
+    // 5. 发送请求
+    if (send(sockfd, header, header_len, 0) != header_len ||
+        send(sockfd, body, body_len, 0) != body_len) {
+        printf("[fetch_mqtt_token] send failed\n");
+        close(sockfd);
+        return -5;
+    }
+
+    // 6. 接收响应
+    char recv_buf[4096]; // 必须在 while 前声明
+    int total = 0, ret;
+    
+    // 修复点3: 使用lwip_recv避免宏冲突
+    while ((ret = lwip_recv(sockfd, recv_buf + total, sizeof(recv_buf) - 1 - total, 0)) > 0) {
+        total += ret;
+        if (total >= sizeof(recv_buf) - 1) break;
+    }
+    close(sockfd);
+    recv_buf[total] = '\0';
+
+    // 7. 验证HTTP状态码
+    if (strstr(recv_buf, "HTTP/1.1 200 OK") == NULL) {
+        printf("[fetch_mqtt_token] non-200 response: %.*s\n", 200, recv_buf);
+        return -6;
+    }
+
+    // 8. 安全提取JSON主体
+    char *body_start = strstr(recv_buf, "\r\n\r\n");
+    if (!body_start) {
+        printf("[fetch_mqtt_token] malformed HTTP response\n");
+        return -7;
+    }
+    body_start += 4;
+
+    // 9. 解析JSON
+    cJSON *root = cJSON_Parse(body_start);
+    if (!root) {
+        printf("[fetch_mqtt_token] JSON parse error\n");
+        return -8;
+    }
+
+    // 10. 安全提取token
+    cJSON *data = cJSON_GetObjectItem(root, "data");
+    cJSON *token = data ? cJSON_GetObjectItem(data, "token") : NULL;
+    if (!token || !cJSON_IsString(token)) {
+        cJSON_Delete(root);
+        printf("[fetch_mqtt_token] invalid token format\n");
+        return -9;
+    }
+
+    strncpy(out_token, token->valuestring, out_token_size - 1);
+    out_token[out_token_size - 1] = '\0';
+    cJSON_Delete(root);
     return 0;
 }
 
@@ -93,7 +199,21 @@ int log_mqtt_connect(void) {
     if (rc != 0) {
         return rc;
     }
-    
+
+    // 获取token,也就是password
+    char token[256] = {0};
+    char sn[25];
+    get_SN(sn);
+    printf("SN: %s\n", sn);
+    rc = fetch_mqtt_token(sn, token, sizeof(token));
+
+    printf("++++++++++++++++++++ %s +++++++++++++++++++++++++\n",token);
+    if (rc != 0) {
+        printf("获取MQTT token失败\n");
+        return rc;
+    }
+   
+
     // 初始化MQTT客户端
     MQTTClient(&mqtt_client, &mqtt_network, 5000, 
                mqtt_send_buf, sizeof(mqtt_send_buf),
@@ -105,8 +225,9 @@ int log_mqtt_connect(void) {
     MQTTPacket_connectData connect_data = MQTTPacket_connectData_initializer;
     connect_data.MQTTVersion = 3;
     connect_data.clientID.cstring = g_mqtt_config.client_id;
-    connect_data.username.cstring = g_mqtt_config.username;
-    connect_data.password.cstring = g_mqtt_config.password;
+    connect_data.username.cstring = sn;
+    
+    connect_data.password.cstring = token;
     connect_data.keepAliveInterval = g_mqtt_config.keep_alive;
     connect_data.cleansession = 1;
     connect_data.willFlag = 0;
@@ -169,12 +290,12 @@ int log_mqtt_send_message(const char* topic, const char* message) {
 }
 
 /* 日志函数实现 */
-void log_mqtt(const char* format, ...) {
+void log_mqtt_level(LogLevel level, const char* format, ...) {
     char log_buffer[512];
     char time_str[20];
     char mqtt_payload[600];
-    // char sn[20] = {0}; // 不再需要单独获取SN
-    const char* sn = g_mqtt_config.username; // 直接用username作为sn
+    char sn[25];
+    get_SN(&sn);
     uint32_t total_ms = timer_get_ms();
     uint32_t seconds = total_ms / 1000;
     uint32_t milliseconds = total_ms % 1000;
@@ -184,14 +305,52 @@ void log_mqtt(const char* format, ...) {
     minutes %= 60;
     // 格式化时间戳 [hh:mm:ss.mmm]
     snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
-    // 获取SN号
-    // get_SN(sn); // 注释掉原有的获取SN
     // 格式化日志内容
     va_list args;
     va_start(args, format);
     vsnprintf(log_buffer, sizeof(log_buffer), format, args);
     va_end(args);
-    // 拼接最终MQTT日志格式: [时间] SN 日志内容
+    // 拼接最终MQTT日志格式: [时间] [级别] SN 日志内容
+    const char* level_str;
+    switch (level) {
+        case LOG_DEBUG: level_str = "DEBUG"; break;
+        case LOG_INFO:  level_str = "INFO";  break;
+        case LOG_WARN:  level_str = "WARN";  break;
+        case LOG_ERROR: level_str = "ERROR"; break;
+        default:        level_str = "INFO";  break;
+    }
+    snprintf(mqtt_payload, sizeof(mqtt_payload), "%s [%s] %s %s", time_str, level_str, sn, log_buffer);
+    // 打印到控制台
+    printf("+++++%s\n", mqtt_payload);
+    // 发送到MQTT
+    if (log_mqtt_is_connected()) {
+        int result = log_mqtt_send_message(g_mqtt_config.topic, mqtt_payload);
+        if (result != 0) {
+            printf("MQTT log sending failed, error code: %d\n", result);
+        }
+    }
+}
+
+void log_mqtt(const char* format, ...) {
+    char log_buffer[512];
+    char time_str[20];
+    char mqtt_payload[600];
+    char sn[25];
+    get_SN(&sn);
+    uint32_t total_ms = timer_get_ms();
+    uint32_t seconds = total_ms / 1000;
+    uint32_t milliseconds = total_ms % 1000;
+    uint32_t minutes = seconds / 60;
+    seconds %= 60;
+    uint32_t hours = minutes / 60;
+    minutes %= 60;
+    // 格式化时间戳 [hh:mm:ss.mmm]
+    snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
+    // 格式化日志内容
+    va_list args;
+    va_start(args, format);
+    vsnprintf(log_buffer, sizeof(log_buffer), format, args);
+    va_end(args);
     snprintf(mqtt_payload, sizeof(mqtt_payload), "%s %s %s", time_str, sn, log_buffer);
     // 打印到控制台
     printf("+++++%s\n", mqtt_payload);

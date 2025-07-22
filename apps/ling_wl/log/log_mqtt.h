@@ -23,13 +23,12 @@ typedef enum {
     LOG_DEBUG,
     LOG_INFO,
     LOG_WARN,
-    LOG_ERROR,
-    LOG_FATAL
+    LOG_ERROR
 } LogLevel;
 
 /* 日志函数 */
+void log_mqtt_level(LogLevel level, const char* format, ...);
 void log_mqtt(const char* format, ...);
-
 /* MQTT连接管理函数 */
 int log_mqtt_init(void);
 int log_mqtt_connect(void);
