@@ -44,13 +44,6 @@ char *get_url_api(char* url, char* format)
     return api;
 }
 
-static void gen_SN();
-
-void get_SN(char* SN){
-    if (snInVm[0] == 0) gen_SN();
-    snprintf(SN, KEY_SIZE, "%s", snInVm);
-}
-
 #ifdef WRITE_SN_KEY
 size_t hex2bytes(const char *hex_str, uint8_t *bytes)
 {
@@ -115,7 +108,13 @@ static void gen_SN()
         bytes_read = lfs_file_read(&g_lfs, &file, &keyInVm, KEY_SIZE);
         log_i(" read LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_read ); //读取成功，第二次启动
     }
+    lfs_file_close(&g_lfs, &file);
 #endif
+}
+
+void get_SN(char* SN){
+    if (snInVm[0] == 0) gen_SN();
+    snprintf(SN, KEY_SIZE, "%s", snInVm);
 }
 
 // 通用HTTP请求函数，当context为空则用httpcli_get，否则用httpcli_post
@@ -249,7 +248,6 @@ static void prepare_signature()
     mbedtls_gcm_context ctx;
     mbedtls_cipher_id_t cipher = MBEDTLS_CIPHER_ID_AES;
 
-    gen_SN();
     memcpy(pt , snInVm, SN_SIZE);
 
     while (1) { //get Token

@@ -212,10 +212,8 @@ int log_mqtt_connect(void) {
     }
 
     // 获取token,也就是password
-    printf("SN: %s\n", sn);
     rc = fetch_mqtt_token(sn, token, sizeof(token));
 
-    printf("++++++++++++++++++++ %s +++++++++++++++++++++++++\n",token);
     if (rc != 0) {
         printf("获取MQTT token失败\n");
         return rc;
