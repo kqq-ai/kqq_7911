@@ -286,6 +286,9 @@ void wss_audio_init()
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
 
     g_app_ctx = lwl_app_core_context_get_instance();
+
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     
 
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
@@ -307,6 +310,10 @@ void wss_audio_init()
 void wss_audio_uninit()
 {
     log_i("Uninit WSS audio\n");
+    
+    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
+    gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker
+
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);
 

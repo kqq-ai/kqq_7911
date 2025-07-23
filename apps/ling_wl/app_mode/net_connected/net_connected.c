@@ -26,6 +26,7 @@
 #include "log.h"
 #include "ota/http_ota.h"
 #include "log/log_mqtt.h"
+#include "bt_ble/app_wifi_manage.h"
 
 // #include "protocol/odm/odmp.h"
 // #include "protocol/odm/odm_util.h"
@@ -34,15 +35,9 @@
 
 #include "protocol/odm/odm_secure.h"
 
-// #define TEST_LOCOL_MODE
-
-int app_net_connected_event_handler(struct application *app, struct sys_event *event)
-{
-    return false;
-}
-
 static int net_connected_init(void)
 {
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     // OTA check version
     int ret = do_check_and_ota();
     if (ret == 1) {
@@ -50,29 +45,8 @@ static int net_connected_init(void)
         return 0;
     }
     ret = log_mqtt_start();
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-
-#ifdef TEST_LOCOL_MODE
-    char *secure_url = get_wss_test_url(); // TODO: 释放资源
-    struct websocket_info_t *websockets_info = wss_server_connect(secure_url);
-#else
-    char *secure_url = get_wss_connection_url(); // TODO: 释放资源
-    struct websocket_info_t *websockets_info = wss_server_connect(secure_url);
-#endif
-
-    if (websockets_info == NULL) {
-        log_i("websockets init failed\n");
-        free(websockets_info);
-        context->wss_url = secure_url;
-        context->websockets_info = NULL;
-        // TODO 尝试重连WSS
-        // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-    } else {
-        /* 将websocket_info保存到全局上下文 */
-        context->wss_url = secure_url;
-        context->websockets_info = websockets_info;
-        lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-    }
+    log_i("log_mqtt_start init\n");
+    context->websockets_info = NULL;
     return 0;
 }
 
@@ -80,9 +54,57 @@ static int net_connected_init(void)
 static int net_connected_unint(void)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    free(context->wss_url);
-    context->wss_url = NULL;
+    if (context->websockets_info != NULL) {
+        //TODO 同步设备状态
+#if 0
+        if (!get_ble_app_disconnect_flag()) {
+            lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+            /* 通知 APP(小程序) 我已经与wss握手成功 */
+            if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_mqtt_succ, NULL)) {
+                printf("Failed to add the notify_app_wifi_mqtt_succ task !\r\n");
+            }
+        }
+        ble_simple_server_module_enable(0);
+        ble_simple_client_module_enable(1);
+        /* 等待ble与小程序断开 再进入小程序 */
+        while(1) {
+            if (get_ble_app_disconnect_flag()) {
+                wss_application_init();
+                break;
+            }
+        }
+        printf("wss_connected_init exit ! \r\n");
+#endif
+
+    }
     return 0;
+}
+
+void app_net_connected_loop()
+{
+    log_i("websockets init\n");
+    if (WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL)) {
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        // wifi manager
+        return;
+    }
+
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    char* wss_url = get_wss_connection_url();
+    if (wss_url == NULL) {
+        log_i("websockets init failed\n");
+        return;
+    }
+    /* 将websocket_info保存到全局上下文 */
+    context->websockets_info = wss_server_connect(wss_url);
+    free(wss_url);
+    if (context->websockets_info == NULL) {
+        log_i("websockets init failed\n");
+        // TODO 尝试重连WSS
+        return;
+    }
+    lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
 }
 
 void app_net_connected_mode(void)
@@ -90,10 +112,7 @@ void app_net_connected_mode(void)
     net_connected_init();
 
     while (1) {
-#if 0
-        auto_test_application_loop();
-#else
-#endif
+        app_net_connected_loop();
         // 应用代码
         mdelay(10);
         if (lwl_app_mode_exitting()) {

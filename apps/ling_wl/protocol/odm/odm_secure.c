@@ -9,8 +9,9 @@
 #include "syscfg_id.h"
 #include "lfs.h"
 
+// #define TEST_LOCOL_MODE
+
 extern lfs_t g_lfs;
-char *kqqToken;
 
 #define BUF_SIZE 128
 #define SN_SIZE 15
@@ -33,8 +34,6 @@ char keyInVm[KEY_SIZE];
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
 #define FORMAT_API  "%s://%s/socket?deviceId=%s&token=%s"
-
-static char server_url[BUF_SIZE];
 char pt[SN_SIZE+2+21];
 
 char *get_url_api(char* url, char* format)
@@ -160,37 +159,34 @@ static int http_request_with_body(const char* url, const char* context, http_bod
     return ret;
 }
 
-static bool https_post_gettk_task(char* context)
+static char* https_post_gettk_task(const char server_url[], char* context)
 {
     int ret = 0;
     http_body_obj http_body_buf;
+    char* Token = NULL;
 
     char* url = get_url_api(server_url, FORMAT_SIGN);
 
     ret = http_request_with_body(url, context, &http_body_buf);
 
     free(url);
-    if (kqqToken) {
-        free(kqqToken); // 如果之前分配过，先释放
-        kqqToken = NULL;
-    }
 
     if (ret != HERROR_OK) {
         log_i("httpcli_post false\n");
         if (http_body_buf.p) free(http_body_buf.p);
-        return false;
+        return Token;
     } else {
         if (http_body_buf.recv_len > 0) {
             const cJSON *nroot = cjson_parse(http_body_buf.p);
             const char* token_tmp = cjson_get_string_value(nroot, "token");
             if (token_tmp) {
-                kqqToken = strdup(token_tmp); // 复制一份
+                Token = strdup(token_tmp); // 复制一份
             }
             cJSON_Delete(nroot); // 用完后释放
         }
     }
     if (http_body_buf.p) free(http_body_buf.p);
-    return true;
+    return Token;
 }
 
 
@@ -226,7 +222,7 @@ static double https_get_timestamp(char* url)
 }
 
 // 准备签名
-static void prepare_signature()
+static char* prepare_signature(const char server_url[])
 {
 
     const size_t iv_len = 12;
@@ -250,72 +246,55 @@ static void prepare_signature()
 
     memcpy(pt , snInVm, SN_SIZE);
 
-    while (1) { //get Token
-        // 将时间戳直接转换为字符串
-        double time_web = https_get_timestamp(server_url);
-        char timestamp_str[21];   // 足够存储64位整数（最长20位数字+终止符）
-        sprintf(timestamp_str, "%.0f", time_web);
-        // 直接用strlen()获取实际长度（更简单）
-        size_t actual_length = strlen(timestamp_str);
-        memcpy(pt + SN_SIZE + 1, timestamp_str, actual_length);  // SN + 1
-        mbedtls_gcm_init(&ctx);
-        mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
+    // 将时间戳直接转换为字符串
+    double time_web = https_get_timestamp(server_url);
+    char timestamp_str[21];   // 足够存储64位整数（最长20位数字+终止符）
+    sprintf(timestamp_str, "%.0f", time_web);
+    // 直接用strlen()获取实际长度（更简单）
+    size_t actual_length = strlen(timestamp_str);
+    memcpy(pt + SN_SIZE + 1, timestamp_str, actual_length);  // SN + 1
+    mbedtls_gcm_init(&ctx);
+    mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
 
-        
-        int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
-                                                pt_len,
-                                                iv, iv_len,
-                                                NULL, 0,
-                                                pt, buf, KEY_SIZE, tag_buf);
-        memcpy(buf + pt_len, tag_buf, KEY_SIZE);
-
-        mbedtls_gcm_free(&ctx);
-        size_t base64_len_iv = 0;
-        mbedtls_base64_encode(base64_iv, BUF_SIZE,  &base64_len_iv,  iv, iv_len);
-
-        size_t base64_len = 0;
-        mbedtls_base64_encode(base64_buf, BUF_SIZE,  &base64_len,  buf, pt_len + KEY_SIZE);
-
-        base64_buf[base64_len] = '|';
-        memcpy(base64_buf + base64_len + 1, base64_iv, base64_len_iv);
-            // 计算总长度：查找第一个零字节
-        int total_length = 0;
-        while (total_length < BUF_SIZE && base64_buf[total_length] != 0) {
-            total_length++;
-        }
-
-        char post_sign_time[264];
-        memset(&post_sign_time, 0x0, sizeof(post_sign_time));
-        cJSON *root = cJSON_CreateObject();
-        cJSON_AddStringToObject(root, "sign", base64_buf);
-        cJSON_AddStringToObject(root, "sn", snInVm);
-        double time_stamp_double = time_web;
-        cJSON_AddNumberToObject(root, "timestamp", time_stamp_double );
-        char *json_str = cJSON_PrintUnformatted(root);
-
-        memcpy(post_sign_time, json_str, strlen(json_str)); //整合结果，存储在  post_sign_time
-
-        // 清理资源
-        free(json_str);
-        cJSON_Delete(root);
-
-        if (https_post_gettk_task(post_sign_time)) break;
-        msleep(3000);
-    }
-}
-
-// 获取带Token的会话url
-char *get_wss_connection_url()
-{
-    snprintf(server_url, BUF_SIZE, SERVER_API, "https", SERVER_DOMAIN);
-    prepare_signature();
-
-    char * url_api = (char *)malloc(BUF_SIZE);
-    char sn_c_id[SN_SIZE+1];
-    get_SN(&sn_c_id);
-    snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id,  kqqToken);
     
-    return url_api;
+    int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
+                                            pt_len,
+                                            iv, iv_len,
+                                            NULL, 0,
+                                            pt, buf, KEY_SIZE, tag_buf);
+    memcpy(buf + pt_len, tag_buf, KEY_SIZE);
+
+    mbedtls_gcm_free(&ctx);
+    size_t base64_len_iv = 0;
+    mbedtls_base64_encode(base64_iv, BUF_SIZE,  &base64_len_iv,  iv, iv_len);
+
+    size_t base64_len = 0;
+    mbedtls_base64_encode(base64_buf, BUF_SIZE,  &base64_len,  buf, pt_len + KEY_SIZE);
+
+    base64_buf[base64_len] = '|';
+    memcpy(base64_buf + base64_len + 1, base64_iv, base64_len_iv);
+        // 计算总长度：查找第一个零字节
+    int total_length = 0;
+    while (total_length < BUF_SIZE && base64_buf[total_length] != 0) {
+        total_length++;
+    }
+
+    char post_sign_time[264];
+    memset(&post_sign_time, 0x0, sizeof(post_sign_time));
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "sign", base64_buf);
+    cJSON_AddStringToObject(root, "sn", snInVm);
+    double time_stamp_double = time_web;
+    cJSON_AddNumberToObject(root, "timestamp", time_stamp_double );
+    char *json_str = cJSON_PrintUnformatted(root);
+
+    memcpy(post_sign_time, json_str, strlen(json_str)); //整合结果，存储在  post_sign_time
+
+    // 清理资源
+    free(json_str);
+    cJSON_Delete(root);
+
+    return https_post_gettk_task(server_url, post_sign_time);
 }
 
 
@@ -349,18 +328,26 @@ char* https_get_test_ip_port(char* url)
 
 #define TEST_IP_GET "https://kqq.tos-cn-beijing.volces.com/kqq_debug.json"
 
-// 获取测试用的WebSocket连接URL
-char *get_wss_test_url()
+// 获取带Token的会话url
+char *get_wss_connection_url()
 {
-
+    char server_url[BUF_SIZE];
+    char sn_c_id[SN_SIZE+1];
+    char * url_api = (char *)malloc(BUF_SIZE);
+    get_SN(&sn_c_id);
+#ifdef TEST_LOCOL_MODE
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);
     snprintf(server_url, BUF_SIZE, SERVER_API, "http", ip_port);
-    prepare_signature();
-
-    char * url_api = (char *)malloc(BUF_SIZE);
-    char sn_c_id[SN_SIZE+1];
-    get_SN(&sn_c_id);
-    snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, sn_c_id,  kqqToken);
-    
+    char * Token = prepare_signature(server_url);
+    if (Token) snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, sn_c_id,  Token);
+#else
+    snprintf(server_url, BUF_SIZE, SERVER_API, "https", SERVER_DOMAIN);
+    char * Token = prepare_signature(server_url);
+    if (Token) snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id,  Token);
+#endif
+    if (!Token) {
+        free(url_api);
+        return NULL;
+    }
     return url_api;
 }

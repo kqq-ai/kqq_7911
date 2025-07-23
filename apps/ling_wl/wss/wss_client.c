@@ -195,39 +195,3 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
     os_mutex_post(&wss_mutex_bin);
     os_mutex_del(&wss_mutex_bin, 0);    
 }
-
-
-// void wss_server_reconnect()
-// {
-//     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-//     if (context->wss_url == NULL) {
-//         log_e("websockets has no URL!!!!\n");
-//         return;
-//     }
-//     if (context->websockets_info != NULL) {
-//         wss_server_disconnect(context->websockets_info);
-//         context->websockets_info = NULL;
-//     }
-//     while (1) {
-//         log_i("websockets try to reconnect\n");
-//         lwl_app_context_t *context = lwl_app_core_context_get_instance();
-//         char *secure_url = context->wss_url;
-
-//         struct websocket_info_t *websockets_info = wss_server_connect(secure_url);
-
-//         if (websockets_info == NULL) {
-//             log_i("websockets init failed\n");
-//             free(websockets_info);
-//             // TODO 尝试重连WSS
-//             // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-//         } else {
-//             /* 将websocket_info保存到全局上下文 */
-//         log_i("websockets reconnected\n");
-//             context->websockets_info = websockets_info;
-//             return;
-//             // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-//         }
-//         msleep(10);
-//     }
-//     return;
-// }

@@ -22,15 +22,45 @@
 #include "default.h"
 #include "../lwl_app_framework.h"
 #include "log.h"
+#include "app_mode/lwl_app_core.h"
+#include "protocol/cp/c_uart_p.h"
+
+
+static void set_led_idel(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
+
+//=================================================================================================
+// LWL event callback
+//=================================================================================================
+static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        log_i("TOUCH KEY DOWN");
+        // play 提示音
+        break;
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        log_i("PRESS NORMAL KEY");
+        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        break;
+    }
+}
 
 
 static int default_init(void)
 {
+    /* 注册lwl事件处理回调 */
+    lwl_event_handler_add(wss_app_lwl_event_handler_cb);
+    set_led_idel(); // 设置LED为白色
     return 0;
 }
 
 static int default_unint(void)
 {
+    /* 取消注册lwl事件处理回调 */
+    lwl_event_handler_remove(wss_app_lwl_event_handler_cb);
     return 0;
 }
 
