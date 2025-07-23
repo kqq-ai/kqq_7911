@@ -18,7 +18,7 @@ typedef void (*user_wss_recv_cb_t)(u8 *buf, u32 len, u8 type);
  * @param websockets_callback Callback function to handle incoming data
  * @return Pointer to the websocket_struct on success, NULL on failure
  */
-struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback);
+struct websocket_struct *wss_server_connect(char *url);
 
 /**
  * @brief Sends data through an established WebSocket connection

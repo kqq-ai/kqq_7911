@@ -20,7 +20,29 @@
 
 static OS_MUTEX wss_mutex_bin;             //
 
-static user_wss_recv_cb_t wss_cb_handler = NULL;
+#define WS_TXT_FRAME 0x81
+#define WS_BIN_FRAME 0x82
+
+void wss_recv_callback(u8 *buf, u32 len, u8 type)
+{
+    switch (type) {
+    case WS_TXT_FRAME: // text frame
+    
+        log_i("wbs recv msg : %s\n", buf);
+        if (strcmp(buf, "client ping") == 0) {
+    
+        } else {
+            // odmp process
+            odmp_rsp_handler(buf, len);
+        }
+        break;
+    case WS_BIN_FRAME: // binary frame
+        log_i("wbs recv msg : %d\n", len);
+        odmp_audio_data_handler(buf, len);
+        break;
+    }
+}
+
 
 /*******************************************************************************
 *   Websocket Client api
@@ -99,7 +121,7 @@ int wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int s
     return ws_ret;
 }
 
-struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websockets_callback)
+struct websocket_struct *wss_server_connect(char *url)
 {
     int err;
     const char *origin_str = "jl791n://localhost";
@@ -110,7 +132,6 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
     os_mutex_pend(&wss_mutex_bin, 0);
     
     log_i(" . ----------------- Client Websocket ------------------\r\n");
-    wss_cb_handler = websockets_callback;
     
     /* 0 . malloc buffer */
     struct websocket_struct *websockets_info = malloc(sizeof(struct websocket_struct));
@@ -122,9 +143,9 @@ struct websocket_struct *wss_server_connect(char *url, user_wss_recv_cb_t websoc
     }
     /* 1 . register */
     if (url[2] == 's') {
-        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, websockets_callback);
+        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, wss_recv_callback);
     } else {
-        websockets_client_reg(websockets_info, WEBSOCKET_MODE, websockets_callback);
+        websockets_client_reg(websockets_info, WEBSOCKET_MODE, wss_recv_callback);
     }
 
     /* 2 . init */
@@ -176,37 +197,37 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
 }
 
 
-void wss_server_reconnect()
-{
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context->wss_url == NULL) {
-        log_e("websockets has no URL!!!!\n");
-        return;
-    }
-    if (context->websockets_info != NULL) {
-        wss_server_disconnect(context->websockets_info);
-        context->websockets_info = NULL;
-    }
-    while (1) {
-        log_i("websockets try to reconnect\n");
-        lwl_app_context_t *context = lwl_app_core_context_get_instance();
-        char *secure_url = context->wss_url;
+// void wss_server_reconnect()
+// {
+//     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+//     if (context->wss_url == NULL) {
+//         log_e("websockets has no URL!!!!\n");
+//         return;
+//     }
+//     if (context->websockets_info != NULL) {
+//         wss_server_disconnect(context->websockets_info);
+//         context->websockets_info = NULL;
+//     }
+//     while (1) {
+//         log_i("websockets try to reconnect\n");
+//         lwl_app_context_t *context = lwl_app_core_context_get_instance();
+//         char *secure_url = context->wss_url;
 
-        struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_cb_handler);
+//         struct websocket_info_t *websockets_info = wss_server_connect(secure_url);
 
-        if (websockets_info == NULL) {
-            log_i("websockets init failed\n");
-            free(websockets_info);
-            // TODO 尝试重连WSS
-            // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-        } else {
-            /* 将websocket_info保存到全局上下文 */
-        log_i("websockets reconnected\n");
-            context->websockets_info = websockets_info;
-            return;
-            // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-        }
-        msleep(10);
-    }
-    return;
-}
+//         if (websockets_info == NULL) {
+//             log_i("websockets init failed\n");
+//             free(websockets_info);
+//             // TODO 尝试重连WSS
+//             // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+//         } else {
+//             /* 将websocket_info保存到全局上下文 */
+//         log_i("websockets reconnected\n");
+//             context->websockets_info = websockets_info;
+//             return;
+//             // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+//         }
+//         msleep(10);
+//     }
+//     return;
+// }

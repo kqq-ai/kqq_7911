@@ -266,15 +266,6 @@ static int app_music_key_click(struct key_event *key)
     case KEY_OK:
         log_i("KEY OK\n");
         lfs_file_t lfs_file;
-        // // 打开文件系统中的MP3文件
-        // int err = lfs_file_open(&g_lfs, &lfs_file, "opening_45.mp3", LFS_O_RDONLY);
-        // if (err)
-        // {
-        //     log_e("Failed to open file: %s, error: %d\n", "opening_45.mp3", err);
-        //     return err;
-        // } else {
-        //     log_e("open success.");
-        // }
         app_music_play_lfs_music_with_callback(&g_music_player, "opening_45.mp3", NULL, NULL);
         // app_music_play_pause(&g_music_player);
         break;

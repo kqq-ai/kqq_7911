@@ -13,11 +13,6 @@
 #include <time.h>
 #include "../../include_lib/net/mqtt/MQTTClient.h"
 
-/* 避免与项目文件系统冲突，使用printf替代stdio.h */
-extern int printf(const char *format, ...);
-
-/* 避免与项目CPU头文件冲突，使用项目自己的bool定义 */
-
 /* 日志级别 */
 typedef enum {
     LOG_DEBUG,
@@ -30,20 +25,7 @@ typedef enum {
 void log_mqtt_level(LogLevel level, const char* format, ...);
 void log_mqtt(const char* format, ...);
 /* MQTT连接管理函数 */
-int log_mqtt_init(void);
-int log_mqtt_connect(void);
-void log_mqtt_disconnect(void);
 int log_mqtt_start(void);
 void log_mqtt_stop(void);
-void log_mqtt_set_config(const char* server, int port, const char* client_id, 
-                        const char* username, const char* password, const char* topic);
-
-/* MQTT日志相关函数 */
-void log_mqtt_set_client(Client* client);
-int log_mqtt_send_message(const char* topic, const char* message);
-bool log_mqtt_is_connected(void);
-
-/* 全局MQTT客户端指针 */
-extern Client* g_mqtt_log_client;
 
 #endif /* LOG_MQTT_H */

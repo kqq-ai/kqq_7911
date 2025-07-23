@@ -62,6 +62,9 @@ static bool g_mqtt_connected = false;
 /* 互斥锁 */
 static OS_MUTEX g_log_mqtt_mutex;
 
+
+void log_mqtt_disconnect();
+
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
     // 初始化网络
@@ -71,7 +74,7 @@ static int init_mqtt_network(void) {
     // 连接网络
     int rc = ConnectNetwork(&mqtt_network, g_mqtt_config.server, g_mqtt_config.port);
     if (rc != 0) {
-        printf("MQTT network connection failed: %s:%d, error code: %d\n", 
+        log_i("MQTT network connection failed: %s:%d, error code: %d\n", 
                g_mqtt_config.server, g_mqtt_config.port, rc);
         return rc;
     }
@@ -88,7 +91,7 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     char body[128];
     int body_len = snprintf(body, sizeof(body), "{\"sn\":\"%s\"}", sn);
     if (body_len < 0 || body_len >= sizeof(body)) {
-        printf("[fetch_mqtt_token] body construction failed\n");
+        log_i("[fetch_mqtt_token] body construction failed\n");
         return -1;
     }
 
@@ -102,26 +105,26 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
         "Connection: close\r\n\r\n",
         api, host, body_len);
     if (header_len < 0 || header_len >= sizeof(header)) {
-        printf("[fetch_mqtt_token] header construction failed\n");
+        log_i("[fetch_mqtt_token] header construction failed\n");
         return -1;
     }
 
     // 3. 域名解析
     struct hostent *he = gethostbyname(host);
     if (!he) {
-        printf("[fetch_mqtt_token] DNS resolution failed\n");
+        log_i("[fetch_mqtt_token] DNS resolution failed\n");
         return -2;
     }
     struct in_addr **addr_list = (struct in_addr **)he->h_addr_list;
     if (addr_list[0] == NULL) {
-        printf("[fetch_mqtt_token] no IP address found\n");
+        log_i("[fetch_mqtt_token] no IP address found\n");
         return -2;
     }
 
     // 4. 创建socket并连接
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
-        printf("[fetch_mqtt_token] socket create failed\n");
+        log_i("[fetch_mqtt_token] socket create failed\n");
         return -3;
     }
 
@@ -133,7 +136,7 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
 
     // 修复点1: 移除多余的右括号
     if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("[fetch_mqtt_token] connect failed, errno=%d\n", errno);
+        log_i("[fetch_mqtt_token] connect failed, errno=%d\n", errno);
         close(sockfd);
         return -4;
     }
@@ -141,7 +144,7 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     // 5. 发送请求
     if (send(sockfd, header, header_len, 0) != header_len ||
         send(sockfd, body, body_len, 0) != body_len) {
-        printf("[fetch_mqtt_token] send failed\n");
+        log_i("[fetch_mqtt_token] send failed\n");
         close(sockfd);
         return -5;
     }
@@ -160,14 +163,14 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
 
     // 7. 验证HTTP状态码
     if (strstr(recv_buf, "HTTP/1.1 200 OK") == NULL) {
-        printf("[fetch_mqtt_token] non-200 response: %.*s\n", 200, recv_buf);
+        log_i("[fetch_mqtt_token] non-200 response: %.*s\n", 200, recv_buf);
         return -6;
     }
 
     // 8. 安全提取JSON主体
     char *body_start = strstr(recv_buf, "\r\n\r\n");
     if (!body_start) {
-        printf("[fetch_mqtt_token] malformed HTTP response\n");
+        log_i("[fetch_mqtt_token] malformed HTTP response\n");
         return -7;
     }
     body_start += 4;
@@ -175,7 +178,7 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     // 9. 解析JSON
     cJSON *root = cJSON_Parse(body_start);
     if (!root) {
-        printf("[fetch_mqtt_token] JSON parse error\n");
+        log_i("[fetch_mqtt_token] JSON parse error\n");
         return -8;
     }
 
@@ -184,7 +187,7 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     cJSON *token = data ? cJSON_GetObjectItem(data, "token") : NULL;
     if (!token || !cJSON_IsString(token)) {
         cJSON_Delete(root);
-        printf("[fetch_mqtt_token] invalid token format\n");
+        log_i("[fetch_mqtt_token] invalid token format\n");
         return -9;
     }
 
@@ -215,7 +218,7 @@ int log_mqtt_connect(void) {
     rc = fetch_mqtt_token(sn, token, sizeof(token));
 
     if (rc != 0) {
-        printf("获取MQTT token失败\n");
+        log_i("获取MQTT token失败\n");
         return rc;
     }
    
@@ -241,13 +244,12 @@ int log_mqtt_connect(void) {
     // 连接MQTT服务器
     rc = MQTTConnect(g_mqtt_client, &connect_data);
     if (rc != 0) {
-        printf("MQTT connection failed, error code: %d\n", rc);
+        log_i("MQTT connection failed, error code: %d\n", rc);
         log_mqtt_disconnect();  // 连接失败，清理资源
         return rc;
     }
     
     g_mqtt_connected = true;
-    printf("======MQTT connection successful: %s:%d\n", g_mqtt_config.server, g_mqtt_config.port);
     return 0;
 }
 
@@ -258,7 +260,7 @@ void log_mqtt_disconnect(void) {
         g_mqtt_client = NULL;
         mqtt_network.disconnect(&mqtt_network);
         g_mqtt_connected = false;
-        printf("MQTT connection disconnected\n");
+        log_i("MQTT connection disconnected\n");
     }
 }
 
@@ -289,7 +291,7 @@ int log_mqtt_send_message(const char* topic, const char* message) {
     
     int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
     if (rc != 0) {
-        printf("MQTT publish failed, error code: %d\n", rc);
+        log_i("MQTT publish failed, error code: %d\n", rc);
         g_mqtt_connected = false;  // 发布失败，标记连接断开
     }
     
@@ -324,12 +326,12 @@ void log_mqtt_level(LogLevel level, const char* format, ...) {
     }
     snprintf(mqtt_payload, sizeof(mqtt_payload), "%s [%s] %s %s", time_str, level_str, sn, log_buffer);
     // 打印到控制台
-    printf("+++++%s\n", mqtt_payload);
+    log_i("+++++%s\n", mqtt_payload);
     // 发送到MQTT
     if (log_mqtt_is_connected()) {
         int result = log_mqtt_send_message(g_mqtt_config.topic, mqtt_payload);
         if (result != 0) {
-            printf("MQTT log sending failed, error code: %d\n", result);
+            log_i("MQTT log sending failed, error code: %d\n", result);
         }
     }
 
@@ -354,12 +356,12 @@ void log_mqtt(const char* format, ...) {
     va_end(args);
     snprintf(mqtt_payload, sizeof(mqtt_payload), "%s %s %s", time_str, sn, log_buffer);
     // 打印到控制台
-    printf("+++++%s\n", mqtt_payload);
+    log_i("+++++%s\n", mqtt_payload);
     // 发送到MQTT
     if (log_mqtt_is_connected()) {
         int result = log_mqtt_send_message(g_mqtt_config.topic, mqtt_payload);
         if (result != 0) {
-            printf("MQTT log sending failed, error code: %d\n", result);
+            log_i("MQTT log sending failed, error code: %d\n", result);
         }
     }
 

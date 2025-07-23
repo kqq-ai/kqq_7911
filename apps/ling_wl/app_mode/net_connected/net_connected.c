@@ -41,29 +41,6 @@ int app_net_connected_event_handler(struct application *app, struct sys_event *e
     return false;
 }
 
-#define WS_TXT_FRAME 0x81
-#define WS_BIN_FRAME 0x82
-
-void wss_recv_callback(u8 *buf, u32 len, u8 type)
-{
-    switch (type) {
-    case WS_TXT_FRAME: // text frame
-    
-        log_i("wbs recv msg : %s\n", buf);
-        if (strcmp(buf, "client ping") == 0) {
-    
-        } else {
-            // odmp process
-            odmp_rsp_handler(buf, len);
-        }
-        break;
-    case WS_BIN_FRAME: // binary frame
-        log_i("wbs recv msg : %d\n", len);
-        odmp_audio_data_handler(buf, len);
-        break;
-    }
-}
-
 static int net_connected_init(void)
 {
     // OTA check version
@@ -73,23 +50,25 @@ static int net_connected_init(void)
         return 0;
     }
     ret = log_mqtt_start();
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
 #ifdef TEST_LOCOL_MODE
     char *secure_url = get_wss_test_url(); // TODO: 释放资源
-    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback);
+    struct websocket_info_t *websockets_info = wss_server_connect(secure_url);
 #else
     char *secure_url = get_wss_connection_url(); // TODO: 释放资源
-    struct websocket_info_t *websockets_info = wss_server_connect(secure_url, wss_recv_callback);
+    struct websocket_info_t *websockets_info = wss_server_connect(secure_url);
 #endif
 
     if (websockets_info == NULL) {
         log_i("websockets init failed\n");
         free(websockets_info);
+        context->wss_url = secure_url;
+        context->websockets_info = NULL;
         // TODO 尝试重连WSS
         // lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     } else {
         /* 将websocket_info保存到全局上下文 */
-        lwl_app_context_t *context = lwl_app_core_context_get_instance();
         context->wss_url = secure_url;
         context->websockets_info = websockets_info;
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
