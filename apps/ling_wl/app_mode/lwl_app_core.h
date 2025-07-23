@@ -85,7 +85,6 @@ typedef struct {
     int  lw_ota_ver_code;            /**< OTA version code */
     char lw_ota_ver_name[33];        /**< OTA version name */
     uint8_t mac[6];                  /**< MAC */
-    char *wss_url;                   /**< WebSocket server URL */
     struct websocket_struct *websockets_info; /**< WebSocket connection info */
     recorder_hdl *recorder;          /**< Audio recorder handle */
     music_player *music_player;      /**< Music player instance */

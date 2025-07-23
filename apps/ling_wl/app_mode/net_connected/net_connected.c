@@ -28,11 +28,6 @@
 #include "log/log_mqtt.h"
 #include "bt_ble/app_wifi_manage.h"
 
-// #include "protocol/odm/odmp.h"
-// #include "protocol/odm/odm_util.h"
-
-#include "wss/wss_client.h"
-
 #include "protocol/odm/odm_secure.h"
 
 static int net_connected_init(void)
@@ -88,23 +83,10 @@ void app_net_connected_loop()
         // wifi manager
         return;
     }
-
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-
-    char* wss_url = get_wss_connection_url();
-    if (wss_url == NULL) {
-        log_i("websockets init failed\n");
-        return;
+    if (wss_connect()) {
+        lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     }
-    /* 将websocket_info保存到全局上下文 */
-    context->websockets_info = wss_server_connect(wss_url);
-    free(wss_url);
-    if (context->websockets_info == NULL) {
-        log_i("websockets init failed\n");
-        // TODO 尝试重连WSS
-        return;
-    }
-    lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+    // TODO 尝试重连WSS
 }
 
 void app_net_connected_mode(void)

@@ -284,7 +284,9 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/power_on/power_on.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_application.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/wss_request.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_audio.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/wss_device.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_connected.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/test/eend_battery_live_test.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/test/function_test.c \
@@ -303,7 +305,6 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/SC7A20/app_sc7a20_task.c \
 	../../../../apps/ling_wl/protocol/odm/odm_secure.c \
 	../../../../apps/ling_wl/protocol/odm/odmp.c \
-	../../../../apps/ling_wl/protocol/odm/odm_util.c \
 	../../../../apps/ling_wl/protocol/cp/c_uart_p.c \
 	../../../../apps/ling_wl/bt_ble/ble.c \
 	../../../../apps/ling_wl/bt_ble/ble_data.c \

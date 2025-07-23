@@ -31,7 +31,7 @@ static void set_led_idel(void)      { uart_send_set_led_color(COLOR_WHITE); }   
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
-static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
+static void default_input_event_handler_cb(lwl_event_t *e)
 {
     static int en = 1;
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
@@ -52,7 +52,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
 static int default_init(void)
 {
     /* 注册lwl事件处理回调 */
-    lwl_event_handler_add(wss_app_lwl_event_handler_cb);
+    lwl_event_handler_add(default_input_event_handler_cb);
     set_led_idel(); // 设置LED为白色
     return 0;
 }
@@ -60,7 +60,7 @@ static int default_init(void)
 static int default_unint(void)
 {
     /* 取消注册lwl事件处理回调 */
-    lwl_event_handler_remove(wss_app_lwl_event_handler_cb);
+    lwl_event_handler_remove(default_input_event_handler_cb);
     return 0;
 }
 

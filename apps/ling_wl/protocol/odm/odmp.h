@@ -6,6 +6,7 @@
 #undef errno
 
 enum odmp_req_msg_event_type_e{
+    ORMET_NONE                  = 0,
     // 初次使用
     ORMET_INITIAL_SETUP         = 1,
     // 蓝牙测距
@@ -63,6 +64,17 @@ enum ORX_EVENT_TYPE {
     OR_MESSAGE_TEXT,
     OR_EXECUTION_TIME,
     OR_PONG,
+};
+
+static const int ORX_EVENT_CLASS[]= {
+    -1,
+    1,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
 };
 
 typedef struct {

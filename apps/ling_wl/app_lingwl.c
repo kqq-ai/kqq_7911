@@ -33,6 +33,8 @@
 #include "bt_ble/client/ble_distance.h"
 
 
+static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+
 extern int app_music_bt_event_handler(struct sys_event *event);
 
 static struct app_lingwl_hdl g_lingwl_hdl;
@@ -104,6 +106,13 @@ void base_lwl_event_handler(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
         power_set_soft_poweroff();
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC");
+        log_i("battery: %d", e->uart_cmd_sync.battery);
+        if(e->uart_cmd_sync.battery < 30 )
+            set_led_red_low_power();
+        uart_response_synch_status(1, 12);/// 音量 E only
         break;
     }
 }
