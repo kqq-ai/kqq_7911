@@ -223,17 +223,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     }
 }
 
-static void reply_tts_bind(lwl_eend_dev_t *p_dev)
-{
-    if (p_dev == NULL) {
-        wss_request_send_event(p_dev, ORMET_SWITCH_FAILED);
-        return;
-    } else {
-        wss_ble_audio_start();
-        wss_request_send_event(p_dev, ORMET_SWITCH_SUCCESS);
-    }
-}
-
 //=================================================================================================
 // pDev response callback
 //=================================================================================================
@@ -250,7 +239,9 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
 
         log_i("Switch PortE %s OK\n", sn_string);
         g_edev_connected = g_edev_target;
-        if (pdev == g_edev_target) reply_tts_bind(pdev);
+        if (pdev == g_edev_target) {
+            send_message = ORMET_SWITCH_SUCCESS;
+        }
         break;
     case BKA_CMD_CODE_DEVLOST:
         log_i("Switch PortE Dev Lost\n");
@@ -272,7 +263,7 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
         break;
     }
     if (code != BKA_CMD_CODE_COMPL) {
-        wss_request_send_event(pdev, ORMET_SWITCH_FAILED);
+        send_message = ORMET_SWITCH_FAILED;
     }
 }
 
@@ -298,7 +289,6 @@ void wss_request_uninit()
 void wss_request_stop()
 {
     log_i("Stop WSS request\n");
-    wss_ble_audio_stop();
 
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD) {
@@ -339,7 +329,22 @@ bool wss_request_loop()
 
     case STATE_TTS_BIND:
         // TTS下载流程
-        if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_START) {
+        if (send_message == ORMET_SWITCH_SUCCESS) {
+            log_i("Switch success, starting audio playback");
+            wss_ble_audio_start();
+            wss_request_send_event(g_edev_target, ORMET_SWITCH_SUCCESS);
+            last_message_received = 0;
+            last_event = 0;
+            send_message = 0; // 重置发送消息标志
+        } else if (send_message == ORMET_SWITCH_FAILED) {
+            log_i("Switch failed, returning to STATE_IDLE");
+            g_mode_state = STATE_IDLE;
+            wss_request_print_state(g_mode_state, "STEP_TO");
+            wss_request_send_event(g_edev_target, ORMET_SWITCH_FAILED);
+            last_message_received = 0;
+            last_event = 0;
+            send_message = 0; // 重置发送消息标志
+        } else if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_START) {
             g_mode_state = STATE_DOWNLOAD;
             wss_request_print_state(g_mode_state, "STEP_TO");
             last_message_received = 0;
@@ -362,6 +367,10 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "STEP_TO");
             wss_request_send_event(g_edev_target, ORMET_PLAY_END);
             wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            
+            uint32_t cmd_id=0;
+            bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
+
             last_message_received = 0;
             last_event = 0;
             send_message = 0; // 重置发送消息标志

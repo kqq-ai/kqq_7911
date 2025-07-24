@@ -12,7 +12,7 @@
 #define MAX_VOLUME_VALUE	100        /**< Maximum volume value */
 #define INIT_VOLUME_VALUE   70         /**< Initial volume value */
 
-#define DEC_BUF_LEN      12 * 1024     /**< Decoder buffer length (12KB) */
+#define DEC_BUF_LEN      32 * 1024     /**< Decoder buffer length (32KB) */
 #define STREAM_BUF_LEN   300 * 1024    /**< Stream buffer length (300KB) */
 
 /**
