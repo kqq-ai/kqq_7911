@@ -329,7 +329,6 @@ int recorder_get_play_pause_state(recorder_hdl *recorder)
     if (recorder == NULL) {
         return RECERROR_Null_Pointer;
     }
-    printf("%d", recorder->running_flag);
 
     return recorder->running_flag;
 }

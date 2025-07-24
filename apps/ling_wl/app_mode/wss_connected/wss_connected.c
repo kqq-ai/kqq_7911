@@ -74,11 +74,7 @@ static int wss_connected_unint(void)
     wss_application_uninit();
 
     /* 退出wss_connected模式时，关闭WSS连接，释放资源 */
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context->websockets_info != NULL) {
-        wss_server_disconnect(context->websockets_info);
-        context->websockets_info = NULL;
-    }
+    wss_disconnect();
     return 0;
 }
 

@@ -439,7 +439,7 @@ int bka_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, 
 {
     ASSERT(p_eend_dev != NULL);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    p_eend_dev->handshake_info.handshake_flag=true; // 设置握手标志
+    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     uart_send_set_sn(p_eend_dev->sn);
 
     u8 cmd_turn_on[] = {0xA0, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};

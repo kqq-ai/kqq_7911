@@ -84,6 +84,7 @@ static void lwl_app_task(void *priv)
     while (true) {
         lwl_app_mode_loop();
     }
+    lwl_app_uninit();
 }
 
 static void open_scan_delay(void *priv)

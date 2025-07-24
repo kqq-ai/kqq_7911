@@ -9,8 +9,8 @@ void wss_audio_uninit();
 u32 get_time_stamp();
 
 bool is_audio_playing();
-void wss_audio_start();
-void wss_audio_stop();
+void wss_ble_audio_start();
+void wss_ble_audio_stop();
 
 bool is_voice_availble();
 bool is_mic_on();

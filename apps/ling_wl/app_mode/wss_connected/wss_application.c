@@ -120,6 +120,7 @@ bool wss_application_loop()
     }
 
     if (wss_request_loop()) {
+        wss_device_loop();
     }
 
     // 状态机处理
@@ -138,7 +139,7 @@ bool wss_application_loop()
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
         // if (wss_application_check_touch_key_exit()) {
         //     g_device_state = DEVICE_IDLE;
-        //     wss_audio_stop(); // 按键打断对话
+        //     wss_ble_audio_stop(); // 按键打断对话
         //     log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE (touch key down)");
         //     g_touch_key_exit = false; // 清除标志
         // }

@@ -27,8 +27,12 @@
 #include "ota/http_ota.h"
 #include "log/log_mqtt.h"
 #include "bt_ble/app_wifi_manage.h"
+#include "protocol/cp/c_uart_p.h"
 
 #include "protocol/odm/odm_secure.h"
+
+
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
 static int net_connected_init(void)
 {
@@ -85,6 +89,9 @@ void app_net_connected_loop()
     }
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+    } else {
+        log_i("websockets init failed\n");
+        set_led_connect_error();// WSS ERROR
     }
     // TODO 尝试重连WSS
 }

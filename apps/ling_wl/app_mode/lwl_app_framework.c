@@ -1,4 +1,3 @@
-
 #include "lwl_app_framework.h"
 
 #include "cpu.h"
@@ -7,12 +6,13 @@
 
 #include "power_on/power_on.h"
 #include "app_core.h"
+#include "os/os_api.h"
 
 static u8 app_prev_mode = 0;
 static u8 app_curr_mode = 0;
 static u8 app_next_mode = 0;
 static u8 mode_exitting = 0;
-
+static OS_MUTEX g_mode_mutex;
 
 //*----------------------------------------------------------------------------*/
 /**@brief    模式退出检查
@@ -60,18 +60,24 @@ static int lwl_app_mode_switch_check(u8 app_mode)
 /*----------------------------------------------------------------------------*/
 int lwl_app_mode_switch_to(u8 app_mode)
 {
+    os_mutex_pend(&g_mode_mutex, 0);
+
     if (app_curr_mode == APP_DEVICE_CHECK_MODE) {
+        os_mutex_post(&g_mode_mutex);
         return false;
     }
     if (app_curr_mode == app_mode) {
+        os_mutex_post(&g_mode_mutex);
         return false;
     }
 
     if (!lwl_app_mode_switch_check(app_mode)) {
+        os_mutex_post(&g_mode_mutex);
         return false;
     }
 
     if (!lwl_app_mode_switch_exit_check(app_curr_mode)) {
+        os_mutex_post(&g_mode_mutex);
         return false;
     }
 
@@ -81,6 +87,7 @@ int lwl_app_mode_switch_to(u8 app_mode)
     app_prev_mode = app_curr_mode;
     app_next_mode = app_mode;
 
+    os_mutex_post(&g_mode_mutex);
     return TRUE;
 }
 
@@ -133,6 +140,7 @@ void lwl_app_mode_exit_ok()
 
 void lwl_app_init(u8 init_mode)
 {
+    os_mutex_create(&g_mode_mutex);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     app_curr_mode = init_mode;
 }
@@ -175,5 +183,11 @@ void lwl_app_mode_loop()
         lwl_app_mode_exit_ok();
         break;
     }
+}
+
+// 在释放时删除互斥锁
+void lwl_app_uninit()
+{
+    os_mutex_del(&g_mode_mutex, 1);
 }
 

@@ -7,9 +7,10 @@ int send_bin_data(uint8_t *data, uint32_t len);
 int send_audio_status(int type, int event);
 int send_req_message(const char *send_id, bool is_play, int event_type);
 
-
 void wss_exception_exit();
 bool wss_check_exit();
+
 bool wss_connect();
+void wss_disconnect();
 
 #endif

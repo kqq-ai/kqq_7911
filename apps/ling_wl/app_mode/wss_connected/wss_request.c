@@ -136,18 +136,21 @@ static void wss_request_print_event(int msg_event, char* tag)
 //=================================================================================================
 void app_music_play_end_cb(void *priv)
 {
-    if (last_message_received == ORMET_PLAY_END) {
-        wss_audio_stop();
+    log_i("app_music_play_end_cb last_messgae %d %d", last_message_received, last_event);
+    if (last_message_received == OAST_TTS && last_event == OASE_END) {
+        wss_ble_audio_stop();
         send_message = ORMET_PLAY_END;
+    } else {
+        send_message = ORMET_PLAY_NEAR_END;
     }
 }
 
 //=================================================================================================
 // WSS response callback
 //=================================================================================================
-static void odmp_rsp_cbk(int type, odmp_package_t *pkg)
+static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
-    log_i("odmp_rsp_cbk level-%d(>=%d): %d\n", ORX_EVENT_CLASS[type], ORX_EVENT_CLASS[last_message_received], type);
+    log_i("wss_rsp_cbk level-%d(>=%d): %d\n", ORX_EVENT_CLASS[type], ORX_EVENT_CLASS[last_message_received], type);
     if (ORX_EVENT_CLASS[type] < ORX_EVENT_CLASS[last_message_received]) return;
     switch (type) {
     case OR_INITIAL_SETUP_RESPONSE:
@@ -199,7 +202,7 @@ static void odmp_rsp_cbk(int type, odmp_package_t *pkg)
                 last_message_received = OR_AUDIO_STATUS;
                 last_event = OASE_ABNORMAL;
             } else if (pkg->audio_status.event == OASE_SENTENCE_START) {
-                log_i("AUDIO_STATUS: OASE_ABNORMAL\n");
+                log_i("AUDIO_STATUS: OASE_SENTENCE_START\n");
             } else if (pkg->audio_status.event == OASE_SENTENCE_END) {
                 log_i("AUDIO_STATUS: OASE_SENTENCE_END\n");
             }
@@ -226,7 +229,7 @@ static void reply_tts_bind(lwl_eend_dev_t *p_dev)
         wss_request_send_event(p_dev, ORMET_SWITCH_FAILED);
         return;
     } else {
-        wss_audio_start();
+        wss_ble_audio_start();
         wss_request_send_event(p_dev, ORMET_SWITCH_SUCCESS);
     }
 }
@@ -278,7 +281,7 @@ void wss_request_init()
     log_i("Init WSS request\n");
     g_app_ctx = lwl_app_core_context_get_instance();
     /* 注册odmp事件回调 */
-    odmp_register_rsp_cbk(odmp_rsp_cbk);
+    odmp_register_rsp_cbk(wss_rsp_cbk);
 
     g_mode_state = STATE_IDLE;
     wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
@@ -295,14 +298,14 @@ void wss_request_uninit()
 void wss_request_stop()
 {
     log_i("Stop WSS request\n");
-    odmp_register_audio_data_cbk(NULL); 
+    wss_ble_audio_stop();
 
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD) {
         send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
     }
 
-    wss_audio_stop(); // 停止音频播放
+    wss_ble_audio_stop(); // 停止音频播放
     wss_mic_stop(); // 开始录音
 
     // 重置状态到IDLE
@@ -346,6 +349,14 @@ bool wss_request_loop()
 
     case STATE_DOWNLOAD:
         // 下载结束，回到TTS_BIND
+        if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_END){
+            // log_i("Download finished, returning to TTS_BIND %d", send_message);
+        }
+        if ((last_message_received != OR_AUDIO_STATUS || last_event != OASE_END) && send_message == ORMET_PLAY_NEAR_END) {
+            log_i("Download continue  reset music callback");
+            app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+            send_message = 0; // 重置发送消息标志
+        }
         if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_END && send_message == ORMET_PLAY_END) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "STEP_TO");

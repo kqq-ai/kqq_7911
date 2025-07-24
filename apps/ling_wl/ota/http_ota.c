@@ -175,13 +175,14 @@ int request_ota_info(char **pota_info)
         return OTAERROR_Malloc_Failed;
     }
     ctx->url = "https://kqq.tos-cn-beijing.volces.com/kqq_ota.json";
-    ctx->timeout_millsec = 5000;
+    ctx->timeout_millsec = 100;
     ctx->priv = &http_body_buf;
     ctx->connection = "close";
 
 
     log_i("http get ota info start\n\n");
     ret = httpcli_get(ctx);
+    log_i("http get ota info end\n\n");
 
     if (ret != HERROR_OK) {
         log_e("http get ota info faile %d\n", ret);

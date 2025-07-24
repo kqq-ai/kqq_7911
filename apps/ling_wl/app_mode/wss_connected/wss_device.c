@@ -50,7 +50,7 @@ static void device_event_handler_cb(lwl_event_t *e)
 
             if (p_eend_dev != g_edev_closest) {
                 g_edev_closest = p_eend_dev;
-                p_eend_dev->handshake_info.handshake_flag=true; // 设置握手标志
+                p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
                 wss_request_send_event(p_eend_dev, ORMET_NEAR_TRIGGER);
             }
 
