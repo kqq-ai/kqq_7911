@@ -37,14 +37,14 @@ static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED)
 static int net_connected_init(void)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    int ret = log_mqtt_start();
+    log_i("log_mqtt_start init\n");
     // OTA check version
-    int ret = do_check_and_ota();
+    ret = do_check_and_ota();
     if (ret == 1) {
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 0;
     }
-    ret = log_mqtt_start();
-    log_i("log_mqtt_start init\n");
     context->websockets_info = NULL;
     return 0;
 }

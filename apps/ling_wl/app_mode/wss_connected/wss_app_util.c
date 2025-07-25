@@ -150,6 +150,7 @@ void wss_disconnect() {
         wss_server_disconnect(context->websockets_info);
         context->websockets_info = NULL;
     }
+    log_mqtt_stop();
     os_mutex_post(&g_wss_mutex);
 }
 

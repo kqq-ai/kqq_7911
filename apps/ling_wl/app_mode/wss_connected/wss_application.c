@@ -16,6 +16,9 @@
 
 #include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
+#include "log/log_mqtt.h"
+
+#define log_i log_mqtt
 
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000

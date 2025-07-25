@@ -20,6 +20,9 @@
 
 #include "timer.h" // 确保有获取毫秒时间的函数
 #include "os/os_api.h"
+#include "log/log_mqtt.h"
+
+#define log_i log_mqtt
 
 static u32 last_dequeue_time = 0;
 
@@ -203,13 +206,13 @@ static void device_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE:
         log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE");
         if (p_eend_dev && p_eend_dev->distance_info.distance_type == DISTANCE_0) {
-            if (!is_in_edev_set(p_eend_dev)) {
-                add_to_edev_set(p_eend_dev);
-                enqueue_edev(p_eend_dev);
-                add_target_sn(p_eend_dev->sn);
-            } else {
-                enqueue_edev(p_eend_dev);
-            }
+            // if (!is_in_edev_set(p_eend_dev)) {
+            //     add_to_edev_set(p_eend_dev);
+            //     enqueue_edev(p_eend_dev);
+            //     add_target_sn(p_eend_dev->sn);
+            // } else {
+            //     enqueue_edev(p_eend_dev);
+            // }
         }
         break;
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE:
