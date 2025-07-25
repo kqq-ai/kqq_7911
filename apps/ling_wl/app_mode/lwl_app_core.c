@@ -41,6 +41,7 @@ static void init_app_context(lwl_app_context_t* context)
     g_event_scheduler_exit = 0;
 
     s_app_context->dev_map = map_create();
+    s_app_context->deleted_map = map_create();
     os_mutex_create(&s_app_context->dev_map_mutex);
 
     ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY));
@@ -74,6 +75,10 @@ void lwl_app_context_free(lwl_app_context_t *ctx)
     if (ctx->dev_map) {
         map_destroy(ctx->dev_map);
         ctx->dev_map = NULL;
+    }
+    if (ctx->deleted_map) {
+        map_destroy(ctx->deleted_map);
+        ctx->deleted_map = NULL;
     }
     pthread_mutex_destroy(&ctx->dev_map_mutex);
     pthread_mutex_destroy(&ctx->event_handlers_mutex);
@@ -141,6 +146,48 @@ void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv)
     }
     
     map_iterator_unlock(it); // 释放锁
+}
+
+/**
+ * @brief 清空并释放所有E端设备对象
+ */
+void clear_all_eend_dev(void)
+{
+    ASSERT(s_app_context != NULL);
+
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
+
+    MapIterator it = map_begin(s_app_context->dev_map);
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    // 先收集所有key，防止遍历过程中修改map导致崩溃
+    int dev_count = map_size(s_app_context->dev_map);
+    char **sn_list = malloc(dev_count * sizeof(char *));
+    int idx = 0;
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        char *sn = (char *)map_iterator_key(it);
+        sn_list[idx] = strdup(sn);
+        idx++;
+
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
+        bka_eend_dev_handshake_info_t *pdev_info = &pdev->handshake_info;
+        pdev_info->alive = 0;
+    }
+    map_iterator_unlock(it);
+    // 删除并释放所有pdev
+    for (int i = 0; i < idx; ++i) {
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
+        if (pdev) {
+            map_erase(s_app_context->dev_map, sn_list[i]);
+            
+            map_insert(s_app_context->deleted_map, sn_list[i], pdev);
+            // TODO need to free(pdev);
+        }
+        free(sn_list[i]);
+    }
+    free(sn_list);
+
+    os_mutex_post(&s_app_context->dev_map_mutex);
 }
 
 void dump_all_eend_info()

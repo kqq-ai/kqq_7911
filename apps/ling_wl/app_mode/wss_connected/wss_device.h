@@ -2,9 +2,10 @@
 #define __WSS_DEVICE_H__
 
 #include "cpu.h"
+#include "app_mode/lwl_app_core.h"
 
 void wss_device_init();
 void wss_device_uninit();
-bool wss_device_loop();
+lwl_eend_dev_t * wss_device_loop();
 
 #endif

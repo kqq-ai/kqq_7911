@@ -137,8 +137,8 @@ void wss_ble_audio_stop() {
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_audio_play_end) {
         g_audio_play_end = true;
-        app_music_play_stop(g_app_ctx->music_player);
     }
+    app_music_play_stop(g_app_ctx->music_player);
     odmp_register_audio_data_cbk(NULL); 
     os_mutex_post(&g_audio_mutex);
 }

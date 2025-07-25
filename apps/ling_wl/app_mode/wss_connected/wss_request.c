@@ -184,8 +184,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         if (pkg->audio_status.type == OAST_ASR) {
             if (pkg->audio_status.event == OASE_ABNORMAL) {
                 log_i("AUDIO_STATUS: ASR OASE_ABNORMAL\n");
-                last_message_received = OR_AUDIO_STATUS;
-                last_event = OASE_ABNORMAL;
+                if (last_message_received != OR_TTS_BIND) {
+                    last_message_received = OR_AUDIO_STATUS;
+                    last_event = OASE_ABNORMAL;
+                }
             }
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
@@ -267,6 +269,27 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
     }
 }
 
+void wss_request_stop()
+{
+    log_i("Stop WSS request\n");
+
+    // 在STATE_DOWNLOAD时发送TTS异常
+    if (g_mode_state == STATE_DOWNLOAD) {
+        uint32_t cmd_id = 0;
+        bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
+        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
+    }
+    g_edev_target = NULL; // 清除目标设备
+
+    wss_ble_audio_stop(); // 停止音频播放
+    wss_mic_stop(); // 开始录音
+
+    // 重置状态到IDLE
+    g_mode_state = STATE_IDLE;
+    last_message_received = 0;
+    last_event = 0;
+}
+
 void wss_request_init()
 {
     log_i("Init WSS request\n");
@@ -284,24 +307,7 @@ void wss_request_uninit()
 
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
-}
-
-void wss_request_stop()
-{
-    log_i("Stop WSS request\n");
-
-    // 在STATE_DOWNLOAD时发送TTS异常
-    if (g_mode_state == STATE_DOWNLOAD) {
-        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
-    }
-
-    wss_ble_audio_stop(); // 停止音频播放
-    wss_mic_stop(); // 开始录音
-
-    // 重置状态到IDLE
-    g_mode_state = STATE_IDLE;
-    last_message_received = 0;
-    last_event = 0;
+    wss_request_stop();
 }
 
 bool wss_request_loop()

@@ -20,6 +20,7 @@
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
+static u32 last_req_time = 0;
 
 static int g_audio_playing = false;
 
@@ -41,11 +42,6 @@ static void wss_application_print_state(int mode_state, char* tag)
         log_i("[%s]DEVICE_AUDIO", tag);
         break;
     }
-}
-
-static bool is_edev_far_away(lwl_eend_dev_t *pdev)
-{
-    return (pdev->distance_info.distance_type == DISTANCE_2) || (pdev->distance_info.distance_type == DISTANCE_3);
 }
 
 static int g_touch_key_exit = false;
@@ -77,6 +73,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");
+        wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
@@ -98,6 +95,7 @@ void wss_application_init()
 
     /* 重置 */
     g_audio_playing = false;
+    last_req_time = 0;
 }
 
 void wss_application_uninit()
@@ -120,7 +118,11 @@ bool wss_application_loop()
     }
 
     if (wss_request_loop()) {
-        wss_device_loop();
+        if (g_curr_time - last_req_time >= 3000) {
+            wss_device_loop();
+        }
+    } else {
+        last_req_time = g_curr_time;
     }
 
     // 状态机处理
