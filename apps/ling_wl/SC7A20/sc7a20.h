@@ -56,3 +56,5 @@ void sc7a20_exit(void *iic_hdl);
 int sc7a20_interrupt_detect(void *iic_hdl);
 
 int sc7a20_clear_interrupt(void *iic_hdl);
+
+int is_device_moving(); /* 检测设备是否在移动 */

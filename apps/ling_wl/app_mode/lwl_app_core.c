@@ -171,6 +171,25 @@ void dump_all_eend_info()
     map_iterator_unlock(it); // 释放锁
 }
 
+bool is_E_nearby()
+{
+    ASSERT(s_app_context != NULL);
+    
+    int count = 0;
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+
+        if (dev->distance_info.distance_type == DISTANCE_0 ||
+            dev->distance_info.distance_type == DISTANCE_1) {
+            count++;
+        }
+    }
+    map_iterator_unlock(it); // 释放锁
+    return count>=0;
+}
 /**
  * @brief 查找信号最强的E端设备
  * @return 信号最强的设备对象引用，如果未找到返回 NULL

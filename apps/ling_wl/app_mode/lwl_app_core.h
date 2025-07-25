@@ -197,4 +197,11 @@ void lwl_event_handler_remove(lwl_event_handler_cb_t *handler);
  */
 void lwl_event_notify(lwl_event_t *event);
 
+
+/**
+ * @brief Check if an EEND device is nearby
+ * @return true if an EEND device is within 5 meters, false otherwise
+ */
+bool is_E_nearby();
+
 #endif

@@ -32,6 +32,10 @@
 #include "gpio.h"
 #include "protocol/cp/c_uart_p.h"
 
+#include "system/os/os_api.h"
+#include "system/os/os_api.h"
+
+#include "../../SC7A20/sc7a20.h"
 #include "protocol/odm/odmp.h"
 
 // static int wss_app_net_event_handler(struct net_event *event)
@@ -78,21 +82,66 @@ static int wss_connected_unint(void)
     return 0;
 }
 
+#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
+#define NO_MOVE_TIMEOUT_MS   (1 * 60 * 1000) // 5分钟
+// 模式5 加速度传感器相关变量
+
+
+void *wss_condition_monitor_thread(void *arg)
+{
+    u32 last_E_found_time = 0;
+    u32 last_move_time = 0;
+
+    while (1) {
+        // 检查E
+        if (!is_E_nearby()) {
+            if (!last_E_found_time) last_E_found_time = timer_get_ms();
+        } else {
+            last_E_found_time = 0;
+        }
+
+        // 检查WiFi
+        if (!is_device_moving()) { // 你需要实现这个函数
+            if (!last_move_time) last_move_time = timer_get_ms();
+        } else {
+            last_move_time = 0;
+        }
+
+        if (last_move_time&&(last_E_found_time&&(timer_get_ms() - last_E_found_time > NO_E_TIMEOUT_MS) ||
+            (timer_get_ms() - last_move_time > NO_MOVE_TIMEOUT_MS))) {
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+            log_i("No E found or device not moving for a long time, switching to default mode.");
+            break; // 退出线程
+        }
+        os_time_dly(100);
+        
+    }
+    return NULL;
+}
+
+
 void app_wss_connected_mode(void)
 {
-    wss_connected_init();
+    wss_connected_init();//application init 和blk RSSI测距 
     
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    // 创建检测线程
+    os_task_create(wss_condition_monitor_thread, NULL, 40, 1024, 128, "wss_cond_monitor");
 
     while (1) {
         // 应用代码
         if (wss_application_loop()) {
             lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         }
+
         mdelay(10);
+
         if (lwl_app_mode_exitting()) {
             wss_connected_unint();
             return;
         }
+
+
     }
 }

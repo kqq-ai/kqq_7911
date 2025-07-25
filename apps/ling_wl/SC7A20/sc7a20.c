@@ -201,10 +201,10 @@ int sc7a20_interrupt_detect(void * iic_hdl)
     if (iic_read_one_byte(iic_hdl, SC7A20H_INT1_SRC, &int_status) == 0)
     {
         if (int_status & 0x40) { // 检查 IA 位
-            printf("interrupt happend!\r\n");           
+            //printf("interrupt happend!\r\n");           
             return 1;
         } else {
-            printf("not interrupt happend!\r\n");
+            //printf("not interrupt happend!\r\n");
             return 0;
         }
     }
@@ -219,4 +219,22 @@ int sc7a20_clear_interrupt(void * iic_hdl)
     {
         printf("Failed to clear interrupt\r\n");
     }
+}
+
+extern void *g_iic_hdl;                            // 外部IIC句柄声明（在app_sc7a20_task.c中定义）
+
+// 检测设备是否在移动
+int is_device_moving(){
+    if(g_iic_hdl == NULL) {
+        log_i("IIC handle is NULL, cannot detect movement");
+        return -1; // 错误处理
+    }
+
+    int ret=sc7a20_interrupt_detect(g_iic_hdl);
+    // if(ret>0){
+    //     log_i("Device is moving");
+    // }else{
+    //     log_i("Device is not moving");
+    // }
+    return ret;
 }
