@@ -6,7 +6,7 @@
 #include "util/ring_queue.h"
 #include "lfs.h"
 
-#define CONFIG_STORE_VOLUME
+// #define CONFIG_STORE_VOLUME
 #define VOLUME_STEP 5                  /**< Volume adjustment step size */
 #define MIN_VOLUME_VALUE	5          /**< Minimum volume value */
 #define MAX_VOLUME_VALUE	100        /**< Maximum volume value */

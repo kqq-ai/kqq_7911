@@ -152,9 +152,9 @@ static void app_lingwl_main(void)
 
     // 取消静音
 #if 1
-    gpio_direction_output(IO_PORTA_00, 1);  //
+    gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
 #else 
-    gpio_direction_output(IO_PORTB_02, 1);  // 
+    gpio_direction_output(IO_PORTB_02, 1);  // 设置E出声
 #endif
 
     /* 创建网络&提示音解码播放器 */
@@ -165,7 +165,7 @@ static void app_lingwl_main(void)
     //set_led_white(); /// on LED after power ON
 
     /* 创建异步任务处理任务 */
-    start_async_msg_loop();
+    // start_async_msg_loop();
 
     /* 创建线程池 */
     pool = threadpool_create(4, 10);

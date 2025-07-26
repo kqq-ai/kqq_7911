@@ -1211,15 +1211,10 @@ static void devices_check_play_music(const char *fname)
 static void devices_check_cb(bka_cmd_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    log_i("devices_check_cb\n");
-    
-    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    }
+    log_i("devices_check_cb  %s\n", pdev->sn);
     switch(code) {
     case BKA_CMD_CODE_COMPL:
-        log_i("Switch PortE %s OK\n", sn_string);
+        log_i("Switch PortE OK\n");
         ///////////////////////////////////////////
         //devices_check_play_music(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
         break;

@@ -185,7 +185,7 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
         AppMessage msg;
         msg.type = APPMSG_SHORT_CLICK;
         if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&g_msg_queue, &msg)) {
-            log_e("Failed to add message APPMSG_SHORT_CLICK");
+            log_i("Failed to add message APPMSG_SHORT_CLICK");
         }
     }   break;
     case LWL_EVENT_TYPE_UART_SYNC:

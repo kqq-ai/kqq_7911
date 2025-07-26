@@ -151,7 +151,7 @@ void monitor_start(void)
 
     argv[0] = MESSAGE_START;
     argv[1] = 11;
-    // 用系统的发消息的函数，发送一个消息代表我的任务停止
+    // 用系统的发消息的函数，发送一个消息代表我的任务开始
     ret = __os_taskq_post("distance_main", Q_USER, argc, argv);
     if (ret == OS_TASK_NOT_EXIST) {
         log_i("[MEASDIST]the task is not exist\n");
@@ -168,7 +168,7 @@ void monitor_stop(void)
     int ret = 0;
     argv[0] = MESSAGE_STOP;
     argv[1] = 12;
-    // 用系统的发消息的函数，发送一个消息代表我的任务开始
+    // 用系统的发消息的函数，发送一个消息代表我的任务停止
     ret = __os_taskq_post("distance_main", Q_USER, argc, argv);
     if (ret == OS_TASK_NOT_EXIST) {
         log_i("[MEASDIST]the task is not exist\n");
@@ -177,8 +177,9 @@ void monitor_stop(void)
     } else {
         log_i("[MEASDIST]post success\n");
     }
-    log_i("[MEASDIST]monitor_stop : clean_all_dev_rssi_samples\n");
+    log_i("[MEASDIST]monitor_stop : clear_all_eend_dev\n");
     clear_all_eend_dev(); // 清空所有E端设备信息
+    log_i("[MEASDIST]monitor_stop : clear_all_eend_dev end\n");
 }
 
 extern bool g_handshake_is_ongoing;
@@ -385,7 +386,7 @@ static void distance_main(void *priv)
                 notify_app_time = current_time;
 
                 process_all_dev_rssi_samples();
-                blue_distance_notify_app();
+                // blue_distance_notify_app();
                 blue_distance_notify_self();
                 clean_all_dev_rssi_samples();
             }

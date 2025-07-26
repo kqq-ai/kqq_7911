@@ -17,6 +17,8 @@
 
 #include "ble_att_util.h"
 
+#define log_e log_i
+
 static const uint8_t handshake_dummy_data[] = { 0x5A, 0xA5 };
 
 // static bka_eend_dev_handshake_info_t g_eend_list[KEEP_ALIVE_DEVICE_MAX_SIZE];
@@ -68,26 +70,6 @@ static uint32_t generate_cmd_id(const char *sn)
 
 static inline void call_cmd_cb(bka_cmd_t *cmd, int code) {
     if (cmd->cb) cmd->cb(code, cmd->priv);
-}
-
-static int handshake_task_prepare(bool need_resp)
-{
-    if (need_resp) {
-        /* 查询GATT服务 */
-        os_sem_set(&g_search_sem, 0);
-        ble_simple_client_profile_start();
-        if (os_sem_pend(&g_search_sem, 1000) == OS_TIMEOUT) {
-            log_e("[BKA]Error search server timeout!!!");
-            return -1;
-        }
-        /* 订阅特征 */
-        u16 tmp_16 = 0x01; //fixed
-        if (ble_simple_client_write_send(NULL, notify_handle + 1, (u8 *)&tmp_16, 2)) {
-            log_e("[BKA]Unexpected Error !!!");
-            return -1;
-        }
-    }
-    return 0;
 }
 
 static bka_cmd_code_e handshake_task_execute_cmd_normal(bka_cmd_t *cmd)
@@ -176,6 +158,7 @@ static void handshake_task(void *priv)
     os_mutex_pend(&pdev_info->mutex, 0);
 
     /* 建立连接 */
+    log_i("[BKA]ble handshake_task %s\n", pdev->sn);
     os_sem_set(&g_conn_sem, 0);
     if (ble_simple_client_create_connection(pdev_info->address, pdev_info->address_type) == APP_BLE_OPERATION_ERROR) {
         log_e("[BKA]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
@@ -187,29 +170,30 @@ static void handshake_task(void *priv)
         ble_simple_client_scan_enable(1);
         goto __finish;
     }
-    log_i("[BKA]ble connected\n");
+    log_i("[BKA]ble connected %s\n", pdev->sn);
 
     bool has_cmd = false;
     bka_cmd_t cmd;
     if (my_blocking_queue_try_dequeue(&pdev_info->cmd_buffer, &cmd) == MYERROR_Success) {
         has_cmd = true;
     }
-    log_i("has cmd: %d %02X %02X", has_cmd, cmd.data[0], cmd.data[1]);
 
     bka_cmd_code_e code = BKA_CMD_CODE_COMPL;
     if (has_cmd) { /* send cmd */
-        code = handshake_task_execute_cmd(&cmd);
+        log_i("[BKA]ble has cmd: %d %02X %02X", has_cmd, cmd.data[0], cmd.data[1]);
+        code = handshake_task_execute_cmd(&cmd); // maybe wait for 2s
         if (code == BKA_CMD_CODE_COMPL) {
             pdev->power_on_state = true;
             memcpy(pdev->bound_mac, lwl_app_core_context_get_instance()->mac, 6);
         }
         call_cmd_cb(&cmd, code);
     } else { /* send dummy */
-        handshake_task_send_dummy();
+        handshake_task_send_dummy(); // wait for 300ms
     }
 
     /* 断开连接 */
     ble_simple_client_disconnect();
+    log_i("[BKA]ble disconnected %s\n", pdev->sn);
 
     /* 本次握手通信成功 */
     if (code == BKA_CMD_CODE_COMPL) {
@@ -259,7 +243,7 @@ static void ble_conn_event_handler(uint8_t *packet)
 static void ble_disconn_event_handler(uint8_t *packet)
 {
     u16 handle = hci_event_disconnection_complete_get_connection_handle(packet);
-    log_i("[BKA]ble_disconn_event_handler: %0x\n", handle);
+    // log_i("[BKA]ble_disconn_event_handler: %0x\n", handle);
 }
 
 static void ble_client_report_data_event_handler(att_data_report_t *report_data, void *priv)
@@ -291,10 +275,11 @@ static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
     if (pdev->handshake_info.handshake_flag == 0) {
         /* 上一轮没有握手成功 */
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
-        log_i("[BKA]%s handshake failed.", sn_string);
-
         pdev->handshake_info.alive_hs_fail_cnt++;
+        log_i("[BKA]%s handshake failed %d times.", sn_string, pdev->handshake_info.alive_hs_fail_cnt);
+
         if (pdev->handshake_info.alive_hs_fail_cnt >= KEEP_ALIVE_HANDSHAKE_LOST_CNT) {
+            log_i("[BKA]%s lost.", sn_string);
             /* 连续n轮没有握手成功判定为丢失 */
             pdev->handshake_info.alive = 0;
 
@@ -325,7 +310,7 @@ static void ble_keep_alive_task(void *priv)
 {
     while (1) {
         ble_keep_alive_start_handshake();
-        mdelay(10000);
+        mdelay(CHECK_ALIVE_TIME);
     }
 }
 
@@ -383,6 +368,7 @@ int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buff
     cmd_pair.cmd_id = cmd_id;
 
     if (my_blocking_queue_try_enqueue(&p_eend_dev->handshake_info.cmd_buffer, &cmd_pair) == MYERROR_Is_Full) {
+        log_i("Failed to add cmd to %s", p_eend_dev->sn);
         ret = BKACODE_Cmd_Queue_Full; /* 对应设备的 cmd_buffer 满了 */
     } else {
         *cmd_id_out = cmd_id;

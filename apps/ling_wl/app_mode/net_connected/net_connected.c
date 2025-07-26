@@ -31,8 +31,6 @@
 
 #include "protocol/odm/odm_secure.h"
 
-bool is_otaing = false;
-
 static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
 static int net_connected_init(void)
@@ -41,7 +39,7 @@ static int net_connected_init(void)
     int ret = log_mqtt_start();
     log_i("log_mqtt_start init\n");
     // OTA check version
-    is_otaing = do_check_and_ota();
+    do_check_and_ota();
     context->websockets_info = NULL;
     return 0;
 }
@@ -50,9 +48,10 @@ static int net_connected_init(void)
 static int net_connected_unint(void)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    is_otaing = false;
     if (context->websockets_info != NULL) {
-        //TODO 同步设备状态
+        //TODO 同步设备状态 IoT Cload
+        //不能关 websocket !!!
+        //APP_WSS_CONNECTED_MODE 模式退出时关闭
 #if 0
         if (!get_ble_app_disconnect_flag()) {
             lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
@@ -85,7 +84,8 @@ void app_net_connected_loop()
         // wifi manager
         return;
     }
-    if (is_otaing == 1) {
+    extern int OTA_download_running;
+    if( OTA_download_running > 0){
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return;
     }

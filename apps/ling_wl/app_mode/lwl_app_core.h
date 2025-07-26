@@ -93,7 +93,6 @@ typedef struct {
     lfs_t *lfs_hdl;                  /**< LittleFS filesystem handle */
 
     Map *dev_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
-    Map *deleted_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
     OS_SEM dev_map_mutex;
 
     MyBlockingQueue event_queue;     /**< Event queue (queue<lwl_event_t>) */

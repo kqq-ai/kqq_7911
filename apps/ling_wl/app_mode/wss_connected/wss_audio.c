@@ -173,7 +173,7 @@ static void recorder_data_to_data_queue(void *priv, void *data, u32 size)
 
     AsrData *asr_data = (AsrData *)data;
     if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&g_asr_data_queue, asr_data)) {
-        log_e("[WSSAPP]asr data qeue full, failed to enquque asr data.");
+        log_i("[WSSAPP]asr data qeue full, failed to enquque asr data.");
     }
 }
 

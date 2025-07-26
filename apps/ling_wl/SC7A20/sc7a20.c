@@ -204,7 +204,7 @@ int sc7a20_interrupt_detect(void * iic_hdl)
             printf("interrupt happend!\r\n");           
             return 1;
         } else {
-            printf("not interrupt happend!\r\n");
+            // printf("not interrupt happend!\r\n");
             return 0;
         }
     }

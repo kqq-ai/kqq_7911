@@ -41,7 +41,6 @@ static void init_app_context(lwl_app_context_t* context)
     g_event_scheduler_exit = 0;
 
     s_app_context->dev_map = map_create();
-    s_app_context->deleted_map = map_create();
     os_mutex_create(&s_app_context->dev_map_mutex);
 
     ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY));
@@ -75,10 +74,6 @@ void lwl_app_context_free(lwl_app_context_t *ctx)
     if (ctx->dev_map) {
         map_destroy(ctx->dev_map);
         ctx->dev_map = NULL;
-    }
-    if (ctx->deleted_map) {
-        map_destroy(ctx->deleted_map);
-        ctx->deleted_map = NULL;
     }
     pthread_mutex_destroy(&ctx->dev_map_mutex);
     pthread_mutex_destroy(&ctx->event_handlers_mutex);
@@ -179,9 +174,7 @@ void clear_all_eend_dev(void)
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
         if (pdev) {
             map_erase(s_app_context->dev_map, sn_list[i]);
-            
-            map_insert(s_app_context->deleted_map, sn_list[i], pdev);
-            // TODO need to free(pdev);
+            free(pdev);
         }
         free(sn_list[i]);
     }
@@ -346,10 +339,12 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
  */
 void free_5m_edev_targets(char **targets, int targets_num)
 {
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
     for (int i = 0; i < targets_num; i++) {
         free(targets[i]);
     }
     free(targets);
+    os_mutex_post(&s_app_context->dev_map_mutex);
 }
 
 /**
