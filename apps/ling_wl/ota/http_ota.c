@@ -14,7 +14,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE "v0.0.36" 
+#define LOCAL_VERSION_CODE "v0.0.37" 
 
 static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
 
@@ -175,7 +175,7 @@ int request_ota_info(char **pota_info)
         return OTAERROR_Malloc_Failed;
     }
     ctx->url = "https://kqq.tos-cn-beijing.volces.com/kqq_ota.json";
-    ctx->timeout_millsec = 100;
+    ctx->timeout_millsec = 1000;
     ctx->priv = &http_body_buf;
     ctx->connection = "close";
 

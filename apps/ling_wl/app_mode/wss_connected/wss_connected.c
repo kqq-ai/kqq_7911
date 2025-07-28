@@ -74,8 +74,8 @@ static int wss_connected_init(void)
 
 static int wss_connected_unint(void)
 {
-    monitor_stop();
-    wss_application_uninit();
+    wss_application_uninit();//clear all pdev
+    monitor_stop();//free all pdev
 
     /* 退出wss_connected模式时，关闭WSS连接，释放资源 */
     wss_disconnect();

@@ -93,6 +93,7 @@ typedef struct {
     lfs_t *lfs_hdl;                  /**< LittleFS filesystem handle */
 
     Map *dev_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
+    Map *deleted_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
     OS_SEM dev_map_mutex;
 
     MyBlockingQueue event_queue;     /**< Event queue (queue<lwl_event_t>) */
@@ -203,5 +204,14 @@ void lwl_event_notify(lwl_event_t *event);
  * @return true if an EEND device is within 5 meters, false otherwise
  */
 bool is_E_nearby();
+
+/**
+ * @brief 清空并释放所有E端设备对象
+ *
+ * 该函数会遍历设备信息表，释放所有lwl_eend_dev_t对象的内存，并将设备表清空。
+ * 调用后，所有已注册的E端设备对象都将被销毁，dev_map也会被清空。
+ * 注意：调用后，所有通过add_new_eend_dev分配的pdev指针都将失效。
+ */
+void clear_all_eend_dev(void);
 
 #endif

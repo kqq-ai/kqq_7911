@@ -122,7 +122,7 @@ void monitor_init(void)
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
 
     // 清空所有设备的RSSI样本
-    eend_dev_traverse(clear_rssi_samples, NULL);
+    clean_all_dev_rssi_samples();
     // 注册回调函数
     ble_adv_report_event_user_handler_add(scan_rssi_record_cb, NULL);
 
@@ -177,7 +177,8 @@ void monitor_stop(void)
     } else {
         log_i("[MEASDIST]post success\n");
     }
-    log_i("[MEASDIST]monitor_stop : stop measure the blue distance\n");
+    log_i("[MEASDIST]monitor_stop : clean_all_dev_rssi_samples\n");
+    clear_all_eend_dev(); // 清空所有E端设备信息
 }
 
 extern bool g_handshake_is_ongoing;
@@ -353,6 +354,10 @@ static void distance_main(void *priv)
                 if (recv_argv[1] == MESSAGE_INIT)
                 {
                     current_task_state = DISTANCE_TASK_INIT;
+                }
+                if (recv_argv[1] == MESSAGE_START)
+                {
+                    current_task_state = DISTANCE_TASK_START;
                 }
             }
             else

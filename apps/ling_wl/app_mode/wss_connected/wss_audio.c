@@ -137,8 +137,8 @@ void wss_ble_audio_stop() {
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_audio_play_end) {
         g_audio_play_end = true;
-        app_music_play_stop(g_app_ctx->music_player);
     }
+    app_music_play_stop(g_app_ctx->music_player);
     odmp_register_audio_data_cbk(NULL); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -360,6 +360,8 @@ void wss_audio_init()
     wss_app_recorder_en(ENABLE);
     /* 设置VAD回调，触发音频上传 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
+
+    g_recording_upload = false;
 
     /* 清除录音数据写入回调，默认不上传 */
     wss_app_recorder_data_upstream(NULL);

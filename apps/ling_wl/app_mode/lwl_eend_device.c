@@ -40,7 +40,7 @@ void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
 
     os_mutex_create(&dev->handshake_info.mutex);
     dev->handshake_info.need_handshake = false;
-    dev->handshake_info.alive = 0;
+    dev->handshake_info.alive = 1;
     dev->handshake_info.alive_hs_fail_cnt = 0;
     dev->handshake_info.handshake_flag = 0;
     memset(&dev->handshake_info.cache_buf, 0, (sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM));
