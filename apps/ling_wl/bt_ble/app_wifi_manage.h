@@ -18,6 +18,8 @@ typedef struct
 void set_app_wifi_info(app_wifi_info_t *info);
 /* 获取app_wifi_info */
 void get_app_wifi_info(app_wifi_info_t *info);
+/* 删除已连接过的并且存储的WiFi ssid */
+void app_del_stored_wifi_ssid(void);
 
 
 /*-------------------------------------------------整体的 初始化相关   start-----------------------------------------*/

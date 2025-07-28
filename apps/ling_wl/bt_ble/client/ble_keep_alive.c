@@ -470,4 +470,36 @@ int bka_cmd_remove(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id)
     return ble_keep_alive_device_remove_cmd(p_eend_dev, cmd_id);
 }
 
-
+/**
+ * @brief 往指定设备的控制指令队列中添加一条e_set_LED指令
+ * 
+ * @param[in]  p_eend_dev 设备引用
+ * @param[in]  cb 函数指针，控制指令传输完成时的回调
+ * @param[in]  priv 用户私有数据
+ * @param[out] cmd_id_out 指令ID
+ * @param[in]  r, 占空比 0 - 10000
+ * @param[in]  g, 占空比 0 - 10000
+ * @param[in]  b, 占空比 0 - 10000
+ * 
+ * @return BKACODE_Success       : 指令添加成功
+ *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
+ * 
+ * @note 执行cb时可能会持有部分锁
+ *       - p_eend_dev->handshake_info.mutex
+ *       LED 为共阳极的RGB灯 
+ */
+int bka_e_set_LED(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, u16 r, u16 g, u16 b, uint32_t *cmd_id_out) 
+{
+    ASSERT(p_eend_dev != NULL);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    u8 cmd_set_E_led[8] = {0};
+    cmd_set_E_led[0] = 0xA0;
+    cmd_set_E_led[1] = 0x02;
+    cmd_set_E_led[2] = r & 0xFF;
+    cmd_set_E_led[3] = (r >> 8) & 0xFF;
+    cmd_set_E_led[4] = g & 0xFF;
+    cmd_set_E_led[5] = (g >> 8) & 0xFF;
+    cmd_set_E_led[6] = b & 0xFF;
+    cmd_set_E_led[7] = (b >> 8) & 0xFF;
+    return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_set_E_led, sizeof(cmd_set_E_led), cb, NULL, cmd_id_out);
+}

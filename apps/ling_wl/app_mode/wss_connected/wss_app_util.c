@@ -6,6 +6,7 @@
 #include "wss/wss_client.h"
 
 #include "system/includes.h"
+#include "app_lingwl.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -139,6 +140,7 @@ bool wss_connect() {
     g_exception_exit = false;
     log_i("websockets init succ\n");
     get_SN(&sn_c_id);
+    set_wss_connected_flag(true);
     os_mutex_post(&g_wss_mutex);
     return true;
 }
@@ -151,6 +153,7 @@ void wss_disconnect() {
         context->websockets_info = NULL;
     }
     log_mqtt_stop();
+    set_wss_connected_flag(false);
     os_mutex_post(&g_wss_mutex);
 }
 

@@ -323,7 +323,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
-        wifi_enter_smp_cfg_mode(); // 进入SMP模式
+        // wifi_enter_smp_cfg_mode(); // 进入SMP模式
         break;
 
     case WIFI_EVENT_P2P_START:

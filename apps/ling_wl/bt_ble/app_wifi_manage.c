@@ -5,6 +5,7 @@
 #include "lwip.h"
 #include "le/att.h"
 #include "stdlib.h" // 包含 qsort 所需的头文件
+#include "syscfg/syscfg_id.h"
 
 /*-------------------------------------------------本文件的 变量及其 所有函数的定义-----------------------------------*/
 static OS_SEM g_disconnect_sem;                                                     // 断连函数(阻塞方式)所用到的sem
@@ -445,4 +446,18 @@ void get_app_wifi_info(app_wifi_info_t *info)
         return;
     }
     memcpy(info, &g_app_wifi_info, sizeof(app_wifi_info_t));
+}
+
+/* 删除已连接过的并且存储的WiFi ssid */
+void app_del_stored_wifi_ssid(void)
+{
+    struct wifi_stored_sta_info app_wifi_stored_ssid[NETWORK_SSID_INFO_CNT] = {0};
+    int ret = 0;
+    ret = wifi_get_stored_sta_info(app_wifi_stored_ssid);
+    log_i("app_del_stored_wifi_ssid: %d\n", ret);
+    for (int i = 0; i < ret; i++)
+    { 
+        log_i("app_del_stored_wifi_ssid: %s\n", app_wifi_stored_ssid[i].ssid);
+        wifi_del_stored_sta_info(app_wifi_stored_ssid[i].ssid);
+    }
 }

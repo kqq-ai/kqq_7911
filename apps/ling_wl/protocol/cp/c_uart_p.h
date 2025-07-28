@@ -24,6 +24,7 @@ typedef enum {
     UART_CMD_MOVE_OVER_A_METER = 0xA6, // 通知检测距离大于一米
     UART_CMD_SET_LED_COLOR     = 0xA7, // 设置LED颜色
     UART_CMD_OPEN_LE_AUDIO     = 0xA8, // 通知打开LE Audio
+    UART_CMD_CLEAR_WIFI_SSID   = 0xA9, // 通知7911 清除WIFI SSID
 } uart_cmd_t;
 
 // 返回码表
@@ -56,6 +57,10 @@ void handle_event(uart_event_type_t event);
 
 // 发送响应包
 int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len);
+
+/* 0. 清除wifi ssid 的响应函数 */
+int uart_response_clear_wifi_ssid(void);
+
 // 发送事件包
 int uart_send_inquiry(uint8_t *payload, uint16_t len);
 

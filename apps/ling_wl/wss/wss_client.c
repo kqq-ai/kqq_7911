@@ -43,11 +43,16 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     }
 }
 
+void wss_exit_callback(struct websocket_struct *websocket_info)
+{
+    log_i("websocket exit!!!!!");
+    odmp_disconnect_handler();
+}
 
 /*******************************************************************************
 *   Websocket Client api
 *******************************************************************************/
-static void websockets_client_reg(struct websocket_struct *websockets_info, char mode, user_wss_recv_cb_t websockets_callback)
+static void websockets_client_reg(struct websocket_struct *websockets_info, char mode)
 {
     memset(websockets_info, 0, sizeof(struct websocket_struct));
     websockets_info->_init           = websockets_client_socket_init;
@@ -56,7 +61,8 @@ static void websockets_client_reg(struct websocket_struct *websockets_info, char
     websockets_info->_send           = websockets_client_socket_send;
     websockets_info->_recv_thread    = websockets_client_socket_recv_thread;
     websockets_info->_heart_thread   = websockets_client_socket_heart_thread;
-    websockets_info->_recv_cb        = websockets_callback;
+    websockets_info->_recv_cb        = wss_recv_callback;
+    websockets_info->_exit_notify    = wss_exit_callback;
     websockets_info->_recv           = NULL;
 
     websockets_info->websocket_mode  = mode;
@@ -143,9 +149,9 @@ struct websocket_struct *wss_server_connect(char *url)
     }
     /* 1 . register */
     if (url[2] == 's') {
-        websockets_client_reg(websockets_info, WEBSOCKETS_MODE, wss_recv_callback);
+        websockets_client_reg(websockets_info, WEBSOCKETS_MODE);
     } else {
-        websockets_client_reg(websockets_info, WEBSOCKET_MODE, wss_recv_callback);
+        websockets_client_reg(websockets_info, WEBSOCKET_MODE);
     }
 
     /* 2 . init */

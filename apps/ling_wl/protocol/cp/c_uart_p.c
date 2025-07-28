@@ -34,12 +34,12 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     }   break;
     case UART_CMD_POWER_OFF:{ // 关机控制
         log_i("the UART_CMD_POWER_OFF !\r\n");
-        break; /// fot test TODO
         extern int OTA_download_running;
         if( OTA_download_running > 0){
             break; /// reset after OTA
         }
         set_led_power_off(); // 控制 LED 关闭
+        msleep(3000);
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
         lwl_event_notify(&e);
@@ -56,6 +56,12 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         log_i("the UART_CMD_MOVE_OVER_A_METER !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER;
+        lwl_event_notify(&e);
+    }   break;
+    case UART_CMD_CLEAR_WIFI_SSID:{ // 清除WIFI SSID
+        log_i("the UART_CMD_CLEAR_WIFI_SSID !\r\n");
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID;
         lwl_event_notify(&e);
     }   break;
     }
@@ -135,6 +141,11 @@ int uart_response_synch_status(uint8_t busy_status, uint8_t volume)
     return uart_send_response(UART_CMD_SYNCH_STATUS, CPCODE_SUCCESS, busy_status_payload, 2);
 }
 
+int uart_response_clear_wifi_ssid(void)
+{
+    uint8_t normal_data = 0x00;
+    return uart_send_response(UART_CMD_CLEAR_WIFI_SSID, CPCODE_SUCCESS, &normal_data, 1);
+}
 
 // 发送事件包
 int uart_send_inquiry(uint8_t *payload, uint16_t len)

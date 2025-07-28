@@ -32,6 +32,8 @@ typedef enum {
 
     LWL_EVENT_TYPE_NET_DISCONNECTED,           /**< Network disconnected event */
     LWL_EVENT_TYPE_BACKEND_DISCONNECTED,       /**< Backend service disconnected event */
+
+    LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID,      /**< Clear stored WiFi SSID event */
 } LWL_EVENT_TYPE;
 
 /**

@@ -225,6 +225,26 @@ int bka_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, 
 int bka_e_turn_off(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out);
 
 /**
+* @brief 往指定设备的控制指令队列中添加一条e_set_LED指令
+* 
+* @param[in]  p_eend_dev 设备引用
+* @param[in]  cb 函数指针，控制指令传输完成时的回调
+* @param[in]  priv 用户私有数据
+* @param[out] cmd_id_out 指令ID
+* @param[in]  r, 占空比 0 - 10000
+* @param[in]  g, 占空比 0 - 10000
+* @param[in]  b, 占空比 0 - 10000
+* 
+* @return BKACODE_Success       : 指令添加成功
+*         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
+* 
+* @note 执行cb时可能会持有部分锁
+*       - p_eend_dev->handshake_info.mutex
+*       LED 为共阳极的RGB灯 
+*/
+int bka_e_set_LED(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, u16 r, u16 g, u16 b, uint32_t *cmd_id_out);
+
+/**
  * @brief 删除指定设备的控制指令队列中的指定指令
  * 
  * @param[in] p_eend_dev 指定设备引用

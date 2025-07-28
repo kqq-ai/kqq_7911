@@ -40,6 +40,12 @@ void wss_application_vailed()
     last_req_time = g_curr_time;
 }
 
+static int odmp_disconnect_cbk(void)
+{
+    log_i("odmp disconnect!!!");
+    wss_exception_exit();
+}
+
 static void wss_application_print_state(int mode_state, char* tag)
 {
     switch (mode_state) {
@@ -93,6 +99,7 @@ static void input_event_handler_cb(lwl_event_t *e)
 void wss_application_init()
 {
     log_i("Init WSS application\n");
+    odmp_register_disconnect_cbk(odmp_disconnect_cbk);
     
     wss_audio_init();
     wss_request_init();

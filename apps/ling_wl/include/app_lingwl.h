@@ -6,5 +6,7 @@
 struct app_lingwl_hdl {
 
 };
+void set_wss_connected_flag(bool flag);/* 为了控制充电的时候谁回复sync指令 */
+
 
 #endif
