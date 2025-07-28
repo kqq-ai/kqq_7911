@@ -222,9 +222,9 @@ int log_mqtt_connect(void) {
         return rc;
     }
    
-
+    //Mqtt超时时间设置成200ms
     // 初始化MQTT客户端
-    MQTTClient(&mqtt_client, &mqtt_network, 5000, 
+    MQTTClient(&mqtt_client, &mqtt_network, 200, 
                mqtt_send_buf, sizeof(mqtt_send_buf),
                mqtt_read_buf, sizeof(mqtt_read_buf));
     
