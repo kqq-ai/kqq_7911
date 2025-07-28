@@ -14,7 +14,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE "v0.0.40" 
+#define LOCAL_VERSION_CODE "v0.0.41" 
 
 static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
 
@@ -345,7 +345,8 @@ int compare_versions(const char* ver1, const char* ver2) {
     if (minor1 > minor2) return 1;
     if (minor1 < minor2) return -1;
     
-    if (patch1 == (patch2 +1)) return 1; //如果前面两位相等，这个大于1，才升级
+    if (patch1 == (patch2 +1))  return 1; //如果前面两位相等，这个大于1，才升级
+    if (patch1 > patch2)        return 1; //如果前面两位相等，这个大于1，才升级
     if (patch1 < patch2) return -1;
     
     return 0; // 版本相同
