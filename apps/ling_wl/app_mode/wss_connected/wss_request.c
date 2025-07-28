@@ -381,6 +381,7 @@ bool wss_request_loop()
             last_event = 0;
             send_message = 0; // 重置发送消息标志
         }
+        wss_application_vailed();
         break;
 
     case STATE_UPLOAD:
@@ -390,6 +391,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "STEP_TO");
             wss_request_send_event(g_edev_target, ORMET_VAD_SPEAKER_END);
         }
+        wss_application_vailed();
         break;
     }
 

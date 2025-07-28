@@ -35,6 +35,11 @@ typedef enum {
 
 static AppTaskStepState g_device_state = DEVICE_IDLE;
 
+void wss_application_vailed()
+{
+    last_req_time = g_curr_time;
+}
+
 static void wss_application_print_state(int mode_state, char* tag)
 {
     switch (mode_state) {
@@ -124,8 +129,6 @@ bool wss_application_loop()
         if (g_curr_time - last_req_time >= 3000) {
             wss_device_loop();
         }
-    } else {
-        last_req_time = g_curr_time;
     }
 
     // 状态机处理
