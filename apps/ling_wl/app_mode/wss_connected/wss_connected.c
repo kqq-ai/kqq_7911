@@ -144,7 +144,7 @@ void app_wss_connected_mode(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
     // 创建检测线程
-    os_task_create(wss_condition_monitor_thread, NULL, 40, 1024, 128, "wss_cond_monitor");
+    //os_task_create(wss_condition_monitor_thread, NULL, 40, 1024, 128, "wss_cond_monitor");
 
     // 创建检测线程，只执行一次
     // static int monitor_thread_created = 0;
