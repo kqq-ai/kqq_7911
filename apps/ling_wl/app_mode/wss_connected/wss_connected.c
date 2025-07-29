@@ -84,7 +84,7 @@ static int wss_connected_unint(void)
 
 
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
-#define NO_MOVE_TIMEOUT_MS   (1 * 60 * 1000) // 5分钟
+#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
 // 模式5 加速度传感器相关变量
 
 void *wss_condition_monitor_thread(void *arg)
@@ -143,24 +143,9 @@ void app_wss_connected_mode(void)
     
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
-    // 创建检测线程
-    //os_task_create(wss_condition_monitor_thread, NULL, 40, 1024, 128, "wss_cond_monitor");
+    pthread_t monitor_thread;
+    pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
 
-    // 创建检测线程，只执行一次
-    // static int monitor_thread_created = 0;
-    // if (!monitor_thread_created) {
-    //     os_task_create(wss_condition_monitor_thread, NULL, 40, 1024, 128, "wss_cond_monitor");
-    //     monitor_thread_created = 1;
-    // }
-
-    static bool task_running = false;
-    
-    if (!task_running) {
-        // 添加任务到线程池
-        threadpool_add_task(context->threadpool, wss_condition_monitor_thread, NULL);
-        task_running = true;
-        log_i("WSS condition monitor thread started.");
-    }
     while (1) {
         // 应用代码
         if (wss_application_loop()) {
