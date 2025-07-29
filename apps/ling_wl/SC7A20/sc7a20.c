@@ -230,11 +230,5 @@ int is_device_moving(){
         return -1; // 错误处理
     }
 
-    int ret=sc7a20_interrupt_detect(g_iic_hdl);
-    // if(ret>0){
-    //     log_i("Device is moving");
-    // }else{
-    //     log_i("Device is not moving");
-    // }
-    return ret;
+    return sc7a20_interrupt_detect(g_iic_hdl);
 }
