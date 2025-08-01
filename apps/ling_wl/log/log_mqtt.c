@@ -338,7 +338,7 @@ void log_mqtt_level(LogLevel level, const char* format, ...) {
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
-void log_mqtt(const char* format, ...) {
+void log_mqtt_string(const char* format, ...) {
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     uint32_t total_ms = timer_get_ms();
     uint32_t seconds = total_ms / 1000;
@@ -368,6 +368,77 @@ void log_mqtt(const char* format, ...) {
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
+
+void log_mqtt(const char* format, ...) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    uint32_t total_ms = timer_get_ms();
+    uint32_t seconds = total_ms / 1000;
+    uint32_t milliseconds = total_ms % 1000;
+    uint32_t minutes = seconds / 60;
+    seconds %= 60;
+    uint32_t hours = minutes / 60;
+    minutes %= 60;
+    // 格式化时间戳 [hh:mm:ss.mmm]
+    snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
+
+    // 格式化日志内容
+    va_list args;
+    va_start(args, format);
+    vsnprintf(log_buffer, sizeof(log_buffer), format, args);
+    va_end(args);
+
+    // 构造JSON
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "time", time_str);
+    cJSON_AddStringToObject(root, "n", sn);
+    cJSON_AddStringToObject(root, "msg", log_buffer);
+
+    char *json_str = cJSON_PrintUnformatted(root);
+
+    // 打印到控制台
+    log_i("+++++json %s\n", log_buffer);
+
+    // 发送到MQTT
+    if (log_mqtt_is_connected()) {
+        int result = log_mqtt_send_message(g_mqtt_config.topic, json_str);
+        if (result != 0) {
+            log_i("MQTT log sending failed, error code: %d\n", result);
+        }
+    }
+
+    cJSON_Delete(root);
+    free(json_str);
+
+    os_mutex_post(&g_log_mqtt_mutex);
+}
+
+
+// 发送电池状态日志
+void log_mqtt_battery(int battery) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    uint32_t total_ms = timer_get_ms();
+    uint32_t seconds = total_ms / 1000;
+    uint32_t milliseconds = total_ms % 1000;
+    uint32_t minutes = seconds / 60;
+    seconds %= 60;
+    uint32_t hours = minutes / 60;
+    minutes %= 60;
+    // 格式化时间戳 [hh:mm:ss.mmm]
+    snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
+    // 拼接日志内容
+    snprintf(mqtt_payload, sizeof(mqtt_payload), "%s [BATTERY] %s Battery: %d%%", time_str, sn, battery);
+    // 打印到控制台
+    log_i("+++++battery  %s\n", mqtt_payload);
+    // 发送到MQTT
+    if (log_mqtt_is_connected()) {
+        int result = log_mqtt_send_message("h-batt-cookie", mqtt_payload);
+        if (result != 0) {
+            log_i("MQTT battery log sending failed, error code: %d\n", result);
+        }
+    }
+    os_mutex_post(&g_log_mqtt_mutex);
+}
+
 /* 启动MQTT日志系统 */
 int log_mqtt_start(void) {
     os_mutex_create(&g_log_mqtt_mutex);
@@ -380,3 +451,4 @@ void log_mqtt_stop(void) {
     log_mqtt_disconnect();
     os_mutex_del(&g_log_mqtt_mutex, 1);
 }
+
