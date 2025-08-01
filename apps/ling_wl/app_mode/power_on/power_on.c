@@ -124,28 +124,6 @@ int led_breathing_simple(uint16_t color1_r, uint16_t color1_g, uint16_t color1_b
 }
 
 /**
- * @brief 使用颜色宏的呼吸灯效果示例
- */
-void example_breathing_with_macros(void)
-{
-    log_i("=== 使用颜色宏的呼吸灯效果示例 ===");
-    
-    // 示例1: 红色到绿色呼吸灯，循环5次
-    log_i("示例1: 红色到绿色呼吸灯");
-    led_breathing_simple(COLOR_RED, COLOR_GREEN, 5, 1000, 15);
-    
-    // 示例2: 蓝色到白色呼吸灯，循环3次
-    log_i("示例2: 蓝色到白色呼吸灯");
-    led_breathing_simple(COLOR_BLUE, COLOR_WHITE, 3, 1500, 20);
-    
-    // 示例3: 紫色到橙色呼吸灯，循环2次
-    log_i("示例3: 紫色到橙色呼吸灯");
-    led_breathing_simple(COLOR_PURPLE, COLOR_ORANGE, 2, 2000, 25);
-    
-    log_i("所有颜色宏呼吸灯效果示例完成");
-}
-
-/**
  * @brief 快速测试函数 - 使用颜色宏
  * @param cycles 循环次数
  */
@@ -162,21 +140,7 @@ void quick_test_with_macros(uint16_t cycles)
     // 黑色到红色
     led_breathing_simple(COLOR_BLACK, COLOR_RED, cycles, 2000, 25);
     mdelay(1000);
-
-    /*
-    // 快速呼吸效果
-    led_breathing_simple(COLOR_RED, COLOR_GREEN, 5, 300, 10);  // 0.3秒过渡
-
-    // 标准呼吸效果  
-    led_breathing_simple(COLOR_RED, COLOR_GREEN, 5, 800, 15);  // 0.8秒过渡
-
-    // 慢速呼吸效果
-    led_breathing_simple(COLOR_RED, COLOR_GREEN, 5, 2000, 25); // 2秒过渡
-    */
-
-    log_i("快速测试完成");
 }
-
 
 
 
