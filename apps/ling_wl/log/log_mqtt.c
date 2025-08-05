@@ -390,7 +390,7 @@ void log_mqtt(const char* format, ...) {
     // 构造JSON
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "time", time_str);
-    cJSON_AddStringToObject(root, "n", sn);
+    cJSON_AddStringToObject(root, "sn", sn);
     cJSON_AddStringToObject(root, "msg", log_buffer);
 
     char *json_str = cJSON_PrintUnformatted(root);
