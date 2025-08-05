@@ -23,6 +23,8 @@ static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
 
+#define G_MAX_VOLUME 12
+
 static int g_exception_exit = false;
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -168,8 +170,11 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
         log_i("volume: %d\n", pkg->tts_bind.volume);
-        
-        uart_response_synch_status(1, pkg->tts_bind.volume);/// 音量 E
+        int mapped_volume = pkg->tts_bind.volume * G_MAX_VOLUME / 100;
+        if (mapped_volume > G_MAX_VOLUME) mapped_volume = G_MAX_VOLUME;
+        if (mapped_volume < 0) mapped_volume = 0;
+
+        uart_response_synch_status(1, mapped_volume);/// 音量 E
         
         // lwl_app_context_t *context = lwl_app_core_context_get_instance();
         // set_dec_volume(context->music_player, 80);
