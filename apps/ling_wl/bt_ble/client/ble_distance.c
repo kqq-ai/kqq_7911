@@ -403,7 +403,16 @@ static void distance_main(void *priv)
                 process_all_dev_rssi_samples();
                 // blue_distance_notify_app();
                 blue_distance_notify_self();
-                clean_all_dev_rssi_samples();
+
+                static int rssi_times = 0;
+                if( rssi_times < 5 ){
+                    rssi_times++;
+                }else{
+                    rssi_times = 0;
+                    log_i("[MEASDIST]--rssi_times-- ");
+                    clean_all_dev_rssi_samples();
+                }
+                ////clean_all_dev_rssi_samples();
             }
 
             if (current_time - notify_self_time > NOTIFY_SELF_TIME)
