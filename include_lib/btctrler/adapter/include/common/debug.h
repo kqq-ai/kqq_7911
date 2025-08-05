@@ -124,7 +124,7 @@ LOG_TAG_CONST_DECLARE(LOG_CHAR,     LOG_TAG_CONST);
 
 #define log_info(format, ...)       \
     if (LOG_IS_ENABLE(LOG_INFO)) \
-        log_print(__LOG_INFO,NULL,"[Info]: " _LOG_TAG format "\r\n", ## __VA_ARGS__)
+        log_print(__LOG_INFO,NULL,"[Infoo]: " _LOG_TAG format "\r\n", ## __VA_ARGS__)
 
 #define log_info_hexdump(x, y)     \
     if (LOG_IS_ENABLE(LOG_INFO)) \

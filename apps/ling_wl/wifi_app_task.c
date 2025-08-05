@@ -26,8 +26,8 @@
 #include "app_mode/lwl_app_framework.h"
 #include "protocol/cp/c_uart_p.h"
 
-#define INIT_SSID "dami1234"
-#define INIT_PWD  "88888888"
+#define INIT_SSID "NotUsed"
+#define INIT_PWD  "n"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;

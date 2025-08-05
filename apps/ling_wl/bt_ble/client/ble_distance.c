@@ -58,10 +58,16 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     log_d("[MEASDIST]===process_rssi======\r\n");
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
     if (p_eend_dev->distance_info.rssi_sample_count <= 0) {
+        if(p_eend_dev->distance_info.rssi > -120 ){
+            p_eend_dev->distance_info.rssi -= -10;
+        } else{
+            p_eend_dev->distance_info.rssi = -128;
+        }
+        
         os_mutex_post(&p_eend_dev->distance_info.mutex);
         return;
     }
-        
+
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
     p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
 
@@ -103,16 +109,25 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     os_mutex_post(&p_eend_dev->distance_info.mutex);
 }
 
-// 处理整个数组
-static void process_all_dev_rssi_samples()
-{
-    eend_dev_traverse(process_rssi_samples, NULL);
-}
-
 // 清除所有RSSI样本
 static void clean_all_dev_rssi_samples() 
 {
+    log_i("[MEASDIST]-?-----------------clean_all_dev_rssi_samples---------------\n");
     eend_dev_traverse(clear_rssi_samples, NULL);
+}
+
+// 处理整个数组
+static void process_all_dev_rssi_samples()
+{
+    static int rssi_times = 0;
+
+    eend_dev_traverse(process_rssi_samples, NULL);
+    if( rssi_times < 150 ){
+        rssi_times++;
+    }else{
+        rssi_times = 0;
+        /////clean_all_dev_rssi_samples();
+    }
 }
 
 void monitor_init(void)
@@ -228,9 +243,9 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     uint8_t bat_level = buffer[2];
     uint8_t eend_power_state = (r == 25) ? 1 : 0;
 
-    if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
+/*     if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
         strcpy(sn, "WECNC4H06CPLJE7");
-    }
+    } */
 #endif
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {
