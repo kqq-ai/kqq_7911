@@ -58,8 +58,8 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     log_d("[MEASDIST]===process_rssi======\r\n");
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
     if (p_eend_dev->distance_info.rssi_sample_count <= 0) {
-        if(p_eend_dev->distance_info.rssi > -120 ){
-            p_eend_dev->distance_info.rssi -= -10;
+        if(p_eend_dev->distance_info.rssi > -110 ){
+            p_eend_dev->distance_info.rssi -= 10;
         } else{
             p_eend_dev->distance_info.rssi = -128;
         }
