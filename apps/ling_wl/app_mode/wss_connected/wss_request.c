@@ -10,7 +10,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "device.h"
 #include "util/threadpool_tasks.h"
-
+#include "protocol/cp/c_uart_p.h"
 #include "ota/http_ota.h"
 #include "uart.h"
 
@@ -167,6 +167,13 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
+        log_i("volume: %d\n", pkg->tts_bind.volume);
+        
+        uart_response_synch_status(1, pkg->tts_bind.volume);/// 音量 E
+        
+        // lwl_app_context_t *context = lwl_app_core_context_get_instance();
+        // set_dec_volume(context->music_player, 80);
+
         last_message_received = OR_TTS_BIND;
         wait_time = pkg->tts_bind.wait_time;
         g_edev_target = find_eend_dev_by_sn(pkg->tts_bind.send_id);
