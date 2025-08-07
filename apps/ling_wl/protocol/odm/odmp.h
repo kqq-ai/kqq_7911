@@ -89,6 +89,7 @@ typedef struct {
 typedef struct {
     char *c_id;
     char *send_id;
+    int volume;
     int wait_time;
 } odmp_pkg_tts_bind_t;
 

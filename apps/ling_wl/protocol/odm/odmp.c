@@ -349,6 +349,9 @@ static int tts_bind_event_handler(const cJSON *nroot, odmp_package_t *pkg)
     if (cjson_get_integer_value(ndata, "wait_time", &pkg->tts_bind.wait_time)) {
         return PARSE_Error;
     }
+    if (cjson_get_integer_value(ndata, "volume", &pkg->tts_bind.volume)) {
+        return PARSE_Error;
+    }
     return PARSE_Success;
 }
 
@@ -516,6 +519,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
         if (entry->handler != NULL) {
             int ret = entry->handler(nroot, &pkg);
             if (ret == PARSE_Success && g_odmp_cbk != NULL) {
+                log_i("odmp_rsp_handler: event %s, type %d", pkg.event, entry->type);
                 g_odmp_cbk(entry->type, &pkg);
             }
         }

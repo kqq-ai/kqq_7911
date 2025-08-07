@@ -127,7 +127,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         log_i("battery: %d", e->uart_cmd_sync.battery);
         if(e->uart_cmd_sync.battery < 30 )
             set_led_red_low_power();
-        uart_response_synch_status(1, 12);/// 音量 E only
+        //uart_response_synch_status(1, 12);/// 音量 E only
         break;
     }
 }
