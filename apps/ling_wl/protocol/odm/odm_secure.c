@@ -28,8 +28,8 @@ char snInVm[SN_SIZE+1]="\0";
 
 char keyInVm[KEY_SIZE];
 
-// #define SERVER_DOMAIN  "test.coolqq.com/api"
-#define SERVER_DOMAIN  "coolqq.com/api"
+#define SERVER_DOMAIN  "test.coolqq.com/api"
+//#define SERVER_DOMAIN  "coolqq.com/api"
 #define SERVER_API  "%s://%s/"
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
@@ -172,7 +172,7 @@ static char* https_post_gettk_task(const char server_url[], char* context)
     free(url);
 
     if (ret != HERROR_OK) {
-        log_i("httpcli_post false\n");
+        log_i("httpcli_post false %s\n", url);
         if (http_body_buf.p) free(http_body_buf.p);
         return Token;
     } else {

@@ -147,6 +147,9 @@ struct websocket_struct *wss_server_connect(char *url)
         os_mutex_del(&wss_mutex_bin, 0);
         return NULL;
     }
+
+    // websockets_info->recv_buf_size = 30 * 1024;//23392
+    // websockets_info->recv_buf = malloc(websockets_info->recv_buf_size);
     /* 1 . register */
     if (url[2] == 's') {
         websockets_client_reg(websockets_info, WEBSOCKETS_MODE);
@@ -178,6 +181,7 @@ struct websocket_struct *wss_server_connect(char *url)
                 &websockets_info->recv_thread_id,
                 websockets_info->_recv_thread,
                 websockets_info);
+    log_i(" websocket_client_recv init %d\r\n", websockets_info->recv_buf_size);
 
     return websockets_info;
 
