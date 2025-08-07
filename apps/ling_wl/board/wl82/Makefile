@@ -1,4 +1,3 @@
-
 # make 编译并下载
 # make VERBOSE=1 显示编译详细过程
 # make clean 清除编译临时文件
@@ -301,6 +300,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/util/threadpool.c \
 	../../../../apps/ling_wl/util/threadpool_tasks.c \
 	../../../../apps/ling_wl/util/tree_map.c \
+	../../../../apps/ling_wl/util/led_breath.c \
 	../../../../apps/ling_wl/SC7A20/sc7a20.c \
 	../../../../apps/ling_wl/SC7A20/app_sc7a20_task.c \
 	../../../../apps/ling_wl/protocol/odm/odm_secure.c \
