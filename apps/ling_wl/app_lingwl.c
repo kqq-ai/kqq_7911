@@ -142,6 +142,14 @@ static void moni_task(void *priv)
         msleep(1000);
     }
 }
+    
+#include "util/led_breath.h"
+
+static void* led_breath_thread(void* arg)
+{
+    quick_test_with_macros(20); // 直接在线程里调用呼吸灯测试函数,20次循环
+    return NULL;
+}
 
 
 static void app_lingwl_main(void)
@@ -155,6 +163,10 @@ static void app_lingwl_main(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
     lwl_event_handler_add(base_lwl_event_handler);
+
+    // led_breath_init(); // 初始化LED呼吸灯
+    // pthread_t monitor_thread;
+    // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
     
     /* 初始化数据通信串口 */
     uart0_hdl = app_uart_dev_init("uart0");

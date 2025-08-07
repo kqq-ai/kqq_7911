@@ -28,8 +28,8 @@ char snInVm[SN_SIZE+1]="\0";
 
 char keyInVm[KEY_SIZE];
 
-#define SERVER_DOMAIN  "test.coolqq.com/api"
-//#define SERVER_DOMAIN  "coolqq.com/api"
+// #define SERVER_DOMAIN  "test.coolqq.com/api"
+#define SERVER_DOMAIN  "coolqq.com/api"
 #define SERVER_API  "%s://%s/"
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
