@@ -26,6 +26,8 @@ void log_mqtt_level(LogLevel level, const char* format, ...);
 void log_mqtt(const char* format, ...);
 /* MQTT连接管理函数 */
 int log_mqtt_start(void);
+
 void log_mqtt_stop(void);
 
+void log_mqtt_battery(const char* sn_param,int battery);
 #endif /* LOG_MQTT_H */
