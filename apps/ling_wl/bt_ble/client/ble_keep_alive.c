@@ -176,6 +176,8 @@ static void handshake_task(void *priv)
     bka_cmd_t cmd;
     if (my_blocking_queue_try_dequeue(&pdev_info->cmd_buffer, &cmd) == MYERROR_Success) {
         has_cmd = true;
+    } else {
+        pdev_info->need_handshake = false; // 没有命令，设置握手标志为false
     }
 
     bka_cmd_code_e code = BKA_CMD_CODE_COMPL;
@@ -425,12 +427,12 @@ int bka_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, 
 {
     ASSERT(p_eend_dev != NULL);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     uart_send_set_sn(p_eend_dev->sn);
 
     u8 cmd_turn_on[] = {0xA0, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     memcpy(cmd_turn_on + 2, ctx->mac, 6);
 
+    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_on, sizeof(cmd_turn_on), cb, priv, cmd_id_out);
 }
 
@@ -453,6 +455,7 @@ int bka_e_turn_off(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv,
     ASSERT(p_eend_dev != NULL);
     uart_send_set_sn("000000000000000");
     const u8 cmd_turn_off[] = {0xA0, 0x00};
+    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_off, sizeof(cmd_turn_off), cb, priv, cmd_id_out);
 }
 
@@ -501,5 +504,6 @@ int bka_e_set_LED(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, 
     cmd_set_E_led[5] = (g >> 8) & 0xFF;
     cmd_set_E_led[6] = b & 0xFF;
     cmd_set_E_led[7] = (b >> 8) & 0xFF;
+    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_set_E_led, sizeof(cmd_set_E_led), cb, NULL, cmd_id_out);
 }

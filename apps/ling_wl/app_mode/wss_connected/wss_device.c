@@ -295,7 +295,6 @@ lwl_eend_dev_t *wss_device_loop()
 
     lwl_eend_dev_t *pdev = dequeue_edev();
     if (pdev) {
-        pdev->handshake_info.need_handshake = true;
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         last_dequeue_time = now;
         return pdev;

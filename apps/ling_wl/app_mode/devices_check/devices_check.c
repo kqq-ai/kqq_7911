@@ -204,8 +204,6 @@ static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         uint cmd_id;
-        pdev->handshake_info.need_handshake = true;
-        // bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
     }
 }
 static void switch_to_e_target(lwl_eend_dev_t* pdev)
@@ -218,7 +216,6 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
     // 设置新的目标设备
     target_pdev = pdev;
     uint cmd_id;
-    pdev->handshake_info.need_handshake = true;
     bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
     log_i("+-- -+");
     // 参考default_e_turn_on函数中的命令发送方式
@@ -233,7 +230,6 @@ static void turn_off_e_target(char *target)
     if (pdev == NULL) return;
     
     uint cmd_id;
-    pdev->handshake_info.need_handshake = true;
     bka_e_turn_off(pdev, NULL, pdev, &cmd_id); // E OFF
     log_i("+-- -+");
     // 参考default_e_turn_on函数中的命令发送方式
