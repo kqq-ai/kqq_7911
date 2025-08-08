@@ -41,6 +41,10 @@ static void default_input_event_handler_cb(lwl_event_t *e)
         log_i("TOUCH KEY DOWN");
         // play 提示音
         break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        log_i("TOUCH KEY UP");
+        // 处理触摸按键抬起事件
+        break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("PRESS NORMAL KEY");
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);

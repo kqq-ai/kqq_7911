@@ -19,6 +19,19 @@
 #include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
 
+// 提示音资源路径与本地播放接口
+#include "app_config.h"          // for CONFIG_VOICE_PROMPT_FILE_PATH
+#include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
+
+#ifndef CONFIG_VOICE_PROMPT_FILE_PATH
+#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
+#endif
+
+// 调试：无论后端返回结果如何，强制播放“未注册”提示音
+#ifndef DEBUG_FORCE_UNREGISTERED_PROMPT
+#define DEBUG_FORCE_UNREGISTERED_PROMPT 1
+#endif
+
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;

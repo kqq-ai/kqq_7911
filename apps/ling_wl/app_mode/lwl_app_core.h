@@ -23,6 +23,7 @@ typedef enum {
     LWL_EVENT_TYPE_UART_SYNC,                  /**< UART synchronization event */
     LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK,    /**< Short click on IO key */
     LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN,        /**< Touch key pressed event */
+    LWL_EVENT_TYPE_UART_TOUCH_KEY_UP,          /**< Touch key released event */
     LWL_EVENT_TYPE_UART_SHUTDOWN,              /**< System shutdown event */
     LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER, /**< Movement detection event */
 
@@ -45,6 +46,13 @@ typedef struct {
 } lwl_event_uart_cmd_sync_t;
 
 /**
+ * @brief UART touch_key command data structure
+ */
+typedef struct {
+    u8 touch_key_event_type;     /**< Current touch_key event type */   /* 0: touch_key_down, 1: touch_key_up*/
+} lwl_event_uart_cmd_touch_t;
+
+/**
  * @brief EEND device distance change event data structure
  */
 typedef struct {
@@ -65,6 +73,7 @@ typedef struct {
     u8 event_type;  /**< Type of the event (from LWL_EVENT_TYPE) */
     union {
         lwl_event_uart_cmd_sync_t uart_cmd_sync; /**< UART sync command data */
+        lwl_event_uart_cmd_touch_t uart_cmd_touch; /**< UART touch_key command data */
         lwl_event_eend_dev_distance_change_t distance_change;   /**< EEND device distance change data */
         lwl_event_eend_dev_new_in_t new_in;
     };
