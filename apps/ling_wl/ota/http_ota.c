@@ -11,12 +11,44 @@
 #include "wifi/wifi_connect.h"
 #include "util/cjson_util.h"
 #include "protocol/cp/c_uart_p.h"
+#include "app_mode/lwl_app_core.h"
+#include "net_music_play_my.h"
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
 #define LOCAL_VERSION_CODE "v0.0.41" 
 
+// 测试开关：置为1则联网后直接进入OTA（无视版本对比），用于验证提示音
+#ifndef FORCE_OTA_ON_BOOT
+#define FORCE_OTA_ON_BOOT 0
+#endif
+
 static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
+
+// 提示音播放完成后再启动下载，避免与写闪存竞争导致播放被打断
+extern int OTA_download_running; // 前置声明
+static void ota_prompt_end_cb(void *priv)
+{
+    char *url = (char *)priv; // 由调用者分配，回调中接管所有权
+    OTA_download_running = 1;
+    http_create_download_task(url);
+}
+
+static int play_ota_start_prompt_then_download(char *url)
+{
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx && ctx->music_player) {
+        int err = app_music_play_local_music_with_callback(
+            ctx->music_player,
+            CONFIG_VOICE_PROMPT_FILE_PATH "OtaInUpdate.mp3",
+            ota_prompt_end_cb,
+            url);
+        if (!err) {
+            return 0; // 成功启动播放，下载将在回调里启动
+        }
+    }
+    return -1; // 启动播放失败，需要立即进入下载
+}
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -373,6 +405,23 @@ int do_check_and_ota()
     }
 
     int net_ver_big = compare_versions(ota_info.version_name, LOCAL_VERSION_CODE);
+
+#if FORCE_OTA_ON_BOOT
+    log_i("FORCE_OTA_ON_BOOT enabled, enter OTA directly.");
+    set_led_OTA_on();
+    size_t url_len_force = strlen(ota_info.file_url);
+    char *ufw_url_force = malloc(url_len_force + 1);
+    strncpy(ufw_url_force, ota_info.file_url, url_len_force + 1);
+    if (play_ota_start_prompt_then_download(ufw_url_force) == 0) {
+        ret = 1; // 播放中，下载将随后开始
+        goto done;
+    }
+    // 播放失败则直接开始下载
+    OTA_download_running = 1;
+    http_create_download_task(ufw_url_force);
+    ret = 1;
+    goto done;
+#endif
     if ( 0 == net_ver_big) { log_i("net:%s ===== LOCAL_VERSION_CODE:%s \r\n", ota_info.version_name, LOCAL_VERSION_CODE);}
     if ( 1 == net_ver_big) { //< ota_info.version_code) {
         log_i("%s < %s, need OTA.", LOCAL_VERSION_CODE, ota_info.version_name);
@@ -382,14 +431,18 @@ int do_check_and_ota()
         size_t url_len = strlen(ota_info.file_url);
         char *ufw_url = malloc(url_len + 1);
         strncpy(ufw_url, ota_info.file_url, url_len + 1);
-        OTA_download_running = 1;   /// reset after OTA
-
-        http_create_download_task(ufw_url);
-        ret = 1;
+        if (play_ota_start_prompt_then_download(ufw_url) == 0) {
+            ret = 1; // 播放中，下载将在回调中启动
+        } else {
+            OTA_download_running = 1;   /// reset after OTA
+            http_create_download_task(ufw_url);
+            ret = 1;
+        }
     } else {
         ret = 0;
     }
-    
+
+done:
     if (nroot != NULL) {
         cJSON_Delete(nroot);
         nroot = NULL;

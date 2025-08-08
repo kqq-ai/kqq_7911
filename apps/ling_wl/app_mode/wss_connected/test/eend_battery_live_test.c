@@ -195,6 +195,9 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");
         break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        log_i("TOUCH KEY UP");
+        break;
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
         log_i("SHUTDOWN");
         break;

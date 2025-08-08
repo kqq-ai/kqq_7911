@@ -89,6 +89,10 @@ static void input_event_handler_cb(lwl_event_t *e)
         log_i("TOUCH KEY DOWN");
         wss_application_touch_key_exit();
         break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        log_i("TOUCH KEY UP");
+        // 处理触摸按键抬起事件
+        break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
         break;

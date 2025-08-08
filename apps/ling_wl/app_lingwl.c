@@ -85,6 +85,7 @@ static void wifi_monitor_thread(void *priv)
 
 static void lwl_app_task(void *priv)
 {
+    //
     log_i("lwl_app_task");
     lwl_app_init(APP_POWER_ON_MODE);
     // lwl_app_init(APP_DEVICE_CHECK_MODE);
@@ -393,10 +394,14 @@ static int app_music_net_event_handler(struct net_event *event)
         case NET_CONNECT_TIMEOUT_NOT_FOUND_SSID:
             log_i("NET_CONNECT_TIMEOUT_NOT_FOUND_SSID");
             // TODO: 可能在配网时需要发送ble通知
+            // 播放WiFi连接失败提示音（未找到SSID）
+            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_CONNECT_ASSOCIAT_FAIL:
             log_i("NET_CONNECT_ASSOCIAT_FAIL");
             // TODO: 可能在配网时需要发送ble通知
+            // 播放WiFi连接失败提示音（关联失败）
+            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_EVENT_SMP_CFG_FIRST:
             log_i("NET_EVENT_SMP_CFG_FIRST");
@@ -408,7 +413,13 @@ static int app_music_net_event_handler(struct net_event *event)
         case NET_EVENT_CONNECTED: {
             log_i("NET_EVENT_CONNECTED");
             //set_led_white();; /// Net Succ
-            // simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
+            // 播放联网成功提示音
+            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
+            for (int i = 0; i < 10; i++)
+            {
+                log_i("********************************************");
+            }
+            
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
             // TODO: 可配置WIFI和BLE共存时的RF共存参数设置

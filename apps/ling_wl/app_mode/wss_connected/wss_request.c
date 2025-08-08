@@ -19,6 +19,19 @@
 #include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
 
+// 提示音资源路径与本地播放接口
+#include "app_config.h"          // for CONFIG_VOICE_PROMPT_FILE_PATH
+#include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
+
+#ifndef CONFIG_VOICE_PROMPT_FILE_PATH
+#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
+#endif
+
+// 调试：无论后端返回结果如何，强制播放“未注册”提示音
+#ifndef DEBUG_FORCE_UNREGISTERED_PROMPT
+#define DEBUG_FORCE_UNREGISTERED_PROMPT 1
+#endif
+
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
@@ -31,6 +44,18 @@ static lwl_eend_dev_t *g_edev_target = NULL; // 服务器维护
 static lwl_eend_dev_t *g_edev_connected = NULL; // E 已连接
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+
+// 播放“未注册”提示音结束后的回调：按需恢复麦克风
+static void unregistered_prompt_end_cb(void *priv)
+{
+    log_i("unregistered_prompt_end_cb, priv=%p", priv);
+    if (priv == (void *)1) {
+        // 恢复 MIC 采集
+        uint ts = get_time_stamp();
+        wss_mic_start(ts);
+        log_i("Mic resumed after unregistered prompt");
+    }
+}
 
 /*=================================================================================================
  * Audio dec app context
@@ -156,6 +181,33 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     case OR_INITIAL_SETUP_RESPONSE:
         log_i("INITIAL_SETUP_RESPONSE\n");
         log_i("setup_complete: %d\n", pkg->initial_setup_response.setup_complete);
+        do {
+            int need_play = (pkg->initial_setup_response.setup_complete == 0);
+#ifdef DEBUG_FORCE_UNREGISTERED_PROMPT
+            if (DEBUG_FORCE_UNREGISTERED_PROMPT) {
+                log_i("DEBUG_FORCE_UNREGISTERED_PROMPT enabled, force play BindFail.mp3");
+                need_play = 1;
+            }
+#endif
+            if (!need_play) {
+                break;
+            }
+            if (g_app_ctx && g_app_ctx->music_player) {
+                // 如 MIC 正在录音，先暂停，播放后在回调中恢复
+                void *need_resume = NULL;
+                if (is_mic_on()) {
+                    wss_mic_stop();
+                    need_resume = (void *)1;
+                    log_i("Mic paused for unregistered prompt");
+                }
+                int err = app_music_play_local_music_with_callback(
+                    g_app_ctx->music_player,
+                    CONFIG_VOICE_PROMPT_FILE_PATH "BindFail.mp3",
+                    unregistered_prompt_end_cb,
+                    need_resume);
+                log_i("Play Unregistered prompt: %d", err);
+            }
+        } while (0);
         break;
     case OR_DEVICE_SWITCH_RESPONSE:
         log_i("DEVICE_SWITCH_RESPONSE\n");

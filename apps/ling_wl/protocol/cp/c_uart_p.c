@@ -1,11 +1,31 @@
 #include "c_uart_p.h"
 #include "cpu.h"
 #include "device/device.h"
+#include "app_config.h"          // for CONFIG_VOICE_PROMPT_FILE_PATH
 #include "app_mode/lwl_app_core.h"
+#include "gpio.h"                 // for gpio_direction_output
+
+#ifndef CONFIG_VOICE_PROMPT_FILE_PATH
+// Fallback to a reasonable default if config path is not defined by profile
+#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
+#endif
 
 extern g_dev_uart_hdl;
 
 static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
+
+
+// 关机提示音播放完成后的回调：播放结束再触发关机事件
+static void power_off_prompt_end_cb(void *priv)
+{
+    log_i("-----------------------------------------------\r\n");
+    log_i("PowerOff prompt finished, notify shutdown\r\n");
+    // 播放完成后再灭灯，防止对侧熄灯动作顺带关闭功放导致听不到提示音
+    set_led_power_off();
+    lwl_event_t e;
+    e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
+    lwl_event_notify(&e);
+}
 
 // 注册回调函数
 void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
@@ -21,7 +41,21 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     case UART_CMD_TOUCH_KEY:{ // 触摸按键控制
         log_i("the UART_CMD_TOUCH_KEY !\r\n");
         lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
+        
+        // 根据payload[1]判断是按下还是抬起
+        // 0: touch_key_down, 1: touch_key_up
+        if (payload[1] == 0) {
+            e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
+            log_i("Touch key PRESSED\r\n");
+        } else if (payload[1] == 1) {
+            e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_UP;
+            log_i("Touch key RELEASED\r\n");
+        } else {
+            log_w("Unknown touch key event type: %d\r\n", payload[1]);
+            e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN; // 默认作为按下处理
+        }
+        
+        e.uart_cmd_touch.touch_key_event_type = payload[1];
         lwl_event_notify(&e);
     }   break;
     case UART_CMD_SYNCH_STATUS:{ // 同步状态
@@ -33,16 +67,32 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         lwl_event_notify(&e);
     }   break;
     case UART_CMD_POWER_OFF:{ // 关机控制
+        log_i("**********************************************************************!\r\n");
         log_i("the UART_CMD_POWER_OFF !\r\n");
         extern int OTA_download_running;
         if( OTA_download_running > 0){
             break; /// reset after OTA
         }
-        set_led_power_off(); // 控制 LED 关闭
-        msleep(3000);
-        lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
-        lwl_event_notify(&e);
+        // 播放关机提示音，播放完成后再关机
+        int err = -1;
+        lwl_app_context_t *context = lwl_app_core_context_get_instance();
+        if (context && context->music_player) {
+            log_i("Try play PowerOff prompt before shutdown\r\n");
+           gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
+            err = app_music_play_local_music_with_callback(
+                    context->music_player,
+                    CONFIG_VOICE_PROMPT_FILE_PATH"PowerOff.mp3",
+                    power_off_prompt_end_cb,
+                    NULL);
+        }
+
+        if (err < 0) {
+            // 没有播放器或播放失败，直接进入关机流程
+            log_w("PowerOff prompt play failed or unavailable, shutdown immediately\r\n");
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
+            lwl_event_notify(&e);
+        }
     }   break;
     case UART_CMD_SET_BLESN:{ // 设置蓝牙SN
         log_i("the UART_CMD_SET_BLESN !\r\n");
