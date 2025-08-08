@@ -165,7 +165,7 @@ void app_music_play_end_cb(void *priv)
 //=================================================================================================
 static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
-    log_i("wss_rsp_cbk level-%d(>=%d): %d\n", ORX_EVENT_CLASS[type], ORX_EVENT_CLASS[last_message_received], type);
+    log_i("wss_rsp_cbk level-%d(>=%d): %d STATE = %d\n", ORX_EVENT_CLASS[type], ORX_EVENT_CLASS[last_message_received], type, g_mode_state);
     if (ORX_EVENT_CLASS[type] < ORX_EVENT_CLASS[last_message_received]) return;
     switch (type) {
     case OR_INITIAL_SETUP_RESPONSE:
@@ -345,6 +345,7 @@ bool wss_request_loop()
         if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "STEP_TO");
+            last_message_received = 0;
             wss_mic_stop(); // 停止录音
             int cmd_id;
             log_i("bka_e_turn_on %s\n", g_edev_target->sn);
@@ -380,6 +381,16 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "STEP_TO");
             last_message_received = 0;
             last_event = 0;
+        } else if (last_message_received == OR_TTS_BIND) {
+            g_mode_state = STATE_TTS_BIND;
+            wss_request_print_state(g_mode_state, "STEP_TO Again");
+            last_message_received = 0;
+            int cmd_id;
+            log_i("bka_e_turn_on %s\n", g_edev_target->sn);
+            if (g_edev_connected) {
+                bka_e_turn_off(g_edev_connected, NULL, g_edev_connected, &cmd_id);
+            }
+            bka_e_turn_on(g_edev_target, e_turn_on_cb, g_edev_target, &cmd_id);
         }
         break;
 

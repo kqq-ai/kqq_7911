@@ -232,7 +232,7 @@ static void device_event_handler_cb(lwl_event_t *e)
             break;
         case DISTANCE_1:
             log_d("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
-            remove_from_edev_set(p_eend_dev);
+            // remove_from_edev_set(p_eend_dev);
             break;
         case DISTANCE_2:
             log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);

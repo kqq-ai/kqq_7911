@@ -13,6 +13,7 @@
 
 #include "ota/http_ota.h"
 #include "uart.h"
+#include "protocol/odm/odmp.h"
 
 #include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
@@ -21,7 +22,7 @@
 #define log_i log_mqtt
 
 static u32 g_curr_time = 0;
-#define HEAT_TIMEOUT 5000
+#define HEAT_TIMEOUT 1000
 static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
 
@@ -83,11 +84,12 @@ static void input_event_handler_cb(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("APPLICATION STOP");
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        // lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");
-        wss_application_touch_key_exit();
+        // wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
         log_i("TOUCH KEY UP");
@@ -151,17 +153,25 @@ bool wss_application_loop()
             g_device_state = DEVICE_AUDIO;
             log_i("STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
+        } else if (wss_application_check_touch_key_exit()) {
+            // multi_player_game();
+            wss_mic_stop(); // 停止录音
+            wss_request_stop(); // 按键打断对话
+            wss_application_vailed();
+            wss_request_send_event(NULL, ORMET_BUTTON_PRESS);
+            g_touch_key_exit = false; // 清除标志
         }
         break;
 
     case DEVICE_AUDIO:
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        // if (wss_application_check_touch_key_exit()) {
-        //     g_device_state = DEVICE_IDLE;
-        //     wss_ble_audio_stop(); // 按键打断对话
-        //     log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE (touch key down)");
-        //     g_touch_key_exit = false; // 清除标志
-        // }
+        if (wss_application_check_touch_key_exit()) {
+            g_device_state = DEVICE_IDLE;
+            wss_request_stop(); // 按键打断对话
+            last_req_time = 0;
+            log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE (touch key down)");
+            g_touch_key_exit = false; // 清除标志
+        }
         if (!is_audio_playing()) {
             g_device_state = DEVICE_IDLE;
             log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE");

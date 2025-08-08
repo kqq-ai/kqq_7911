@@ -375,6 +375,7 @@ int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buff
     } else {
         *cmd_id_out = cmd_id;
         p_eend_dev->handshake_info.handshake_flag = 0;
+        p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     }
 
     os_mutex_post(&p_eend_dev->handshake_info.mutex);
@@ -432,7 +433,6 @@ int bka_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, 
     u8 cmd_turn_on[] = {0xA0, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     memcpy(cmd_turn_on + 2, ctx->mac, 6);
 
-    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_on, sizeof(cmd_turn_on), cb, priv, cmd_id_out);
 }
 
@@ -455,7 +455,6 @@ int bka_e_turn_off(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv,
     ASSERT(p_eend_dev != NULL);
     uart_send_set_sn("000000000000000");
     const u8 cmd_turn_off[] = {0xA0, 0x00};
-    p_eend_dev->handshake_info.need_handshake=true; // 设置握手标志
     return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_off, sizeof(cmd_turn_off), cb, priv, cmd_id_out);
 }
 
