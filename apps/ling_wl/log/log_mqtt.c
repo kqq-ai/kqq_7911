@@ -490,7 +490,7 @@ int mqtt_subscribe_reset() {
 /* 启动MQTT日志系统 */
 int log_mqtt_start(void) {
     os_mutex_create(&g_log_mqtt_mutex);
-    get_SN(&sn);
+    if (!get_SN(&sn)) return 1;
     return log_mqtt_connect();
 }
 

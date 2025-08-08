@@ -307,7 +307,7 @@ void wss_request_stop()
     g_edev_target = NULL; // 清除目标设备
 
     wss_ble_audio_stop(); // 停止音频播放
-    wss_mic_stop(); // 开始录音
+    wss_mic_stop(); // 停止录音
 
     // 重置状态到IDLE
     g_mode_state = STATE_IDLE;

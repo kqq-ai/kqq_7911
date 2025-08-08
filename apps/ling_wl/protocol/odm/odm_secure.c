@@ -8,6 +8,7 @@
 #include "util/cjson_util.h"
 #include "syscfg_id.h"
 #include "lfs.h"
+#include "app_mode/lwl_app_framework.h"
 
 extern lfs_t g_lfs;
 
@@ -91,7 +92,10 @@ static void gen_SN()
     lfs_file_close(&g_lfs, &file);
 
 #else
-    assert(lfs_stat(&g_lfs, "SN_KEY.bin", &info) == LFS_ERR_OK);
+    if (lfs_stat(&g_lfs, "SN_KEY.bin", &info) != LFS_ERR_OK) {
+        return;
+    }
+    // assert(lfs_stat(&g_lfs, "SN_KEY.bin", &info) == LFS_ERR_OK);
     // 如果文件存在，get SN from LittleFS
     int ret_lfs = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", LFS_O_RDONLY);
     if (ret_lfs < 0) {
@@ -107,9 +111,15 @@ static void gen_SN()
 #endif
 }
 
-void get_SN(char* SN){
+bool get_SN(char* SN){
+    log_i("get_SN");
     if (snInVm[0] == 0) gen_SN();
+    if (snInVm[0] == 0) {
+        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+        return false;
+    }
     snprintf(SN, KEY_SIZE, "%s", snInVm);
+    return true;
 }
 
 // 通用HTTP请求函数，当context为空则用httpcli_get，否则用httpcli_post
@@ -329,8 +339,8 @@ char *get_wss_connection_url()
 {
     char server_url[BUF_SIZE];
     char sn_c_id[SN_SIZE+1];
+    if (!get_SN(&sn_c_id)) return NULL;
     char * url_api = (char *)malloc(BUF_SIZE);
-    get_SN(&sn_c_id);
 #ifdef TEST_LOCOL_MODE
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);
     snprintf(server_url, BUF_SIZE, SERVER_API, "http", ip_port);
