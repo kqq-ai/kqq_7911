@@ -935,6 +935,13 @@ static void process_mode_6(void)
 static u8 g_mode7_network_check_done = 0;
 static u8 g_mode7_sn_key_obtained = 0;     // SN和Key是否已获取成功
 static u8 g_mode7_first_touch_handled = 0; // 第一次触摸按键是否已处理
+// 模式7写入请求延迟到任务上下文执行的标志与运行中标志
+static u8 g_mode7_write_pending = 0;
+static u8 g_mode7_op_running = 0;
+
+// 全局LittleFS访问读写锁（保护所有lfs_*并发访问）
+#include "../../util/rwlock.h"
+static rwlock_t g_lfs_rwlock;
 
 // 模式7存储从服务器获取的SN和Key
 #define MODE7_SN_SIZE 32
@@ -948,6 +955,8 @@ static void mode7_reset_network_check(void)
     g_mode7_network_check_done = 0;
     g_mode7_sn_key_obtained = 0;
     g_mode7_first_touch_handled = 0;
+    g_mode7_write_pending = 0;
+    g_mode7_op_running = 0;
     // 清空存储的SN和Key
     memset(g_mode7_obtained_sn, 0, MODE7_SN_SIZE);
     memset(g_mode7_obtained_key, 0, MODE7_KEY_SIZE);
@@ -962,9 +971,27 @@ static void process_mode_7(void)
         // 等待音频播放完成，无需特殊处理
         return;
     }
-    
+
+    // 如果有挂起的写入请求，且当前未在执行写入，则在任务上下文执行
+    if (g_mode7_write_pending && !g_mode7_op_running && g_mode7_sn_key_obtained) {
+        g_mode7_op_running = 1;
+        log_i("MODE 7: Pending SN/Key write detected, executing in task context");
+        int result = mode7_write_and_verify_sn_key(g_mode7_obtained_sn, g_mode7_obtained_key);
+        
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        log_i("MODE 7: Write+Verify completed with result=%d", result);
+        g_mode7_write_pending = 0;
+        g_mode7_op_running = 0;
+    }
+
     // 提示音播放完成后，SN请求将在audio callback中执行
-    // 这里不需要额外处理
+    // 其余无需额外处理
 }
 
 // 模式7执行SN请求函数
@@ -1523,10 +1550,11 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                 log_i("MODE 7: ========== STARTING SN/KEY WRITE PROCESS ==========");
                 log_i("MODE 7: SN to write: %s", g_mode7_obtained_sn);
                 log_i("MODE 7: Key to write: %s", g_mode7_obtained_key);
-                
-                // 执行SN和Key的写入、验证和状态反馈
-                //int result = mode7_write_and_verify_sn_key(g_mode7_obtained_sn, g_mode7_obtained_key);
-                //log_i("MODE 7: ========== SN/KEY WRITE PROCESS COMPLETED (result: %d) ==========", result);
+                log_i("MODE 7: ==================================================================");
+                // 触发写入动作：改为设置挂起标志，避免在事件回调/模式切换上下文直接进行LFS操作
+                g_mode7_write_pending = 1;
+                int result = 0; // 实际结果将在任务上下文执行时输出
+
                 //=============================================================================================================================================================================================
 
                 // 打印十行分隔符
@@ -1640,6 +1668,9 @@ static int devices_check_init(void)
     
     // 初始化模式系统，进入初始模式（红灯常亮）
     switch_to_mode(WORK_MODE_INIT);
+
+    // 初始化全局LFS读写锁
+    rwlock_init(&g_lfs_rwlock);
     
     log_i("=== MODE SYSTEM INITIALIZED ===");
     log_i("Press key to switch modes:");
@@ -1671,6 +1702,9 @@ static int devices_check_unint(void)
     }
     
     lwl_event_handler_remove(devices_check_lwl_event_handler_cb);
+
+    // 销毁全局LFS读写锁
+    rwlock_destroy(&g_lfs_rwlock);
     return 0;
 }
 
@@ -1758,6 +1792,9 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     struct lfs_info info;
     lfs_file_t file;
     int ret;
+
+    // 写操作加写锁
+    rwlock_acquire_write(&g_lfs_rwlock);
     
     // 先删除旧文件（如果存在）
     ret = lfs_stat(&g_lfs, "MODE7_SN_KEY.bin", &info);
@@ -1771,6 +1808,7 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
                         LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
     if (ret < 0) {
         log_e("MODE 7: Failed to create SN/Key file, error: %d", ret);
+        rwlock_release_write(&g_lfs_rwlock);
         return -3;
     }
     
@@ -1788,6 +1826,7 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     if (bytes_written != sizeof(sn_len)) {
         log_e("MODE 7: Failed to write SN length, written: %d", bytes_written);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_write(&g_lfs_rwlock);
         return -4;
     }
     
@@ -1796,6 +1835,7 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     if (bytes_written != sn_len) {
         log_e("MODE 7: Failed to write SN data, written: %d, expected: %d", bytes_written, sn_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_write(&g_lfs_rwlock);
         return -5;
     }
     
@@ -1804,6 +1844,7 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     if (bytes_written != sizeof(key_len)) {
         log_e("MODE 7: Failed to write Key length, written: %d", bytes_written);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_write(&g_lfs_rwlock);
         return -6;
     }
     
@@ -1812,11 +1853,14 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     if (bytes_written != key_len) {
         log_e("MODE 7: Failed to write Key data, written: %d, expected: %d", bytes_written, key_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_write(&g_lfs_rwlock);
         return -7;
     }
     
     // 关闭文件
     lfs_file_close(&g_lfs, &file);
+    // 释放写锁（验证函数内部再加读锁）
+    rwlock_release_write(&g_lfs_rwlock);
     
     log_i("MODE 7: ========== SN/KEY WRITE SUCCESS ==========");
     log_i("MODE 7: Written SN:  %s (%d bytes)", sn, sn_len);
@@ -1853,11 +1897,15 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     struct lfs_info info;
     lfs_file_t file;
     int ret;
+
+    // 读操作加读锁
+    rwlock_acquire_read(&g_lfs_rwlock);
     
     // 检查文件是否存在
     ret = lfs_stat(&g_lfs, "MODE7_SN_KEY.bin", &info);
     if (ret != LFS_ERR_OK) {
         log_e("MODE 7: SN/Key file does not exist, error: %d", ret);
+        rwlock_release_read(&g_lfs_rwlock);
         return -2;
     }
     
@@ -1865,6 +1913,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     ret = lfs_file_open(&g_lfs, &file, "MODE7_SN_KEY.bin", LFS_O_RDONLY);
     if (ret < 0) {
         log_e("MODE 7: Failed to open SN/Key file for verification, error: %d", ret);
+        rwlock_release_read(&g_lfs_rwlock);
         return -3;
     }
     
@@ -1874,12 +1923,14 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     if (bytes_read != sizeof(read_sn_len)) {
         log_e("MODE 7: Failed to read SN length, read: %d", bytes_read);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -4;
     }
     
     if (read_sn_len != strlen(expected_sn)) {
         log_e("MODE 7: SN length mismatch, expected: %d, read: %d", strlen(expected_sn), read_sn_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -5;
     }
     
@@ -1888,6 +1939,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     if (bytes_read != read_sn_len) {
         log_e("MODE 7: Failed to read SN data, read: %d, expected: %d", bytes_read, read_sn_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -6;
     }
     
@@ -1896,6 +1948,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
         log_e("MODE 7: Expected: %s", expected_sn);
         log_e("MODE 7: Read:     %.*s", read_sn_len, read_sn);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -7;
     }
     
@@ -1905,12 +1958,14 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     if (bytes_read != sizeof(read_key_len)) {
         log_e("MODE 7: Failed to read Key length, read: %d", bytes_read);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -8;
     }
     
     if (read_key_len != strlen(expected_key)) {
         log_e("MODE 7: Key length mismatch, expected: %d, read: %d", strlen(expected_key), read_key_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -9;
     }
     
@@ -1919,6 +1974,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     if (bytes_read != read_key_len) {
         log_e("MODE 7: Failed to read Key data, read: %d, expected: %d", bytes_read, read_key_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -10;
     }
     
@@ -1927,11 +1983,14 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
         log_e("MODE 7: Expected: %s", expected_key);
         log_e("MODE 7: Read:     %.*s", read_key_len, read_key);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -11;
     }
     
     // 关闭文件
     lfs_file_close(&g_lfs, &file);
+    // 释放读锁
+    rwlock_release_read(&g_lfs_rwlock);
     
     log_i("MODE 7: ========== VERIFICATION SUCCESS ==========");
     log_i("MODE 7: SN verification:  PASSED (%s)", expected_sn);
@@ -1962,11 +2021,15 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     struct lfs_info info;
     lfs_file_t file;
     int ret;
+
+    // 读操作加读锁
+    rwlock_acquire_read(&g_lfs_rwlock);
     
     // 检查文件是否存在
     ret = lfs_stat(&g_lfs, "MODE7_SN_KEY.bin", &info);
     if (ret != LFS_ERR_OK) {
         log_e("MODE 7: SN/Key file does not exist, error: %d", ret);
+        rwlock_release_read(&g_lfs_rwlock);
         return -2;
     }
     
@@ -1974,6 +2037,7 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     ret = lfs_file_open(&g_lfs, &file, "MODE7_SN_KEY.bin", LFS_O_RDONLY);
     if (ret < 0) {
         log_e("MODE 7: Failed to open SN/Key file for reading, error: %d", ret);
+        rwlock_release_read(&g_lfs_rwlock);
         return -3;
     }
     
@@ -1983,12 +2047,14 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     if (bytes_read != sizeof(sn_len)) {
         log_e("MODE 7: Failed to read SN length, read: %d", bytes_read);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -4;
     }
     
     if (sn_len >= sn_size) {
         log_e("MODE 7: SN buffer too small, need: %d, have: %d", sn_len + 1, sn_size);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -5;
     }
     
@@ -1997,6 +2063,7 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     if (bytes_read != sn_len) {
         log_e("MODE 7: Failed to read SN data, read: %d, expected: %d", bytes_read, sn_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -6;
     }
     sn_out[sn_len] = '\0';  // 确保字符串终止
@@ -2007,12 +2074,14 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     if (bytes_read != sizeof(key_len)) {
         log_e("MODE 7: Failed to read Key length, read: %d", bytes_read);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -7;
     }
     
     if (key_len >= key_size) {
         log_e("MODE 7: Key buffer too small, need: %d, have: %d", key_len + 1, key_size);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -8;
     }
     
@@ -2021,12 +2090,15 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     if (bytes_read != key_len) {
         log_e("MODE 7: Failed to read Key data, read: %d, expected: %d", bytes_read, key_len);
         lfs_file_close(&g_lfs, &file);
+        rwlock_release_read(&g_lfs_rwlock);
         return -9;
     }
     key_out[key_len] = '\0';  // 确保字符串终止
     
     // 关闭文件
     lfs_file_close(&g_lfs, &file);
+    // 释放读锁
+    rwlock_release_read(&g_lfs_rwlock);
     
     log_i("MODE 7: ========== READ SUCCESS ==========");
     log_i("MODE 7: Read SN:  %s (%d bytes)", sn_out, sn_len);
