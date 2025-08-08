@@ -9,8 +9,6 @@
 #include "syscfg_id.h"
 #include "lfs.h"
 
-// #define TEST_LOCOL_MODE
-
 extern lfs_t g_lfs;
 
 #define BUF_SIZE 128
@@ -28,12 +26,10 @@ char snInVm[SN_SIZE+1]="\0";
 
 char keyInVm[KEY_SIZE];
 
-// #define SERVER_DOMAIN  "test.coolqq.com/api"
-#define SERVER_DOMAIN  "coolqq.com/api"
-#define SERVER_API  "%s://%s/"
+#define SERVER_API  "%s://%s/api/"
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
-#define FORMAT_API  "%s://%s/socket?deviceId=%s&token=%s"
+#define FORMAT_API  "%s://%s/api/socket?deviceId=%s&token=%s"
 char pt[SN_SIZE+2+21];
 
 char *get_url_api(char* url, char* format)

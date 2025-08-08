@@ -84,7 +84,7 @@ static int init_mqtt_network(void) {
 }
 
 int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
-    const char* host = "test.coolqq.com";
+    const char* host = SERVER_DOMAIN;
     int port = 80;
     const char* api = "/api/jwt/permanentEncrypt";
     
