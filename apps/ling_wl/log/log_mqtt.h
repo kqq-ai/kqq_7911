@@ -26,6 +26,7 @@ void log_mqtt_level(LogLevel level, const char* format, ...);
 void log_mqtt(const char* format, ...);
 /* MQTT连接管理函数 */
 int log_mqtt_start(void);
+int mqtt_subscribe_reset();
 
 void log_mqtt_stop(void);
 

@@ -3,6 +3,7 @@
  */
 
 #include "log_mqtt.h"
+#include "wifi/wifi_connect.h"
 #include <string.h>
 #include <netdb.h> // 添加域名解析支持
 #include "system/includes.h"  // 杰理芯片系统头文件
@@ -13,7 +14,7 @@
 #include "cJSON_common/cJSON.h"
 #include "lwip/sockets.h"  // 或你实际用的 socket 头文件
 #include "os/os_api.h" // 添加互斥锁支持
-
+#include "app_mode/lwl_app_framework.h"
 /* 全局MQTT客户端指针 */
 static Client* g_mqtt_client = NULL;
 
@@ -23,7 +24,7 @@ char time_str[20];
 char mqtt_payload[600];
 char sn[25];
 char token[256] = {0};
-
+char reset_topic[64];
 /* MQTT连接配置结构体 */
 typedef struct {
     char* server;           // MQTT服务器地址
@@ -449,6 +450,42 @@ void log_mqtt_battery(const char* sn_param,int battery) {
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
+// 回调函数实现
+void mqtt_reset_callback(MessageData* data)
+{
+    log_i("+++++++++++++++MQTT reset callback triggered++++++++++++++++++\n");
+    //清除wifi配置，并且重启设备
+    log_i("收到MQTT reset消息:\n");
+    log_i("- topic: %.*s\n", data->topicName->lenstring.len, data->topicName->lenstring.data);
+    log_i("- msg: %.*s\n", data->message->payloadlen, (char*)data->message->payload);
+    log_i("- QoS: %d\n", data->message->qos);
+    
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    
+    app_del_stored_wifi_ssid();
+    printf("delete all wifi info\r\n");
+    lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    os_mutex_post(&g_log_mqtt_mutex);
+    return ;
+}
+
+/* 订阅主题*/
+int mqtt_subscribe_reset() {
+    if (!log_mqtt_is_connected()) {
+        log_i("MQTT not connected, cannot subscribe\n");
+        return -1;
+    }
+
+    snprintf(reset_topic, sizeof(reset_topic), "reset-%s", sn);
+    int rc = MQTTSubscribe(g_mqtt_client, reset_topic, QOS0, mqtt_reset_callback);
+
+    if (rc != 0) {
+        log_i("MQTT subscribe failed, error code: %d\n", rc);
+    } else {
+        log_i("Subscribed to topic: %s\n", reset_topic);
+    }
+    return rc;
+}
 
 /* 启动MQTT日志系统 */
 int log_mqtt_start(void) {
