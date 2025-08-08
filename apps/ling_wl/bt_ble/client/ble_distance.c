@@ -47,8 +47,11 @@ inline const char *distance_type_to_text(enum distance_type type) {
 static void clear_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
 {
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
-    p_eend_dev->distance_info.rssi_sample_count = 0;
+    // int count = ((p_eend_dev->distance_info.rssi_sample_count + 3) >> 2);
+    // memcpy(p_eend_dev->distance_info.rssi_samples, p_eend_dev->distance_info.rssi_samples + count, p_eend_dev->distance_info.rssi_sample_count - count);
+    // p_eend_dev->distance_info.rssi_sample_count -= count;
     memset(p_eend_dev->distance_info.rssi_samples, 0, sizeof(p_eend_dev->distance_info.rssi_samples));
+    p_eend_dev->distance_info.rssi_sample_count = 0;
     os_mutex_post(&p_eend_dev->distance_info.mutex);
 }
 
@@ -58,6 +61,11 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     log_d("[MEASDIST]===process_rssi======\r\n");
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
     if (p_eend_dev->distance_info.rssi_sample_count <= 0) {
+        if(p_eend_dev->distance_info.rssi > -118 ){
+            p_eend_dev->distance_info.rssi -= 10;
+        } else{
+            p_eend_dev->distance_info.rssi = -128;
+        }
         os_mutex_post(&p_eend_dev->distance_info.mutex);
         return;
     }
@@ -388,7 +396,15 @@ static void distance_main(void *priv)
                 process_all_dev_rssi_samples();
                 // blue_distance_notify_app();
                 blue_distance_notify_self();
-                clean_all_dev_rssi_samples();
+                // clean_all_dev_rssi_samples();
+                static int rssi_times = 0;
+                if( rssi_times < 5 ){
+                    rssi_times++;
+                }else{
+                    rssi_times = 0;
+                    log_i("[MEASDIST]--rssi_times-- ");
+                    clean_all_dev_rssi_samples();
+                }
             }
 
             if (current_time - notify_self_time > NOTIFY_SELF_TIME)

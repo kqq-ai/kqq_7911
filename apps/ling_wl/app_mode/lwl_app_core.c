@@ -192,20 +192,20 @@ void dump_all_eend_info()
      * 
      */
 
-    log_i("+-----------------+-----+---+-------------------+------+-----------+");
-    log_i("|       sn        | bat | P |     bound_mac     | rssi |  distance |");
-    log_i("+-----------------+-----+---+-------------------+------+-----------+");
+    log_i("+-----------------+-----+---+-------------------+------+-----------+-----+");
+    log_i("|       sn        | bat | P |     bound_mac     | rssi |  distance | num |");
+    log_i("+-----------------+-----+---+-------------------+------+-----------+-----+");
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
-        log_i("| %15.15s | %3d | %1d | %02X:%02X:%02X:%02X:%02X:%02X | %4d | %9s |", pdev->sn, 
+        log_i("| %15.15s | %3d | %1d | %02X:%02X:%02X:%02X:%02X:%02X | %4d | %9s | %3d |", pdev->sn, 
             pdev->bat_level, pdev->power_on_state, 
             pdev->bound_mac[0], pdev->bound_mac[1], pdev->bound_mac[2], 
             pdev->bound_mac[3], pdev->bound_mac[4], pdev->bound_mac[5],
-            pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type));
+            pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type),pdev->distance_info.rssi_sample_count);
     }
-    log_i("+-----------------+-----+---+-------------------+------+-----------+");
+    log_i("+-----------------+-----+---+-------------------+------+-----------+------+");
 
     
     map_iterator_unlock(it); // 释放锁
