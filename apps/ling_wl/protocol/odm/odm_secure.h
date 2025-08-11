@@ -1,6 +1,6 @@
 #ifndef __ODM_SECURE_H__
 #define __ODM_SECURE_H__
-
+#include <cpu.h>
 
 // #define TEST_LOCOL_MODE
 // #define SERVER_DOMAIN  "test.coolqq.com"
