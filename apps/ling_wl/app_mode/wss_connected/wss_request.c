@@ -71,6 +71,10 @@ typedef enum {
 
 AppRequestState g_mode_state = STATE_IDLE;
 
+bool is_request_busy(){
+    return (g_mode_state != STATE_IDLE);
+}
+
 static void wss_request_print_state(AppRequestState mode_state, char* tag)
 {
     switch (mode_state) {

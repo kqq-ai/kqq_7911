@@ -19,6 +19,8 @@
 #include "protocol/cp/c_uart_p.h"
 #include "log/log_mqtt.h"
 
+#include "../../SC7A20/sc7a20.h"
+
 #define log_i log_mqtt
 
 static u32 g_curr_time = 0;
@@ -102,11 +104,8 @@ static void input_event_handler_cb(lwl_event_t *e)
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by input_event_handler_cb (1, 12)");
-        if(e->uart_cmd_sync.battery < 30 ){
-            // set_led_red_low_power();
-        }
-        uart_response_synch_status(g_device_state != DEVICE_IDLE, last_req_volume);/// 0是idle 1是busy，必须回复
+        log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
+        uart_response_synch_status(is_request_busy(), last_req_volume);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
@@ -115,15 +114,66 @@ static void input_event_handler_cb(lwl_event_t *e)
 }
 
 
+
+static pthread_t monitor_thread = NULL;
+static bool monitor_thread_running = false;
+#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
+#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
+// 模式5 加速度传感器相关变量
+
+void *wss_condition_monitor_thread(void *arg)
+{
+    u32 current_time = timer_get_ms();
+    u32 last_E_found_time = current_time;
+    u32 last_move_time = current_time;
+    log_i("Starting WSS condition monitor thread...");
+    while (monitor_thread_running) {
+        current_time = timer_get_ms();
+        
+        // 检查E设备
+        if (get_5m_edev_count() > 0) {  // 检测到E设备
+            last_E_found_time = current_time;
+        }
+
+        // 检查设备移动状态
+        if (is_device_moving()) {  // 设备在移动
+            last_move_time = current_time;
+        }
+
+        // 检查超时条件
+        bool e_timeout = ((current_time - last_E_found_time) > NO_E_TIMEOUT_MS);
+                         
+        bool move_timeout = ((current_time - last_move_time) > NO_MOVE_TIMEOUT_MS);
+
+        // 任一超时条件满足就切换模式
+        if (e_timeout || move_timeout) {
+            log_i("No E found or device not moving for a long time, switching to default mode.");
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+            monitor_thread_running = false;
+            return NULL;
+        }
+        os_time_dly(100);  // 100ms 延迟
+    }
+    monitor_thread_running = false;
+    return NULL;
+}
+
 void wss_application_init()
 {
     log_i("Init WSS application\n");
     lwl_event_handler_add(input_event_handler_cb);
     odmp_register_disconnect_cbk(odmp_disconnect_cbk);
     
+    monitor_start();
     wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
+
+   // 检查线程是否已经在运行
+    if (!monitor_thread_running) {
+        pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
+        monitor_thread_running = true; 
+    }
 
     /* 注册lwl事件处理回调 */
 
@@ -136,9 +186,16 @@ void wss_application_uninit()
 {
     log_i("Uninit WSS application\n");
 
+    monitor_thread_running = false;
+    if (!monitor_thread) {
+        pthread_join(monitor_thread, NULL);  // 等待线程退出
+        monitor_thread = NULL;
+    }
+
     wss_audio_uninit();
     wss_request_uninit();
     wss_device_uninit();
+    monitor_stop();//free all pdev
 
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);

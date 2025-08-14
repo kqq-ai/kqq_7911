@@ -157,26 +157,14 @@ void base_lwl_event_handler(lwl_event_t *e)
         log_i("PRESS RESET KEY");
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
             lastbattery = e->uart_cmd_sync.battery;
             log_mqtt_set_battery_level(sn, lastbattery);
         }
-        log_i("battery: %d", e->uart_cmd_sync.battery);
         if(e->uart_cmd_sync.battery < 30 )
             set_led_red_low_power();
-        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
-        log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         break;
-    // case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-    //     app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
-    //     uart_response_clear_wifi_ssid();
-    //     break;
-    // case LWL_EVENT_TYPE_UART_SYNC:
-    //     log_i("battery: %d", e->uart_cmd_sync.battery);
-    //     if(e->uart_cmd_sync.battery < 30 )
-    //         set_led_red_low_power();
-    //     uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
-    //     break;
     }
 }
 
