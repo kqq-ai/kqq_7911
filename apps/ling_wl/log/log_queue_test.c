@@ -12,11 +12,12 @@
 //#include "../../lib/net/tmallgenie/include/aligenie_os.h"
 #include "os/os_api.h" // 添加互斥锁支持
 #include "../util/cqueue.h"
+#include "system/os/os_api.h"
 
 #define LOG_QUEUE_MAX_COUNT 15    // 最大元素个数（原LOG_QUEUE_SIZE）
 #define LOG_QUEUE_ITEM_MAX_LEN 120 // 单个元素最大长度（字节）（原LOG_ITEM_MAXLEN）
 
-#define LOG_UPLOAD_INTERVAL 200  // 200ms 上传间隔
+#define LOG_UPLOAD_INTERVAL 1000  // 1000ms 上传间隔
 #define LOG_QUEUE_THRESHOLD 10  // 添加新的阈值定义
 
 char temp[LOG_QUEUE_ITEM_MAX_LEN];
@@ -71,9 +72,10 @@ void log_mqtt_disconnect();
 
 static MyBlockingQueue log_queue;
 static char log_queue_data[LOG_QUEUE_MAX_COUNT * LOG_QUEUE_ITEM_MAX_LEN];
-//static AG_TIMER_T log_upload_timer;  // 修改定时器类型为 AG_TIMER_T
-//static bool log_timer_running = false;
 
+static pthread_t monitor_thread;  // 声明监控线程
+static bool g_monitor_thread_running = false;  // 线程运行标志
+static uint32_t last_upload_time = 0;  // 上次上传时间（用于超时判断）
 
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
@@ -377,33 +379,70 @@ static void upload_all_logs(void) {
 //         os_mutex_post(&g_log_mqtt_mutex);
 //     }
 // }
+/* 常驻监控线程：检测队列阈值和超时 */
+static void* log_monitor_thread(void* arg) {
+    log_i("Log monitor thread started\n");
+    last_upload_time = timer_get_ms();  // 初始化上传时间
 
+    while (g_monitor_thread_running) {
+        uint32_t current_time = timer_get_ms();
+        bool need_upload = false;
+
+        // 条件1：队列长度达到阈值
+        if (log_queue.size >= LOG_QUEUE_THRESHOLD) {
+            need_upload = true;
+        }
+        // 条件2：未达阈值但超过上传间隔（超时兜底）
+        else if (log_queue.size > 0 && 
+                 (current_time - last_upload_time) >= LOG_UPLOAD_INTERVAL) {
+            need_upload = true;
+        }
+
+        if (need_upload) {
+            upload_all_logs();  // 触发上传
+        }
+        // 休眠10ms，避免CPU空转（可根据需求调整）
+        os_time_dly(100);
+    }
+
+    log_i("Log monitor thread exited\n");
+    return NULL;
+}
 // 初始化队列和定时器
 void log_mqtt_queue_init(void) {
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
-    
-    // 创建并启动定时器
-    // if(ag_os_timer_create(&log_upload_timer, LOG_UPLOAD_INTERVAL, true, log_upload_timer_cb, NULL) == 0) {
-    //     ag_os_timer_start(&log_upload_timer);
-    //     log_timer_running = true;
-    // }
+    //创建线程
+    // 启动监控线程
+    g_monitor_thread_running = true;
+    int ret = pthread_create(&monitor_thread, NULL, log_monitor_thread, NULL);
+    if (ret != 0) {
+        log_i("Failed to create monitor thread, error: %d\n", ret);
+        g_monitor_thread_running = false;
+    }
 }
 
 // 入队日志，满了就批量推送
+// void log_mqtt_enqueue(const char *msg) {
+//     os_mutex_pend(&g_log_mqtt_mutex, 0);
+//     log_i("log_mqtt_enqueue: %s  %d\n", msg,strlen(msg));
+//     if (my_blocking_queue_try_enqueue(&log_queue, (void *)msg) == MYERROR_Is_Full) {
+//         // 队列满，进行批量发送
+//         upload_all_logs();
+//         // 队列已清空，现在可以入队新消息
+//         my_blocking_queue_enqueue(&log_queue, (void *)msg);
+//     } 
+//     if (log_queue.size >= LOG_QUEUE_THRESHOLD) {
+//         // 当队列中的消息数量达到或超过阈值时，触发发送
+//         upload_all_logs();
+//     }
+    
+//     os_mutex_post(&g_log_mqtt_mutex);
+// }
+
 void log_mqtt_enqueue(const char *msg) {
     os_mutex_pend(&g_log_mqtt_mutex, 0);
-    log_i("log_mqtt_enqueue: %s  %d\n", msg,strlen(msg));
-    if (my_blocking_queue_try_enqueue(&log_queue, (void *)msg) == MYERROR_Is_Full) {
-        // 队列满，进行批量发送
-        upload_all_logs();
-        // 队列已清空，现在可以入队新消息
-        my_blocking_queue_enqueue(&log_queue, (void *)msg);
-    } 
-    if (log_queue.size >= LOG_QUEUE_THRESHOLD) {
-        // 当队列中的消息数量达到或超过阈值时，触发发送
-        upload_all_logs();
-    }
-    
+    log_i("log_mqtt_enqueue: %s  %d\n", msg, strlen(msg));
+    my_blocking_queue_enqueue(&log_queue, (void *)msg);
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
@@ -455,15 +494,15 @@ int log_mqtt_batch_start(void) {
     return log_mqtt_connect();
 }
 
+
+
 // 添加停止函数
 void log_mqtt_batch_stop(void) {
-    //定时器相关
-    // if (log_timer_running) {
-    //     ag_os_timer_stop(&log_upload_timer);
-    //     ag_os_timer_destroy(&log_upload_timer);
-    //     log_timer_running = false;
-    // }
-    
+
+    // 停止监控线程
+    g_monitor_thread_running = false;
+    pthread_join(monitor_thread, NULL);  // 等待线程退出
+
     // 确保最后的消息都发送出去
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     upload_all_logs();
@@ -475,53 +514,3 @@ void log_mqtt_batch_stop(void) {
 
     os_mutex_del(&g_log_mqtt_mutex, 1);//删除互斥锁
 }
-
-
-//定时器实现
-// 定时器参数定义
-// #define LOG_UPLOAD_INTERVAL 1000  // 定时间隔：200ms
-// static AG_TIMER_T log_upload_timer;  // 定时器句柄
-// static bool log_timer_running = false;  // 定时器运行状态
-
-// // 定时器回调函数：每隔200ms打印一次日志
-// static void log_upload_timer_cb(void* arg) {
-//     // 打印测试信息（可添加时间戳辅助观察间隔）
-//     printf("[Test Timer] 定时触发，间隔 %d ms\n", LOG_UPLOAD_INTERVAL);
-    
-// }
-
-// void test_timer_cb(void)
-// {
-//     // 检查定时器是否已运行，避免重复创建
-//     if (log_timer_running) {
-//         printf("定时器已在运行中\n");
-//         return;
-//     }
-
-//     // 创建定时器：间隔200ms，自动重装载（true）
-//     int create_ret = ag_os_timer_create(
-//         &log_upload_timer,          // 定时器句柄
-//         LOG_UPLOAD_INTERVAL,        // 间隔时间（ms）
-//         true,                       // 自动重装载（循环触发）
-//         log_upload_timer_cb,        // 回调函数
-//         NULL                        // 传递给回调的参数（此处无需）
-//     );
-
-//     if (create_ret != AG_OS_TIMER_OK) {
-//         printf("定时器创建失败！错误码：%d\n", create_ret);
-//         return;
-//     }
-
-//     // 启动定时器
-//     int start_ret = ag_os_timer_start(&log_upload_timer);
-//     if (start_ret != AG_OS_TIMER_OK) {
-//         printf("定时器启动失败！错误码：%d\n", start_ret);
-//         // 若启动失败，销毁已创建的定时器释放资源
-//         ag_os_timer_destroy(&log_upload_timer);
-//         return;
-//     }
-
-//     // 标记定时器运行状态
-//     log_timer_running = true;
-//     printf("定时器初始化成功，每隔 %d ms触发一次\n", LOG_UPLOAD_INTERVAL);
-// }

@@ -24,7 +24,7 @@
 #include "../lwl_app_core.h"
 #include "../wss_connected/wss_application.h"
 #include "log.h"
-#include "log/log_queue_test.h"
+#include "log/log_mqtt.h"
 #include "ota/http_ota.h"
 #include "bt_ble/app_wifi_manage.h"
 #include "protocol/cp/c_uart_p.h"
@@ -46,14 +46,13 @@ static int net_connected_init(void)
     
     // MQTT 连接重试
     while (retry_count < 10) {
-        int ret = log_mqtt_batch_start();
-        log_i("log_mqtt_batch_start init attempt %d: %d\n", retry_count + 1, ret);
-
+        int ret = log_mqtt_start();
+        log_i("log_mqtt_start init attempt %d: %d\n", retry_count + 1, ret);
         if (ret == 0) {
+            mqtt_subscribe_reset();
             connected = true;
             break;
         }
-        
         retry_count++;
         if (retry_count < 10) {
             mdelay(100);

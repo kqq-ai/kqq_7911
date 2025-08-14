@@ -33,7 +33,6 @@
 #include "protocol/cp/c_uart_p.h"
 
 #include "system/os/os_api.h"
-#include "system/os/os_api.h"
 
 #include "../../SC7A20/sc7a20.h"
 #include "protocol/odm/odmp.h"

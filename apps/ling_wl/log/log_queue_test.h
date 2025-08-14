@@ -1,5 +1,5 @@
-#ifndef __LOG_QUEUE_TEST_H__
-#define __LOG_QUEUE_TEST_H__
+#ifndef LOG_QUEUE_TEST_H
+#define LOG_QUEUE_TEST_H
 
 #include "../../include_lib/net/mqtt/MQTTClient.h"
 #include <stdarg.h>
