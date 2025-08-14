@@ -31,6 +31,9 @@
 
 #include "protocol/odm/odm_secure.h"
 
+#define MODE_TIMEOUT_MS 10000 // 10s
+static u32 init_time = 0;
+
 static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
 //=================================================================================================
@@ -54,14 +57,15 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
         // Reset WiFi SSID
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by power_on_input_event_handler_cb (1, 12)");
-        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
+        log_i("SYNC response by net_connected_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
         break;
     }
 }
 
 static int net_connected_init(void)
 {
+    init_time = timer_get_ms();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_add(net_connected_event_handler_cb);
     int ret = log_mqtt_start();
@@ -127,6 +131,11 @@ void app_net_connected_loop()
     } else {
         log_i("websockets init failed\n");
         set_led_connect_error();// WSS ERROR
+        
+        // 无网络超时10s，进入配网
+        if (timer_get_ms() - init_time >= 10000) {
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        }
     }
     // TODO 尝试重连WSS
 }

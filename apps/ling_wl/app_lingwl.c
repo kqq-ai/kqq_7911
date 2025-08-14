@@ -56,13 +56,6 @@ const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 //"WCCN24H28FEEEFE"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
 
-static bool g_is_wss_connected_flag = false; /* 控制充电的时候谁来回复sync指令（根据是否连接上了wss） */
-
-void set_wss_connected_flag(bool flag)
-{
-    g_is_wss_connected_flag = flag;
-}  
-
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }   /* 控制 led : 正常响应中 白色 */
 
 static void simple_play_prompt(const char *fname) 
@@ -111,7 +104,7 @@ static void power_off_cb(void *priv)
     power_set_soft_poweroff();
 }
 
-static void do_shutdown()
+void do_shutdown()
 {
     int err = -1;
     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
@@ -167,10 +160,6 @@ void base_lwl_event_handler(lwl_event_t *e)
     //     uart_response_clear_wifi_ssid();
     //     break;
     // case LWL_EVENT_TYPE_UART_SYNC:
-    //     if (!g_is_wss_connected_flag){
-    //         log_i("base_lwl_event_handler response sync \r\n");
-    //         uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
-    //     }
     //     log_i("battery: %d", e->uart_cmd_sync.battery);
     //     if(e->uart_cmd_sync.battery < 30 )
     //         set_led_red_low_power();

@@ -25,6 +25,8 @@
 #include "app_mode/lwl_app_core.h"
 #include "protocol/cp/c_uart_p.h"
 
+#define MODE_TIMEOUT_MS 1000 // 1s
+static u32 init_time = 0;
 
 static void set_led_idel(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
 
@@ -52,21 +54,21 @@ static void default_input_event_handler_cb(lwl_event_t *e)
         uart_response_clear_wifi_ssid();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by default_input_event_handler_cb (1, 12)");
+        log_i("SYNC response by default_input_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
         if(e->uart_cmd_sync.battery < 30 ){
             // set_led_red_low_power();
         }
-        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
         break;
     }
 }
-
 
 static int default_init(void)
 {
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(default_input_event_handler_cb);
     set_led_idel(); // 设置LED为白色
+    init_time = timer_get_ms();
     return 0;
 }
 
@@ -82,7 +84,6 @@ void app_default_mode(void)
     default_init();
 
     while (1) {
-        // 应用代码
         mdelay(10);
         if (lwl_app_mode_exitting()) {
             default_unint();

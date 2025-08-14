@@ -67,6 +67,9 @@ extern lfs_t g_lfs;
 #include "../../SC7A20/sc7a20.h"           // SC7A20陀螺仪头文件
 #include "../../SC7A20/app_sc7a20_task.h"  // SC7A20任务头文件
 
+#define MODE_TIMEOUT_MS 600000 // 10 minutes
+static u32 init_time = 0;
+
 // 使用系统预定义的颜色常量
 static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
 static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
@@ -1545,11 +1548,11 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("battery: %d", e->uart_cmd_sync.battery);
-        log_i("SYNC response by devices_check_lwl_event_handler_cb (1, 12)");
+        log_i("SYNC response by devices_check_lwl_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
         if(e->uart_cmd_sync.battery < 30 ){
             // set_led_red();
         }
-        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
@@ -1666,6 +1669,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
 }
 static int devices_check_init(void)
 {
+    init_time = timer_get_ms();
     lwl_app_context_t *g_app_ctx = lwl_app_core_context_get_instance();
     
     msleep(5000);
