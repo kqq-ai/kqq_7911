@@ -72,16 +72,24 @@ static int wss_connected_init(void)
     return 0;
 }
 
+static pthread_t monitor_thread = NULL;
+static bool monitor_thread_running = false;
+
 static int wss_connected_unint(void)
 {
     wss_application_uninit();//clear all pdev
     monitor_stop();//free all pdev
 
+    monitor_thread_running = false;
+    if (!monitor_thread) {
+        pthread_join(monitor_thread, NULL);  // 等待线程退出
+        monitor_thread = NULL;
+    }
+
     /* 退出wss_connected模式时，关闭WSS连接，释放资源 */
     wss_disconnect();
     return 0;
 }
-
 
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
 #define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
@@ -93,7 +101,7 @@ void *wss_condition_monitor_thread(void *arg)
     u32 last_move_time = 0;
     u32 current_time = 0;
     log_i("Starting WSS condition monitor thread...");
-    while (1) {
+    while (monitor_thread_running) {
         current_time = timer_get_ms();
         
         // 检查E设备
@@ -129,10 +137,12 @@ void *wss_condition_monitor_thread(void *arg)
             // 重置计时器，避免重复触发
             last_E_found_time = 0;
             last_move_time = 0;
+            monitor_thread_running = false;
             return NULL;
         }
         os_time_dly(100);  // 100ms 延迟
     }
+    monitor_thread_running = false;
     return NULL;
 }
 
@@ -143,9 +153,12 @@ void app_wss_connected_mode(void)
     
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
-    pthread_t monitor_thread;
-    pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
-
+   // 检查线程是否已经在运行
+    if (!monitor_thread_running) {
+        pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
+        monitor_thread_running = true; 
+    }
+    
     while (1) {
         // 应用代码
         if (wss_application_loop()) {

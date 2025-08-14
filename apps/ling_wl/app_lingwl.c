@@ -28,10 +28,11 @@
 #include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_framework.h"
 
+#include "protocol/odm/odm_secure.h"
 #include "app_mode/lwl_app_core.h"
 
 #include "bt_ble/client/ble_distance.h"
-
+#include "log/log_mqtt.h"
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
@@ -55,6 +56,8 @@ const u8 sn1[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x38, 0x00 };
 //"WCCN24H28FEEEFE"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
+
+static char sn[25];
 
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }   /* 控制 led : 正常响应中 白色 */
 
@@ -104,7 +107,8 @@ static void power_off_cb(void *priv)
     power_set_soft_poweroff();
 }
 
-void do_shutdown()
+int lastbattery=0;
+static void do_shutdown()
 {
     int err = -1;
     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
@@ -153,6 +157,14 @@ void base_lwl_event_handler(lwl_event_t *e)
         log_i("PRESS RESET KEY");
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
+        if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
+            lastbattery = e->uart_cmd_sync.battery;
+            log_mqtt_set_battery_level(sn, lastbattery);
+        }
+        log_i("battery: %d", e->uart_cmd_sync.battery);
+        if(e->uart_cmd_sync.battery < 30 )
+            set_led_red_low_power();
+        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
         log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         break;
     // case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
@@ -256,10 +268,12 @@ static void app_lingwl_main(void)
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
 
+    
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);
     /* 【调试】监测att send buffer remaing size */
     // thread_fork("moni", 15, 512 * 3, 0, 0, moni_task, NULL);
+    get_SN(&sn);
 }
 
 void play_end_callback(void *priv)

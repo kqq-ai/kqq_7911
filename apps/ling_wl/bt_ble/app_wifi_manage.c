@@ -125,7 +125,7 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
     get_wifi_config(auto_ssid,auto_pwd);
     printf("the auto_ssid is %s     the auto_pwd is %s\r\n",auto_ssid,auto_pwd);
 
-    wifi_connect_block(auto_ssid,auto_pwd, 10);
+    return wifi_connect_block(auto_ssid,auto_pwd, 10);
 }
 
 WIFI_connect_STATUES wifi_connect(
