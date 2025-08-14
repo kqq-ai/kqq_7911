@@ -42,8 +42,8 @@ u32 get_time_stamp() {
 /*=================================================================================================
  * Audio dec app context
  *=================================================================================================*/
-static int g_audio_play_end = true;
-static int g_audio_play_ongoing_num = 0;
+static int g_audio_play_end = true; // 音频播放结束标志（外部请求状态）
+static int g_audio_play_ongoing = false; // 音频播放进行中标志（播放器状态）
 /*=================================================================================================
  * Record app context
  *=================================================================================================*/
@@ -68,6 +68,7 @@ static MyRingBuffer g_asr_ringbuffer;    // MyRingBuffer<AsrData>
 static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)];
 
 
+void app_music_play_end_cb(void *priv);
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 void wait_vad_task(void *priv);
 static void wss_app_recorder_data_upstream(recorder_data_cb_t cb);
@@ -128,17 +129,19 @@ void wss_mic_start(uint timestamp) {
 
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    bool playing = (g_audio_play_end == false);
+    // bool playing = (g_audio_play_end == false);
+    bool playing = g_audio_play_ongoing;
     os_mutex_post(&g_audio_mutex);
-    return playing;
+    return g_audio_play_ongoing;
 }
 
 void wss_ble_audio_stop() {
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_audio_play_end) {
         g_audio_play_end = true;
+        g_audio_play_ongoing = false; // 停止音频播放
+        app_music_play_stop(g_app_ctx->music_player);
     }
-    app_music_play_stop(g_app_ctx->music_player);
     odmp_register_audio_data_cbk(NULL); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -146,6 +149,10 @@ void wss_ble_audio_stop() {
 void wss_ble_audio_start() {
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_end = false;
+    if (g_audio_play_ongoing == false) {
+        g_audio_play_ongoing = true;
+        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+    }
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -289,7 +296,21 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     const uint32_t MAX_CHUNK_SIZE = 50000;
     uint32_t total_written = 0;
     uint32_t remaining = len;
+
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (g_audio_play_end) {
+        os_mutex_post(&g_audio_mutex);
+        return 0;
+    }
+
+    if (g_audio_play_ongoing == false) {
+        g_audio_play_ongoing = true;
+        log_i("start to play.");
+        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+    }
+
     set_led_tts_play();
+    os_mutex_post(&g_audio_mutex);
     
     while (remaining > 0 && g_audio_play_end == false) {
         uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
@@ -310,6 +331,17 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     }
     log_i("Total stream write: %u / %u bytes", total_written, len);
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
+}
+
+//=================================================================================================
+// MUSIC response callback
+//=================================================================================================
+void app_music_play_end_cb(void *priv)
+{
+    os_mutex_pend(&g_audio_mutex, 0);
+    g_audio_play_ongoing = false; // 音乐播放结束标志
+    log_i("app_music_play_end_cb end");
+    os_mutex_post(&g_audio_mutex);
 }
 
 /**

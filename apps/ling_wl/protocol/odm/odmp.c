@@ -181,10 +181,8 @@ char *odmp_audio_status(const char *c_id, int type, int event)
             "type": 1,
             "Event ": 1，
             "audio_params": {
-                "format": "pcm",
+                "format": "opus",
                 "sample_rate": 16000,
-                "channels": 1,
-                "frame_duration": 60
             }
         }
     }
@@ -201,8 +199,6 @@ char *odmp_audio_status(const char *c_id, int type, int event)
         cJSON *naudio_params = cJSON_CreateObject();
         cJSON_AddStringToObject(naudio_params, "format", "mp3");
         cJSON_AddNumberToObject(naudio_params, "sample_rate", 16000);
-        cJSON_AddNumberToObject(naudio_params, "channels", 1);
-        cJSON_AddNumberToObject(naudio_params, "frame_duration", 60);
         cJSON_AddItemToObject(nroot_data, "audio_params", naudio_params);
     }
 
@@ -386,12 +382,6 @@ static int audio_status_event_handler(const cJSON *nroot, odmp_package_t *pkg)
         pkg->audio_status.audio_param.format = vformat;
 
         if (cjson_get_integer_value(naudio_params, "sample_rate", &pkg->audio_status.audio_param.sample_rate)) {
-            return PARSE_Error;
-        }
-        if (cjson_get_integer_value(naudio_params, "channels", &pkg->audio_status.audio_param.channels)) {
-            return PARSE_Error;
-        }
-        if (cjson_get_integer_value(naudio_params, "frame_duration", &pkg->audio_status.audio_param.frame_duration)) {
             return PARSE_Error;
         }
     }
