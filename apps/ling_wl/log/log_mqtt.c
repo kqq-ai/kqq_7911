@@ -335,6 +335,7 @@ static void upload_all_logs(void) {
 
     while (log_queue.size > 0) {
         if (my_blocking_queue_try_dequeue(&log_queue, temp) == MYERROR_Success) {
+
             cJSON *item = cJSON_Parse(temp);
             if (item) {
                 cJSON_AddItemToArray(array, item);
@@ -360,14 +361,14 @@ static void upload_all_logs(void) {
     cJSON_Delete(array);
     
     uint32_t end_time = timer_get_ms();
-    log_i("Batch send messages took %u ms\n", end_time - start_time);
+    log_i("[MQTT upload]Batch send messages took %u ms\n", end_time - start_time);
     os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
 }
 
 
 /* 常驻监控线程：检测队列阈值和超时 */
 static void* log_monitor_thread(void* arg) {
-    log_i("Log monitor thread started\n");
+    log_i("[MQTT log_monitor]Log monitor thread started\n");
     last_upload_time = timer_get_ms();  // 初始化上传时间
     while (g_monitor_thread_running) {
         uint32_t current_time = timer_get_ms();
@@ -395,8 +396,9 @@ static void* log_monitor_thread(void* arg) {
         // 休眠10ms，避免CPU空转（可根据需求调整）
         os_time_dly(100);
     }
+    g_monitor_thread_running = false;
 
-    log_i("Log monitor thread exited\n");
+    log_i("[MQTT log_monitor]Log monitor thread exited\n");
     return NULL;
 }
 
@@ -406,6 +408,7 @@ void log_mqtt_queue_init(void) {
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     //创建线程
     // 启动监控线程
+    if (g_monitor_thread_running) return;
     g_monitor_thread_running = true;
     int ret = pthread_create(&monitor_thread, NULL, log_monitor_thread, NULL);
     if (ret != 0) {
@@ -468,7 +471,6 @@ void log_mqtt_battery(const char* sn_param,int battery) {
 
 void log_mqtt_enqueue(const char *msg) {
     os_mutex_pend(&g_log_mqtt_mutex, 0);
-    log_i("log_mqtt_enqueue: %s  %d\n", msg, strlen(msg));
     my_blocking_queue_enqueue(&log_queue, (void *)msg);
     os_mutex_post(&g_log_mqtt_mutex);
 }
@@ -501,7 +503,7 @@ void log_mqtt(const char* format, ...) {
     char *json_str = cJSON_PrintUnformatted(root);
     
     // 打印到控制台
-    log_i("+++++json %s\n", log_buffer);
+    log_i("[MQTT message] %s", log_buffer);
 
     // 发送到队列
     log_mqtt_enqueue(json_str);

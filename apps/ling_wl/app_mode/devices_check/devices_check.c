@@ -1539,12 +1539,17 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         switch_to_mode(next_mode);
 
     }   break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        // return to WORK_MODE_1
+        switch_to_mode(WORK_MODE_1);
+        break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC");
         log_i("battery: %d", e->uart_cmd_sync.battery);
-        // if(e->uart_cmd_sync.battery < 30 )
-        //     set_led_red(); //red~ low power
-        uart_response_synch_status(1, 12);/// 音量  e的声音 only
+        log_i("SYNC response by devices_check_lwl_event_handler_cb (1, 12)");
+        if(e->uart_cmd_sync.battery < 30 ){
+            // set_led_red();
+        }
+        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
@@ -1653,9 +1658,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         } else {
             log_i("Touch key released in mode %s", mode_names[g_current_mode]);
         }
-        break;
-    case LWL_EVENT_TYPE_UART_SHUTDOWN:
-        log_i("SHUTDOWN");
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");

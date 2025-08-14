@@ -53,6 +53,7 @@ static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_R
 int wait_time = 0;
 int last_message_received = 0;
 int last_event = 0;
+int last_volume = 12;
 
 int send_message = 0;
 
@@ -68,9 +69,9 @@ typedef enum {
     STATE_PLAYING, // 播放状态
 } AppRequestState;
 
-static int g_mode_state = STATE_IDLE;
+AppRequestState g_mode_state = STATE_IDLE;
 
-static void wss_request_print_state(int mode_state, char* tag)
+static void wss_request_print_state(AppRequestState mode_state, char* tag)
 {
     switch (mode_state) {
     case STATE_IDLE:
@@ -92,58 +93,58 @@ static void wss_request_print_event(int msg_event, char* tag)
 {
     switch (msg_event) {
     case ORMET_INITIAL_SETUP:
-        log_i("[%s]ORMET_INITIAL_SETUP", tag);
+        log_i("[%s]send ORMET_INITIAL_SETUP", tag);
         break;
     case ORMET_NEAR_TRIGGER:
-        log_i("[%s]ORMET_NEAR_TRIGGER", tag);
+        log_i("[%s]send ORMET_NEAR_TRIGGER", tag);
         break;
     case ORMET_NEW_DEVICE_IN:
-        log_i("[%s]ORMET_NEW_DEVICE_IN", tag);
+        log_i("[%s]send ORMET_NEW_DEVICE_IN", tag);
         break;
     case ORMET_SWITCH_SUCCESS:
-        log_i("[%s]ORMET_SWITCH_SUCCESS", tag);
+        log_i("[%s]send ORMET_SWITCH_SUCCESS", tag);
         break;
     case ORMET_SWITCH_FAILED:
-        log_i("[%s]ORMET_SWITCH_FAILED", tag);
+        log_i("[%s]send ORMET_SWITCH_FAILED", tag);
         break;
     case ORMET_BUTTON_TRIGGER:
-        log_i("[%s]ORMET_BUTTON_TRIGGER", tag);
+        log_i("[%s]send ORMET_BUTTON_TRIGGER", tag);
         break;
     case ORMET_BUTTON_PRESS:
-        log_i("[%s]ORMET_BUTTON_PRESS", tag);
+        log_i("[%s]send ORMET_BUTTON_PRESS", tag);
         break;
     case ORMET_BUTTON_DOUBLE_PRESS:
-        log_i("[%s]ORMET_BUTTON_DOUBLE_PRESS", tag);
+        log_i("[%s]send ORMET_BUTTON_DOUBLE_PRESS", tag);
         break;
     case ORMET_BUTTON_START:
-        log_i("[%s]ORMET_BUTTON_START", tag);
+        log_i("[%s]send ORMET_BUTTON_START", tag);
         break;
     case ORMET_BUTTON_END:
-        log_i("[%s]ORMET_BUTTON_END", tag);
+        log_i("[%s]send ORMET_BUTTON_END", tag);
         break;
     case ORMET_MOVE_PATROL:
-        log_i("[%s]ORMET_MOVE_PATROL", tag);
+        log_i("[%s]send ORMET_MOVE_PATROL", tag);
         break;
     case ORMET_MOVE_STOP:
-        log_i("[%s]ORMET_MOVE_STOP", tag);
+        log_i("[%s]send ORMET_MOVE_STOP", tag);
         break;
     case ORMET_MOVE_SHAKE:
-        log_i("[%s]ORMET_MOVE_SHAKE", tag);
+        log_i("[%s]send ORMET_MOVE_SHAKE", tag);
         break;
     case ORMET_VAD_SPEAKER_START:
-        log_i("[%s]ORMET_VAD_SPEAKER_START", tag);
+        log_i("[%s]send ORMET_VAD_SPEAKER_START", tag);
         break;
     case ORMET_VAD_SPEAKER_END:
-        log_i("[%s]ORMET_VAD_SPEAKER_END", tag);
+        log_i("[%s]send ORMET_VAD_SPEAKER_END", tag);
         break;
     case ORMET_PLAY_START:
-        log_i("[%s]ORMET_PLAY_START", tag);
+        log_i("[%s]send ORMET_PLAY_START", tag);
         break;
     case ORMET_PLAY_NEAR_END:
-        log_i("[%s]ORMET_PLAY_NEAR_END", tag);
+        log_i("[%s]send ORMET_PLAY_NEAR_END", tag);
         break;
     case ORMET_PLAY_END:
-        log_i("[%s]ORMET_PLAY_END", tag);
+        log_i("[%s]send ORMET_PLAY_END", tag);
         break;
     }
 }
@@ -174,6 +175,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         int mapped_volume = pkg->tts_bind.volume * G_MAX_VOLUME / 100;
         if (mapped_volume > G_MAX_VOLUME) mapped_volume = G_MAX_VOLUME;
         if (mapped_volume < 0) mapped_volume = 0;
+        last_volume = mapped_volume;
 
         uart_response_synch_status(1, mapped_volume);/// 音量 E
         
@@ -222,10 +224,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         }
         break;
     case OR_MESSAGE_TEXT:
-        if (pkg->message_text.type == 1)
-            log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
-        if (pkg->message_text.type == 2)
-            log_i("TTS_TEXT %d %s\n", pkg->message_text.c_id, pkg->message_text.text);
+        // if (pkg->message_text.type == 1)
+        //     log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
+        // if (pkg->message_text.type == 2)
+        //     log_i("TTS_TEXT %d %s\n", pkg->message_text.c_id, pkg->message_text.text);
         break;
     case OR_EXECUTION_TIME:
         log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
@@ -285,10 +287,12 @@ void wss_request_stop()
     log_i("Stop WSS request\n");
 
     // 在STATE_DOWNLOAD时发送TTS异常
-    if (g_mode_state == STATE_DOWNLOAD) {
+    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
         uint32_t cmd_id = 0;
         bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
-        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
+        if (g_mode_state == STATE_DOWNLOAD) {
+            send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
+        }
     }
     g_edev_target = NULL; // 清除目标设备
 
@@ -395,7 +399,7 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
         }
-        wss_application_vailed();
+        wss_application_vailed(last_volume);
         break;
 
     case STATE_UPLOAD:
@@ -405,7 +409,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "VAD state is not voice");
             wss_request_send_event(g_edev_target, ORMET_VAD_SPEAKER_END);
         }
-        wss_application_vailed();
+        wss_application_vailed(last_volume);
         break;
 
     case STATE_PLAYING:
@@ -430,7 +434,7 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
         } else {
-            wss_application_vailed();
+            wss_application_vailed(last_volume);
         }
         break;
     }

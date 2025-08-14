@@ -94,6 +94,7 @@ void quick_test_with_macros(uint16_t cycles)
     // 黑到绿色
     led_breathing_simple(COLOR_BLACK, COLOR_GREEN, cycles, 2000, 25);
     mdelay(1000);
+    
     // 黑到蓝色
     led_breathing_simple(COLOR_BLACK, COLOR_BLUE, cycles, 2000, 25);
     mdelay(1000);
@@ -101,7 +102,6 @@ void quick_test_with_macros(uint16_t cycles)
     // 黑色到红色
     led_breathing_simple(COLOR_BLACK, COLOR_RED, cycles, 2000, 25);
     mdelay(1000);
-    return ;
 }
 
 /**

@@ -35,6 +35,32 @@ bool has_saved_wifi()
 // TODO
     return true;
 }
+//=================================================================================================
+// LWL event callback
+//=================================================================================================
+static void power_on_input_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        // play 提示音
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        // 处理触摸按键抬起事件
+        break;
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        // Reset WiFi SSID
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC response by power_on_input_event_handler_cb (1, 12)");
+        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
+        break;
+    }
+}
 
 static int power_on_init(void)
 {
@@ -43,25 +69,19 @@ static int power_on_init(void)
     } else {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     }
+    /* 注册lwl事件处理回调 */
+    lwl_event_handler_add(power_on_input_event_handler_cb);
     return 0;
 }
 
 static int power_on_unint(void)
 {
+    lwl_event_handler_remove(power_on_input_event_handler_cb);
     return 0;
-}
-
-static void* led_breath_thread(void* arg)
-{
-    quick_test_with_macros(2); // 直接在线程里调用呼吸灯测试函数,2次循环
-    return NULL;
 }
 
 void app_power_on_mode(void)
 {
-    // led_breath_init(); // 初始化LED呼吸灯
-    // pthread_t monitor_thread;
-    // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
     power_on_init();
     while (1) {
         // 应用代码

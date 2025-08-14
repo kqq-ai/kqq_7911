@@ -180,6 +180,7 @@ static void function_test_lwl_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC");
+        log_i("SYNC response by wss_app_lwl_event_handler_cb (1, 16)");
         uart_response_synch_status(1, 16);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
