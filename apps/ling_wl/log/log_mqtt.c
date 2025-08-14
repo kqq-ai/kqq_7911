@@ -70,13 +70,18 @@ static bool g_mqtt_connected = false;
 static OS_MUTEX g_log_mqtt_mutex;
 
 void log_mqtt_disconnect();
-
+void log_mqtt_battery(const char* sn_param,int battery);
 static MyBlockingQueue log_queue;
 static char log_queue_data[LOG_QUEUE_MAX_COUNT * LOG_QUEUE_ITEM_MAX_LEN];
 
 static pthread_t monitor_thread;  // 声明监控线程
 static bool g_monitor_thread_running = false;  // 线程运行标志
 static uint32_t last_upload_time = 0;  // 上次上传时间（用于超时判断）
+
+
+static bool g_battery_update_flag = false;
+static int g_current_battery_level = 0;
+static char g_sn_battery[25];
 
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
@@ -291,6 +296,7 @@ int log_mqtt_send_message(const char* topic, const char* message) {
             if (log_mqtt_connect() != 0) {
                 return -1;
             }
+            log_mqtt_start();
         } else {
             return -1;
         }
@@ -329,9 +335,6 @@ static void upload_all_logs(void) {
 
     while (log_queue.size > 0) {
         if (my_blocking_queue_try_dequeue(&log_queue, temp) == MYERROR_Success) {
-
-            log_i("Dequeued log: %s...%d\n", temp, strlen(temp));
-
             cJSON *item = cJSON_Parse(temp);
             if (item) {
                 cJSON_AddItemToArray(array, item);
@@ -342,20 +345,9 @@ static void upload_all_logs(void) {
     // 一次性转换成JSON字符串
     char *batch_json = cJSON_PrintUnformatted(array);
 
-    // 打印batch_json内容（调试用）
-    if (batch_json) {
-        // 注意：如果JSON过长，可能需要限制打印长度，避免刷屏
-        log_i("Batch JSON content: %s\n", batch_json);
-        
-        // 也可以打印JSON长度，辅助判断是否过大
-        log_i("Batch JSON length: %zu bytes\n", strlen(batch_json));
-    } else {
-        log_i("Failed to generate batch JSON\n");
-    }
-
     // 一次性发送所有消息
     if (log_mqtt_is_connected() && batch_json) {
-        int result = log_mqtt_send_message("test-log", batch_json);
+        int result = log_mqtt_send_message("h-log", batch_json);
         if (result != 0) {
             log_i("Batch MQTT send failed, error code: %d\n", result);
         }
@@ -372,22 +364,20 @@ static void upload_all_logs(void) {
     os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
 }
 
-// // 定时器回调函数
-// static void log_upload_timer_cb(void* arg) {
-//     if (log_queue.size > 0) {
-//         os_mutex_pend(&g_log_mqtt_mutex, 0);
-//         upload_all_logs();
-//         os_mutex_post(&g_log_mqtt_mutex);
-//     }
-// }
+
 /* 常驻监控线程：检测队列阈值和超时 */
 static void* log_monitor_thread(void* arg) {
     log_i("Log monitor thread started\n");
     last_upload_time = timer_get_ms();  // 初始化上传时间
-
     while (g_monitor_thread_running) {
         uint32_t current_time = timer_get_ms();
         bool need_upload = false;
+
+        // 检查是否需要上传电池状态
+        if (g_battery_update_flag) {
+            log_mqtt_battery(g_sn_battery, g_current_battery_level);
+            g_battery_update_flag = false;
+        }
 
         // 条件1：队列长度达到阈值
         if (log_queue.size >= LOG_QUEUE_THRESHOLD) {
@@ -409,6 +399,8 @@ static void* log_monitor_thread(void* arg) {
     log_i("Log monitor thread exited\n");
     return NULL;
 }
+
+
 // 初始化队列和定时器
 void log_mqtt_queue_init(void) {
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
@@ -421,6 +413,16 @@ void log_mqtt_queue_init(void) {
         g_monitor_thread_running = false;
     }
 }
+
+// 添加新函数
+void log_mqtt_set_battery_level(char *sn_battery, int battery_level) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    g_current_battery_level = battery_level;
+    g_battery_update_flag = true;
+    strncpy(g_sn_battery, sn_battery, sizeof(g_sn_battery) - 1);
+    os_mutex_post(&g_log_mqtt_mutex);
+}
+
 
 // 发送电池状态日志
 void log_mqtt_battery(const char* sn_param,int battery) {
@@ -453,6 +455,8 @@ void log_mqtt_battery(const char* sn_param,int battery) {
         if (result != 0) {
             log_i("MQTT battery log sending failed, error code: %d\n", result);
         }
+    }else{
+        log_i("MQTT not connected, battery log not sent\n");
     }
 
     cJSON_Delete(root);
@@ -461,23 +465,6 @@ void log_mqtt_battery(const char* sn_param,int battery) {
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
-// 入队日志，满了就批量推送
-// void log_mqtt_enqueue(const char *msg) {
-//     os_mutex_pend(&g_log_mqtt_mutex, 0);
-//     log_i("log_mqtt_enqueue: %s  %d\n", msg,strlen(msg));
-//     if (my_blocking_queue_try_enqueue(&log_queue, (void *)msg) == MYERROR_Is_Full) {
-//         // 队列满，进行批量发送
-//         upload_all_logs();
-//         // 队列已清空，现在可以入队新消息
-//         my_blocking_queue_enqueue(&log_queue, (void *)msg);
-//     } 
-//     if (log_queue.size >= LOG_QUEUE_THRESHOLD) {
-//         // 当队列中的消息数量达到或超过阈值时，触发发送
-//         upload_all_logs();
-//     }
-    
-//     os_mutex_post(&g_log_mqtt_mutex);
-// }
 
 void log_mqtt_enqueue(const char *msg) {
     os_mutex_pend(&g_log_mqtt_mutex, 0);
@@ -582,9 +569,7 @@ void log_mqtt_stop(void) {
     pthread_join(monitor_thread, NULL);  // 等待线程退出
 
     // 确保最后的消息都发送出去
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
     upload_all_logs();
-    os_mutex_post(&g_log_mqtt_mutex);
     
     my_blocking_queue_destroy_static(&log_queue);// 释放队列资源
 

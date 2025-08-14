@@ -81,7 +81,8 @@ static int wss_connected_unint(void)
     return 0;
 }
 
-
+static pthread_t monitor_thread;
+static bool monitor_thread_running = false;
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
 #define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
 // 模式5 加速度传感器相关变量
@@ -92,7 +93,7 @@ void *wss_condition_monitor_thread(void *arg)
     u32 last_move_time = 0;
     u32 current_time = 0;
     log_i("Starting WSS condition monitor thread...");
-    while (1) {
+    while (monitor_thread_running) {
         current_time = timer_get_ms();
         
         // 检查E设备
@@ -128,10 +129,12 @@ void *wss_condition_monitor_thread(void *arg)
             // 重置计时器，避免重复触发
             last_E_found_time = 0;
             last_move_time = 0;
+            monitor_thread_running = false;
             return NULL;
         }
         os_time_dly(100);  // 100ms 延迟
     }
+    monitor_thread_running = false;
     return NULL;
 }
 
@@ -161,8 +164,11 @@ void app_wss_connected_mode(void)
     //     log_i("WSS condition monitor thread started.");
     // }
     
-    pthread_t monitor_thread;
-    pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
+   // 检查线程是否已经在运行
+    if (!monitor_thread_running) {
+        pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
+        monitor_thread_running = true; 
+    }
 
     while (1) {
         // 应用代码

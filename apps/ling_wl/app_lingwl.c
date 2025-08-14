@@ -28,10 +28,11 @@
 #include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_framework.h"
 
+#include "protocol/odm/odm_secure.h"
 #include "app_mode/lwl_app_core.h"
 
 #include "bt_ble/client/ble_distance.h"
-
+#include "log/log_mqtt.h"
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 
@@ -56,6 +57,8 @@ const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
 
 static bool g_is_wss_connected_flag = false; /* 控制充电的时候谁来回复sync指令（根据是否连接上了wss） */
+
+static char sn[25];
 
 void set_wss_connected_flag(bool flag)
 {
@@ -108,6 +111,7 @@ static void auto_shutdown(void *priv)
     power_set_soft_poweroff();
 }
 
+int lastbattery=0;
 
 void base_lwl_event_handler(lwl_event_t *e)
 {
@@ -123,6 +127,10 @@ void base_lwl_event_handler(lwl_event_t *e)
         if (!g_is_wss_connected_flag){
             log_i("base_lwl_event_handler response sync \r\n");
             uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
+        }
+        if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
+            lastbattery = e->uart_cmd_sync.battery;
+            log_mqtt_set_battery_level(sn, lastbattery);
         }
         log_i("battery: %d", e->uart_cmd_sync.battery);
         if(e->uart_cmd_sync.battery < 30 )
@@ -220,10 +228,12 @@ static void app_lingwl_main(void)
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
 
+    
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);
     /* 【调试】监测att send buffer remaing size */
     // thread_fork("moni", 15, 512 * 3, 0, 0, moni_task, NULL);
+    get_SN(&sn);
 }
 
 void play_end_callback(void *priv)
