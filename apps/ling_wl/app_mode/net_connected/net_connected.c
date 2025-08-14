@@ -24,8 +24,8 @@
 #include "../lwl_app_core.h"
 #include "../wss_connected/wss_application.h"
 #include "log.h"
+#include "log/log_queue_test.h"
 #include "ota/http_ota.h"
-#include "log/log_mqtt.h"
 #include "bt_ble/app_wifi_manage.h"
 #include "protocol/cp/c_uart_p.h"
 
@@ -36,12 +36,39 @@ static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED)
 static int net_connected_init(void)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    int ret = log_mqtt_start();
+    // int ret = log_mqtt_start();
+    // log_i("log_mqtt_start init %d\n", ret);
+    // if (ret==0) {
+    //     ret = mqtt_subscribe_reset();
+    // }
+    int retry_count = 0;
+    bool connected = false;
     
-    if (ret==0) {
-        log_i("log_mqtt_start init\n");
-        ret = mqtt_subscribe_reset();
+    // MQTT 连接重试
+    while (retry_count < 10) {
+        int ret = log_mqtt_batch_start();
+        log_i("log_mqtt_batch_start init attempt %d: %d\n", retry_count + 1, ret);
+
+        if (ret == 0) {
+            connected = true;
+            break;
+        }
+        
+        retry_count++;
+        if (retry_count < 10) {
+            mdelay(100);
+        }
     }
+    // char *sn = NULL;
+    // get_SN(&sn);
+    // int battery = sys_power_get_battery_persent();
+    // for(int i=0;i<100;i++){
+    //     log_mqtt_battery(sn,battery);
+    // }
+
+    // for(int i=0;i<100;i++){
+    //     log_mqtt("25-07-31 15:00 lingwl test %d", i);
+    // }
     // OTA check version
     do_check_and_ota();
     context->websockets_info = NULL;

@@ -16,11 +16,11 @@ extern lfs_t g_lfs;
 #define SN_SIZE 15
 #define KEY_SIZE 16
 
-// #define WRITE_SN_KEY
+//#define WRITE_SN_KEY
 
 #ifdef WRITE_SN_KEY
-char snInVm[SN_SIZE+1] = "KCCNC5F12JEEEF7";
-char keyInCHAR[KEY_SIZE*2] = "686771725153614a56514b307a617551";
+char snInVm[SN_SIZE+1] = "KCCNC5F12YEEFH2";
+char keyInCHAR[KEY_SIZE*2] = "63476e6f4e656d4637586b7159706474";
 #else
 char snInVm[SN_SIZE+1]="\0";
 #endif

@@ -271,7 +271,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/async_msg_loop.c \
 	../../../../apps/ling_wl/wss/wss_client.c \
 	../../../../apps/ling_wl/ota/http_ota.c \
-	../../../../apps/ling_wl/log/log_mqtt.c \
+	../../../../apps/ling_wl/log/log_queue_test.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_core.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \

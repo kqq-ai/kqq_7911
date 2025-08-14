@@ -225,7 +225,7 @@ int log_mqtt_connect(void) {
    
     //Mqtt超时时间设置成200ms
     // 初始化MQTT客户端
-    MQTTClient(&mqtt_client, &mqtt_network, 200, 
+    MQTTClient(&mqtt_client, &mqtt_network, 2000, 
                mqtt_send_buf, sizeof(mqtt_send_buf),
                mqtt_read_buf, sizeof(mqtt_read_buf));
     
@@ -289,11 +289,11 @@ int log_mqtt_send_message(const char* topic, const char* message) {
     mqtt_msg.retained = 0;
     mqtt_msg.payload = (void*)message;
     mqtt_msg.payloadlen = strlen(message);  // 修正：不包含'\0'
-    
+
     int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
     if (rc != 0) {
         log_i("MQTT publish failed, error code: %d\n", rc);
-        g_mqtt_connected = false;  // 发布失败，标记连接断开
+        //g_mqtt_connected = false;  // 发布失败，标记连接断开
     }
     
     return rc;
@@ -403,11 +403,81 @@ void log_mqtt(const char* format, ...) {
         if (result != 0) {
             log_i("MQTT log sending failed, error code: %d\n", result);
         }
+    }else{
+        log_i("MQTT not connected, log message discarded\n");
     }
 
     cJSON_Delete(root);
     free(json_str);
+    os_mutex_post(&g_log_mqtt_mutex);
+}
 
+
+
+#define BATCH_SIZE 10
+char base_msg[512];
+void log_mqtt_batch(const char* format, ...) {
+    uint32_t start_time = timer_get_ms();  // 开始计时
+    
+    // 先格式化基础消息
+    va_list args;
+    va_start(args, format);
+    vsnprintf(base_msg, sizeof(base_msg), format, args);
+    va_end(args);
+    
+    // 创建JSON数组
+    cJSON *array = cJSON_CreateArray();
+    
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    
+    // 一次性生成10条不同的消息
+    for(int i = 1; i <= BATCH_SIZE; i++) {
+        // 获取当前时间
+        uint32_t total_ms = timer_get_ms();
+        uint32_t seconds = total_ms / 1000;
+        uint32_t milliseconds = total_ms % 1000;
+        uint32_t minutes = seconds / 60;
+        seconds %= 60;
+        uint32_t hours = minutes / 60;
+        minutes %= 60;
+        
+        // 格式化时间戳
+        snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", 
+                hours, minutes, seconds, milliseconds);
+        
+        // 构造不同的消息
+        snprintf(log_buffer, sizeof(log_buffer), "%s - batch %d", base_msg, i);
+        
+        log_i("+++++json %s\n", log_buffer);
+
+        // 添加到JSON数组
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "time", time_str);
+        cJSON_AddStringToObject(item, "sn", sn);
+        cJSON_AddStringToObject(item, "msg", log_buffer);
+        cJSON_AddItemToArray(array, item);
+    }
+    
+    // 一次性转换成JSON字符串
+    char *batch_json = cJSON_PrintUnformatted(array);
+    
+    // 一次性发送所有消息
+    if (log_mqtt_is_connected()) {
+        int result = log_mqtt_send_message("test-log", batch_json);
+        if (result != 0) {
+            log_i("Batch MQTT send failed, error code: %d\n", result);
+        }
+    }else{
+        log_i("MQTT not connected, batch log message discarded\n");
+    }
+    
+    // 清理资源
+    cJSON_Delete(array);
+    free(batch_json);
+    
+    uint32_t end_time = timer_get_ms();
+    log_i("Batch send %d messages took %u ms\n", BATCH_SIZE, end_time - start_time);
+    
     os_mutex_post(&g_log_mqtt_mutex);
 }
 

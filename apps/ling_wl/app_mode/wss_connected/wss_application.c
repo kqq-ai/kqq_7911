@@ -108,8 +108,8 @@ void wss_application_init()
     odmp_register_disconnect_cbk(odmp_disconnect_cbk);
     
     wss_audio_init();
-    wss_request_init();
-    wss_device_init();
+    wss_request_init();//发送1
+    wss_device_init();//设备初始化，包含设备队列等
 
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(input_event_handler_cb);

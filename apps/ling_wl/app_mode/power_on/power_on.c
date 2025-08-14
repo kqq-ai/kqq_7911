@@ -51,8 +51,17 @@ static int power_on_unint(void)
     return 0;
 }
 
+static void* led_breath_thread(void* arg)
+{
+    quick_test_with_macros(2); // 直接在线程里调用呼吸灯测试函数,2次循环
+    return NULL;
+}
+
 void app_power_on_mode(void)
 {
+    // led_breath_init(); // 初始化LED呼吸灯
+    // pthread_t monitor_thread;
+    // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
     power_on_init();
     while (1) {
         // 应用代码
