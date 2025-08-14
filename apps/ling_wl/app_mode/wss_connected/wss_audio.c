@@ -149,10 +149,6 @@ void wss_ble_audio_stop() {
 void wss_ble_audio_start() {
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_end = false;
-    if (g_audio_play_ongoing == false) {
-        g_audio_play_ongoing = true;
-        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
-    }
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
