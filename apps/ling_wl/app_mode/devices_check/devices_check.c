@@ -284,9 +284,24 @@ static void mode6_audio_callback(void *priv)
     }
     
     gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
+
+    // 播放结束后，先关闭当前已连接的E端设备（如果有）
+    if (current_pdev) {
+        char sn_string[SN_SIZE] = "(NULL)";
+        current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
+        log_i("MODE 6: Turn OFF current E device: %s", sn_string);
+        uint cmd_id;
+        bka_e_turn_off(current_pdev, NULL, current_pdev, &cmd_id);
+        current_pdev = NULL; // 清空当前连接设备指针
+    }
+
     g_mode6_e_index++;
     if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
+    if (pdev_list_count > 0) {
     switch_to_e_target(pdev_list[g_mode6_e_index]);
+    } else {
+        log_i("MODE 6: pdev_list empty, skip switching target");
+    }
     if (g_mode6_playing_prompt) {
         // 提示音播放完成，开始播放循环音频
         log_i("MODE 6: Prompt audio callback - finished, starting loop audio");

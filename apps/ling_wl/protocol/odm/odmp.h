@@ -96,8 +96,6 @@ typedef struct {
 typedef struct {
     char *format;
     int sample_rate;
-    int channels;
-    int frame_duration;
 } odmp_audio_param_t;
 
 typedef struct {
