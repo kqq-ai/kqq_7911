@@ -38,16 +38,25 @@ static void default_input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        log_i("TOUCH KEY DOWN");
         // play 提示音
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        log_i("TOUCH KEY UP");
         // 处理触摸按键抬起事件
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("PRESS NORMAL KEY");
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        // Reset WiFi SSID
+        app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
+        uart_response_clear_wifi_ssid();
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC response by default_input_event_handler_cb (1, 12)");
+        if(e->uart_cmd_sync.battery < 30 ){
+            // set_led_red_low_power();
+        }
+        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
         break;
     }
 }

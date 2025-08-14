@@ -69,30 +69,9 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     case UART_CMD_POWER_OFF:{ // 关机控制
         log_i("**********************************************************************!\r\n");
         log_i("the UART_CMD_POWER_OFF !\r\n");
-        extern int OTA_download_running;
-        if( OTA_download_running > 0){
-            break; /// reset after OTA
-        }
-        // 播放关机提示音，播放完成后再关机
-        int err = -1;
-        lwl_app_context_t *context = lwl_app_core_context_get_instance();
-        if (context && context->music_player) {
-            log_i("Try play PowerOff prompt before shutdown\r\n");
-           gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
-            err = app_music_play_local_music_with_callback(
-                    context->music_player,
-                    CONFIG_VOICE_PROMPT_FILE_PATH"PowerOff.mp3",
-                    power_off_prompt_end_cb,
-                    NULL);
-        }
-
-        if (err < 0) {
-            // 没有播放器或播放失败，直接进入关机流程
-            log_w("PowerOff prompt play failed or unavailable, shutdown immediately\r\n");
-            lwl_event_t e;
-            e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
-            lwl_event_notify(&e);
-        }
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
+        lwl_event_notify(&e);
     }   break;
     case UART_CMD_SET_BLESN:{ // 设置蓝牙SN
         log_i("the UART_CMD_SET_BLESN !\r\n");
