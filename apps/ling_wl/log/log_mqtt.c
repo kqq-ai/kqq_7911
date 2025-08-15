@@ -371,6 +371,19 @@ static void upload_all_logs(void) {
 /* 常驻监控线程：检测队列阈值和超时 */
 static void* log_monitor_thread(void* arg) {
     log_i("[MQTT log_monitor]Log monitor thread started\n");
+    
+    if(!g_connect_thread_running) {
+        int ret=log_mqtt_connect(); // 内部调用log_mqtt_connect
+        if (ret==0) {
+            log_i("MQTT connected successfully\n");
+            ret = mqtt_subscribe_reset();
+        }
+        os_mutex_pend(&g_log_mqtt_mutex, 0);
+        g_connect_thread_running = true;
+        g_monitor_thread_running = true;
+        os_mutex_post(&g_log_mqtt_mutex);
+    }
+
     last_upload_time = timer_get_ms();  // 初始化上传时间
     while (g_monitor_thread_running) {
         uint32_t current_time = timer_get_ms();
@@ -398,8 +411,11 @@ static void* log_monitor_thread(void* arg) {
         // 休眠10ms，避免CPU空转（可根据需求调整）
         os_time_dly(100);
     }
-    g_monitor_thread_running = false;
 
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    g_monitor_thread_running = false;
+    os_mutex_post(&g_log_mqtt_mutex);
+    
     log_i("[MQTT log_monitor]Log monitor thread exited\n");
     return NULL;
 }
@@ -411,8 +427,14 @@ void log_mqtt_queue_init(void) {
     //创建线程
     // 启动监控线程
     if (g_monitor_thread_running) return;
-    g_monitor_thread_running = true;
-    int ret = pthread_create(&monitor_thread, NULL, log_monitor_thread, NULL);
+
+    pthread_attr_t attr;
+    size_t stack_size = 1024 * 4;  // 设置栈大小为4KB
+    // 初始化线程属性并设置栈大小
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, stack_size);
+    
+    int ret = pthread_create(&monitor_thread, &attr, log_monitor_thread, NULL);
     if (ret != 0) {
         log_i("Failed to create monitor thread, error: %d\n", ret);
         g_monitor_thread_running = false;
@@ -554,33 +576,11 @@ int mqtt_subscribe_reset() {
     return rc;
 }
 
-// 异步连接线程
-static void* async_connect_thread(void* arg) {
-    int ret=log_mqtt_connect(); // 内部调用log_mqtt_connect
-    if (ret==0) {
-        log_i("MQTT connected successfully\n");
-        ret = mqtt_subscribe_reset();
-    }else{
-        os_mutex_pend(&g_log_mqtt_mutex, 0);
-        g_connect_thread_running = false;
-        os_mutex_post(&g_log_mqtt_mutex);
-    }
-    
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    g_connect_thread_running = true;
-    os_mutex_post(&g_log_mqtt_mutex);
-
-    return NULL;
-}
-
 // 在 log_mqtt_start() 里加上队列初始化
 int log_mqtt_start(void) {
     os_mutex_create(&g_log_mqtt_mutex);
     get_SN(&sn);
     log_mqtt_queue_init();//初始化定时器和日志队列
-    if(!g_connect_thread_running) {
-        pthread_create(&connect_thread, NULL, async_connect_thread, NULL);
-    }
     return 0;
 }
 
