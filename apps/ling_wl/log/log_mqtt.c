@@ -79,6 +79,9 @@ static bool g_monitor_thread_running = false;  // 线程运行标志
 static uint32_t last_upload_time = 0;  // 上次上传时间（用于超时判断）
 
 
+static pthread_t connect_thread;
+static bool g_connect_thread_running = false;
+
 static bool g_battery_update_flag = false;
 static int g_current_battery_level = 0;
 static char g_sn_battery[25];
@@ -87,7 +90,7 @@ static char g_sn_battery[25];
 static int init_mqtt_network(void) {
     // 初始化网络
     NewNetwork(&mqtt_network);
-    SetNetworkRecvTimeout(&mqtt_network, 5000);  // 2秒超时
+    SetNetworkRecvTimeout(&mqtt_network, 2000);  // 2秒超时
     
     // 连接网络
     int rc = ConnectNetwork(&mqtt_network, g_mqtt_config.server, g_mqtt_config.port);
@@ -99,14 +102,15 @@ static int init_mqtt_network(void) {
     
     return 0;
 }
-
+static char body[128];
+static char header[512];
+static char recv_buf[4096]; // 必须在 while 前声明
 int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     const char* host = SERVER_DOMAIN;
     int port = 80;
     const char* api = "/api/jwt/permanentEncrypt";
     
     // 1. 动态构造请求体
-    char body[128];
     int body_len = snprintf(body, sizeof(body), "{\"sn\":\"%s\"}", sn);
     if (body_len < 0 || body_len >= sizeof(body)) {
         log_i("[fetch_mqtt_token] body construction failed\n");
@@ -114,7 +118,6 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     }
 
     // 2. 动态构造请求头
-    char header[512];
     int header_len = snprintf(header, sizeof(header),
         "POST %s HTTP/1.1\r\n"
         "Host: %s\r\n"
@@ -168,7 +171,6 @@ int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     }
 
     // 6. 接收响应
-    char recv_buf[4096]; // 必须在 while 前声明
     int total = 0, ret;
     
     // 修复点3: 使用lwip_recv避免宏冲突
@@ -396,9 +398,7 @@ static void* log_monitor_thread(void* arg) {
         // 休眠10ms，避免CPU空转（可根据需求调整）
         os_time_dly(100);
     }
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
     g_monitor_thread_running = false;
-    os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
 
     log_i("[MQTT log_monitor]Log monitor thread exited\n");
     return NULL;
@@ -406,17 +406,17 @@ static void* log_monitor_thread(void* arg) {
 
 
 // 初始化队列和定时器
-int log_mqtt_thread_init(void) {
+void log_mqtt_queue_init(void) {
+    my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     //创建线程
     // 启动监控线程
-    if (g_monitor_thread_running) return 0;
+    if (g_monitor_thread_running) return;
     g_monitor_thread_running = true;
     int ret = pthread_create(&monitor_thread, NULL, log_monitor_thread, NULL);
     if (ret != 0) {
         log_i("Failed to create monitor thread, error: %d\n", ret);
         g_monitor_thread_running = false;
     }
-    return log_mqtt_connect();
 }
 
 // 添加新函数
@@ -554,26 +554,44 @@ int mqtt_subscribe_reset() {
     return rc;
 }
 
+// 异步连接线程
+static void* async_connect_thread(void* arg) {
+    int ret=log_mqtt_connect(); // 内部调用log_mqtt_connect
+    if (ret==0) {
+        log_i("MQTT connected successfully\n");
+        ret = mqtt_subscribe_reset();
+    }else{
+        os_mutex_pend(&g_log_mqtt_mutex, 0);
+        g_connect_thread_running = false;
+        os_mutex_post(&g_log_mqtt_mutex);
+    }
+    
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    g_connect_thread_running = true;
+    os_mutex_post(&g_log_mqtt_mutex);
+
+    return NULL;
+}
 
 // 在 log_mqtt_start() 里加上队列初始化
 int log_mqtt_start(void) {
     os_mutex_create(&g_log_mqtt_mutex);
     get_SN(&sn);
-    my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
-    return log_mqtt_thread_init();//初始化MQTT连接
+    log_mqtt_queue_init();//初始化定时器和日志队列
+    if(!g_connect_thread_running) {
+        pthread_create(&connect_thread, NULL, async_connect_thread, NULL);
+    }
+    return 0;
 }
 
 
 
 // 添加停止函数
 void log_mqtt_stop(void) {
-
+    g_connect_thread_running = false;
     // 停止监控线程
     g_monitor_thread_running = false;
-    if (!monitor_thread) {
-        pthread_join(monitor_thread, NULL);  // 等待线程退出
-        monitor_thread = NULL;
-    }
+    pthread_join(monitor_thread, NULL);  // 等待线程退出
 
     // 确保最后的消息都发送出去
     upload_all_logs();
