@@ -109,6 +109,7 @@ static u8 g_mode_switching = 0;      // 模式切换锁定标志，防止重复�
 static u8 g_mode1_touch_enabled = 0;    // 模式1 触摸检测是否已启用
 static u32 g_mode1_touch_start_time = 0; // 触摸开始时间（保留兼容性）
 static u8 g_mode1_touch_active = 0;     // 触摸是否正在激活 (0=绿灯, 1=红灯)
+static u8 t_key_playing = 0;            // 模式1：t_key.mp3 播放标志
 
 // 模式4 VAD相关变量
 static int g_vad_state = 0;          // 当前VAD状态 (0=无语音, 1=有语音)
@@ -326,6 +327,7 @@ static void process_mode_6(void);
 static void process_mode_7(void); // 新增模式7处理函数声明
 static void devices_check_play_music(const char *fname);
 static void mode1_audio_callback(void *priv);
+static void mode1_tkey_audio_end_cb(void *priv);
 static void mode3_audio_callback(void *priv);
 static void mode6_audio_callback(void *priv); // <-- 提前声明
 static void mode4_audio_callback(void *priv);
@@ -1606,12 +1608,33 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                 g_mode1_touch_active = 1;
                 log_i("MODE 1: Touch key pressed - LED set to BLUE");
                 log_i("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
+                // 播放 t_key.mp3（仅在未播放时触发）
+                if (!t_key_playing && !g_audio_playing) {
+                    lwl_app_context_t *context1 = lwl_app_core_context_get_instance();
+                    if (context1 && context1->music_player) {
+                        t_key_playing = 1;
+                        g_audio_playing = 1;
+                        int err = app_music_play_local_music_with_callback(
+                            context1->music_player,
+                            CONFIG_VOICE_PROMPT_FILE_PATH"t_key.mp3",
+                            mode1_tkey_audio_end_cb, NULL);
+                        if (err != 0) {
+                            log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
+                            g_audio_playing = 0;
+                            t_key_playing = 0;
+                        } else {
+                            log_i("MODE 1: t_key.mp3 started successfully");
+                        }
+                    }
+                }
             } else if (e->uart_cmd_touch.touch_key_event_type == 1) {
                 // 按键释放事件：恢复绿灯
                 set_led_green();
                 g_mode1_touch_active = 0;
                 log_i("MODE 1: Touch key released - LED restored to GREEN");
                 log_i("------------------------------------------------------------------------");
+                // 允许下次按下时再次触发播放（若音频已结束回调会复位）
+                t_key_playing = 0;
             }
         } else {
             // 特殊处理初始模式的触摸按键检测
@@ -2188,4 +2211,15 @@ static int mode7_write_and_verify_sn_key(const char* sn, const char* key)
     set_led_green();  // 完全成功，显示绿灯
     
     return 0;  // 完全成功
+}
+
+// 模式1：t_key.mp3 播放结束回调
+static void mode1_tkey_audio_end_cb(void *priv)
+{
+    // 仅在仍处于模式1时复位播放标志
+    if (g_current_mode == WORK_MODE_1) {
+        t_key_playing = 0;
+    }
+    g_audio_playing = 0;
+    log_i("MODE 1: t_key.mp3 playback finished");
 }
