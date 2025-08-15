@@ -31,11 +31,43 @@
 
 #include "protocol/odm/odm_secure.h"
 
+#define MODE_TIMEOUT_MS 10000 // 10s
+static u32 init_time = 0;
+
 static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
+
+//=================================================================================================
+// LWL event callback
+//=================================================================================================
+static void net_connected_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        // play 提示音
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        // 处理触摸按键抬起事件
+        break;
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        // Reset WiFi SSID
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC response by net_connected_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
+        break;
+    }
+}
 
 static int net_connected_init(void)
 {
+    init_time = timer_get_ms();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    lwl_event_handler_add(net_connected_event_handler_cb);
     int ret = log_mqtt_start();
     
     if (ret==0) {
@@ -52,6 +84,7 @@ static int net_connected_init(void)
 static int net_connected_unint(void)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    lwl_event_handler_remove(net_connected_event_handler_cb);
     if (context->websockets_info != NULL) {
         //TODO 同步设备状态 IoT Cload
         //不能关 websocket !!!
@@ -98,6 +131,11 @@ void app_net_connected_loop()
     } else {
         log_i("websockets init failed\n");
         set_led_connect_error();// WSS ERROR
+        
+        // 无网络超时10s，进入配网
+        if (timer_get_ms() - init_time >= 10000) {
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        }
     }
     // TODO 尝试重连WSS
 }

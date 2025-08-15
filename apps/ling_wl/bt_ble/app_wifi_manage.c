@@ -123,32 +123,9 @@ WIFI_connect_STATUES wifi_auto_reconnect(void)
     char auto_pwd[33] = {0};
     
     get_wifi_config(auto_ssid,auto_pwd);
-
     printf("the auto_ssid is %s     the auto_pwd is %s\r\n",auto_ssid,auto_pwd);
 
-    if (g_connect_func_flag == CONNECT_FUNC_BLOCK_DEFAULT)
-    {
-        g_connect_func_flag = CONNECT_FUNC_BLOCK_RUNNING;
-        wifi_set_sta_connect_timeout(10);
-        wifi_enter_sta_mode(auto_ssid, auto_pwd);
-        ret = block_connect_sem_pend(NULL); // 等待连接成功或者失败
-        printf("the ret = ---------------------------------------------------------------------%d\r\n", ret);
-        if (0 == ret)
-        {
-            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
-            return get_wifi_connect_status(NULL);
-        }
-        else
-        {
-            g_connect_func_flag = CONNECT_FUNC_BLOCK_DEFAULT;
-            return -1;
-        }
-    }
-    else if (g_connect_func_flag == CONNECT_FUNC_BLOCK_RUNNING)
-    {
-        printf("the wifi_sta_mode_connect_block is running\r\n");
-        return -5;
-    }
+    return wifi_connect_block(auto_ssid,auto_pwd, 10);
 }
 
 WIFI_connect_STATUES wifi_connect(
@@ -365,7 +342,8 @@ void store_wifi_ip_info(void *pri)
              (temp_ip >> 8) & 0xFF,  // 第三字节
              temp_ip & 0xFF          // 第四字节
     );
-    printf("current get wifi ip:%s \r\n", g_wifi_ip);
+    printf("####################### wifi ip:%s #######################", g_wifi_ip);
+    // TODO store
 }
 
 /*获取 wifi ip 信息*/

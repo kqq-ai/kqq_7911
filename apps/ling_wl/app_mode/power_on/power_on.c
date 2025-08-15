@@ -25,6 +25,9 @@
 #include "log.h"
 #include "app_lfs.h"
 
+#define MODE_TIMEOUT_MS 10000 // 10s
+static u32 init_time = 0;
+
 int app_power_on_event_handler(struct application *app, struct sys_event *event)
 {
     return false;
@@ -35,19 +38,49 @@ bool has_saved_wifi()
 // TODO
     return true;
 }
+//=================================================================================================
+// LWL event callback
+//=================================================================================================
+static void power_on_input_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        // play 提示音
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        // 处理触摸按键抬起事件
+        break;
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        // Reset WiFi SSID
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC response by power_on_input_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
+        break;
+    }
+}
 
 static int power_on_init(void)
 {
+    init_time = timer_get_ms();
     if (has_saved_wifi()) {
         lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     } else {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     }
+    /* 注册lwl事件处理回调 */
+    lwl_event_handler_add(power_on_input_event_handler_cb);
     return 0;
 }
 
 static int power_on_unint(void)
 {
+    lwl_event_handler_remove(power_on_input_event_handler_cb);
     return 0;
 }
 

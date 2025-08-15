@@ -27,6 +27,9 @@ char snInVm[SN_SIZE+1]="\0";
 
 char keyInVm[KEY_SIZE];
 
+#define TEST_SERVER_API  "%s://%s/"
+#define TEST_FORMAT_API  "%s://%s/socket?deviceId=%s&token=%s"
+
 #define SERVER_API  "%s://%s/api/"
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
@@ -343,9 +346,9 @@ char *get_wss_connection_url()
     char * url_api = (char *)malloc(BUF_SIZE);
 #ifdef TEST_LOCOL_MODE
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);
-    snprintf(server_url, BUF_SIZE, SERVER_API, "http", ip_port);
+    snprintf(server_url, BUF_SIZE, TEST_SERVER_API, "http", ip_port);
     char * Token = prepare_signature(server_url);
-    if (Token) snprintf(url_api, BUF_SIZE, FORMAT_API, "ws", ip_port, sn_c_id,  Token);
+    if (Token) snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port, sn_c_id,  Token);
 #else
     snprintf(server_url, BUF_SIZE, SERVER_API, "https", SERVER_DOMAIN);
     char * Token = prepare_signature(server_url);

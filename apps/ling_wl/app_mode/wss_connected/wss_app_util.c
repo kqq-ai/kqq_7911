@@ -140,7 +140,6 @@ bool wss_connect() {
     g_exception_exit = false;
     log_i("websockets init succ\n");
     get_SN(&sn_c_id);
-    set_wss_connected_flag(true);
     os_mutex_post(&g_wss_mutex);
     return true;
 }
@@ -153,7 +152,6 @@ void wss_disconnect() {
         context->websockets_info = NULL;
     }
     log_mqtt_stop();
-    set_wss_connected_flag(false);
     os_mutex_post(&g_wss_mutex);
 }
 
@@ -213,7 +211,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    // log_i("wbs send msg : %s", send_data);
+    log_i("wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -240,7 +238,7 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    log_i("wbs send msg : %d", len);
+    // log_i("wbs send msg : %d", len);
     os_mutex_post(&g_wss_mutex);
     return 0;
 }

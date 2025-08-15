@@ -27,13 +27,45 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "log.h"
 
+#define MODE_TIMEOUT_MS 10000 // 10s
+static u32 init_time = 0;
+
 int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
 {
     return false;
 }
 
+//=================================================================================================
+// LWL event callback
+//=================================================================================================
+static void net_connecting_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        // play 提示音
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        // 处理触摸按键抬起事件
+        break;
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        // Reset WiFi SSID
+        break;
+    case LWL_EVENT_TYPE_UART_SYNC:
+        log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
+        break;
+    }
+}
+
 static int net_connecting_init(void)
 {
+    init_time = timer_get_ms();
+    lwl_event_handler_add(net_connecting_event_handler_cb);
     if (wifi_auto_reconnect() == WIFI_CONNECT_SUCC) {
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
     } else {
@@ -44,6 +76,7 @@ static int net_connecting_init(void)
 
 static int net_connecting_unint(void)
 {
+    lwl_event_handler_remove(net_connecting_event_handler_cb);
     return 0;
 }
 

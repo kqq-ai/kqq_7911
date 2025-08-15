@@ -28,12 +28,14 @@
 #include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_framework.h"
 
+#include "protocol/odm/odm_secure.h"
 #include "app_mode/lwl_app_core.h"
 
 #include "bt_ble/client/ble_distance.h"
-
+#include "log/log_mqtt.h"
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -55,12 +57,7 @@ const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 //"WCCN24H28FEEEFE"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
 
-static bool g_is_wss_connected_flag = false; /* 控制充电的时候谁来回复sync指令（根据是否连接上了wss） */
-
-void set_wss_connected_flag(bool flag)
-{
-    g_is_wss_connected_flag = flag;
-}  
+static char sn[25];
 
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }   /* 控制 led : 正常响应中 白色 */
 
@@ -101,11 +98,37 @@ static void open_scan_delay(void *priv)
     ble_simple_client_module_enable(1);
 }
 
-static void auto_shutdown(void *priv)
+// 关机提示音播放完成后的回调：播放结束再触发关机事件
+static void power_off_cb(void *priv)
 {
-    msleep(10000);
-
+    log_i("----------------------BYE-------------------------\r\n");
+    // 播放完成后再灭灯，防止对侧熄灯动作顺带关闭功放导致听不到提示音
+    set_led_power_off();
     power_set_soft_poweroff();
+}
+
+int lastbattery=0;
+static void do_shutdown()
+{
+    int err = -1;
+    lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if (context && context->music_player) {
+        log_i("Try play PowerOff prompt before shutdown\r\n");
+        msleep(100);
+        gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
+        err = app_music_play_local_music_with_callback(
+                context->music_player,
+                CONFIG_VOICE_PROMPT_FILE_PATH"PowerOff.mp3",
+                power_off_cb,
+                NULL);
+    }
+
+    if (err < 0) {
+        // 没有播放器或播放失败，直接进入关机流程
+        log_w("PowerOff prompt play failed or unavailable, shutdown immediately\r\n");
+        power_off_cb(NULL);
+    }
 }
 
 
@@ -113,21 +136,34 @@ void base_lwl_event_handler(lwl_event_t *e)
 {
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
-        power_set_soft_poweroff();
+        extern int OTA_download_running;
+        if( OTA_download_running > 0){
+            break; /// reset after OTA
+        }
+        do_shutdown();
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        log_i("TOUCH KEY DOWN");
+        // play 提示音
+        break;
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
+        log_i("TOUCH KEY UP");
+        // 处理触摸按键抬起事件
+        break;
+    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        log_i("PRESS NORMAL KEY");
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
-        uart_response_clear_wifi_ssid();
+        log_i("PRESS RESET KEY");
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        if (!g_is_wss_connected_flag){
-            log_i("base_lwl_event_handler response sync \r\n");
-            uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
+        log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
+        if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
+            lastbattery = e->uart_cmd_sync.battery;
+            log_mqtt_set_battery_level(sn, lastbattery);
         }
-        log_i("battery: %d", e->uart_cmd_sync.battery);
         if(e->uart_cmd_sync.battery < 30 )
             set_led_red_low_power();
-        uart_response_synch_status(1, 12);/// 0是idle 1是busy，必须回复
         break;
     }
 }
@@ -220,10 +256,12 @@ static void app_lingwl_main(void)
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
 
+    
     /* 【测试】默认10s后关机 */
     // threadpool_add_task(pool, auto_shutdown, NULL);
     /* 【调试】监测att send buffer remaing size */
     // thread_fork("moni", 15, 512 * 3, 0, 0, moni_task, NULL);
+    get_SN(&sn);
 }
 
 void play_end_callback(void *priv)
