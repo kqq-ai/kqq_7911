@@ -2,14 +2,14 @@
 #include <stdbool.h>
 #include "led_breath.h"
 #include "os/os_api.h" // 添加互斥锁支持
+#include "os/pthread.h"
 
 /* 互斥锁 */
 static OS_MUTEX g_led_breath_mutex;
 
-void led_breath_init(void)
-{
-    os_mutex_create(&g_led_breath_mutex); // 只创建一次
-}
+static pthread_t breath_thread;
+static volatile bool is_breathing = false; // 只用一个标志位
+
 
 /**
  * @brief 简化版呼吸灯效果 - 在两个颜色之间平滑过渡
@@ -104,6 +104,13 @@ void quick_test_with_macros(uint16_t cycles)
     mdelay(1000);
 }
 
+
+
+void led_breath_init(void)
+{
+    os_mutex_create(&g_led_breath_mutex); // 只创建一次
+}
+
 /**
  * @brief 删除LED呼吸灯互斥锁
  * @note 在模块卸载或系统退出时调用
@@ -112,6 +119,80 @@ void led_breath_deinit(void)
 {
     os_mutex_post(&g_led_breath_mutex);  // 先解锁,以防有线程还在等待
     os_mutex_delete(&g_led_breath_mutex); // 删除互斥锁
+}
+
+static void* breath_thread_func(void* arg) {
+    uint16_t* params = (uint16_t*)arg;
+    uint16_t color1_r = params[0], color1_g = params[1], color1_b = params[2];
+    uint16_t color2_r = params[3], color2_g = params[4], color2_b = params[5];
+    uint16_t cycle_count = params[6], transition_time_ms = params[7];
+    uint8_t step_delay_ms = (uint8_t)params[8];
+    free(params);
+
+    uint16_t steps = transition_time_ms / step_delay_ms;
+    if (steps == 0) steps = 1;
+    uint16_t cycles = 0;
+    bool infinite = (cycle_count == 0);
+
+    while (infinite || cycles < cycle_count) {
+        if (!is_breathing) {
+            break;
+        }
+        // color1 -> color2
+        for (uint16_t i = 0; i <= steps && is_breathing; i++) {
+            float ratio = (float)i / steps;
+            uint16_t r = (uint16_t)(color1_r + (color2_r - color1_r) * ratio);
+            uint16_t g = (uint16_t)(color1_g + (color2_g - color1_g) * ratio);
+            uint16_t b = (uint16_t)(color1_b + (color2_b - color1_b) * ratio);
+            uart_send_set_led_color(r, g, b);
+            mdelay(step_delay_ms);
+        }
+        // color2 -> color1
+        for (uint16_t i = 0; i <= steps && is_breathing; i++) {
+            float ratio = (float)i / steps;
+            uint16_t r = (uint16_t)(color2_r + (color1_r - color2_r) * ratio);
+            uint16_t g = (uint16_t)(color2_g + (color1_g - color2_g) * ratio);
+            uint16_t b = (uint16_t)(color2_b + (color1_b - color2_b) * ratio);
+            uart_send_set_led_color(r, g, b);
+            mdelay(step_delay_ms);
+        }
+        cycles++;
+    }
+    return NULL;
+}
+
+int led_breath_start(uint16_t color1_r, uint16_t color1_g, uint16_t color1_b,
+                     uint16_t color2_r, uint16_t color2_g, uint16_t color2_b,
+                     uint16_t cycle_count, uint16_t transition_time_ms, uint8_t step_delay_ms)
+{
+    if (is_breathing) return 0;
+    // 参数打包
+    uint16_t* params = malloc(sizeof(uint16_t) * 9);
+    params[0] = color1_r; params[1] = color1_g; params[2] = color1_b;
+    params[3] = color2_r; params[4] = color2_g; params[5] = color2_b;
+    params[6] = cycle_count; params[7] = transition_time_ms; params[8] = step_delay_ms;
+
+    // 启动新线程前设置标志
+    os_mutex_pend(&g_led_breath_mutex, 0);
+    is_breathing = true;
+    os_mutex_post(&g_led_breath_mutex);
+    if (pthread_create(&breath_thread, NULL, breath_thread_func, params) == 0) {
+        return 0;
+    }
+    free(params);
+    return -1;
+}
+
+void led_set_color(uint8_t r, uint8_t g, uint8_t b)
+{
+    // 打断呼吸灯线程
+    os_mutex_pend(&g_led_breath_mutex, 0);
+    is_breathing = false;
+    os_mutex_post(&g_led_breath_mutex);
+
+    pthread_join(breath_thread, NULL);
+
+    uart_send_set_led_color(r, g, b);
 }
 
 
