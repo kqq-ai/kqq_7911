@@ -23,6 +23,8 @@
 #include "app_config.h"          // for CONFIG_VOICE_PROMPT_FILE_PATH
 #include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
 
+#include "log/log_mqtt.h"
+
 #ifndef CONFIG_VOICE_PROMPT_FILE_PATH
 #define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
 #endif
@@ -343,6 +345,9 @@ bool wss_request_loop()
             wss_mic_stop(); // 停止录音
             int cmd_id;
             log_i("bka_e_turn_on %s\n", g_edev_target->sn);
+            //上传E的电量
+            log_mqtt_set_battery_level(g_edev_target->sn, (g_edev_target->bat_level)*10);
+            
             bka_e_turn_on(g_edev_target, e_turn_on_cb, g_edev_target, &cmd_id);
         }
         // VAD信号响应，进入上传
