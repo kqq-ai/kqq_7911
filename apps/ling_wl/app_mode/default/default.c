@@ -25,11 +25,12 @@
 #include "app_mode/lwl_app_core.h"
 #include "protocol/cp/c_uart_p.h"
 
+#include "./bt_ble/app_wifi_manage.h"
+#include "net_music_play_my.h"
+#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
 #define MODE_TIMEOUT_MS 1000 // 1s
 static u32 init_time = 0;
-
 static void set_led_idel(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
-
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -79,7 +80,15 @@ static int default_unint(void)
 void app_default_mode(void)
 {
     default_init();
-
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if(get_wifi_connect_status(NULL) != WIFI_CONNECT_SUCC){
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_VOICE_PROMPT_FILE_PATH "NetCfgFail.mp3",
+            NULL,
+            NULL);
+    }
+    //mdelay(2000);
     while (1) {
         mdelay(10);
         if (lwl_app_mode_exitting()) {

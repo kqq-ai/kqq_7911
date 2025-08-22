@@ -444,13 +444,13 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_CONNECT_TIMEOUT_NOT_FOUND_SSID");
             // TODO: 可能在配网时需要发送ble通知
             // 播放WiFi连接失败提示音（未找到SSID）
-            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
+            //simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_CONNECT_ASSOCIAT_FAIL:
             log_i("NET_CONNECT_ASSOCIAT_FAIL");
             // TODO: 可能在配网时需要发送ble通知
             // 播放WiFi连接失败提示音（关联失败）
-            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
+            //simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_EVENT_SMP_CFG_FIRST:
             log_i("NET_EVENT_SMP_CFG_FIRST");
