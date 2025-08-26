@@ -31,6 +31,7 @@ static int argv[30] = {0};
 static int recv_argv[30] = {0};
 
 static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv);
+static int creat_scan_adv_process_task(void);
 
 static const char *distance_type_text[] = {
     [DISTANCE_0] = "e < 2    ",
@@ -128,6 +129,8 @@ void monitor_init(void)
     int ret = 0;
     
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    // 创建扫描和广告数据处理任务
+    creat_scan_adv_process_task();
 
     // 清空所有设备的RSSI样本
     clean_all_dev_rssi_samples();
@@ -218,28 +221,50 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
         return;
     }
 
-    s8 rssi = report_pt->rssi;
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    lwl_cqueue_adv_data_t adv_queue_data;
+    memset(&adv_queue_data, 0, sizeof(adv_queue_data));
+    adv_queue_data.rssi = report_pt->rssi;
+    memcpy(adv_queue_data.address, report_pt->address, 6);
+    adv_queue_data.address_type = report_pt->address_type;
+    
+    
+
+    // s8 rssi = report_pt->rssi;
     
     /*
     关机广播格式：2(固定前缀) + 1(电量) + 16(序列号)
     开机广播格式：2(固定前缀) + 1(电量) + 16(序列号) + 6(绑定的C端MAC)
     */
-    uint8_t buffer[32];
-    int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
-#if 1
-    char sn[16] = "";
-    memcpy(sn, buffer + 3, 15);
-#else
-    char *sn = (char *)buffer + 3;
-#endif
-    sn[15] = '\0'; // 确保字符串以 null 结尾
-    uint8_t bat_level = buffer[2];
-    uint8_t eend_power_state = (r == 25) ? 1 : 0;
-
-    if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
-        strcpy(sn, "WECNC4H06CPLJE7");
+    // uint8_t buffer[32];
+    int ret = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, adv_queue_data.adv_data);
+    adv_queue_data.adv_data_length = ret;
+    log_i("ble_adv_report_get_data ret:%d",ret);
+    log_i("adv cb adv_data_length:%d\r\n", report_pt->length);
+    ret = my_blocking_queue_try_enqueue(&ctx->adv_queue, &adv_queue_data);
+    if (MYERROR_Is_Full == ret)
+    {
+        log_i("adv_queue full\n");
     }
+    else if (MYERROR_Success == ret)
+    {
+        log_i("ADV_Queue_Data enqueued successfully\n");
+    }
+// #if 1
+//     char sn[16] = "";
+//     memcpy(sn, buffer + 3, 15);
+// #else
+//     char *sn = (char *)buffer + 3;
+// #endif
+//     sn[15] = '\0'; // 确保字符串以 null 结尾
+//     uint8_t bat_level = buffer[2];
+//     uint8_t eend_power_state = (r == 25) ? 1 : 0;
+
+//     if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
+//         strcpy(sn, "WECNC4H06CPLJE7");
+//     }
 #endif
+#if 0 // 测试用
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
     if (dev == NULL) {
         log_i("[MEASDIST]add new device: %s\n", sn);
@@ -251,10 +276,23 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
         lwl_event_notify(&e);
     }
     log_d("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
+    uint8_t power_on_state_latest = dev->power_on_state;
     dev->bat_level = bat_level;
     dev->power_on_state = eend_power_state;
+    
     if (dev->power_on_state) {
         memcpy(dev->bound_mac, buffer + 19, sizeof(dev->bound_mac));
+
+        /*
+        1. 上一次搜索的广播数据中，无C端MAC
+        2. 这一次搜索的广播数据中，有C端MAC
+        3. 广播数据中的C端MAC和自身匹配
+        */
+        if (power_on_state_latest != dev->power_on_state && 
+            memcmp(dev->bound_mac, lwl_app_core_context_get_instance()->mac, sizeof(dev->bound_mac)) == 0) {
+            extern void bka_notify_turn_on_success(void);
+            bka_notify_turn_on_success();
+        }
     } else {
         memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
     }
@@ -292,6 +330,7 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     }
 
     log_d("[MEASDIST]over");
+#endif
 }
 
 static void get_closest_devive(lwl_eend_dev_t *p_eend_dev, void *priv)
@@ -433,6 +472,141 @@ static int creat_task_distance(void)
     if (ret != 0)
     {
         log_i("[MEASDIST]distance_main task create failed\n");
+        return -1;
+    }
+    return 0;
+}
+
+static void scan_adv_process_task(void *priv)
+{
+    lwl_app_context_t *temp_ctx = lwl_app_core_context_get_instance();
+    lwl_cqueue_adv_data_t temp_adv_data;
+    memset(&temp_adv_data, 0, sizeof(temp_adv_data));
+    int ret = 0;
+    while(1)
+    {
+        ret = my_blocking_queue_dequeue(&temp_ctx->adv_queue, &temp_adv_data);
+        if (MYERROR_Success == ret)
+        {
+            printf("my_blocking_queue_dequeue one time !\r\n");
+            // s8 rssi = temp_adv_data->rssi;
+
+            /*
+            关机广播格式：2(固定前缀) + 1(电量) + 16(序列号)
+            开机广播格式：2(固定前缀) + 1(电量) + 16(序列号) + 6(绑定的C端MAC)
+            */
+            // uint8_t buffer[32];
+            // int r = ble_adv_report_get_data(temp_adv_data->data, temp_adv_data->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
+            int r = temp_adv_data.adv_data_length;
+#if 1
+            char sn[16] = "";
+            memcpy(sn, temp_adv_data.adv_data + 3, 15);
+#else
+            char *sn = (char *)buffer + 3;
+#endif
+            sn[15] = '\0'; // 确保字符串以 null 结尾
+            uint8_t bat_level = temp_adv_data.adv_data[2];
+            uint8_t eend_power_state = (r == 25) ? 1 : 0;
+
+            if (strcmp(sn, "WCCN24H28FEEEFA") == 0)
+            {
+                strcpy(sn, "WECNC4H06CPLJE7");
+            }
+            lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
+            if (dev == NULL)
+            {
+                log_i("[MEASDIST]add new device: %s\n", sn);
+                dev = add_new_eend_dev(sn);
+
+                lwl_event_t e;
+                e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
+                e.new_in.pdev = dev;
+                lwl_event_notify(&e);
+            }
+            log_d("[MEASDIST]RSSI = %d bat = %d", temp_adv_data.rssi, bat_level);
+            uint8_t power_on_state_latest = dev->power_on_state;
+            ///log_i("power_on_state_latest: %d\r\n",power_on_state_latest);
+            dev->bat_level = bat_level;
+            dev->power_on_state = eend_power_state;
+            ///log_i("dev->power_on_state: %d\r\n",dev->power_on_state);
+            if (dev->power_on_state)
+            {
+                memcpy(dev->bound_mac, temp_adv_data.adv_data + 19, sizeof(dev->bound_mac));
+                ///log_i("dev->bound_mac: %02x:%02x:%02x:%02x:%02x:%02x\r\n",dev->bound_mac[0],dev->bound_mac[1],dev->bound_mac[2],dev->bound_mac[3],dev->bound_mac[4],dev->bound_mac[5]);
+                /*
+                1. 上一次搜索的广播数据中，无C端MAC
+                2. 这一次搜索的广播数据中，有C端MAC
+                3. 广播数据中的C端MAC和自身匹配
+                */
+                if (power_on_state_latest != dev->power_on_state &&
+                    memcmp(dev->bound_mac, lwl_app_core_context_get_instance()->mac, sizeof(dev->bound_mac)) == 0)
+                {
+                    extern void bka_notify_turn_on_success(void);
+                    bka_notify_turn_on_success();
+                    log_i("MAC notify ok !\r\n");
+                }
+            }
+            else
+            {
+                memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
+            }
+            ///log_i("os_mutex_pend dev->distance_info.mutex time :%d\n",timer_get_ms());
+            os_mutex_pend(&dev->distance_info.mutex, 0);
+            // Store the RSSI value
+            dev->distance_info.rssi_samples[dev->distance_info.rssi_sample_count++] = temp_adv_data.rssi;
+            if (dev->distance_info.rssi_sample_count == MAX_SAMPLES)
+            {
+                dev->distance_info.rssi_sample_count = 0;
+            }
+            os_mutex_post(&dev->distance_info.mutex);
+            ///log_i("os_mutex_post dev->distance_info.mutex time :%d\n",timer_get_ms());
+
+            // 握手通信相关处理
+            if (dev->handshake_info.need_handshake)
+            {
+                ///log_i("os_mutex_pend dev->handshake_info.mutex time :%d\n",timer_get_ms());
+                os_mutex_pend(&dev->handshake_info.mutex, 0);
+                ///log_i("os_mutex_post dev->handshake_info.mutex time next :%d\n",timer_get_ms());
+                if (dev->handshake_info.handshake_flag == 1)
+                { /* 已经握手过了 */
+                    os_mutex_post(&dev->handshake_info.mutex);
+                    ///log_i("os_mutex_post dev->handshake_info.mutex time :%d\n",timer_get_ms());
+                    continue;
+                }
+
+                /* 更新状态 */
+                dev->handshake_info.alive = 1;
+                dev->handshake_info.alive_hs_fail_cnt = 0;
+                dev->handshake_info.address_type = temp_adv_data.address_type;
+                memcpy(dev->handshake_info.address, temp_adv_data.address, 6);
+
+                if (!g_handshake_is_ongoing)
+                {
+                    /* 如果没有正在进行的握手任务，就启动一次握手流程 */
+                    extern void start_handshake(lwl_eend_dev_t * pdev);
+                    start_handshake(dev);
+                }
+                os_mutex_post(&dev->handshake_info.mutex);
+                ///log_i("os_mutex_post dev->handshake_info.mutex time :%d\n",timer_get_ms());
+            }
+
+            log_d("[MEASDIST]over");
+        }
+        else if (MYERROR_Is_Empty == ret) { 
+            log_d("[MEASDIST]empty adv_queue");
+        }
+    }
+}
+
+
+static int creat_scan_adv_process_task(void)
+{
+    int ret = 0;
+    // 创建任务
+    ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
+    if (ret != 0)
+    {
+        log_i("[MEASDIST]scan_adv_process task create failed\n");
         return -1;
     }
     return 0;

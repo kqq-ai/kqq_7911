@@ -45,6 +45,7 @@ static void init_app_context(lwl_app_context_t* context)
 
     ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY));
     os_mutex_create(&s_app_context->event_handlers_mutex);
+    ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->adv_queue, sizeof(lwl_cqueue_adv_data_t), LWL_ADV_QUEUE_CAPACITY));
 
     thread_fork("lwl_event_scheduler", 15, 512, 0, 0, lwl_simple_event_scheduler, NULL);
 }

@@ -114,8 +114,8 @@ const struct task_info task_info_table[] = {
     {"btencry",             14,      512,   128   },
 #endif
 #if CPU_CORE_NUM > 1
-    {"#C0btctrler",         19,      512,   384   },
-    {"#C0btstack",          18,      1024,  384   },
+    {"#C0btctrler",         14,      512,   512   }, // origin :384
+    {"#C0btstack",          14,      1024,  512   }, // origin :384
 #else
     {"btctrler",            19,      512,   384   },
     {"btstack",             18,      768,   384   },

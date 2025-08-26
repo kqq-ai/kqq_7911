@@ -44,7 +44,7 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 #endif
 
 //搜索类型
-#define SET_SCAN_TYPE       SCAN_ACTIVE
+#define SET_SCAN_TYPE       SCAN_PASSIVE
 //搜索 周期大小
 #define SET_SCAN_INTERVAL   ADV_SCAN_MS(24) // unit: ms
 #define SET_SCAN_WINDOW     ADV_SCAN_MS(8) // unit: ms
@@ -63,7 +63,7 @@ static u8 sm_master_pair_redo = 0;//keymiss,是否重新执行配对
 //-------------------------------------------------------------------------------
 
 static void bt_ble_create_connection(u8 *conn_addr, u8 addr_type);
-static int bt_ble_scan_enable(void *priv, u32 en);
+static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window);
 static int client_operation_send(u16 handle, u8 *data, u16 len, u8 att_op_type);
 int ble_enable_new_dev_scan(void);
 //---------------------------------------------------------------------------
@@ -413,7 +413,7 @@ static void client_report_adv_data(adv_report_t *report_pt, u16 len)
         log_info("\n*********create_connection***********\n");
         log_info("***remote type %d,addr:", report_pt->address_type);
         log_info_hexdump(report_pt->address, 6);
-        bt_ble_scan_enable(0, 0);
+        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         client_create_connect_api(report_pt->address, report_pt->address_type);
         log_info("*create_finish\n");
     }
@@ -619,7 +619,7 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                     log_info("LE_MASTER CREATE CONNECTION FAIL!!! %0x\n", packet[3]);
                     set_ble_work_state(BLE_ST_DISCONN);
                     //auto to do
-                    bt_ble_scan_enable(0, 1);
+                    bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
                     break;
                 }
 
@@ -678,10 +678,10 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 if (BLE_ST_SCAN == get_ble_work_state() || BLE_ST_CREATE_CONN == get_ble_work_state()) {
                     //由于连上一台和未连接的时候scan参数可能不一致，所以有链路断开时，则先关闭已有scan再打开;
                     log_info("doing\n");
-                    bt_ble_scan_enable(NULL, 0);
+                    bt_ble_scan_enable(NULL, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
                 }
             }
-            bt_ble_scan_enable(0, 1);
+            bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
 
             ble_disconn_user_handler(packet);
         }
@@ -818,7 +818,7 @@ static void scanning_setup_init(void)
     ble_op_set_scan_param(SET_SCAN_TYPE, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
 }
 
-static int bt_ble_scan_enable(void *priv, u32 en)
+static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
 {
     ble_state_e next_state, cur_state;
 
@@ -855,7 +855,7 @@ static int bt_ble_scan_enable(void *priv, u32 en)
     set_ble_work_state(next_state);
 
     if (en) {
-        scanning_setup_init();
+        ble_op_set_scan_param(SET_SCAN_TYPE, interval, window);
     }
     ble_op_scan_enable2(en, 0);
 
@@ -885,7 +885,7 @@ static int client_create_connect_api(u8 *addr, u8 addr_type)
 
     if (cur_state == BLE_ST_SCAN) {
         log_info("stop scan\n");
-        bt_ble_scan_enable(0, 0);
+        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
     }
 
     log_info("addr to creat!\n");
@@ -913,9 +913,9 @@ static int get_ble_work_state_api(void)
     return get_ble_work_state();
 }
 
-void ble_simple_client_scan_enable(u8 en)
+void ble_simple_client_scan_enable(u8 en, int interval, int window)
 {
-    bt_ble_scan_enable(0, en);
+    bt_ble_scan_enable(0, en, interval, window);
 }
 
 //模块开关
@@ -925,10 +925,10 @@ void ble_simple_client_module_enable(u8 en)
 
     if (en) {
         scan_ctrl_en = 1;
-        bt_ble_scan_enable(0, 1);
+        bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
     } else {
         scan_ctrl_en = 0;
-        bt_ble_scan_enable(0, 0);
+        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         ble_simple_client_disconnect();
     }
 }

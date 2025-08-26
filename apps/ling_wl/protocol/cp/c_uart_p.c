@@ -241,6 +241,15 @@ int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b)
     return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
 }
 
+/* 5. 7911申请软关机 发送函数 */
+int uart_send_apply_soft_poweroff(void)
+{
+    uint8_t send_payload[1];
+    memset(send_payload, 0, sizeof(send_payload));
+    send_payload[0] = UART_CMD_APPLY_SOFT_POWEROFF;
+    return uart_send_inquiry(send_payload, 1);
+}
+
 void set_led_off(void)          { uart_send_set_led_color(COLOR_BLACK); }   //结束对话时灯光关闭
 
 int uart_send_open_le_audio(uint8_t *mac)

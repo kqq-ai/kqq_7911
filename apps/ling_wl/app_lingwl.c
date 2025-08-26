@@ -157,6 +157,16 @@ void base_lwl_event_handler(lwl_event_t *e)
         log_i("PRESS RESET KEY");
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
+
+//          if (!g_is_wss_connected_flag){
+//              log_i("base_lwl_event_handler response sync \r\n");
+// -            uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
+// +            if (1 == e->uart_cmd_sync.charging)
+// +            {
+// +                uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
+// +            } 
+//          }
+
         log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
             lastbattery = e->uart_cmd_sync.battery;

@@ -7,13 +7,15 @@
 #include "btstack/le/ble_api.h"
 #include "btstack/le/att.h"
 
+#include "le_common.h"
+
 void client_profile_init(void);
 void client_deal_passkey_input(u32 *key);
 void client_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
 
-void ble_simple_client_scan_enable(u8 en);
+void ble_simple_client_scan_enable(u8 en, int interval, int window);
 void ble_simple_client_module_enable(u8 en);
 void ble_simple_client_init(void);
 void ble_simple_client_exit(void);

@@ -16,6 +16,8 @@
 #define LWL_EVENT_QUEUE_CAPACITY 20 /**< Capacity of the event queue */
 #define LWL_EVENT_HANDLER_MAX_CNT 10 /**< Maximum number of event handlers */
 
+#define LWL_ADV_QUEUE_CAPACITY 60 /**< Capacity of the adv queue */
+
 /**
  * @brief Enumeration of LWL event types
  */
@@ -36,6 +38,17 @@ typedef enum {
 
     LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID,      /**< Clear stored WiFi SSID event */
 } LWL_EVENT_TYPE;
+
+/**
+ * @brief SCAN cb process adv data
+ */
+typedef struct {
+    uint8_t adv_data[32];
+    uint32_t adv_data_length;
+    u8 address_type;  //对方地址类型：0--public address,1--random address
+    u8 address[6];    //peer_address
+    s8 rssi;
+} lwl_cqueue_adv_data_t;
 
 /**
  * @brief UART sync command data structure
@@ -108,6 +121,7 @@ typedef struct {
 
     MyBlockingQueue event_queue;     /**< Event queue (queue<lwl_event_t>) */
     lwl_event_handler_cb_t event_handlers[LWL_EVENT_HANDLER_MAX_CNT]; /**< Registered event handlers */
+    MyBlockingQueue adv_queue;     /**< Adv queue (queue<lwl_cqueue_adv_data_t>) */
     OS_SEM event_handlers_mutex;
 } lwl_app_context_t;
 

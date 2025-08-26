@@ -2006,7 +2006,9 @@
                 "${workspaceFolder}/include_lib/driver/device/usb/host",
                 "${workspaceFolder}/include_lib/utils/btmesh",
                 "${workspaceFolder}/include_lib/utils/btmesh/adaptation",
-                "C:/JL/pi32/pi32v2-include"
+                "C:/JL/pi32/pi32v2-include",
+                "${workspaceFolder}/apps/ling_wl/util",
+                "${workspaceFolder}/apps/ling_wl"
             ],
             "intelliSenseMode": "clang-x86",
             "name": "AC791N_SCAN_BOX"

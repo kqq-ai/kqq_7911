@@ -15,16 +15,17 @@ typedef enum {
 // CMD 命令
 typedef enum {
     UART_NONE,
-    UART_CMD_NORMAL_KEY        = 0xA0, // 普通按键
-    UART_CMD_TOUCH_KEY         = 0xA1, // 触摸按键
-    UART_CMD_SYNCH_STATUS      = 0xA2, // 同步状态 ： 电量 充电状态 告知给7911    7911需将工作状态返回给7016（相应包发送）
-    UART_CMD_POWER_OFF         = 0xA3, // 关机
-    UART_CMD_SET_BLESN         = 0xA4, // 设置蓝牙序列号
-    UART_CMD_MOVE_DETECT_EN    = 0xA5, // 使能移动检测
-    UART_CMD_MOVE_OVER_A_METER = 0xA6, // 通知检测距离大于一米
-    UART_CMD_SET_LED_COLOR     = 0xA7, // 设置LED颜色
-    UART_CMD_OPEN_LE_AUDIO     = 0xA8, // 通知打开LE Audio
-    UART_CMD_CLEAR_WIFI_SSID   = 0xA9, // 通知7911 清除WIFI SSID
+    UART_CMD_NORMAL_KEY          = 0xA0, // 普通按键
+    UART_CMD_TOUCH_KEY           = 0xA1, // 触摸按键
+    UART_CMD_SYNCH_STATUS        = 0xA2, // 同步状态 ： 电量 充电状态 告知给7911    7911需将工作状态返回给7016（相应包发送）
+    UART_CMD_POWER_OFF           = 0xA3, // 关机
+    UART_CMD_SET_BLESN           = 0xA4, // 设置蓝牙序列号
+    UART_CMD_MOVE_DETECT_EN      = 0xA5, // 使能移动检测
+    UART_CMD_MOVE_OVER_A_METER   = 0xA6, // 通知检测距离大于一米
+    UART_CMD_SET_LED_COLOR       = 0xA7, // 设置LED颜色
+    UART_CMD_OPEN_LE_AUDIO       = 0xA8, // 通知打开LE Audio
+    UART_CMD_CLEAR_WIFI_SSID     = 0xA9, // 通知7911 清除WIFI SSID
+    UART_CMD_APPLY_SOFT_POWEROFF = 0xAA, // 7911申请软关机
 } uart_cmd_t;
 
 // 返回码表
@@ -98,6 +99,10 @@ int uart_send_move_detect_en(uint8_t en);
 #define COLOR_BROWN       (3529),  (8352),  (8352)    // 褐色(165,42,42)
 #define COLOR_PURPLE      (4980),  (10000), (4980)    // 紫色(128,0,128)
 #define COLOR_GRAY        (4980),  (4980),  (4980)    // 灰色(128,128,128)
+
+/* 5. 7911申请软关机 发送函数 */
+int uart_send_apply_soft_poweroff(void);
+
 int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b);
 void set_led_off(void);
 

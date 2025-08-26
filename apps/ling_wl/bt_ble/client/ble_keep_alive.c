@@ -26,6 +26,12 @@ static int g_eend_cnt = 0;
 
 static pthread_mutex_t g_mutex;
 
+#define SET_SCAN_INTERVAL   ADV_SCAN_MS(24) // unit: ms
+#define SET_SCAN_WINDOW     ADV_SCAN_MS(8) // unit: ms
+
+#define SET_SCAN_HIGH_DUTY_INTERVAL   ADV_SCAN_MS(24) // unit: ms
+#define SET_SCAN_HIGH_DUTY_WINDOW     ADV_SCAN_MS(12) // unit: ms
+
 /**
  * 只有当前没有正在进行的握手任务时，才能启动一个新的握手任务
  */
@@ -131,10 +137,10 @@ static bka_cmd_code_e handshake_task_execute_cmd_turn_on(bka_cmd_t *cmd)
 
 static bka_cmd_code_e handshake_task_execute_cmd(bka_cmd_t *cmd)
 {
-    if (cmd->data[0] == 0xA0 && cmd->data[1] == 0x01) {
-        log_i_buf(cmd->data, cmd->size);
-        return handshake_task_execute_cmd_turn_on(cmd);
-    }
+    // if (cmd->data[0] == 0xA0 && cmd->data[1] == 0x01) {
+    //     log_i_buf(cmd->data, cmd->size);
+    //     return handshake_task_execute_cmd_turn_on(cmd);
+    // }
     return handshake_task_execute_cmd_normal(cmd);
 }
 
@@ -148,6 +154,17 @@ static void handshake_task_send_dummy()
     }
 }
 
+static void switch_default_scan(void *arg)
+{
+    mdelay(2000);
+    ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+}
+
+void bka_notify_turn_on_success(void)
+{
+    os_sem_post(&g_eend_turn_on_resp_sem);
+}
+
 static void handshake_task(void *priv)
 {
     int ret = 0;
@@ -155,7 +172,7 @@ static void handshake_task(void *priv)
     ASSERT(pdev != NULL);
     bka_eend_dev_handshake_info_t *pdev_info = &pdev->handshake_info;
     ASSERT(pdev_info != NULL);
-    os_mutex_pend(&pdev_info->mutex, 0);
+    // os_mutex_pend(&pdev_info->mutex, 0);
 
     /* 建立连接 */
     log_i("[BKA]ble handshake_task %s\n", pdev->sn);
@@ -167,10 +184,13 @@ static void handshake_task(void *priv)
     if (os_sem_pend(&g_conn_sem, 400) == OS_TIMEOUT) {
         ble_simple_client_create_cannel();
         log_e("[BKA]Error ble connection timeout!!!");
-        ble_simple_client_scan_enable(1);
+        ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         goto __finish;
     }
     log_i("[BKA]ble connected %s\n", pdev->sn);
+    log_i("D1\r\n");
+    os_mutex_pend(&pdev_info->mutex, 0);
+    log_i("D2\r\n");
 
     bool has_cmd = false;
     bka_cmd_t cmd;
@@ -179,16 +199,18 @@ static void handshake_task(void *priv)
     } else {
         pdev_info->need_handshake = false; // 没有命令，设置握手标志为false
     }
+    os_mutex_post(&pdev_info->mutex);
+    log_i("D3\r\n");
 
     bka_cmd_code_e code = BKA_CMD_CODE_COMPL;
     if (has_cmd) { /* send cmd */
         log_i("[BKA]ble has cmd: %d %02X %02X", has_cmd, cmd.data[0], cmd.data[1]);
-        code = handshake_task_execute_cmd(&cmd); // maybe wait for 2s
-        if (code == BKA_CMD_CODE_COMPL) {
-            pdev->power_on_state = true;
-            memcpy(pdev->bound_mac, lwl_app_core_context_get_instance()->mac, 6);
+        /* 开机指令需要等待E端反馈 */
+        if (cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {
+            os_sem_set(&g_eend_turn_on_resp_sem, 0);
         }
-        call_cmd_cb(&cmd, code);
+        ///call_cmd_cb(&cmd, code);
+        code = handshake_task_execute_cmd(&cmd);
     } else { /* send dummy */
         handshake_task_send_dummy(); // wait for 300ms
     }
@@ -197,6 +219,30 @@ static void handshake_task(void *priv)
     ble_simple_client_disconnect();
     log_i("[BKA]ble disconnected %s\n", pdev->sn);
 
+    if (has_cmd) {
+        if (cmd.data[0] == 0xA0 && cmd.data[1] == 0x01) {
+            ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);
+            // ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+            /*
+            1. 启动一个定时任务，过2s钟切回一般间隔的SCAN
+            */
+            lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+
+            threadpool_add_task(ctx->threadpool, switch_default_scan, NULL);
+            
+            /* 等待E端回复 */
+            if (os_sem_pend(&g_eend_turn_on_resp_sem, 2000) == OS_TIMEOUT) {
+                log_e("[BKA]Error E BIG connection timeout!!!");
+                code = BKA_CMD_CODE_E_TURN_ON_TIMEOUT;
+            } else {
+                code = BKA_CMD_CODE_COMPL;
+            }
+        }
+        call_cmd_cb(&cmd, code);
+    }
+    log_i("D4\r\n");
+    os_mutex_pend(&pdev_info->mutex, 0);
+    log_i("D5\r\n");
     /* 本次握手通信成功 */
     if (code == BKA_CMD_CODE_COMPL) {
         pdev_info->handshake_flag = 1;
@@ -206,6 +252,7 @@ static void handshake_task(void *priv)
 __finish:
     os_mutex_post(&pdev_info->mutex);
     g_handshake_is_ongoing = false;
+    log_i("D6\r\n");
 }
 
 void start_handshake(lwl_eend_dev_t *pdev)
@@ -272,15 +319,21 @@ static void ble_search_completed_event_handler(void *priv)
 static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
 {
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
+    ///log_i("A1");
     os_mutex_pend(&pdev->handshake_info.mutex, 0);
 
+    ///log_i("A2");
     if (pdev->handshake_info.handshake_flag == 0) {
+    ///log_i("A3");
         /* 上一轮没有握手成功 */
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    ///log_i("A4");
         pdev->handshake_info.alive_hs_fail_cnt++;
         log_i("[BKA]%s handshake failed %d times.", sn_string, pdev->handshake_info.alive_hs_fail_cnt);
 
+    ///log_i("A5");
         if (pdev->handshake_info.alive_hs_fail_cnt >= KEEP_ALIVE_HANDSHAKE_LOST_CNT) {
+    ///log_i("A6");
             log_i("[BKA]%s lost.", sn_string);
             /* 连续n轮没有握手成功判定为丢失 */
             pdev->handshake_info.alive = 0;
@@ -288,14 +341,18 @@ static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
             /* 清空所有cmd */
             bka_cmd_t cmd;
             while (my_blocking_queue_try_dequeue(&pdev->handshake_info.cmd_buffer, &cmd) == MYERROR_Success) {
+    ///log_i("A7");
                 call_cmd_cb(&cmd, BKA_CMD_CODE_DEVLOST);
+    ///log_i("A8");
             }
         }
     }
     /* 重置状态 */
     pdev->handshake_info.handshake_flag = 0;
+    ///log_i("A9");
     
     os_mutex_post(&pdev->handshake_info.mutex);
+    ///log_i("A10");
 }
 
 /**
@@ -355,10 +412,14 @@ int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buff
     ASSERT(size < KEEP_ALIVE_CMD_DATA_SIZE);
     ASSERT(p_eend_dev != NULL);
     
+    log_i("B1");
     os_mutex_pend(&p_eend_dev->handshake_info.mutex, 0);
+    log_i("B2");
     int ret = BKACODE_Success;
     
+    log_i("B3");
     uint32_t cmd_id = generate_cmd_id((const char *)p_eend_dev->sn);
+    log_i("B4");
 
     /* 构造 cmd_pair */
     bka_cmd_t cmd_pair;
@@ -368,6 +429,7 @@ int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buff
     cmd_pair.cb = cb;
     cmd_pair.priv = priv;
     cmd_pair.cmd_id = cmd_id;
+    log_i("B5");
 
     if (my_blocking_queue_try_enqueue(&p_eend_dev->handshake_info.cmd_buffer, &cmd_pair) == MYERROR_Is_Full) {
         log_i("Failed to add cmd to %s", p_eend_dev->sn);
@@ -398,15 +460,21 @@ static int bka_device_remove_cmd_condition(void *pcmd_data, void *priv) {
 int ble_keep_alive_device_remove_cmd(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id)
 {
     ASSERT(p_eend_dev != NULL);
+    log_i("C1");
     os_mutex_pend(&p_eend_dev->handshake_info.mutex, 0);
+    log_i("C2");
     int ret = BKACODE_Success;
 
+    log_i("C3");
     if (MYERROR_Not_Found == my_blocking_queue_try_remove_if(&p_eend_dev->handshake_info.cmd_buffer, 
             bka_device_remove_cmd_condition, (void*)cmd_id)) {
+    log_i("C4");
         ret = BKACODE_Cmd_Not_Found;
     }
 
+    log_i("C5");
     os_mutex_post(&p_eend_dev->handshake_info.mutex);
+    log_i("C6");
     return ret;
 }
 
