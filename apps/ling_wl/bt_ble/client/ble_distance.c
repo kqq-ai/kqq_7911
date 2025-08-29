@@ -133,14 +133,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     int sum = 0;
     int sample_count = p_eend_dev->distance_info.rssi_sample_count;
     
-    // 严格的边界检查，防止数组越界和负数
-    if (sample_count < 0) {
-        log_i("[PROCESS_RSSI] %s: ERROR - negative sample_count %d, resetting", sn_string, sample_count);
-        sample_count = 0;
-        p_eend_dev->distance_info.rssi_sample_count = 0;
-        os_mutex_post(&p_eend_dev->distance_info.mutex);
-        return;
-    }
+    // 严格的边界检查，防止数组越界
     if (sample_count > MAX_SAMPLES) {
         log_i("[PROCESS_RSSI] %s: ERROR - sample_count %d exceeds MAX_SAMPLES %d, resetting", 
               sn_string, sample_count, MAX_SAMPLES);
@@ -178,10 +171,10 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     p_eend_dev->distance_info.rssi = (s8)original_average;
     
     // 打印最终RSSI信息
-    log_i("[FINAL_RSSI] %s: simple_average=%d (using all %d samples)", 
-          sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.rssi_sample_count);
+    // log_i("[FINAL_RSSI] %s: simple_average=%d (using all %d samples)", 
+    //       sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.rssi_sample_count);
 
-    log_d("[MEASDIST]%s  Average RSSI: %d\n", sn_string, p_eend_dev->distance_info.rssi);
+    // log_d("[MEASDIST]%s  Average RSSI: %d\n", sn_string, p_eend_dev->distance_info.rssi);
     os_mutex_post(&p_eend_dev->distance_info.mutex);
 }
 
@@ -322,16 +315,12 @@ static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
     // uint8_t buffer[32];
     int ret = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, adv_queue_data.adv_data);
     adv_queue_data.adv_data_length = ret;
-    log_i("ble_adv_report_get_data ret:%d",ret);
-    log_i("adv cb adv_data_length:%d\r\n", report_pt->length);
+    // log_i("ble_adv_report_get_data ret:%d",ret);
+    // log_i("adv cb adv_data_length:%d\r\n", report_pt->length);
     ret = my_blocking_queue_try_enqueue(&ctx->adv_queue, &adv_queue_data);
     if (MYERROR_Is_Full == ret)
     {
         log_i("adv_queue full\n");
-    }
-    else if (MYERROR_Success == ret)
-    {
-        log_i("ADV_Queue_Data enqueued successfully\n");
     }
 // #if 1
 //     char sn[16] = "";
@@ -552,8 +541,8 @@ static void distance_main(void *priv)
 static int creat_task_distance(void)
 {
     int ret = 0;
-    // 创建任务，增加栈大小防止栈溢出
-    ret = os_task_create(distance_main, NULL, 10, 2048, 512, "distance_main");
+    // 创建任务
+    ret = os_task_create(distance_main, NULL, 10, 1024, 256, "distance_main");
     if (ret != 0)
     {
         log_i("[MEASDIST]distance_main task create failed\n");
@@ -579,7 +568,7 @@ static void scan_adv_process_task(void *priv)
         ret = my_blocking_queue_dequeue(&temp_ctx->adv_queue, &temp_adv_data);
         if (MYERROR_Success == ret)
         {
-            printf("my_blocking_queue_dequeue one time !\r\n");
+            // printf("my_blocking_queue_dequeue one time !\r\n");
             // s8 rssi = temp_adv_data->rssi;
 
             /*
@@ -605,14 +594,10 @@ static void scan_adv_process_task(void *priv)
 #else
             char *sn = (char *)buffer + 3;
 #endif
-            sn[15] = '\0'; // 确保字符串以 null 结尾
+            sn[sn_len] = '\0'; // 确保字符串以 null 结尾
             uint8_t bat_level = (r >= 3) ? temp_adv_data.adv_data[2] : 0;
             uint8_t eend_power_state = (r == 25) ? 1 : 0;
 
-            if (strcmp(sn, "WCCN24H28FEEEFA") == 0)
-            {
-                strcpy(sn, "WECNC4H06CPLJE7");
-            }
             lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
             if (dev == NULL)
             {
@@ -629,7 +614,7 @@ static void scan_adv_process_task(void *priv)
                 e.new_in.pdev = dev;
                 lwl_event_notify(&e);
             }
-            log_d("[MEASDIST]RSSI = %d bat = %d", temp_adv_data.rssi, bat_level);
+            // log_d("[MEASDIST]RSSI = %d bat = %d", temp_adv_data.rssi, bat_level);
             uint8_t power_on_state_latest = dev->power_on_state;
             ///log_i("power_on_state_latest: %d\r\n",power_on_state_latest);
             dev->bat_level = bat_level;
@@ -727,8 +712,8 @@ static void scan_adv_process_task(void *priv)
 static int creat_scan_adv_process_task(void)
 {
     int ret = 0;
-    // 创建任务，增加栈大小防止栈溢出
-    ret = os_task_create(scan_adv_process_task, NULL, 14, 2048, 512, "scan_adv_process");
+    // 创建任务
+    ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
     if (ret != 0)
     {
         log_i("[MEASDIST]scan_adv_process task create failed\n");

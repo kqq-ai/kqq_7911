@@ -477,9 +477,9 @@ void log_mqtt_battery(const char* sn_param,int battery) {
 
 
 void log_mqtt_enqueue(const char *msg) {
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    my_blocking_queue_enqueue(&log_queue, (void *)msg);
-    os_mutex_post(&g_log_mqtt_mutex);
+    // os_mutex_pend(&g_log_mqtt_mutex, 0);
+    my_blocking_queue_try_enqueue(&log_queue, (void *)msg);
+    // os_mutex_post(&g_log_mqtt_mutex);
 }
 
 /* 日志发送函数 */
@@ -499,7 +499,14 @@ void log_mqtt(const char* format, ...) {
     va_list args;
     va_start(args, format);
     vsnprintf(log_buffer, sizeof(log_buffer), format, args);
+    log_i("[MQTT message] %s", log_buffer);
+    // 打印到控制台
     va_end(args);
+    if (!log_mqtt_is_connected()) {
+        os_mutex_post(&g_log_mqtt_mutex);
+        return;
+    }
+
 
     // 构造JSON
     cJSON *root = cJSON_CreateObject();
@@ -509,8 +516,6 @@ void log_mqtt(const char* format, ...) {
 
     char *json_str = cJSON_PrintUnformatted(root);
     
-    // 打印到控制台
-    log_i("[MQTT message] %s", log_buffer);
 
     // 发送到队列
     log_mqtt_enqueue(json_str);
