@@ -9,6 +9,7 @@
 #include "ble_att_util.h"
 
 #define APP_STATUS (1)
+#define RSSI_EXPIRE_TIME_MS (5000)  // RSSI样本过期时间：5秒
 
 // 消息类型
 enum
@@ -45,68 +46,140 @@ inline const char *distance_type_to_text(enum distance_type type) {
 }
 
 // 清空RSSI样本
-static void clear_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
+static void clear_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv) 
 {
+    // 增加NULL指针检查
+    if (!p_eend_dev) {
+        log_i("[CLEAR_RSSI] ERROR: NULL device pointer");
+        return;
+    }
+    
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
-    // int count = ((p_eend_dev->distance_info.rssi_sample_count + 3) >> 2);
-    // memcpy(p_eend_dev->distance_info.rssi_samples, p_eend_dev->distance_info.rssi_samples + count, p_eend_dev->distance_info.rssi_sample_count - count);
-    // p_eend_dev->distance_info.rssi_sample_count -= count;
     memset(p_eend_dev->distance_info.rssi_samples, 0, sizeof(p_eend_dev->distance_info.rssi_samples));
+    memset(p_eend_dev->distance_info.rssi_timestamps, 0, sizeof(p_eend_dev->distance_info.rssi_timestamps));
     p_eend_dev->distance_info.rssi_sample_count = 0;
     os_mutex_post(&p_eend_dev->distance_info.mutex);
 }
 
+// 过期清理
+static void simple_expire_cleanup(lwl_eend_dev_t *dev, void *priv) {
+    // 增加NULL指针检查
+    if (!dev) {
+        log_i("[EXPIRE_CLEANUP] ERROR: NULL device pointer");
+        return;
+    }
+    
+    os_mutex_pend(&dev->distance_info.mutex, 0);
+    u32 now = timer_get_ms();
+    int valid = 0;
+    int sample_count = dev->distance_info.rssi_sample_count;
+    
+    // 边界检查
+    if (sample_count < 0 || sample_count > MAX_SAMPLES) {
+        log_i("[EXPIRE_CLEANUP] ERROR: invalid sample_count %d, resetting", sample_count);
+        dev->distance_info.rssi_sample_count = 0;
+        os_mutex_post(&dev->distance_info.mutex);
+        return;
+    }
+    
+    for (int i = 0; i < sample_count && i < MAX_SAMPLES; i++) {
+        // 处理时间戳溢出情况，当now < timestamp时说明发生了溢出
+        u32 time_diff;
+        if (now >= dev->distance_info.rssi_timestamps[i]) {
+            time_diff = now - dev->distance_info.rssi_timestamps[i];
+        } else {
+            // 时间戳溢出，计算正确的时间差
+            time_diff = (0xFFFFFFFF - dev->distance_info.rssi_timestamps[i]) + now + 1;
+        }
+        
+        if (time_diff < RSSI_EXPIRE_TIME_MS) {
+            if (valid != i && valid < MAX_SAMPLES) {
+                dev->distance_info.rssi_samples[valid] = dev->distance_info.rssi_samples[i];
+                dev->distance_info.rssi_timestamps[valid] = dev->distance_info.rssi_timestamps[i];
+            }
+            valid++;
+        }
+    }
+    dev->distance_info.rssi_sample_count = valid;
+    os_mutex_post(&dev->distance_info.mutex);
+}
+
+// RSSI处理
 // 计算平均RSSI并过滤掉低于平均值一半的数据点
 static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
 {
+    // 增加NULL指针检查
+    if (!p_eend_dev) {
+        log_i("[PROCESS_RSSI] ERROR: NULL device pointer");
+        return;
+    }
+    
     log_d("[MEASDIST]===process_rssi======\r\n");
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
     if (p_eend_dev->distance_info.rssi_sample_count <= 0) {
-        // if(p_eend_dev->distance_info.rssi > -118 ){
-        //     p_eend_dev->distance_info.rssi -= 10;
-        // } else{
-        //     p_eend_dev->distance_info.rssi = -128;
-        // }
         os_mutex_post(&p_eend_dev->distance_info.mutex);
         return;
     }
         
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-    p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-
+    // 增加get_string回调函数的NULL检查
+    if (p_eend_dev->get_string) {
+        p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
+    }
 
     log_d("[MEASDIST]===process_rssi   %s  sample_count : %d          ======\r\n", sn_string, p_eend_dev->distance_info.rssi_sample_count);
-    // 计算原始平均RSSI
+    
+    // 计算原始平均RSSI（加强边界检查）
     int sum = 0;
-    for (int i = 0; i < p_eend_dev->distance_info.rssi_sample_count; ++i) {
-        sum += p_eend_dev->distance_info.rssi_samples[i];
-    }
-    int original_average = sum / p_eend_dev->distance_info.rssi_sample_count;
-    log_d("[MEASDIST]original_average : %d\n",original_average);
-
-    // 过滤数据点，创建临时数组存储符合条件的数据点
-    s8 filtered_samples[MAX_SAMPLES];
-    int filtered_count = 0;
-    for (int i = 0; i < p_eend_dev->distance_info.rssi_sample_count; ++i) {
-        if (p_eend_dev->distance_info.rssi_samples[i] >= original_average) {
-            filtered_samples[filtered_count++] = p_eend_dev->distance_info.rssi_samples[i];
-        }
-    }
-
-    // 如果没有数据点满足条件，则保留原始数据
-    if (filtered_count == 0) {
-        log_i("[MEASDIST]No valid samples found, using original average\n");
-        p_eend_dev->distance_info.rssi = -128;
+    int sample_count = p_eend_dev->distance_info.rssi_sample_count;
+    
+    // 严格的边界检查，防止数组越界和负数
+    if (sample_count < 0) {
+        log_i("[PROCESS_RSSI] %s: ERROR - negative sample_count %d, resetting", sn_string, sample_count);
+        sample_count = 0;
+        p_eend_dev->distance_info.rssi_sample_count = 0;
         os_mutex_post(&p_eend_dev->distance_info.mutex);
         return;
     }
-
-    // 重新计算平均RSSI
-    sum = 0;
-    for (int i = 0; i < filtered_count; ++i) {
-        sum += filtered_samples[i];
+    if (sample_count > MAX_SAMPLES) {
+        log_i("[PROCESS_RSSI] %s: ERROR - sample_count %d exceeds MAX_SAMPLES %d, resetting", 
+              sn_string, sample_count, MAX_SAMPLES);
+        sample_count = 0;
+        p_eend_dev->distance_info.rssi_sample_count = 0;
+        os_mutex_post(&p_eend_dev->distance_info.mutex);
+        return;
     }
-    p_eend_dev->distance_info.rssi = sum ? (s8)(sum / filtered_count) : -128;
+    
+    for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i) {
+        sum += p_eend_dev->distance_info.rssi_samples[i];
+    }
+    int original_average = sum / sample_count;
+    log_d("[MEASDIST]original_average : %d\n",original_average);
+    
+    // 构建原始RSSI样本数组字符串（加强边界检查）
+    char raw_samples_str[512] = {0};
+    int offset = 0;
+    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, 
+                      "[RAW_RSSI] %s: count=%d, samples=[", sn_string, sample_count);
+    
+    for (int i = 0; i < sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i) {
+        if (i > 0) {
+            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
+        }
+        offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%d", 
+                          p_eend_dev->distance_info.rssi_samples[i]);
+    }
+    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
+    
+    // 打印完整的原始RSSI信息
+    log_i("%s", raw_samples_str);
+
+    // 使用简单均值：直接使用所有样本的平均值
+    p_eend_dev->distance_info.rssi = (s8)original_average;
+    
+    // 打印最终RSSI信息
+    log_i("[FINAL_RSSI] %s: simple_average=%d (using all %d samples)", 
+          sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.rssi_sample_count);
 
     log_d("[MEASDIST]%s  Average RSSI: %d\n", sn_string, p_eend_dev->distance_info.rssi);
     os_mutex_post(&p_eend_dev->distance_info.mutex);
@@ -118,15 +191,25 @@ static void process_all_dev_rssi_samples()
     eend_dev_traverse(process_rssi_samples, NULL);
 }
 
-// 清除所有RSSI样本
+// 清除所有RSSI样本（初始化用）
 static void clean_all_dev_rssi_samples() 
 {
     eend_dev_traverse(clear_rssi_samples, NULL);
 }
 
+// 清理所有设备的过期RSSI样本
+static void remove_all_dev_expired_rssi_samples()
+{
+    eend_dev_traverse(simple_expire_cleanup, NULL);
+}
+
 void monitor_init(void)
 {
     int ret = 0;
+    
+    // 配置验证日志
+    log_i("[MEASDIST] monitor_init: MAX_SAMPLES=%d, RSSI_EXPIRE_TIME_MS=%dms", 
+          MAX_SAMPLES, RSSI_EXPIRE_TIME_MS);
     
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     // 创建扫描和广告数据处理任务
@@ -355,6 +438,12 @@ static void blue_distance_notify_app()
 
 static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *priv)
 {
+    // 增加NULL指针检查
+    if (!p_eend_dev) {
+        log_i("[DISTANCE_NOTIFY] ERROR: NULL device pointer");
+        return;
+    }
+    
     s8 rssi = p_eend_dev->distance_info.rssi;
 
     p_eend_dev->distance_info.distance_type_last = p_eend_dev->distance_info.distance_type;
@@ -432,18 +521,14 @@ static void distance_main(void *priv)
             {
                 notify_app_time = current_time;
 
+                // 首先清理过期数据
+                remove_all_dev_expired_rssi_samples();
+                
+                // 然后处理有效样本
                 process_all_dev_rssi_samples();
-                // blue_distance_notify_app();
+                
+                // 通知距离变化
                 blue_distance_notify_self();
-                // clean_all_dev_rssi_samples();
-                static int rssi_times = 0;
-                if( rssi_times < 5 ){
-                    rssi_times++;
-                }else{
-                    rssi_times = 0;
-                    log_i("[MEASDIST]--rssi_times-- ");
-                    clean_all_dev_rssi_samples();
-                }
             }
 
             if (current_time - notify_self_time > NOTIFY_SELF_TIME)
@@ -467,8 +552,8 @@ static void distance_main(void *priv)
 static int creat_task_distance(void)
 {
     int ret = 0;
-    // 创建任务
-    ret = os_task_create(distance_main, NULL, 10, 1024, 256, "distance_main");
+    // 创建任务，增加栈大小防止栈溢出
+    ret = os_task_create(distance_main, NULL, 10, 2048, 512, "distance_main");
     if (ret != 0)
     {
         log_i("[MEASDIST]distance_main task create failed\n");
@@ -480,6 +565,12 @@ static int creat_task_distance(void)
 static void scan_adv_process_task(void *priv)
 {
     lwl_app_context_t *temp_ctx = lwl_app_core_context_get_instance();
+    // 增加NULL检查
+    if (!temp_ctx) {
+        log_i("[SCAN_ADV] ERROR: NULL context pointer");
+        return;
+    }
+    
     lwl_cqueue_adv_data_t temp_adv_data;
     memset(&temp_adv_data, 0, sizeof(temp_adv_data));
     int ret = 0;
@@ -499,13 +590,23 @@ static void scan_adv_process_task(void *priv)
             // int r = ble_adv_report_get_data(temp_adv_data->data, temp_adv_data->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
             int r = temp_adv_data.adv_data_length;
 #if 1
+            // 增加数据长度检查，防止内存访问越界
+            if (r < 19) {
+                log_i("[SCAN_ADV] ERROR: adv_data too short: %d bytes", r);
+                continue;
+            }
+            
             char sn[16] = "";
-            memcpy(sn, temp_adv_data.adv_data + 3, 15);
+            // 安全的内存拷贝，确保不会越界
+            int sn_len = (r >= 18) ? 15 : (r - 3);
+            if (sn_len > 0 && sn_len <= 15) {
+                memcpy(sn, temp_adv_data.adv_data + 3, sn_len);
+            }
 #else
             char *sn = (char *)buffer + 3;
 #endif
             sn[15] = '\0'; // 确保字符串以 null 结尾
-            uint8_t bat_level = temp_adv_data.adv_data[2];
+            uint8_t bat_level = (r >= 3) ? temp_adv_data.adv_data[2] : 0;
             uint8_t eend_power_state = (r == 25) ? 1 : 0;
 
             if (strcmp(sn, "WCCN24H28FEEEFA") == 0)
@@ -517,6 +618,11 @@ static void scan_adv_process_task(void *priv)
             {
                 log_i("[MEASDIST]add new device: %s\n", sn);
                 dev = add_new_eend_dev(sn);
+                // 增加NULL检查，防止设备创建失败
+                if (dev == NULL) {
+                    log_i("[MEASDIST] ERROR: failed to create new device for %s", sn);
+                    continue;
+                }
 
                 lwl_event_t e;
                 e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
@@ -531,7 +637,13 @@ static void scan_adv_process_task(void *priv)
             ///log_i("dev->power_on_state: %d\r\n",dev->power_on_state);
             if (dev->power_on_state)
             {
-                memcpy(dev->bound_mac, temp_adv_data.adv_data + 19, sizeof(dev->bound_mac));
+                // 增加边界检查，防止访问越界
+                if (r >= 25) {
+                    memcpy(dev->bound_mac, temp_adv_data.adv_data + 19, sizeof(dev->bound_mac));
+                } else {
+                    log_i("[MEASDIST] WARNING: adv_data too short for MAC addr, r=%d", r);
+                    memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
+                }
                 ///log_i("dev->bound_mac: %02x:%02x:%02x:%02x:%02x:%02x\r\n",dev->bound_mac[0],dev->bound_mac[1],dev->bound_mac[2],dev->bound_mac[3],dev->bound_mac[4],dev->bound_mac[5]);
                 /*
                 1. 上一次搜索的广播数据中，无C端MAC
@@ -552,13 +664,26 @@ static void scan_adv_process_task(void *priv)
             }
             ///log_i("os_mutex_pend dev->distance_info.mutex time :%d\n",timer_get_ms());
             os_mutex_pend(&dev->distance_info.mutex, 0);
-            // Store the RSSI value
-            dev->distance_info.rssi_samples[dev->distance_info.rssi_sample_count++] = temp_adv_data.rssi;
-            if (dev->distance_info.rssi_sample_count == MAX_SAMPLES)
-            {
+            // Store the RSSI value and timestamp with safety checks
+            // 严格的边界检查，防止数组越界
+            if (dev->distance_info.rssi_sample_count >= 0 && dev->distance_info.rssi_sample_count < MAX_SAMPLES) {
+                int idx = dev->distance_info.rssi_sample_count;
+                dev->distance_info.rssi_samples[idx] = temp_adv_data.rssi;
+                dev->distance_info.rssi_timestamps[idx] = timer_get_ms();
+                dev->distance_info.rssi_sample_count++;
+            } else {
+                // 数组已满或索引异常，记录错误
+                log_i("[RSSI_STORE] %s: ERROR - invalid sample_count=%d (MAX=%d)", 
+                      sn, dev->distance_info.rssi_sample_count, MAX_SAMPLES);
+                // 重置为安全状态
                 dev->distance_info.rssi_sample_count = 0;
             }
             os_mutex_post(&dev->distance_info.mutex);
+            
+            // 添加RSSI存储日志
+            log_d("[RSSI_STORE] %s: new_rssi=%d, sample_count=%d, timestamp=%u", 
+                  sn, temp_adv_data.rssi, dev->distance_info.rssi_sample_count, timer_get_ms());
+            
             ///log_i("os_mutex_post dev->distance_info.mutex time :%d\n",timer_get_ms());
 
             // 握手通信相关处理
@@ -602,8 +727,8 @@ static void scan_adv_process_task(void *priv)
 static int creat_scan_adv_process_task(void)
 {
     int ret = 0;
-    // 创建任务
-    ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
+    // 创建任务，增加栈大小防止栈溢出
+    ret = os_task_create(scan_adv_process_task, NULL, 14, 2048, 512, "scan_adv_process");
     if (ret != 0)
     {
         log_i("[MEASDIST]scan_adv_process task create failed\n");
