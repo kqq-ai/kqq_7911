@@ -168,19 +168,15 @@ int send_audio_status(int type, int event)
     char *send_data = odmp_audio_status(sn_c_id, type, event);
 
     if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("Error %s %d     1.", __FILE__, __LINE__);
+        log_e("Error %s %d", __FILE__, __LINE__);
 
         free(send_data);
-        log_e("Error %s %d     2.", __FILE__, __LINE__);
         if (ctx->websockets_info != NULL) {
             wss_server_disconnect(ctx->websockets_info);
             ctx->websockets_info = NULL;
         }
-        log_e("Error %s %d     3.", __FILE__, __LINE__);
         wss_exception_exit();
-        log_e("Error %s %d     4.", __FILE__, __LINE__);
         os_mutex_post(&g_wss_mutex);
-        log_e("Error %s %d     5.", __FILE__, __LINE__);
         return -1;
     }
     log_i("wbs send msg : %s", send_data);

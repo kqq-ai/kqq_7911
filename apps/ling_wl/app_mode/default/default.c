@@ -88,10 +88,8 @@ void app_default_mode(void)
             NULL,
             NULL);
     }
-    //mdelay(2000);
     while (1) {
         mdelay(10);
-        //log_i("+++++++++++%d++++++++\n",get_wifi_connect_status(NULL));
         if (lwl_app_mode_exitting()) {
             default_unint();
             return;

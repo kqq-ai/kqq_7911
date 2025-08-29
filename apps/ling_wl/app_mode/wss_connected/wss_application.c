@@ -196,10 +196,8 @@ void wss_application_uninit()
     wss_request_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
-    log_i("Uninit WSS application 1\n");
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);
-    log_i("Uninit WSS application 2\n");
 }
 
 bool wss_application_loop()

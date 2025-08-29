@@ -51,7 +51,7 @@ static int __https_get_mothed(const char *url, int (*cb)(char *, void *), void *
     get_mac_oauth_ctx->ctx.url = url;
     get_mac_oauth_ctx->ctx.priv = &http_body_buf;
     get_mac_oauth_ctx->ctx.connection = "close";
-    get_mac_oauth_ctx->ctx.timeout_millsec = 50000;
+    get_mac_oauth_ctx->ctx.timeout_millsec = 10000;
 
     error = httpcli_get(&get_mac_oauth_ctx->ctx);
 

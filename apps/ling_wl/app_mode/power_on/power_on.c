@@ -26,8 +26,6 @@
 #include "app_lfs.h"
 
 
-#include "../util/led_breath.h"
-
 #define MODE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 
@@ -89,17 +87,6 @@ static int power_on_unint(void)
 
 void app_power_on_mode(void)
 {
-    // mdelay(5000);
-    // led_breath_init();
-    // led_breath_start(COLOR_BLACK, COLOR_GREEN, 20, 2000, 25);
-
-    // mdelay(5000);
-     
-    // led_breath_start(COLOR_BLACK, COLOR_RED, 20, 2000, 25);
-    // mdelay(1000);
-    // led_set_color(COLOR_RED);
-
-    
     power_on_init();
     while (1) {
         // 应用代码

@@ -11,7 +11,7 @@ void init_download_params(struct net_download_parm *parm, const char *url)
     memset(parm, 0, sizeof(struct net_download_parm));
     parm->url = url;
     parm->cbuf_size = 200 * 1024;  // 设置缓存大小为200KB
-    parm->timeout_millsec = 50000; // 设置超时时间为50秒
+    parm->timeout_millsec = 10000; // 设置超时时间为10秒
     parm->seek_low_range = 0;      // 从文件开头开始下载
     parm->seek_high_range = 0;     // 下载整个文件
     // parm->prio = 0; // 设置优先级

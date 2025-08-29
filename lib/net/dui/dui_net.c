@@ -677,7 +677,7 @@ static int websockets_client_init(struct websocket_struct *websockets_info, u8 *
 {
     websockets_info->ip_or_url = url;
     websockets_info->origin_str = origin_str;
-    websockets_info->recv_time_out = 50000;
+    websockets_info->recv_time_out = 1000;
     //应用层和库的版本检测，结构体不一样则返回出错
     int err = websockets_struct_check(sizeof(struct websocket_struct));
     if (err == FALSE) {
