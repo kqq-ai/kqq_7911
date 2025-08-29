@@ -81,8 +81,7 @@ static void wifi_monitor_thread(void *priv)
 static void lwl_app_task(void *priv)
 {
     log_i("lwl_app_task");
-    lwl_app_init(APP_POWER_ON_MODE);
-    // lwl_app_init(APP_DEVICE_CHECK_MODE);
+    lwl_app_init();
     while (true) {
         lwl_app_mode_loop();
     }

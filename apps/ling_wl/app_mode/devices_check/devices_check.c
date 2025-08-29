@@ -1116,13 +1116,13 @@ static void mode7_execute_sn_request(void)
         g_audio_playing = 1;  // 设置音频播放标志
         int err = app_music_play_local_music_with_callback(
             context7_success->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_getsn.mp3",
+            CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_s.mp3",
             mode7_success_audio_callback, NULL);
         if (err != 0) {
-            log_e("MODE 7: Failed to play test_getsn.mp3, error: %d", err);
+            log_e("MODE 7: Failed to play test_sn_s.mp3, error: %d", err);
             g_audio_playing = 0;  // 播放失败时重置状态
         } else {
-            log_i("MODE 7: test_getsn.mp3 started successfully");
+            log_i("MODE 7: test_sn_s.mp3 started successfully");
         }
     } else {
         log_i("===============================[MODE7] Failed to get SN/Key, process terminated==========");
@@ -1167,7 +1167,25 @@ static void mode7_audio_callback(void *priv)
     
     // 模式7音频播放完成后，开始SN号获取流程
     log_i("MODE 7: Audio playback completed, starting SN key retrieval process");
-    mode7_execute_sn_request();
+
+    char sn[SN_SIZE+1];
+    if (!get_SN(sn)) {
+        mode7_execute_sn_request();
+    } else {
+        log_i("MODE 7: device has SN: %s, skipping SN request", sn);
+        lwl_app_context_t *context7_failed = lwl_app_core_context_get_instance();
+        g_audio_playing = 1;  // 设置音频播放标志
+        int err = app_music_play_local_music_with_callback(
+            context7_failed->music_player,
+            CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_f.mp3",
+            mode7_success_audio_callback, NULL);
+        if (err != 0) {
+            log_e("MODE 7: Failed to play test_sn_f.mp3, error: %d", err);
+            g_audio_playing = 0;  // 播放失败时重置状态
+        } else {
+            log_i("MODE 7: test_sn_f.mp3 started successfully");
+        }
+    }
 }
 
 // 模式7成功音频播放回调函数
@@ -1179,14 +1197,15 @@ static void mode7_success_audio_callback(void *priv)
         return;
     }
     
-    log_i("MODE 7: test_getsn.mp3 playback completed");
+    log_i("MODE 7: test_sn_s.mp3 playback completed");
     g_audio_playing = 0;
+    uart_send_apply_soft_poweroff();
     
     // SN获取成功音频播放完成后的处理
     log_i("MODE 7: SN retrieval success audio completed");
 }
 
-// 模式7 test_wrsn.mp3 音频播放回调函数
+// 模式7 test_sn_s.mp3 音频播放回调函数
 static void mode7_wrsn_audio_callback(void *priv)
 {
     // 检查当前模式，如果不是模式7，则忽略回调
@@ -1195,7 +1214,7 @@ static void mode7_wrsn_audio_callback(void *priv)
         return;
     }
     
-    log_i("MODE 7: test_wrsn.mp3 playback completed");
+    log_i("MODE 7: test_sn_s.mp3 playback completed");
     g_audio_playing = 0;
     
     log_i("MODE 7: WRSN audio playback finished");
@@ -1562,7 +1581,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         log_i("Touch key event type: %d",e->uart_cmd_touch.touch_key_event_type);
         
         // 特殊处理模式7的触摸按键检测
-        if (g_current_mode == WORK_MODE_7 && g_mode7_sn_key_obtained && !g_mode7_first_touch_handled) {
+        if (g_current_mode == WORK_MODE_7 && g_mode7_sn_key_obtained) {
             if (e->uart_cmd_touch.touch_key_event_type == 0) {
                 // 第一次触摸按键按下事件，且SN/Key已获取成功
                 log_i("MODE 7: First touch key detected after SN/Key obtained");
@@ -1584,19 +1603,19 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                     log_i("。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。");
                 }
                 
-                // 播放test_wrsn.mp3
+                // 播放test_sn_s.mp3
                 lwl_app_context_t *context7_wrsn = lwl_app_core_context_get_instance();
                 if (context7_wrsn && context7_wrsn->music_player) {
                     g_audio_playing = 1;
                     int err = app_music_play_local_music_with_callback(
                         context7_wrsn->music_player,
-                        CONFIG_VOICE_PROMPT_FILE_PATH"test_wrsn.mp3",
+                        CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_s.mp3",
                         mode7_wrsn_audio_callback, NULL);
                     if (err != 0) {
-                        log_e("MODE 7: Failed to play test_wrsn.mp3, error: %d", err);
+                        log_e("MODE 7: Failed to play test_sn_s.mp3, error: %d", err);
                         g_audio_playing = 0;
                     } else {
-                        log_i("MODE 7: test_wrsn.mp3 started successfully");
+                        log_i("MODE 7: test_sn_s.mp3 started successfully");
                     }
                 }
                 
@@ -1619,17 +1638,17 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                     if (context1 && context1->music_player) {
                         t_key_playing = 1;
                         g_audio_playing = 1;
-                        int err = app_music_play_local_music_with_callback(
-                            context1->music_player,
-                            CONFIG_VOICE_PROMPT_FILE_PATH"t_key.mp3",
-                            mode1_tkey_audio_end_cb, NULL);
-                        if (err != 0) {
-                            log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
-                            g_audio_playing = 0;
-                            t_key_playing = 0;
-                        } else {
-                            log_i("MODE 1: t_key.mp3 started successfully");
-                        }
+                        // int err = app_music_play_local_music_with_callback(
+                        //     context1->music_player,
+                        //     CONFIG_VOICE_PROMPT_FILE_PATH"t_key.mp3",
+                        //     mode1_tkey_audio_end_cb, NULL);
+                        // if (err != 0) {
+                        //     log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
+                        //     g_audio_playing = 0;
+                        //     t_key_playing = 0;
+                        // } else {
+                        //     log_i("MODE 1: t_key.mp3 started successfully");
+                        // }
                     }
                 }
             } else if (e->uart_cmd_touch.touch_key_event_type == 1) {

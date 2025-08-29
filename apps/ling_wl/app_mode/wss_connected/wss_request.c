@@ -20,14 +20,10 @@
 #include "protocol/cp/c_uart_p.h"
 
 // 提示音资源路径与本地播放接口
-#include "app_config.h"          // for CONFIG_VOICE_PROMPT_FILE_PATH
 #include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
 
 #include "log/log_mqtt.h"
 
-#ifndef CONFIG_VOICE_PROMPT_FILE_PATH
-#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
-#endif
 
 // 调试：无论后端返回结果如何，强制播放“未注册”提示音
 #ifndef DEBUG_FORCE_UNREGISTERED_PROMPT

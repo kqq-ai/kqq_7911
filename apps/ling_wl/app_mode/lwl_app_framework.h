@@ -47,7 +47,7 @@ void lwl_app_mode_exit_ok();
  * @brief Initialize the application framework
  * @param init_mode Initial mode to start in (from the mode enumeration)
  */
-void lwl_app_init(u8 init_mode);
+void lwl_app_init();
 
 /**
  * @brief Main application mode loop processor

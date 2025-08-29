@@ -138,11 +138,11 @@ void lwl_app_mode_exit_ok()
     }
 }
 
-void lwl_app_init(u8 init_mode)
+void lwl_app_init()
 {
     os_mutex_create(&g_mode_mutex);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    app_curr_mode = init_mode;
+    app_curr_mode = APP_POWER_ON_MODE;
 }
 
 void lwl_app_mode_loop()

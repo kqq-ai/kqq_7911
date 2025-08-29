@@ -53,6 +53,7 @@ static void default_input_event_handler_cb(lwl_event_t *e)
         // Reset WiFi SSID
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         uart_response_clear_wifi_ssid();
+        uart_send_apply_soft_poweroff();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by default_input_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);

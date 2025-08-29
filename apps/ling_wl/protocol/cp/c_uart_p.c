@@ -1,14 +1,8 @@
 #include "c_uart_p.h"
 #include "cpu.h"
 #include "device/device.h"
-#include "app_config.h"          // for CONFIG_VOICE_PROMPT_FILE_PATH
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"                 // for gpio_direction_output
-
-#ifndef CONFIG_VOICE_PROMPT_FILE_PATH
-// Fallback to a reasonable default if config path is not defined by profile
-#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
-#endif
 
 extern g_dev_uart_hdl;
 
