@@ -55,6 +55,7 @@ typedef void (*bka_cmd_cb_funp_t)(bka_cmd_code_e code, void *);
 typedef struct {
     int rssi_sample_count;
     s8 rssi_samples[MAX_SAMPLES];
+    u32 rssi_timestamps[MAX_SAMPLES];
     s8 rssi;
     int distance_type;
     int distance_type_last;
