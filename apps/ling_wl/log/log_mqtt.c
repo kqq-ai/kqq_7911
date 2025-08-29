@@ -420,12 +420,16 @@ static void* log_monitor_thread(void* arg) {
     return NULL;
 }
 
-// 添加新函数
+// 设置需要更新电量上传消息的SN和电量参数，SN为NULL时使用默认SN,即C的SN，电量范围0-100
 void log_mqtt_set_battery_level(char *sn_battery, int battery_level) {
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     g_current_battery_level = battery_level;
     g_battery_update_flag = true;
-    strncpy(g_sn_battery, sn_battery, sizeof(g_sn_battery) - 1);
+    if (sn_battery == NULL) {
+        strncpy(g_sn_battery, sn, sizeof(g_sn_battery) - 1);
+    } else {
+        strncpy(g_sn_battery, sn_battery, sizeof(g_sn_battery) - 1);
+    }
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
@@ -558,7 +562,7 @@ int mqtt_subscribe_reset() {
 // 在 log_mqtt_start() 里加上队列初始化
 int log_mqtt_start(void) {
     os_mutex_create(&g_log_mqtt_mutex);
-    get_SN(&sn);
+    get_SN(sn);
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     //创建线程
     // 启动监控线程

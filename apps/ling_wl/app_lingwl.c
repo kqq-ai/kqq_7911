@@ -57,8 +57,6 @@ const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 //"WCCN24H28FEEEFE"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
 
-static char sn[25];
-
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }   /* 控制 led : 正常响应中 白色 */
 
 static void simple_play_prompt(const char *fname) 
@@ -170,7 +168,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
             lastbattery = e->uart_cmd_sync.battery;
-            log_mqtt_set_battery_level(sn, lastbattery);
+            log_mqtt_set_battery_level(NULL, lastbattery);
         }
         if(e->uart_cmd_sync.battery < 30 )
             set_led_red_low_power();
@@ -271,7 +269,6 @@ static void app_lingwl_main(void)
     // threadpool_add_task(pool, auto_shutdown, NULL);
     /* 【调试】监测att send buffer remaing size */
     // thread_fork("moni", 15, 512 * 3, 0, 0, moni_task, NULL);
-    get_SN(&sn);
 }
 
 void play_end_callback(void *priv)

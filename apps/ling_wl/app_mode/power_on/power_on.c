@@ -73,6 +73,8 @@ static int power_on_init(void)
     } else {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     }
+    char sn[25];
+    get_SN(sn);
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(power_on_input_event_handler_cb);
     return 0;

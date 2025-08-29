@@ -342,7 +342,7 @@ char *get_wss_connection_url()
 {
     char server_url[BUF_SIZE];
     char sn_c_id[SN_SIZE+1];
-    if (!get_SN(&sn_c_id)) return NULL;
+    if (!get_SN(sn_c_id)) return NULL;
     char * url_api = (char *)malloc(BUF_SIZE);
 #ifdef TEST_LOCOL_MODE
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);

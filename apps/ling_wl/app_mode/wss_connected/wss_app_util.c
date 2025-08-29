@@ -139,7 +139,7 @@ bool wss_connect() {
     }
     g_exception_exit = false;
     log_i("websockets init succ\n");
-    get_SN(&sn_c_id);
+    get_SN(sn_c_id);
     os_mutex_post(&g_wss_mutex);
     return true;
 }
