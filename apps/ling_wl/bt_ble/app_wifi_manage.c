@@ -438,4 +438,5 @@ void app_del_stored_wifi_ssid(void)
         log_i("app_del_stored_wifi_ssid: %s\n", app_wifi_stored_ssid[i].ssid);
         wifi_del_stored_sta_info(app_wifi_stored_ssid[i].ssid);
     }
+    wifi_manage_init(NULL);
 }

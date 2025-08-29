@@ -313,7 +313,7 @@ uintptr_t HAL_TLS_Connect(TLSConnectParams *pConnectParams, const char *host, in
 
     while ((ret = mbedtls_ssl_handshake(&(pDataParams->ssl))) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-            Log_e("mbedtls_ssl_handshake failed returned 0x%04x", -ret);
+        //    Log_e("mbedtls_ssl_handshake failed returned 0x%04x", -ret);
 
 #if defined(MBEDTLS_X509_USE_C)
             if (ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {

@@ -298,7 +298,7 @@ static void get_closest_devive(lwl_eend_dev_t *p_eend_dev, void *priv)
 {
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
     p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-    log_i("[MEASDIST] %s: %d\r\n", sn_string, p_eend_dev->distance_info.rssi);
+    //log_i("[MEASDIST] %s: %d\r\n", sn_string, p_eend_dev->distance_info.rssi);
 }
 
 static void blue_distance_notify_app()
@@ -402,7 +402,7 @@ static void distance_main(void *priv)
                     rssi_times++;
                 }else{
                     rssi_times = 0;
-                    log_i("[MEASDIST]--rssi_times-- ");
+                    //log_i("[MEASDIST]--rssi_times-- ");
                     clean_all_dev_rssi_samples();
                 }
             }

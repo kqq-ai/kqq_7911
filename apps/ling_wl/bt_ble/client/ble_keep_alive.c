@@ -278,10 +278,10 @@ static void ble_keep_alive_do_start_handshake(lwl_eend_dev_t *pdev, void *priv)
         /* 上一轮没有握手成功 */
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
         pdev->handshake_info.alive_hs_fail_cnt++;
-        log_i("[BKA]%s handshake failed %d times.", sn_string, pdev->handshake_info.alive_hs_fail_cnt);
+        //log_i("[BKA]%s handshake failed %d times.", sn_string, pdev->handshake_info.alive_hs_fail_cnt);
 
         if (pdev->handshake_info.alive_hs_fail_cnt >= KEEP_ALIVE_HANDSHAKE_LOST_CNT) {
-            log_i("[BKA]%s lost.", sn_string);
+            //log_i("[BKA]%s lost.", sn_string);
             /* 连续n轮没有握手成功判定为丢失 */
             pdev->handshake_info.alive = 0;
 

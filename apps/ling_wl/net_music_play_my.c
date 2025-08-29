@@ -809,7 +809,7 @@ static int net_music_dec_file(music_player *player, void *_url)
     parm.url                = (const char *)_url;
     parm.prio               = 0;
     parm.cbuf_size          = 200 * 1024;
-    parm.timeout_millsec    = 10000;
+    parm.timeout_millsec    = 50000;
     parm.seek_high_range    = 0;
     parm.seek_low_range     = 0;
 

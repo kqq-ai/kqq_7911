@@ -69,9 +69,9 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     case UART_CMD_POWER_OFF:{ // 关机控制
         log_i("**********************************************************************!\r\n");
         log_i("the UART_CMD_POWER_OFF !\r\n");
-        lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
-        lwl_event_notify(&e);
+        // lwl_event_t e;
+        // e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
+        // lwl_event_notify(&e);
     }   break;
     case UART_CMD_SET_BLESN:{ // 设置蓝牙SN
         log_i("the UART_CMD_SET_BLESN !\r\n");

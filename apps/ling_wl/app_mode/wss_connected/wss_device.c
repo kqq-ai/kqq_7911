@@ -22,7 +22,7 @@
 #include "os/os_api.h"
 #include "log/log_mqtt.h"
 
-#define log_i log_mqtt
+//#define log_i log_mqtt
 
 static u32 last_dequeue_time = 0;
 
@@ -218,12 +218,12 @@ static void device_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE:
         char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
-        log_i("LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE");
+        //log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
+        //log_i("LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE");
         if (!p_eend_dev) break;
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
-            log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
+        //    log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
             if (!is_in_edev_set(p_eend_dev)) {
                 add_to_edev_set(p_eend_dev);
                 enqueue_edev(p_eend_dev);
@@ -231,16 +231,16 @@ static void device_event_handler_cb(lwl_event_t *e)
             }
             break;
         case DISTANCE_1:
-            log_d("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
+         //   log_d("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
             // remove_from_edev_set(p_eend_dev);
             break;
         case DISTANCE_2:
-            log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
+         //   log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
             remove_target_sn(p_eend_dev->sn);
             remove_from_edev_set(p_eend_dev);
             break;
         case DISTANCE_3:
-            log_d("[MEASDIST] not found ---%s\r\n", sn_string);
+         //   log_d("[MEASDIST] not found ---%s\r\n", sn_string);
             remove_target_sn(p_eend_dev->sn);
             remove_from_edev_set(p_eend_dev);
             break;
@@ -249,7 +249,7 @@ static void device_event_handler_cb(lwl_event_t *e)
         }
         break;
     case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
-        log_i("ORMET_NEW_DEVICE_IN");
+        //log_i("ORMET_NEW_DEVICE_IN");
         break;
     }
 }

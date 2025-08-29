@@ -9,7 +9,7 @@
 #include "syscfg_id.h"
 #include "lfs.h"
 #include "app_mode/lwl_app_framework.h"
-
+#define CUSTOM_TEST_SERVER "192.168.50.105:8867"
 extern lfs_t g_lfs;
 
 #define BUF_SIZE 128
@@ -30,10 +30,10 @@ char keyInVm[KEY_SIZE];
 #define TEST_SERVER_API  "%s://%s/"
 #define TEST_FORMAT_API  "%s://%s/socket?deviceId=%s&token=%s"
 
-#define SERVER_API  "%s://%s/api/"
+#define SERVER_API  "%s://%s/api_test/"
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
-#define FORMAT_API  "%s://%s/api/socket?deviceId=%s&token=%s"
+#define FORMAT_API  "%s://%s/api_test/socket?deviceId=%s&token=%s"
 char pt[SN_SIZE+2+21];
 
 char *get_url_api(char* url, char* format)
@@ -360,3 +360,24 @@ char *get_wss_connection_url()
     }
     return url_api;
 }
+
+// char *get_wss_connection_url()
+// {
+//     char sn_c_id[SN_SIZE+1];
+//     if (!get_SN(&sn_c_id)) return NULL;
+//     char * url_api = (char *)malloc(BUF_SIZE);
+
+//     // 使用你的测试地址
+//     char server_url[BUF_SIZE];
+//     snprintf(server_url, BUF_SIZE, "http://%s/", CUSTOM_TEST_SERVER);
+
+//     char * Token = prepare_signature(server_url);
+//     if (Token) {
+//         // 拼接 ws 协议和 token
+//         snprintf(url_api, BUF_SIZE, "ws://%s/socket?deviceId=%s&token=%s", CUSTOM_TEST_SERVER, sn_c_id, Token);
+//     } else {
+//         free(url_api);
+//         return NULL;
+//     }
+//     return url_api;
+// }

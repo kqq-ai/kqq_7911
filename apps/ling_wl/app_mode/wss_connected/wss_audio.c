@@ -378,9 +378,9 @@ void wss_audio_init()
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
 
     g_app_ctx = lwl_app_core_context_get_instance();
-
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-    gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
+    gpio_direction_output(IO_PORTA_00, 1);
+    //gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    //gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
 
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);

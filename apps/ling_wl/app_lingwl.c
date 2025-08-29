@@ -157,7 +157,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         log_i("PRESS RESET KEY");
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
+        //log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         if(lastbattery != e->uart_cmd_sync.battery&&log_mqtt_is_connected()) {
             lastbattery = e->uart_cmd_sync.battery;
             log_mqtt_set_battery_level(sn, lastbattery);

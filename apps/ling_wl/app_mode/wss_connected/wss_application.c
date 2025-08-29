@@ -104,7 +104,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
+    //    log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
         uart_response_synch_status(is_request_busy(), last_req_volume);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
@@ -117,8 +117,8 @@ static void input_event_handler_cb(lwl_event_t *e)
 
 static pthread_t monitor_thread = NULL;
 static bool monitor_thread_running = false;
-#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
-#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
+#define NO_E_TIMEOUT_MS      (50 * 60 * 1000) // 5分钟
+#define NO_MOVE_TIMEOUT_MS   (50 * 60 * 1000) // 5分钟
 // 模式5 加速度传感器相关变量
 
 void *wss_condition_monitor_thread(void *arg)
@@ -196,9 +196,10 @@ void wss_application_uninit()
     wss_request_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
-
+    log_i("Uninit WSS application 1\n");
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);
+    log_i("Uninit WSS application 2\n");
 }
 
 bool wss_application_loop()

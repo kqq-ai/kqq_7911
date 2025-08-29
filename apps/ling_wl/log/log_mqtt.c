@@ -109,7 +109,7 @@ static char recv_buf[4096]; // 必须在 while 前声明
 int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
     const char* host = SERVER_DOMAIN;
     int port = 80;
-    const char* api = "/api/jwt/permanentEncrypt";
+    const char* api = "/api_test/jwt/permanentEncrypt";
     
     // 1. 动态构造请求体
     int body_len = snprintf(body, sizeof(body), "{\"sn\":\"%s\"}", sn);
@@ -312,7 +312,7 @@ int log_mqtt_send_message(const char* topic, const char* message) {
 
     int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
     if (rc != 0) {
-        log_i("MQTT publish failed, error code: %d\n", rc);
+        //log_i("MQTT publish failed, error code: %d\n", rc);
         //g_mqtt_connected = false;  // 发布失败，标记连接断开
     }
     
@@ -352,7 +352,7 @@ static void upload_all_logs(void) {
     if (log_mqtt_is_connected() && batch_json) {
         int result = log_mqtt_send_message("h-log", batch_json);
         if (result != 0) {
-            log_i("Batch MQTT send failed, error code: %d\n", result);
+            //log_i("Batch MQTT send failed, error code: %d\n", result);
         }
     }
     
@@ -363,19 +363,19 @@ static void upload_all_logs(void) {
     cJSON_Delete(array);
     
     uint32_t end_time = timer_get_ms();
-    log_i("[MQTT upload]Batch send messages took %u ms\n", end_time - start_time);
+    //log_i("[MQTT upload]Batch send messages took %u ms\n", end_time - start_time);
     os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
 }
 
 
 /* 常驻监控线程：检测队列阈值和超时 */
 static void* log_monitor_thread(void* arg) {
-    log_i("[MQTT log_monitor]Log monitor thread started\n");
+    //log_i("[MQTT log_monitor]Log monitor thread started\n");
     
     if(!g_connect_thread_running) {
         int ret=log_mqtt_connect(); // 内部调用log_mqtt_connect
         if (ret==0) {
-            log_i("MQTT connected successfully\n");
+            //log_i("MQTT connected successfully\n");
             ret = mqtt_subscribe_reset();
             os_mutex_pend(&g_log_mqtt_mutex, 0);
             g_connect_thread_running = true;
@@ -416,7 +416,7 @@ static void* log_monitor_thread(void* arg) {
     g_monitor_thread_running = false;
     os_mutex_post(&g_log_mqtt_mutex);
     
-    log_i("[MQTT log_monitor]Log monitor thread exited\n");
+    //log_i("[MQTT log_monitor]Log monitor thread exited\n");
     return NULL;
 }
 
@@ -506,7 +506,7 @@ void log_mqtt(const char* format, ...) {
     char *json_str = cJSON_PrintUnformatted(root);
     
     // 打印到控制台
-    log_i("[MQTT message] %s", log_buffer);
+    //log_i("[MQTT message] %s", log_buffer);
 
     // 发送到队列
     log_mqtt_enqueue(json_str);
@@ -564,7 +564,7 @@ int log_mqtt_start(void) {
     // 启动监控线程
     if (g_monitor_thread_running) return 0;
 
-    // 初始化线程属性并设置栈大小
+    //初始化线程属性并设置栈大小
     pthread_attr_init(&attr);
     pthread_attr_setstacksize(&attr, stack_size);
     
