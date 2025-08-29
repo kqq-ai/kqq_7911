@@ -31,6 +31,7 @@ char keyInVm[KEY_SIZE];
 #define TEST_FORMAT_API  "%s://%s/socket?deviceId=%s&token=%s"
 
 #define SERVER_API  "%s://%s/api/"
+#define FORMAT_MQTT  "%sjwt/permanentEncrypt"
 #define FORMAT_TIME  "%stimestamp"
 #define FORMAT_SIGN  "%ssignature"
 #define FORMAT_API  "%s://%s/api/socket?deviceId=%s&token=%s"
@@ -168,20 +169,15 @@ static int http_request_with_body(const char* url, const char* context, http_bod
     return ret;
 }
 
-static char* https_post_gettk_task(const char server_url[], char* context)
+static char* https_post_gettk_task(const char post_url[], char* context)
 {
     int ret = 0;
     http_body_obj http_body_buf;
     char* Token = NULL;
 
-    char* url = get_url_api(server_url, FORMAT_SIGN);
-
-    ret = http_request_with_body(url, context, &http_body_buf);
-
-    free(url);
+    ret = http_request_with_body(post_url, context, &http_body_buf);
 
     if (ret != HERROR_OK) {
-        log_i("httpcli_post false %s\n", url);
         if (http_body_buf.p) free(http_body_buf.p);
         return Token;
     } else {
@@ -198,6 +194,52 @@ static char* https_post_gettk_task(const char server_url[], char* context)
     return Token;
 }
 
+static char* https_post_gettk_task2(const char post_url[], char* context)
+{
+    int ret = 0;
+    http_body_obj http_body_buf;
+    char* Token = NULL;
+
+    ret = http_request_with_body(post_url, context, &http_body_buf);
+
+    if (ret != HERROR_OK) {
+        if (http_body_buf.p) free(http_body_buf.p);
+        return Token;
+    } else {
+        if (http_body_buf.recv_len > 0) {
+            const cJSON *nroot = cjson_parse(http_body_buf.p);
+            // 10. 安全提取token
+            cJSON *data = cJSON_GetObjectItem(nroot, "data");
+            const char* token_tmp = cjson_get_string_value(data, "token");
+            if (token_tmp) {
+                Token = strdup(token_tmp); // 复制一份
+            }
+            cJSON_Delete(nroot); // 用完后释放
+        }
+    }
+    if (http_body_buf.p) free(http_body_buf.p);
+    return Token;
+}
+
+char *get_mqtt_token() {
+    char url_api[BUF_SIZE];
+    char server_url[BUF_SIZE];
+    char context[BUF_SIZE];
+    snprintf(server_url, BUF_SIZE, SERVER_API, "https", SERVER_DOMAIN);
+    snprintf(url_api, BUF_SIZE, FORMAT_MQTT, server_url);
+
+    
+    char sn_c_id[SN_SIZE+1];
+    if (!get_SN(sn_c_id)) return NULL;
+    
+    int body_len = snprintf(context, sizeof(context), "{\"sn\":\"%s\"}", sn_c_id);
+    if (body_len < 0 || body_len >= sizeof(context)) {
+        log_i("[fetch_mqtt_token] body construction failed\n");
+        return NULL;
+    }
+
+    return https_post_gettk_task2(url_api, context);
+}
 
 static double https_get_timestamp(char* url)
 {
@@ -303,7 +345,11 @@ static char* prepare_signature(const char server_url[])
     free(json_str);
     cJSON_Delete(root);
 
-    return https_post_gettk_task(server_url, post_sign_time);
+
+    char post_url[BUF_SIZE];
+    snprintf(post_url, BUF_SIZE, FORMAT_SIGN, server_url);
+
+    return https_post_gettk_task(post_url, post_sign_time);
 }
 
 

@@ -184,7 +184,7 @@ static lwl_eend_dev_t* dequeue_edev() {
     if (is_edev_queue_empty()) {
         return NULL; // 队列为空
     }
-    print_edev_queue(); // 打印队列内容
+    // print_edev_queue(); // 打印队列内容
     os_mutex_pend(&edev_queue_mutex, 0);
     if (edev_queue_head != edev_queue_tail) {
         pdev = edev_queue[edev_queue_head];

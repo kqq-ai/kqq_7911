@@ -68,7 +68,6 @@ static int net_connected_init(void)
     init_time = timer_get_ms();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_add(net_connected_event_handler_cb);
-    int ret = log_mqtt_start();
     
     // if (ret==0) {
     //     log_i("log_mqtt_start init\n");
@@ -127,6 +126,7 @@ void app_net_connected_loop()
         return;
     }
     if (wss_connect()) {
+        int ret = log_mqtt_start();
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     } else {
         log_i("websockets init failed\n");

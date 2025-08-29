@@ -6,6 +6,7 @@
 #define SERVER_DOMAIN  "test.coolqq.com"
 // #define SERVER_DOMAIN  "coolqq.com"
 
+char *get_mqtt_token();
 char *get_wss_connection_url();
 char *get_wss_test_url();
 bool get_SN(char* target);

@@ -76,7 +76,7 @@ static char log_queue_data[LOG_QUEUE_MAX_COUNT * LOG_QUEUE_ITEM_MAX_LEN];
 
 static pthread_t monitor_thread;  // 声明监控线程
 pthread_attr_t attr;
-size_t stack_size = 1024 * 4;  // 设置栈大小为4KB
+size_t stack_size = 1024 * 8;  // 设置栈大小为8KB
 
 static bool g_monitor_thread_running = false;  // 线程运行标志
 static uint32_t last_upload_time = 0;  // 上次上传时间（用于超时判断）
@@ -103,120 +103,6 @@ static int init_mqtt_network(void) {
     
     return 0;
 }
-static char body[128];
-static char header[512];
-static char recv_buf[4096]; // 必须在 while 前声明
-int fetch_mqtt_token(const char* sn, char* out_token, int out_token_size) {
-    const char* host = SERVER_DOMAIN;
-    int port = 80;
-    const char* api = "/api/jwt/permanentEncrypt";
-    
-    // 1. 动态构造请求体
-    int body_len = snprintf(body, sizeof(body), "{\"sn\":\"%s\"}", sn);
-    if (body_len < 0 || body_len >= sizeof(body)) {
-        log_i("[fetch_mqtt_token] body construction failed\n");
-        return -1;
-    }
-
-    // 2. 动态构造请求头
-    int header_len = snprintf(header, sizeof(header),
-        "POST %s HTTP/1.1\r\n"
-        "Host: %s\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: %d\r\n"
-        "Connection: close\r\n\r\n",
-        api, host, body_len);
-    if (header_len < 0 || header_len >= sizeof(header)) {
-        log_i("[fetch_mqtt_token] header construction failed\n");
-        return -1;
-    }
-
-    // 3. 域名解析
-    struct hostent *he = gethostbyname(host);
-    if (!he) {
-        log_i("[fetch_mqtt_token] DNS resolution failed\n");
-        return -2;
-    }
-    struct in_addr **addr_list = (struct in_addr **)he->h_addr_list;
-    if (addr_list[0] == NULL) {
-        log_i("[fetch_mqtt_token] no IP address found\n");
-        return -2;
-    }
-
-    // 4. 创建socket并连接
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        log_i("[fetch_mqtt_token] socket create failed\n");
-        return -3;
-    }
-
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    serv_addr.sin_addr = *addr_list[0];
-
-    // 修复点1: 移除多余的右括号
-    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-        log_i("[fetch_mqtt_token] connect failed, errno=%d\n", errno);
-        close(sockfd);
-        return -4;
-    }
-
-    // 5. 发送请求
-    if (send(sockfd, header, header_len, 0) != header_len ||
-        send(sockfd, body, body_len, 0) != body_len) {
-        log_i("[fetch_mqtt_token] send failed\n");
-        close(sockfd);
-        return -5;
-    }
-
-    // 6. 接收响应
-    int total = 0, ret;
-    
-    // 修复点3: 使用lwip_recv避免宏冲突
-    while ((ret = lwip_recv(sockfd, recv_buf + total, sizeof(recv_buf) - 1 - total, 0)) > 0) {
-        total += ret;
-        if (total >= sizeof(recv_buf) - 1) break;
-    }
-    close(sockfd);
-    recv_buf[total] = '\0';
-
-    // 7. 验证HTTP状态码
-    if (strstr(recv_buf, "HTTP/1.1 200 OK") == NULL) {
-        log_i("[fetch_mqtt_token] non-200 response: %.*s\n", 200, recv_buf);
-        return -6;
-    }
-
-    // 8. 安全提取JSON主体
-    char *body_start = strstr(recv_buf, "\r\n\r\n");
-    if (!body_start) {
-        log_i("[fetch_mqtt_token] malformed HTTP response\n");
-        return -7;
-    }
-    body_start += 4;
-
-    // 9. 解析JSON
-    cJSON *root = cJSON_Parse(body_start);
-    if (!root) {
-        log_i("[fetch_mqtt_token] JSON parse error\n");
-        return -8;
-    }
-
-    // 10. 安全提取token
-    cJSON *data = cJSON_GetObjectItem(root, "data");
-    cJSON *token = data ? cJSON_GetObjectItem(data, "token") : NULL;
-    if (!token || !cJSON_IsString(token)) {
-        cJSON_Delete(root);
-        log_i("[fetch_mqtt_token] invalid token format\n");
-        return -9;
-    }
-
-    strncpy(out_token, token->valuestring, out_token_size - 1);
-    out_token[out_token_size - 1] = '\0';
-    cJSON_Delete(root);
-    return 0;
-}
 
 /* 连接MQTT服务器 */
 int log_mqtt_connect(void) {
@@ -236,11 +122,11 @@ int log_mqtt_connect(void) {
     }
 
     // 获取token,也就是password
-    rc = fetch_mqtt_token(sn, token, sizeof(token));
+    char* token = get_mqtt_token();
 
-    if (rc != 0) {
+    if (token == NULL) {
         log_i("获取MQTT token失败\n");
-        return rc;
+        return -1;
     }
 
     //Mqtt超时时间设置成2000ms
