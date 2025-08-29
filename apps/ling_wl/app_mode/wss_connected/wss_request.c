@@ -456,7 +456,7 @@ void wss_request_send_event(lwl_eend_dev_t *p_dev, int msg_event)
 {
     wss_request_print_event(msg_event, "wss_request_send_event");
     
-    // if (send_req_message("KPCNC5F11XEEEF4", is_audio_playing(), msg_event)) {
-    //     return;
-    // }
+    if (send_req_message("KPCNC5F11XEEEF4", is_audio_playing(), msg_event)) {
+        return;
+    }
 }
