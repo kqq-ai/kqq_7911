@@ -22,7 +22,7 @@ extern lfs_t g_lfs;
 char snInVm[SN_SIZE+1] = "KCCNC5F12JEEEF7";
 char keyInCHAR[KEY_SIZE*2] = "686771725153614a56514b307a617551";
 #else
-char snInVm[SN_SIZE+1]="\0";
+char snInVm[SN_SIZE+SN_SIZE]="\0";
 #endif
 
 char keyInVm[KEY_SIZE];
@@ -116,13 +116,15 @@ static void gen_SN()
 }
 
 bool get_SN(char* SN){
-    log_i("get_SN");
     if (snInVm[0] == 0) gen_SN();
-    if (snInVm[0] == 0) {
+    if (snInVm[0] == 0 || strlen(snInVm) != SN_SIZE) {
+        log_i("get_SN NULL, switch to device check mode\n");
         lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+        snInVm[0] = 0;
         return false;
     }
     snprintf(SN, KEY_SIZE, "%s", snInVm);
+    log_i("get_SN %s\n", snInVm);
     return true;
 }
 

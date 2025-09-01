@@ -26,8 +26,8 @@
 #include "app_mode/lwl_app_framework.h"
 #include "protocol/cp/c_uart_p.h"
 
-#define INIT_SSID "invalid_ssid"
-#define INIT_PWD  "invalid_pwd"
+#define INIT_SSID "KQQ" // for device check
+#define INIT_PWD  "quickquick" // for device check
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;

@@ -1008,6 +1008,41 @@ static void process_mode_7(void)
         log_i("MODE 7: Write+Verify completed with result=%d", result);
         g_mode7_write_pending = 0;
         g_mode7_op_running = 0;
+
+        if (result == 0) {
+            log_i("MODE 7: SN/Key write and verification succeeded");
+            // 播放test_sn_s.mp3
+            lwl_app_context_t *context7_wrsn = lwl_app_core_context_get_instance();
+            if (context7_wrsn && context7_wrsn->music_player) {
+                g_audio_playing = 1;
+                int err = app_music_play_local_music_with_callback(
+                    context7_wrsn->music_player,
+                    CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_s.mp3",
+                    mode7_wrsn_audio_callback, NULL);
+                if (err != 0) {
+                    log_e("MODE 7: Failed to play test_sn_s.mp3, error: %d", err);
+                    g_audio_playing = 0;
+                } else {
+                    log_i("MODE 7: test_sn_s.mp3 started successfully");
+                }
+            }
+        } else {
+            log_e("MODE 7: SN/Key write and/or verification failed");
+            lwl_app_context_t *context7_failed = lwl_app_core_context_get_instance();
+            g_audio_playing = 1;  // 设置音频播放标志
+            int err = app_music_play_local_music_with_callback(
+                context7_failed->music_player,
+                CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_f.mp3",
+                mode7_wrsn_audio_callback, NULL);
+            if (err != 0) {
+                log_e("MODE 7: Failed to play test_sn_f.mp3, error: %d", err);
+                g_audio_playing = 0;  // 播放失败时重置状态
+            } else {
+                log_i("MODE 7: test_sn_f.mp3 started successfully");
+            }
+        }
+
+
     }
 
     // 提示音播放完成后，SN请求将在audio callback中执行
@@ -1111,19 +1146,24 @@ static void mode7_execute_sn_request(void)
         // 设置SN和Key获取成功标志
         g_mode7_sn_key_obtained = 1;
         
+        g_audio_playing = 0;
+        g_mode7_op_running = 0;
+        g_mode7_write_pending = 1;//TODO using touch key to trigger write
+        
         // 播放获取SN成功的音频
-        lwl_app_context_t *context7_success = lwl_app_core_context_get_instance();
-        g_audio_playing = 1;  // 设置音频播放标志
-        int err = app_music_play_local_music_with_callback(
-            context7_success->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_s.mp3",
-            mode7_success_audio_callback, NULL);
-        if (err != 0) {
-            log_e("MODE 7: Failed to play test_sn_s.mp3, error: %d", err);
-            g_audio_playing = 0;  // 播放失败时重置状态
-        } else {
-            log_i("MODE 7: test_sn_s.mp3 started successfully");
-        }
+        // lwl_app_context_t *context7_success = lwl_app_core_context_get_instance();
+        // g_audio_playing = 1;  // 设置音频播放标志
+        // int err = app_music_play_local_music_with_callback(
+        //     context7_success->music_player,
+        //     CONFIG_VOICE_PROMPT_FILE_PATH"test_getsn.mp3",
+        //     mode7_success_audio_callback, NULL);
+        // if (err != 0) {
+        //     log_e("MODE 7: Failed to play test_getsn.mp3, error: %d", err);
+        //     g_audio_playing = 0;  // 播放失败时重置状态
+        // } else {
+        //     log_i("MODE 7: test_getsn.mp3 started successfully");
+        //     g_mode7_op_running = 1;
+        // }
     } else {
         log_i("===============================[MODE7] Failed to get SN/Key, process terminated==========");
         log_i("=============================MODE 7: SN/Key fetch failed================================");
@@ -1178,7 +1218,7 @@ static void mode7_audio_callback(void *priv)
         int err = app_music_play_local_music_with_callback(
             context7_failed->music_player,
             CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_f.mp3",
-            mode7_success_audio_callback, NULL);
+            mode7_wrsn_audio_callback, NULL);
         if (err != 0) {
             log_e("MODE 7: Failed to play test_sn_f.mp3, error: %d", err);
             g_audio_playing = 0;  // 播放失败时重置状态
@@ -1197,15 +1237,16 @@ static void mode7_success_audio_callback(void *priv)
         return;
     }
     
-    log_i("MODE 7: test_sn_s.mp3 playback completed");
+    log_i("MODE 7: test_getsn.mp3 playback completed");
     g_audio_playing = 0;
-    uart_send_apply_soft_poweroff();
+    g_mode7_op_running = 0;
+    g_mode7_write_pending = 1;//TODO using touch key to trigger write
     
     // SN获取成功音频播放完成后的处理
     log_i("MODE 7: SN retrieval success audio completed");
 }
 
-// 模式7 test_sn_s.mp3 音频播放回调函数
+// 模式7 test_getsn.mp3 音频播放回调函数
 static void mode7_wrsn_audio_callback(void *priv)
 {
     // 检查当前模式，如果不是模式7，则忽略回调
@@ -1216,6 +1257,7 @@ static void mode7_wrsn_audio_callback(void *priv)
     
     log_i("MODE 7: test_sn_s.mp3 playback completed");
     g_audio_playing = 0;
+    uart_send_apply_soft_poweroff(); // 播放完成后发送关机指令
     
     log_i("MODE 7: WRSN audio playback finished");
 }
@@ -1581,7 +1623,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         log_i("Touch key event type: %d",e->uart_cmd_touch.touch_key_event_type);
         
         // 特殊处理模式7的触摸按键检测
-        if (g_current_mode == WORK_MODE_7 && g_mode7_sn_key_obtained) {
+        if (g_current_mode == WORK_MODE_7 && g_mode7_sn_key_obtained && !g_mode7_first_touch_handled) {
             if (e->uart_cmd_touch.touch_key_event_type == 0) {
                 // 第一次触摸按键按下事件，且SN/Key已获取成功
                 log_i("MODE 7: First touch key detected after SN/Key obtained");
@@ -1594,30 +1636,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                 log_i("MODE 7: ==================================================================");
                 // 触发写入动作：改为设置挂起标志，避免在事件回调/模式切换上下文直接进行LFS操作
                 g_mode7_write_pending = 1;
-                int result = 0; // 实际结果将在任务上下文执行时输出
-
-                //=============================================================================================================================================================================================
-
-                // 打印十行分隔符
-                for (int i = 0; i < 10; i++) {
-                    log_i("。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。");
-                }
-                
-                // 播放test_sn_s.mp3
-                lwl_app_context_t *context7_wrsn = lwl_app_core_context_get_instance();
-                if (context7_wrsn && context7_wrsn->music_player) {
-                    g_audio_playing = 1;
-                    int err = app_music_play_local_music_with_callback(
-                        context7_wrsn->music_player,
-                        CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_s.mp3",
-                        mode7_wrsn_audio_callback, NULL);
-                    if (err != 0) {
-                        log_e("MODE 7: Failed to play test_sn_s.mp3, error: %d", err);
-                        g_audio_playing = 0;
-                    } else {
-                        log_i("MODE 7: test_sn_s.mp3 started successfully");
-                    }
-                }
                 
                 // 标记第一次触摸已处理
                 g_mode7_first_touch_handled = 1;
@@ -1780,7 +1798,7 @@ void app_devices_check_mode(void)
 
     while (1) {
         // 主循环延时
-        mdelay(10);
+        mdelay(100);
         
         // 执行当前模式的处理函数
         if (g_current_mode < WORK_MODE_MAX && mode_process_functions[g_current_mode]) {
@@ -1857,14 +1875,14 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     rwlock_acquire_write(&g_lfs_rwlock);
     
     // 先删除旧文件（如果存在）
-    ret = lfs_stat(&g_lfs, "MODE7_SN_KEY.bin", &info);
+    ret = lfs_stat(&g_lfs, "SN_KEY.bin", &info);
     if (ret == LFS_ERR_OK) {
-        lfs_remove(&g_lfs, "MODE7_SN_KEY.bin");
+        lfs_remove(&g_lfs, "SN_KEY.bin");
         log_i("MODE 7: Removed existing SN/Key file");
     }
     
     // 创建新文件
-    ret = lfs_file_open(&g_lfs, &file, "MODE7_SN_KEY.bin", 
+    ret = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", 
                         LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
     if (ret < 0) {
         log_e("MODE 7: Failed to create SN/Key file, error: %d", ret);
@@ -1880,15 +1898,17 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     
     uint32_t sn_len = strlen(sn);
     uint32_t key_len = strlen(key);
+
+    lfs_ssize_t bytes_written = 0;
     
     // 写入SN长度
-    lfs_ssize_t bytes_written = lfs_file_write(&g_lfs, &file, &sn_len, sizeof(sn_len));
-    if (bytes_written != sizeof(sn_len)) {
-        log_e("MODE 7: Failed to write SN length, written: %d", bytes_written);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_write(&g_lfs_rwlock);
-        return -4;
-    }
+    // lfs_ssize_t bytes_written = lfs_file_write(&g_lfs, &file, &sn_len, sizeof(sn_len));
+    // if (bytes_written != sizeof(sn_len)) {
+    //     log_e("MODE 7: Failed to write SN length, written: %d", bytes_written);
+    //     lfs_file_close(&g_lfs, &file);
+    //     rwlock_release_write(&g_lfs_rwlock);
+    //     return -4;
+    // }
     
     // 写入SN数据
     bytes_written = lfs_file_write(&g_lfs, &file, sn, sn_len);
@@ -1900,13 +1920,13 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     }
     
     // 写入Key长度
-    bytes_written = lfs_file_write(&g_lfs, &file, &key_len, sizeof(key_len));
-    if (bytes_written != sizeof(key_len)) {
-        log_e("MODE 7: Failed to write Key length, written: %d", bytes_written);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_write(&g_lfs_rwlock);
-        return -6;
-    }
+    // bytes_written = lfs_file_write(&g_lfs, &file, &key_len, sizeof(key_len));
+    // if (bytes_written != sizeof(key_len)) {
+    //     log_e("MODE 7: Failed to write Key length, written: %d", bytes_written);
+    //     lfs_file_close(&g_lfs, &file);
+    //     rwlock_release_write(&g_lfs_rwlock);
+    //     return -6;
+    // }
     
     // 写入Key数据
     bytes_written = lfs_file_write(&g_lfs, &file, key, key_len);
@@ -1925,7 +1945,7 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     log_i("MODE 7: ========== SN/KEY WRITE SUCCESS ==========");
     log_i("MODE 7: Written SN:  %s (%d bytes)", sn, sn_len);
     log_i("MODE 7: Written Key: %s (%d bytes)", key, key_len);
-    log_i("MODE 7: File: MODE7_SN_KEY.bin");
+    log_i("MODE 7: File: SN_KEY.bin");
     log_i("MODE 7: ==========================================");
     
     // 验证写入的数据
@@ -1938,6 +1958,10 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     log_i("MODE 7: SN/Key verification passed");
     return 0;  // 成功
 }
+
+
+#define SN_SIZE 15
+#define KEY_SIZE 16
 
 /**
  * @brief 验证写入的SN和Key是否正确
@@ -1962,7 +1986,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     rwlock_acquire_read(&g_lfs_rwlock);
     
     // 检查文件是否存在
-    ret = lfs_stat(&g_lfs, "MODE7_SN_KEY.bin", &info);
+    ret = lfs_stat(&g_lfs, "SN_KEY.bin", &info);
     if (ret != LFS_ERR_OK) {
         log_e("MODE 7: SN/Key file does not exist, error: %d", ret);
         rwlock_release_read(&g_lfs_rwlock);
@@ -1970,7 +1994,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     }
     
     // 打开文件进行读取
-    ret = lfs_file_open(&g_lfs, &file, "MODE7_SN_KEY.bin", LFS_O_RDONLY);
+    ret = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", LFS_O_RDONLY);
     if (ret < 0) {
         log_e("MODE 7: Failed to open SN/Key file for verification, error: %d", ret);
         rwlock_release_read(&g_lfs_rwlock);
@@ -1978,24 +2002,10 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     }
     
     // 读取并验证SN
-    uint32_t read_sn_len;
-    lfs_ssize_t bytes_read = lfs_file_read(&g_lfs, &file, &read_sn_len, sizeof(read_sn_len));
-    if (bytes_read != sizeof(read_sn_len)) {
-        log_e("MODE 7: Failed to read SN length, read: %d", bytes_read);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -4;
-    }
-    
-    if (read_sn_len != strlen(expected_sn)) {
-        log_e("MODE 7: SN length mismatch, expected: %d, read: %d", strlen(expected_sn), read_sn_len);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -5;
-    }
+    uint32_t read_sn_len = SN_SIZE;
     
     char read_sn[MODE7_SN_SIZE] = {0};
-    bytes_read = lfs_file_read(&g_lfs, &file, read_sn, read_sn_len);
+    lfs_ssize_t bytes_read = lfs_file_read(&g_lfs, &file, read_sn, read_sn_len);
     if (bytes_read != read_sn_len) {
         log_e("MODE 7: Failed to read SN data, read: %d, expected: %d", bytes_read, read_sn_len);
         lfs_file_close(&g_lfs, &file);
@@ -2013,21 +2023,7 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     }
     
     // 读取并验证Key
-    uint32_t read_key_len;
-    bytes_read = lfs_file_read(&g_lfs, &file, &read_key_len, sizeof(read_key_len));
-    if (bytes_read != sizeof(read_key_len)) {
-        log_e("MODE 7: Failed to read Key length, read: %d", bytes_read);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -8;
-    }
-    
-    if (read_key_len != strlen(expected_key)) {
-        log_e("MODE 7: Key length mismatch, expected: %d, read: %d", strlen(expected_key), read_key_len);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -9;
-    }
+    uint32_t read_key_len = KEY_SIZE;
     
     char read_key[MODE7_KEY_SIZE] = {0};
     bytes_read = lfs_file_read(&g_lfs, &file, read_key, read_key_len);
@@ -2086,7 +2082,7 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     rwlock_acquire_read(&g_lfs_rwlock);
     
     // 检查文件是否存在
-    ret = lfs_stat(&g_lfs, "MODE7_SN_KEY.bin", &info);
+    ret = lfs_stat(&g_lfs, "SN_KEY.bin", &info);
     if (ret != LFS_ERR_OK) {
         log_e("MODE 7: SN/Key file does not exist, error: %d", ret);
         rwlock_release_read(&g_lfs_rwlock);
@@ -2094,7 +2090,7 @@ static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_o
     }
     
     // 打开文件进行读取
-    ret = lfs_file_open(&g_lfs, &file, "MODE7_SN_KEY.bin", LFS_O_RDONLY);
+    ret = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", LFS_O_RDONLY);
     if (ret < 0) {
         log_e("MODE 7: Failed to open SN/Key file for reading, error: %d", ret);
         rwlock_release_read(&g_lfs_rwlock);
@@ -2211,8 +2207,8 @@ static int mode7_write_and_verify_sn_key(const char* sn, const char* key)
     if (read_result != 0) {
         log_w("MODE 7: Read back verification failed, but write was successful");
         log_w("MODE 7: Read error code: %d", read_result);
-        set_led_green();  // 写入成功但验证失败，仍显示绿灯
-        return 0;  // 写入成功就算成功
+        set_led_red();  // 写入成功但验证失败，显示红灯
+        return -1;
     }
     
     // 第三步：验证数据一致性
