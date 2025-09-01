@@ -43,6 +43,7 @@
 #include "../../bt_ble/client/ble_simple_client.h"
 #include "../../include/app_config.h"
 #include "../../protocol/cp/c_uart_p.h"
+#include "../../protocol/odm/odm_secure.h"
 
 #include "../../bt_ble/client/ble_distance.h"
 #include <sys_time.h>
@@ -358,7 +359,6 @@ static void mode5_motion_detection(void);
 static void mode7_reset_network_check(void);
 static int mode7_write_sn_key_to_storage(const char* sn, const char* key); // 新增模式7写入SN/Key函数声明
 static int mode7_verify_written_sn_key(const char* expected_sn, const char* expected_key); // 新增模式7验证SN/Key函数声明
-static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_out, int key_size); // 新增模式7读取SN/Key函数声明
 static int mode7_write_and_verify_sn_key(const char* sn, const char* key); // 新增模式7写入并验证SN/Key综合函数声明
 
 // 模式处理函数数组
@@ -1209,7 +1209,7 @@ static void mode7_audio_callback(void *priv)
     log_i("MODE 7: Audio playback completed, starting SN key retrieval process");
 
     char sn[SN_SIZE+1];
-    if (!get_SN(sn)) {
+    if (!get_SN(sn) || WRITE_SN_KEY) {
         mode7_execute_sn_request();
     } else {
         log_i("MODE 7: device has SN: %s, skipping SN request", sn);
@@ -1844,6 +1844,8 @@ static void check_key_status(void)
 // 模式7 SN/Key写入功能实现
 //=================================================================================================
 
+#define SN_SIZE 15
+#define KEY_SIZE 16
 /**
  * @brief 将SN和Key写入存储
  * @param sn 序列号字符串
@@ -1927,9 +1929,17 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     //     rwlock_release_write(&g_lfs_rwlock);
     //     return -6;
     // }
+    uint8_t keyInVm[KEY_SIZE];
+    key_len = hex2bytes(key, keyInVm);
+    if (key_len != KEY_SIZE) {
+        log_e("MODE 7: Failed to exchange Key data, len = %d, expected: %d", key_len, KEY_SIZE);
+        lfs_file_close(&g_lfs, &file);
+        rwlock_release_write(&g_lfs_rwlock);
+        return -7;
+    }
     
     // 写入Key数据
-    bytes_written = lfs_file_write(&g_lfs, &file, key, key_len);
+    bytes_written = lfs_file_write(&g_lfs, &file, keyInVm, key_len);
     if (bytes_written != key_len) {
         log_e("MODE 7: Failed to write Key data, written: %d, expected: %d", bytes_written, key_len);
         lfs_file_close(&g_lfs, &file);
@@ -1948,20 +1958,9 @@ static int mode7_write_sn_key_to_storage(const char* sn, const char* key)
     log_i("MODE 7: File: SN_KEY.bin");
     log_i("MODE 7: ==========================================");
     
-    // 验证写入的数据
-    ret = mode7_verify_written_sn_key(sn, key);
-    if (ret != 0) {
-        log_e("MODE 7: Verification failed, error: %d", ret);
-        return -8;
-    }
-    
     log_i("MODE 7: SN/Key verification passed");
     return 0;  // 成功
 }
-
-
-#define SN_SIZE 15
-#define KEY_SIZE 16
 
 /**
  * @brief 验证写入的SN和Key是否正确
@@ -2033,8 +2032,10 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
         rwlock_release_read(&g_lfs_rwlock);
         return -10;
     }
+
+    read_key_len = bytes2hex(read_key, read_key_len, read_key, sizeof(read_key));
     
-    if (strncmp(read_key, expected_key, read_key_len) != 0) {
+    if (strncasecmp(read_key, expected_key, read_key_len) != 0) {
         log_e("MODE 7: Key data mismatch");
         log_e("MODE 7: Expected: %s", expected_key);
         log_e("MODE 7: Read:     %.*s", read_key_len, read_key);
@@ -2055,114 +2056,6 @@ static int mode7_verify_written_sn_key(const char* expected_sn, const char* expe
     log_i("MODE 7: ========================================");
     
     return 0;  // 验证成功
-}
-
-/**
- * @brief 从存储中读取SN和Key
- * @param sn_out 输出SN的缓冲区
- * @param sn_size SN缓冲区大小
- * @param key_out 输出Key的缓冲区  
- * @param key_size Key缓冲区大小
- * @return 0成功, -1失败
- */
-static int mode7_read_sn_key_from_storage(char* sn_out, int sn_size, char* key_out, int key_size)
-{
-    if (!sn_out || !key_out || sn_size <= 0 || key_size <= 0) {
-        log_e("MODE 7: Invalid output buffers or sizes");
-        return -1;
-    }
-    
-    log_i("MODE 7: Reading SN/Key from storage...");
-    
-    struct lfs_info info;
-    lfs_file_t file;
-    int ret;
-
-    // 读操作加读锁
-    rwlock_acquire_read(&g_lfs_rwlock);
-    
-    // 检查文件是否存在
-    ret = lfs_stat(&g_lfs, "SN_KEY.bin", &info);
-    if (ret != LFS_ERR_OK) {
-        log_e("MODE 7: SN/Key file does not exist, error: %d", ret);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -2;
-    }
-    
-    // 打开文件进行读取
-    ret = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", LFS_O_RDONLY);
-    if (ret < 0) {
-        log_e("MODE 7: Failed to open SN/Key file for reading, error: %d", ret);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -3;
-    }
-    
-    // 读取SN长度
-    uint32_t sn_len;
-    lfs_ssize_t bytes_read = lfs_file_read(&g_lfs, &file, &sn_len, sizeof(sn_len));
-    if (bytes_read != sizeof(sn_len)) {
-        log_e("MODE 7: Failed to read SN length, read: %d", bytes_read);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -4;
-    }
-    
-    if (sn_len >= sn_size) {
-        log_e("MODE 7: SN buffer too small, need: %d, have: %d", sn_len + 1, sn_size);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -5;
-    }
-    
-    // 读取SN数据
-    bytes_read = lfs_file_read(&g_lfs, &file, sn_out, sn_len);
-    if (bytes_read != sn_len) {
-        log_e("MODE 7: Failed to read SN data, read: %d, expected: %d", bytes_read, sn_len);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -6;
-    }
-    sn_out[sn_len] = '\0';  // 确保字符串终止
-    
-    // 读取Key长度
-    uint32_t key_len;
-    bytes_read = lfs_file_read(&g_lfs, &file, &key_len, sizeof(key_len));
-    if (bytes_read != sizeof(key_len)) {
-        log_e("MODE 7: Failed to read Key length, read: %d", bytes_read);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -7;
-    }
-    
-    if (key_len >= key_size) {
-        log_e("MODE 7: Key buffer too small, need: %d, have: %d", key_len + 1, key_size);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -8;
-    }
-    
-    // 读取Key数据
-    bytes_read = lfs_file_read(&g_lfs, &file, key_out, key_len);
-    if (bytes_read != key_len) {
-        log_e("MODE 7: Failed to read Key data, read: %d, expected: %d", bytes_read, key_len);
-        lfs_file_close(&g_lfs, &file);
-        rwlock_release_read(&g_lfs_rwlock);
-        return -9;
-    }
-    key_out[key_len] = '\0';  // 确保字符串终止
-    
-    // 关闭文件
-    lfs_file_close(&g_lfs, &file);
-    // 释放读锁
-    rwlock_release_read(&g_lfs_rwlock);
-    
-    log_i("MODE 7: ========== READ SUCCESS ==========");
-    log_i("MODE 7: Read SN:  %s (%d bytes)", sn_out, sn_len);
-    log_i("MODE 7: Read Key: %s (%d bytes)", key_out, key_len);
-    log_i("MODE 7: File size: %d bytes", info.size);
-    log_i("MODE 7: ====================================");
-    
-    return 0;  // 读取成功
 }
 
 /**
@@ -2199,11 +2092,8 @@ static int mode7_write_and_verify_sn_key(const char* sn, const char* key)
     log_i("MODE 7: ========== SN/KEY WRITE SUCCESS ==========");
     log_i("MODE 7: SN/Key written to storage successfully!");
     
-    // 第二步：执行读取验证
-    char verify_sn[MODE7_SN_SIZE] = {0};
-    char verify_key[MODE7_KEY_SIZE] = {0};
-    int read_result = mode7_read_sn_key_from_storage(verify_sn, sizeof(verify_sn), verify_key, sizeof(verify_key));
-    
+    // 验证写入的数据
+    int read_result = mode7_verify_written_sn_key(sn, key);
     if (read_result != 0) {
         log_w("MODE 7: Read back verification failed, but write was successful");
         log_w("MODE 7: Read error code: %d", read_result);
@@ -2211,20 +2101,9 @@ static int mode7_write_and_verify_sn_key(const char* sn, const char* key)
         return -1;
     }
     
-    // 第三步：验证数据一致性
-    if (strcmp(verify_sn, sn) != 0 || strcmp(verify_key, key) != 0) {
-        log_e("MODE 7: Data verification failed!");
-        log_e("MODE 7: Original SN:  %s, Read SN:  %s", sn, verify_sn);
-        log_e("MODE 7: Original Key: %s, Read Key: %s", key, verify_key);
-        set_led_red();    // 验证失败，显示红灯
-        return -100;
-    }
-    
-    // 第四步：完全成功
+    // 第三步：完全成功
     log_i("MODE 7: ========== COMPLETE SUCCESS ==========");
     log_i("MODE 7: Read back verification successful");
-    log_i("MODE 7: Verified SN:  %s", verify_sn);
-    log_i("MODE 7: Verified Key: %s", verify_key);
     log_i("MODE 7: All operations completed successfully!");
     set_led_green();  // 完全成功，显示绿灯
     
