@@ -117,6 +117,7 @@ static void input_event_handler_cb(lwl_event_t *e)
 
 static pthread_t monitor_thread = NULL;
 static bool monitor_thread_running = false;
+#define NO_REQ_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
 #define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
 // 模式5 加速度传感器相关变量
@@ -140,17 +141,20 @@ void *wss_condition_monitor_thread(void *arg)
             last_move_time = current_time;
         }
 
-        // 检查超时条件
-        bool e_timeout = ((current_time - last_E_found_time) > NO_E_TIMEOUT_MS);
-                         
-        bool move_timeout = ((current_time - last_move_time) > NO_MOVE_TIMEOUT_MS);
+        if (current_time - last_req_time > NO_REQ_TIMEOUT_MS) {
 
-        // 任一超时条件满足就切换模式
-        if (e_timeout || move_timeout) {
-            log_i("No E found or device not moving for a long time, switching to default mode.");
-            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-            monitor_thread_running = false;
-            return NULL;
+            // 检查超时条件
+            bool e_timeout = ((current_time - last_E_found_time) > NO_E_TIMEOUT_MS);
+                            
+            bool move_timeout = ((current_time - last_move_time) > NO_MOVE_TIMEOUT_MS);
+
+            // 任一超时条件满足就切换模式
+            if (e_timeout || move_timeout) {
+                log_i("No E found or device not moving for a long time, switching to default mode.");
+                lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+                monitor_thread_running = false;
+                return NULL;
+            }
         }
         os_time_dly(100);  // 100ms 延迟
     }
@@ -179,7 +183,8 @@ void wss_application_init()
 
     /* 重置 */
     g_audio_playing = false;
-    last_req_time = 0;
+    g_curr_time = timer_get_ms();
+    last_req_time = g_curr_time;
 }
 
 void wss_application_uninit()
@@ -238,7 +243,7 @@ bool wss_application_loop()
         if (wss_application_check_touch_key_exit()) {
             g_device_state = DEVICE_IDLE;
             wss_request_stop(); // 按键打断对话
-            last_req_time = 0;
+            last_req_time = g_curr_time;
             log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE (touch key down)");
             g_touch_key_exit = false; // 清除标志
         }
