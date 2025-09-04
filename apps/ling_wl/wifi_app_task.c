@@ -26,9 +26,6 @@
 #include "app_mode/lwl_app_framework.h"
 #include "protocol/cp/c_uart_p.h"
 
-#define INIT_SSID "KQQ" // for device check
-#define INIT_PWD  "quickquick" // for device check
-
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
 
@@ -80,12 +77,11 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         wifi_default_mode_parm.mode = STA_MODE;
         wifi_default_mode_parm.sta_cnt = 1;
         wifi_default_mode_parm.connect_best_network = 1;
-        memcpy(wifi_default_mode_parm.ssid[0], INIT_SSID, strlen(INIT_SSID));
-        memcpy(wifi_default_mode_parm.pwd[0], INIT_PWD, strlen(INIT_PWD));
-        
+
+        // TODO READ ssid pwd from VM
+        get_wifi_config(wifi_default_mode_parm.ssid[0],wifi_default_mode_parm.pwd[0]);
 
         wifi_set_sta_connect_timeout(5);
-        // wifi_set_store_ssid_cnt(10);
         wifi_set_sta_connect_best_ssid(1);
         wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
 
@@ -265,9 +261,23 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
 
-        /* 控制 led : 联网成功 紫色 */
+        /* 控制 led : 联网成功 白色 */
         set_led_connected();
-        printf("the net connected enable led purple !\r\n");
+
+        struct wifi_mode_info info = {0};
+        info.mode = NONE_MODE;
+        /* 获取 最新的 WIFI SSID 和 PWD */
+        wifi_get_mode_cur_info(&info);
+        printf("the event callback get the current connected ssid: %s  pwd: %s\n", info.ssid, info.pwd);
+        if (info.mode != NONE_MODE) {
+            app_wifi_info_t app_wifi_info;
+            memcpy(app_wifi_info.ssid, info.ssid, sizeof(app_wifi_info.ssid));
+            memcpy(app_wifi_info.pwd, info.pwd, sizeof(app_wifi_info.pwd));
+            set_app_wifi_info(&app_wifi_info);
+            /* 存储到VM */
+            wifi_store_mode_info(STA_MODE, info.ssid, info.pwd);
+            free(&app_wifi_info);
+        }
 
         /* 存储 IP*/
         store_wifi_ip_info(NULL);
@@ -278,17 +288,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         {
             printf("Failed to add the notify_app_wifi_ip_succ task !\r\n");
         }
-
-        /* 获取 最新的 WIFI SSID 和 PWD */
-        static app_wifi_info_t temp_wifi_info = {0};
-        get_app_wifi_info(&temp_wifi_info);
-        printf("the event callback get the current connected ssid: %s  pwd: %s\n", temp_wifi_info.ssid, temp_wifi_info.pwd);
-        /* 存储到VM */
-        if (temp_wifi_info.ssid[0] != '\0' && temp_wifi_info.pwd[0] != '\0'){
-            wifi_store_mode_info(STA_MODE, temp_wifi_info.ssid, temp_wifi_info.pwd);
-        }
-        /* 将APP切换到 APP的连接成功模式 */
-        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
 
         break;
 
@@ -306,11 +305,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         block_connect_sem_post(NULL); // 通知连接函数
         
         /* 控制 led : 网络连接失败 灰色 */
-        // set_led_connect_error();
-        //todo play audo 罗天宇///////////////////////////////////
-        wifi_set_sta_connect_best_ssid(1);
-        wifi_enter_sta_mode(INIT_SSID,INIT_PWD);
- 
+        set_led_connect_error();
 
         break;
 

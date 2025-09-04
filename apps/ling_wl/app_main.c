@@ -121,24 +121,24 @@ const struct task_info task_info_table[] = {
     {"btstack",             18,      768,   384   },
 #endif
 #endif
-    {"wl80_test",            1,     2048,   64    },
+    // {"wl80_test",            1,     2048,   64    },
 
-    {"video_server",        16,      768,   128   },
-    {"vpkg_server",         16,      512,   128   },
-    {"video0_rec0",         20,      256,   128   },
-    {"video0_rec1",         20,      256,   128   },
-    {"video2_rec0",         20,      512,   128   },
-    {"video2_rec1",         20,      512,   128   },
-    {"net_video_server",    16,      256,   64    },
+    // {"video_server",        16,      768,   128   },
+    // {"vpkg_server",         16,      512,   128   },
+    // {"video0_rec0",         20,      256,   128   },
+    // {"video0_rec1",         20,      256,   128   },
+    // {"video2_rec0",         20,      512,   128   },
+    // {"video2_rec1",         20,      512,   128   },
+    // {"net_video_server",    16,      256,   64    },
 
-    {"net_avi0",            18,      512,   0     },
-    {"net_avi1",            18,      512,   0     },
+    // {"net_avi0",            18,      512,   0     },
+    // {"net_avi1",            18,      512,   0     },
 
-    {"avi0",                11,      320,   64    },
-    {"jpg_dec",             10,     1024,   32    },
-    {"video_dec_server",    16,     1024,   256   },
-    {"vunpkg_server",       16,     1024,   128   },
-    {"ui",                  21,      768,   256   },
+    // {"avi0",                11,      320,   64    },
+    // {"jpg_dec",             10,     1024,   32    },
+    // {"video_dec_server",    16,     1024,   256   },
+    // {"vunpkg_server",       16,     1024,   128   },
+    // {"ui",                  21,      768,   256   },
 
     {0, 0},
 };

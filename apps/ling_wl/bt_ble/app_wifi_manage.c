@@ -414,7 +414,6 @@ void set_app_wifi_info(app_wifi_info_t *info)
         return;
     }
     memcpy(&g_app_wifi_info, info, sizeof(app_wifi_info_t));
-    free(info);
 }
 /* 获取app_wifi_info */
 void get_app_wifi_info(app_wifi_info_t *info)

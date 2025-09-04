@@ -66,11 +66,7 @@ static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
     lwl_event_handler_add(net_connecting_event_handler_cb);
-    if (wifi_auto_reconnect() == WIFI_CONNECT_SUCC) {
-        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-    } else {
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    }
+
     return 0;
 }
 
@@ -80,11 +76,26 @@ static int net_connecting_unint(void)
     return 0;
 }
 
+void app_net_connecting_loop()
+{
+    enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
+    if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
+        printf("Network connection is successful!\n");
+        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+    }
+    if (WIFI_STA_DISCONNECT == state) {
+        // 判断联网不成功才启动wifi manager
+        printf("Network connection is DISCONNECTED!\n");
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    }
+}
+
 void app_net_connecting_mode(void)
 {
     net_connecting_init();
 
     while (1) {
+        app_net_connecting_loop();
         // 应用代码
         if (lwl_app_mode_exitting()) {
             net_connecting_unint();

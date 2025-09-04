@@ -676,15 +676,10 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     set_wifi_cmd_status(WIFI_CMD_CONNECTING);
 
     // 保存连接信息
-    app_wifi_info_t *app_wifi_info = (app_wifi_info_t *)malloc(sizeof(app_wifi_info_t));
-    if (app_wifi_info == NULL)
-    {
-        printf("Failed to allocate memory for app_wifi_info\n");
-    }
-    memcpy(app_wifi_info->ssid, ssid, sizeof(app_wifi_info->ssid));
-    memcpy(app_wifi_info->pwd, password, sizeof(app_wifi_info->pwd));
-    set_app_wifi_info(app_wifi_info);
-
+    app_wifi_info_t app_wifi_info;
+    memcpy(app_wifi_info.ssid, ssid, sizeof(app_wifi_info.ssid));
+    memcpy(app_wifi_info.pwd, password, sizeof(app_wifi_info.pwd));
+    set_app_wifi_info(&app_wifi_info);
 
     // 封装return_json_data
     cJSON *root = cJSON_CreateObject(); // 创建根节点

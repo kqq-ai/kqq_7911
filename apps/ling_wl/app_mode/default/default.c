@@ -30,6 +30,7 @@
 #define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
 #define MODE_TIMEOUT_MS 1000 // 1s
 static u32 init_time = 0;
+bool wait_for_button = false;
 static void set_led_idel(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
 //=================================================================================================
 // LWL event callback
@@ -47,7 +48,7 @@ static void default_input_event_handler_cb(lwl_event_t *e)
         // 处理触摸按键抬起事件
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        wait_for_button = false;
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         // Reset WiFi SSID
@@ -64,10 +65,22 @@ static void default_input_event_handler_cb(lwl_event_t *e)
 
 static int default_init(void)
 {
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(default_input_event_handler_cb);
     set_led_idel(); // 设置LED为白色
     init_time = timer_get_ms();
+    enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
+    if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
+        wait_for_button = true;
+    } else {
+        wait_for_button = false;
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_VOICE_PROMPT_FILE_PATH "NetCfgFail.mp3",
+            NULL,
+            NULL);
+    }
     return 0;
 }
 
@@ -78,19 +91,23 @@ static int default_unint(void)
     return 0;
 }
 
+void app_default_loop()
+{
+    if (!wait_for_button) {
+        enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
+        if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
+            printf("Network connection is successful!\n");
+            lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+        }
+    }
+}
+
 void app_default_mode(void)
 {
     default_init();
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if(get_wifi_connect_status(NULL) != WIFI_CONNECT_SUCC){
-        int err = app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH "NetCfgFail.mp3",
-            NULL,
-            NULL);
-    }
     //mdelay(2000);
     while (1) {
+        app_default_loop();
         mdelay(10);
         if (lwl_app_mode_exitting()) {
             default_unint();
