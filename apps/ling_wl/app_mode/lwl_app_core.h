@@ -10,6 +10,7 @@
 #include "app_lfs.h"
 #include "util/cqueue.h"
 #include "util/tree_map.h"
+#include "app_config.h"
 
 #define EEND_MAX_CNT 3 /**< Maximum number of EEND devices supported */
 

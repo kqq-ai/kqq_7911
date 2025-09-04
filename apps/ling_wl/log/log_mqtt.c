@@ -263,10 +263,8 @@ static void* log_monitor_thread(void* arg) {
         if (ret==0) {
             log_i("MQTT connected successfully\n");
             ret = mqtt_subscribe_reset();
-            os_mutex_pend(&g_log_mqtt_mutex, 0);
             g_connect_thread_running = true;
             g_monitor_thread_running = true;
-            os_mutex_post(&g_log_mqtt_mutex);
         }
     }
 
@@ -452,12 +450,13 @@ int mqtt_subscribe_reset() {
 
 // 在 log_mqtt_start() 里加上队列初始化
 int log_mqtt_start(void) {
+    if (g_monitor_thread_running) return 0;
     os_mutex_create(&g_log_mqtt_mutex);
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
     get_SN(sn);
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     //创建线程
     // 启动监控线程
-    if (g_monitor_thread_running) return 0;
 
     // 初始化线程属性并设置栈大小
     pthread_attr_init(&attr);
@@ -468,6 +467,7 @@ int log_mqtt_start(void) {
         log_i("Failed to create monitor thread, error: %d\n", ret);
         g_monitor_thread_running = false;
     }
+    os_mutex_post(&g_log_mqtt_mutex);
     return 0;
 }
 

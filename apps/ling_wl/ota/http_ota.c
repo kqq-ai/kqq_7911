@@ -35,7 +35,7 @@ static int play_ota_start_prompt_then_download(char *url)
     if (ctx && ctx->music_player) {
         int err = app_music_play_local_music_with_callback(
             ctx->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH "OtaInUpdate.mp3",
+            CONFIG_CP_VOICE_FILE_PATH "OtaInUpdate.mp3",
             ota_prompt_end_cb,
             url);
         if (!err) {

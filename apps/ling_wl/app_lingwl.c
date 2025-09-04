@@ -116,7 +116,7 @@ static void do_shutdown()
         gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
         err = app_music_play_local_music_with_callback(
                 context->music_player,
-                CONFIG_VOICE_PROMPT_FILE_PATH"PowerOff.mp3",
+                CONFIG_CP_VOICE_FILE_PATH"PowerOff.mp3",
                 power_off_cb,
                 NULL);
     }
@@ -230,7 +230,7 @@ static void app_lingwl_main(void)
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
 
-    simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"poweron.mp3");
+    simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"poweron.mp3");
     //set_led_white(); /// on LED after power ON
 
     /* 创建异步任务处理任务 */
@@ -450,13 +450,13 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_CONNECT_TIMEOUT_NOT_FOUND_SSID");
             // TODO: 可能在配网时需要发送ble通知
             // 播放WiFi连接失败提示音（未找到SSID）
-            //simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
+            //simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_CONNECT_ASSOCIAT_FAIL:
             log_i("NET_CONNECT_ASSOCIAT_FAIL");
             // TODO: 可能在配网时需要发送ble通知
             // 播放WiFi连接失败提示音（关联失败）
-            //simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgFail.mp3");
+            //simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_EVENT_SMP_CFG_FIRST:
             log_i("NET_EVENT_SMP_CFG_FIRST");
@@ -469,7 +469,6 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_CONNECTED");
             //set_led_white();; /// Net Succ
             // 播放联网成功提示音
-            simple_play_prompt(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
             // TODO: 可配置WIFI和BLE共存时的RF共存参数设置
@@ -498,7 +497,7 @@ static int app_music_net_event_handler(struct net_event *event)
         case NET_EVENT_DISCONNECTED_AND_REQ_CONNECT:
             log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
-        case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回
+        case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
             log_i("NET_NTP_GET_TIME_SUCC\n");
             break;
         default:

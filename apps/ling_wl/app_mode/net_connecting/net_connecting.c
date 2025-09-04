@@ -24,7 +24,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "os/os_api.h"
 #include "net/wifi/wifi_connect.h"
-#include "bt_ble/app_wifi_manage.h"
+#include "net_music_play_my.h"
 #include "log.h"
 
 #define MODE_TIMEOUT_MS 10000 // 10s
@@ -78,9 +78,15 @@ static int net_connecting_unint(void)
 
 void app_net_connecting_loop()
 {
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
         printf("Network connection is successful!\n");
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "NetCfgSucc.mp3",
+            NULL,
+            NULL);
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
     }
     if (WIFI_STA_DISCONNECT == state) {

@@ -274,6 +274,7 @@
 #define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/app/aupackres/tone/"
 #else
 #define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
+#define CONFIG_CP_VOICE_FILE_PATH CONFIG_VOICE_PROMPT_FILE_PATH
 #endif
 #endif
 

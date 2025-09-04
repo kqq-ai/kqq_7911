@@ -27,7 +27,6 @@
 
 #include "./bt_ble/app_wifi_manage.h"
 #include "net_music_play_my.h"
-#define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
 #define MODE_TIMEOUT_MS 1000 // 1s
 static u32 init_time = 0;
 bool wait_for_button = false;
@@ -77,7 +76,7 @@ static int default_init(void)
         wait_for_button = false;
         int err = app_music_play_local_music_with_callback(
             context->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH "NetCfgFail.mp3",
+            CONFIG_CP_VOICE_FILE_PATH "NetCfgFail.mp3",
             NULL,
             NULL);
     }

@@ -260,12 +260,12 @@ static void mode6_try_next_step(void)
         if((g_mode6_e_index&1) == 0 ){
             err = app_music_play_local_music_with_callback(
             context->music_player, 
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev1.mp3", 
+            CONFIG_CP_VOICE_FILE_PATH"test_dev1.mp3", 
             mode6_audio_callback, NULL);
         }else{
             err = app_music_play_local_music_with_callback(
             context->music_player, 
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_dev2.mp3", 
+            CONFIG_CP_VOICE_FILE_PATH"test_dev2.mp3", 
             mode6_audio_callback, NULL);
         }
         
@@ -468,7 +468,7 @@ static void switch_to_mode(work_mode_e new_mode)
         gpio_direction_output(IO_PORTA_00, 1);  // 启用C端扬声器
         log_i("INIT MODE: Green LED ON, C speaker enabled");
         // 播放进入模式0的音频
-        devices_check_play_music(CONFIG_VOICE_PROMPT_FILE_PATH"test_start.mp3");
+        devices_check_play_music(CONFIG_CP_VOICE_FILE_PATH"test_start.mp3");
         log_i("Playing test_start.mp3 for INIT mode");
         break;
     case WORK_MODE_1:
@@ -482,7 +482,7 @@ static void switch_to_mode(work_mode_e new_mode)
         lwl_app_context_t *context1 = lwl_app_core_context_get_instance();
         app_music_play_local_music_with_callback(
             context1->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_touchk.mp3",
+            CONFIG_CP_VOICE_FILE_PATH"test_touchk.mp3",
             mode1_audio_callback, NULL);
         log_i("Playing test_touchk.mp3 for MODE 1 with callback");
         break;
@@ -491,7 +491,7 @@ static void switch_to_mode(work_mode_e new_mode)
         gpio_direction_output(IO_PORTA_00, 1);  // 启用C端扬声器
         log_i("MODE 2: All colors cycling started (0.5s interval), C speaker enabled");
         // 播放进入模式2的音频          LED
-        devices_check_play_music(CONFIG_VOICE_PROMPT_FILE_PATH"test_led.mp3");
+        devices_check_play_music(CONFIG_CP_VOICE_FILE_PATH"test_led.mp3");
         log_i("Playing test_led.mp3 for MODE 2");
         break;
     case WORK_MODE_3:
@@ -504,7 +504,7 @@ static void switch_to_mode(work_mode_e new_mode)
         lwl_app_context_t *context3 = lwl_app_core_context_get_instance();
         app_music_play_local_music_with_callback(
             context3->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_loud.mp3",
+            CONFIG_CP_VOICE_FILE_PATH"test_loud.mp3",
             mode3_audio_callback, NULL);
         log_i("Playing test_loud.mp3 for MODE 3 with callback");
         
@@ -520,7 +520,7 @@ static void switch_to_mode(work_mode_e new_mode)
         lwl_app_context_t *context4 = lwl_app_core_context_get_instance();
         app_music_play_local_music_with_callback(
             context4->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_micro.mp3",
+            CONFIG_CP_VOICE_FILE_PATH"test_micro.mp3",
             mode4_audio_callback, NULL);
         log_i("Playing test_micro.mp3 for MODE 4 with callback");
         break;
@@ -538,7 +538,7 @@ static void switch_to_mode(work_mode_e new_mode)
         lwl_app_context_t *context5 = lwl_app_core_context_get_instance();
         app_music_play_local_music_with_callback(
             context5->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_gyro.mp3",  // 使用gyro_test音频文件
+            CONFIG_CP_VOICE_FILE_PATH"test_gyro.mp3",  // 使用gyro_test音频文件
             mode5_audio_callback, NULL);
         log_i("Playing test_gyro.mp3 for MODE 5 with callback");
         break;
@@ -552,7 +552,7 @@ static void switch_to_mode(work_mode_e new_mode)
             lwl_app_context_t *context6 = lwl_app_core_context_get_instance();
             app_music_play_local_music_with_callback(
                 context6->music_player,
-                CONFIG_VOICE_PROMPT_FILE_PATH"test_edev.mp3",
+                CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3",
                 mode6_audio_callback, NULL);
             g_mode6_action_in_progress = 1;
         }
@@ -568,7 +568,7 @@ static void switch_to_mode(work_mode_e new_mode)
             lwl_app_context_t *context7 = lwl_app_core_context_get_instance();
             int err = app_music_play_local_music_with_callback(
                 context7->music_player,
-                CONFIG_VOICE_PROMPT_FILE_PATH"test_snkey.mp3",
+                CONFIG_CP_VOICE_FILE_PATH"test_snkey.mp3",
                 mode7_audio_callback, NULL);
             if (err != 0) {
                 log_e("MODE 7: Failed to play test_snkey.mp3, error: %d", err);
@@ -685,7 +685,7 @@ static void process_mode_3(void)
             // 播放循环测试音频，使用回调
             int err = app_music_play_local_music_with_callback(
                 context->music_player, 
-                CONFIG_VOICE_PROMPT_FILE_PATH"test_1hz5s.mp3", 
+                CONFIG_CP_VOICE_FILE_PATH"test_1hz5s.mp3", 
                 mode3_audio_callback, NULL);
                 
             if (err == 0) {
@@ -1017,7 +1017,7 @@ static void process_mode_7(void)
                 g_audio_playing = 1;
                 int err = app_music_play_local_music_with_callback(
                     context7_wrsn->music_player,
-                    CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_s.mp3",
+                    CONFIG_CP_VOICE_FILE_PATH"test_sn_s.mp3",
                     mode7_wrsn_audio_callback, NULL);
                 if (err != 0) {
                     log_e("MODE 7: Failed to play test_sn_s.mp3, error: %d", err);
@@ -1032,7 +1032,7 @@ static void process_mode_7(void)
             g_audio_playing = 1;  // 设置音频播放标志
             int err = app_music_play_local_music_with_callback(
                 context7_failed->music_player,
-                CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_f.mp3",
+                CONFIG_CP_VOICE_FILE_PATH"test_sn_f.mp3",
                 mode7_wrsn_audio_callback, NULL);
             if (err != 0) {
                 log_e("MODE 7: Failed to play test_sn_f.mp3, error: %d", err);
@@ -1155,7 +1155,7 @@ static void mode7_execute_sn_request(void)
         // g_audio_playing = 1;  // 设置音频播放标志
         // int err = app_music_play_local_music_with_callback(
         //     context7_success->music_player,
-        //     CONFIG_VOICE_PROMPT_FILE_PATH"test_getsn.mp3",
+        //     CONFIG_CP_VOICE_FILE_PATH"test_getsn.mp3",
         //     mode7_success_audio_callback, NULL);
         // if (err != 0) {
         //     log_e("MODE 7: Failed to play test_getsn.mp3, error: %d", err);
@@ -1217,7 +1217,7 @@ static void mode7_audio_callback(void *priv)
         g_audio_playing = 1;  // 设置音频播放标志
         int err = app_music_play_local_music_with_callback(
             context7_failed->music_player,
-            CONFIG_VOICE_PROMPT_FILE_PATH"test_sn_f.mp3",
+            CONFIG_CP_VOICE_FILE_PATH"test_sn_f.mp3",
             mode7_wrsn_audio_callback, NULL);
         if (err != 0) {
             log_e("MODE 7: Failed to play test_sn_f.mp3, error: %d", err);
@@ -1493,7 +1493,7 @@ static void devices_check_cb(bka_cmd_code_e code, void *priv)
     case BKA_CMD_CODE_COMPL:
         log_i("Switch PortE OK\n");
         ///////////////////////////////////////////
-        //devices_check_play_music(CONFIG_VOICE_PROMPT_FILE_PATH"NetCfgSucc.mp3");
+        //devices_check_play_music(CONFIG_CP_VOICE_FILE_PATH"NetCfgSucc.mp3");
         break;
     case BKA_CMD_CODE_DEVLOST:
         log_i("Switch PortE Dev Lost\n");
@@ -1658,7 +1658,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                         g_audio_playing = 1;
                         // int err = app_music_play_local_music_with_callback(
                         //     context1->music_player,
-                        //     CONFIG_VOICE_PROMPT_FILE_PATH"t_key.mp3",
+                        //     CONFIG_CP_VOICE_FILE_PATH"t_key.mp3",
                         //     mode1_tkey_audio_end_cb, NULL);
                         // if (err != 0) {
                         //     log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
