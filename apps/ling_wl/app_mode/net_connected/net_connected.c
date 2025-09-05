@@ -53,9 +53,6 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // Reset WiFi SSID
-        break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connected_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
         uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
@@ -112,8 +109,7 @@ void app_net_connected_loop()
 {
     log_i("websockets init\n");
     if (WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL)) {
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-        // wifi manager
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
         return;
     }
     extern int OTA_download_running;
@@ -129,9 +125,9 @@ void app_net_connected_loop()
         set_led_connect_error();// WSS ERROR
         
         // 无网络超时10s，进入配网
-        if (timer_get_ms() - init_time >= 10000) {
-            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-        }
+        // if (timer_get_ms() - init_time >= 10000) {
+        //     lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        // }
     }
     // TODO 尝试重连WSS
 }

@@ -27,8 +27,10 @@
 #include "net_music_play_my.h"
 #include "log.h"
 
-#define MODE_TIMEOUT_MS 10000 // 10s
+#define MODE_TIMEOUT_MS 600000 // 600s
+#define MODE_WIFI_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
+bool wifi_manager_state = false; // wifi manager 状态
 
 int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
 {
@@ -42,18 +44,22 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 {
     static int en = 1;
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        printf("LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN\n");
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "t_key.mp3",
+            NULL,
+            NULL);
         // play 提示音
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
         // 处理触摸按键抬起事件
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // Reset WiFi SSID
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
@@ -66,6 +72,7 @@ static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
     lwl_event_handler_add(net_connecting_event_handler_cb);
+    wifi_manager_state = false;
 
     return 0;
 }
@@ -73,6 +80,7 @@ static int net_connecting_init(void)
 static int net_connecting_unint(void)
 {
     lwl_event_handler_remove(net_connecting_event_handler_cb);
+    wifi_manager_state = false;
     return 0;
 }
 
@@ -88,11 +96,18 @@ void app_net_connecting_loop()
             NULL,
             NULL);
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-    }
-    if (WIFI_STA_DISCONNECT == state) {
+    } else 
+    if (WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID == state && wifi_manager_state == false) {
         // 判断联网不成功才启动wifi manager
-        printf("Network connection is DISCONNECTED!\n");
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        wifi_manager_state = true;
+        printf("Network connection is WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID!\n");
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "NetCfgEnter.mp3",
+            NULL,
+            NULL);
+    } else {
+        // log_i("Network connecting... state=%d", state);
     }
 }
 

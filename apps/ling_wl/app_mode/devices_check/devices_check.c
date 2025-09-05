@@ -1907,17 +1907,17 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                     if (context1 && context1->music_player) {
                         t_key_playing = 1;
                         g_audio_playing = 1;
-                        // int err = app_music_play_local_music_with_callback(
-                        //     context1->music_player,
-                        //     CONFIG_CP_VOICE_FILE_PATH"t_key.mp3",
-                        //     mode1_tkey_audio_end_cb, NULL);
-                        // if (err != 0) {
-                        //     log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
-                        //     g_audio_playing = 0;
-                        //     t_key_playing = 0;
-                        // } else {
-                        //     log_i("MODE 1: t_key.mp3 started successfully");
-                        // }
+                        int err = app_music_play_local_music_with_callback(
+                            context1->music_player,
+                            CONFIG_CP_VOICE_FILE_PATH"t_key.mp3",
+                            mode1_tkey_audio_end_cb, NULL);
+                        if (err != 0) {
+                            log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
+                            g_audio_playing = 0;
+                            t_key_playing = 0;
+                        } else {
+                            log_i("MODE 1: t_key.mp3 started successfully");
+                        }
                     }
                 }
             } else if (e->uart_cmd_touch.touch_key_event_type == 1) {

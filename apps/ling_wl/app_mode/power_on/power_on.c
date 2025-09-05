@@ -55,9 +55,6 @@ static void power_on_input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // Reset WiFi SSID
-        break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by power_on_input_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
         uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
@@ -68,11 +65,7 @@ static void power_on_input_event_handler_cb(lwl_event_t *e)
 static int power_on_init(void)
 {
     init_time = timer_get_ms();
-    if (has_saved_wifi()) {
-        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
-    } else {
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    }
+    lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     char sn[25];
     get_SN(sn);
     /* 注册lwl事件处理回调 */

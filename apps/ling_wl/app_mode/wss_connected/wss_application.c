@@ -99,10 +99,6 @@ static void input_event_handler_cb(lwl_event_t *e)
         log_i("TOUCH KEY UP");
         // 处理触摸按键抬起事件
         break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // Return to Default Mode
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-        break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
         uart_response_synch_status(is_request_busy(), last_req_volume);/// 0是idle 1是busy，必须回复

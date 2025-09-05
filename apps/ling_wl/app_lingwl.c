@@ -152,6 +152,10 @@ void base_lwl_event_handler(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         log_i("PRESS RESET KEY");
+        // Reset WiFi SSID
+        app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
+        uart_response_clear_wifi_ssid();
+        uart_send_apply_soft_poweroff(); // TODO restart
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
 
