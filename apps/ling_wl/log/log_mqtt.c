@@ -22,7 +22,7 @@
 #define LOG_QUEUE_THRESHOLD 10  // 添加新的阈值定义
 
 char temp[LOG_QUEUE_ITEM_MAX_LEN];
-char log_buffer[512];
+char log_buffer[LOG_QUEUE_ITEM_MAX_LEN];
 char time_str[20];
 char mqtt_payload[600];
 char token[256] = {0};
@@ -68,6 +68,7 @@ static bool g_mqtt_connected = false;
 
 /* 互斥锁 */
 static OS_MUTEX g_log_mqtt_mutex;
+static bool g_mqtt_start = false;
 
 void log_mqtt_disconnect();
 void log_mqtt_battery(const char* sn_param,int battery);
@@ -80,8 +81,6 @@ size_t stack_size = 1024 * 8;  // 设置栈大小为8KB
 
 static bool g_monitor_thread_running = false;  // 线程运行标志
 static uint32_t last_upload_time = 0;  // 上次上传时间（用于超时判断）
-
-static bool g_connect_thread_running = false;
 
 static bool g_battery_update_flag = false;
 static int g_current_battery_level = 0;
@@ -106,6 +105,7 @@ static int init_mqtt_network(void) {
 
 /* 连接MQTT服务器 */
 int log_mqtt_connect(void) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
     if (g_mqtt_connected) {
         return 0; // 已经连接
     }
@@ -118,6 +118,7 @@ int log_mqtt_connect(void) {
     // 初始化网络
     int rc = init_mqtt_network();
     if (rc != 0) {
+        os_mutex_post(&g_log_mqtt_mutex);
         return rc;
     }
 
@@ -126,6 +127,7 @@ int log_mqtt_connect(void) {
 
     if (token == NULL) {
         log_i("获取MQTT token失败\n");
+        os_mutex_post(&g_log_mqtt_mutex);
         return -1;
     }
 
@@ -157,37 +159,44 @@ int log_mqtt_connect(void) {
     }
     
     g_mqtt_connected = true;
+    os_mutex_post(&g_log_mqtt_mutex);
     return 0;
+}
+
+/* 检查MQTT连接状态 */
+bool log_mqtt_is_connected(void) {
+    if (!os_mutex_valid(&g_log_mqtt_mutex)) return false;
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    bool ret = (g_mqtt_client != NULL && g_mqtt_connected);
+    os_mutex_post(&g_log_mqtt_mutex);
+    return ret;
 }
 
 /* 断开MQTT连接 */
 void log_mqtt_disconnect(void) {
-    if (g_mqtt_client != NULL && g_mqtt_connected) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    if (g_mqtt_client!=NULL) {
         MQTTDisconnect(g_mqtt_client);
         g_mqtt_client = NULL;
         mqtt_network.disconnect(&mqtt_network);
         g_mqtt_connected = false;
         log_i("MQTT connection disconnected\n");
     }
-}
-
-/* 检查MQTT连接状态 */
-bool log_mqtt_is_connected(void) {
-    return g_mqtt_client != NULL && g_mqtt_connected;
+    os_mutex_post(&g_log_mqtt_mutex);
 }
 
 /* 通过MQTT发送消息 */
 int log_mqtt_send_message(const char* topic, const char* message) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);  // 添加锁
     if (!log_mqtt_is_connected()) {
         // 尝试重连
         if (g_mqtt_config.auto_reconnect) {
-            log_mqtt_disconnect();  // 先确保断开旧连接
-            if (log_mqtt_connect() != 0) {
-                return -1;
-            }
-        } else {
-            return -1;
+            log_mqtt_connect();
         }
+    }
+    if (!log_mqtt_is_connected()) {
+        os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
+        return -1;
     }
     
     MQTTMessage mqtt_msg;
@@ -199,9 +208,10 @@ int log_mqtt_send_message(const char* topic, const char* message) {
     int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
     if (rc != 0) {
         log_i("MQTT publish failed, error code: %d\n", rc);
-        //g_mqtt_connected = false;  // 发布失败，标记连接断开
+        g_mqtt_connected = false;  // 发布失败，标记连接断开
     }
     
+    os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
     return rc;
 }
 
@@ -220,7 +230,7 @@ static void upload_all_logs(void) {
     if (!array) {
         return;
     }
-
+    int size = log_queue.size;
     while (log_queue.size > 0) {
         if (my_blocking_queue_try_dequeue(&log_queue, temp) == MYERROR_Success) {
 
@@ -235,15 +245,13 @@ static void upload_all_logs(void) {
     
     // 一次性转换成JSON字符串
     char *batch_json = cJSON_PrintUnformatted(array);
-
-    // 一次性发送所有消息
-    if (log_mqtt_is_connected() && batch_json) {
+    if (batch_json != NULL) {
         int result = log_mqtt_send_message("h-log", batch_json);
         if (result != 0) {
-            log_i("Batch MQTT send failed, error code: %d\n", result);
+            log_i("MQTT message log sending failed, error code: %d\n", result);
         }
     }
-    
+
     // 清理资源
     if (batch_json) {
         free(batch_json);
@@ -251,7 +259,7 @@ static void upload_all_logs(void) {
     cJSON_Delete(array);
     
     uint32_t end_time = timer_get_ms();
-    log_i("[MQTT upload]Batch send messages took %u ms\n", end_time - start_time);
+    log_i("[MQTT upload]Batch send messages took %u ms %d\n", end_time - start_time, size);
     os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
 }
 
@@ -260,18 +268,18 @@ static void upload_all_logs(void) {
 static void* log_monitor_thread(void* arg) {
     log_i("[MQTT log_monitor]Log monitor thread started\n");
     
-    if(!g_connect_thread_running) {
+    if(!log_mqtt_is_connected()) {
         int ret=log_mqtt_connect(); // 内部调用log_mqtt_connect
         if (ret==0) {
             log_i("MQTT connected successfully\n");
             ret = mqtt_subscribe_reset();
-            g_connect_thread_running = true;
             g_monitor_thread_running = true;
         }
     }
 
     last_upload_time = timer_get_ms();  // 初始化上传时间
     while (g_monitor_thread_running) {
+        os_mutex_pend(&g_log_mqtt_mutex, 0);
         uint32_t current_time = timer_get_ms();
         bool need_upload = false;
 
@@ -294,7 +302,8 @@ static void* log_monitor_thread(void* arg) {
         if (need_upload) {
             upload_all_logs();  // 触发上传
         }
-        // 休眠10ms，避免CPU空转（可根据需求调整）
+        os_mutex_post(&g_log_mqtt_mutex);
+        // 休眠100ms，避免CPU空转（可根据需求调整）
         os_time_dly(100);
     }
 
@@ -308,6 +317,7 @@ static void* log_monitor_thread(void* arg) {
 
 // 设置需要更新电量上传消息的SN和电量参数，SN为NULL时使用默认SN,即C的SN，电量范围0-100
 void log_mqtt_set_battery_level(char *sn_battery, int battery_level) {
+    if (!log_mqtt_is_connected()) return;
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     g_current_battery_level = battery_level;
     g_battery_update_flag = true;
@@ -319,9 +329,9 @@ void log_mqtt_set_battery_level(char *sn_battery, int battery_level) {
     os_mutex_post(&g_log_mqtt_mutex);
 }
 
-
 // 发送电池状态日志
 void log_mqtt_battery(const char* sn_param,int battery) {
+    if (!log_mqtt_is_connected()) return;
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     uint32_t total_ms = timer_get_ms();
     uint32_t seconds = total_ms / 1000;
@@ -343,16 +353,14 @@ void log_mqtt_battery(const char* sn_param,int battery) {
     char *json_str = cJSON_PrintUnformatted(root);
 
     // 打印到控制台
-    log_i("+++++battery json %d\n", battery);
+    log_i("[MQTT battery]%s %d\n", sn_param, battery);
 
     // 发送到MQTT
-    if (log_mqtt_is_connected()) {
+    if (json_str != NULL) {
         int result = log_mqtt_send_message("h-status", json_str);
         if (result != 0) {
             log_i("MQTT battery log sending failed, error code: %d\n", result);
         }
-    }else{
-        log_i("MQTT not connected, battery log not sent\n");
     }
 
     cJSON_Delete(root);
@@ -370,6 +378,16 @@ void log_mqtt_enqueue(const char *msg) {
 
 /* 日志发送函数 */
 void log_mqtt(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsnprintf(log_buffer, sizeof(log_buffer), format, args);
+    va_end(args);
+    
+    // 打印到控制台
+    log_i("[MQTT message] %s", log_buffer);
+
+    if (!log_mqtt_is_connected()) return;
+
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     
     uint32_t total_ms = timer_get_ms();
@@ -381,17 +399,6 @@ void log_mqtt(const char* format, ...) {
     minutes %= 60;
     
     snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
-    
-    va_list args;
-    va_start(args, format);
-    vsnprintf(log_buffer, sizeof(log_buffer), format, args);
-    log_i("[MQTT message] %s", log_buffer);
-    // 打印到控制台
-    va_end(args);
-    if (!log_mqtt_is_connected()) {
-        os_mutex_post(&g_log_mqtt_mutex);
-        return;
-    }
 
 
     // 构造JSON
@@ -401,7 +408,6 @@ void log_mqtt(const char* format, ...) {
     cJSON_AddStringToObject(root, "msg", log_buffer);
 
     char *json_str = cJSON_PrintUnformatted(root);
-    
 
     // 发送到队列
     log_mqtt_enqueue(json_str);
@@ -450,12 +456,19 @@ int mqtt_subscribe_reset() {
     return rc;
 }
 
-// 在 log_mqtt_start() 里加上队列初始化
 int log_mqtt_start(void) {
-    if (g_monitor_thread_running) return 0;
-    os_mutex_create(&g_log_mqtt_mutex);
+    if (!os_mutex_valid(&g_log_mqtt_mutex)) {
+        os_mutex_create(&g_log_mqtt_mutex);
+        get_SN(sn);
+    }
     os_mutex_pend(&g_log_mqtt_mutex, 0);
-    get_SN(sn);
+    if (g_monitor_thread_running) {
+        os_mutex_post(&g_log_mqtt_mutex);
+        return 0;
+    }
+    if (g_mqtt_start) log_mqtt_stop();
+    g_mqtt_start = true;
+
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     //创建线程
     // 启动监控线程
@@ -467,19 +480,17 @@ int log_mqtt_start(void) {
     int ret = pthread_create(&monitor_thread, &attr, log_monitor_thread, NULL);
     if (ret != 0) {
         log_i("Failed to create monitor thread, error: %d\n", ret);
-        g_monitor_thread_running = false;
     }
     os_mutex_post(&g_log_mqtt_mutex);
     return 0;
 }
 
-
-
 // 添加停止函数
 void log_mqtt_stop(void) {
-    g_connect_thread_running = false;
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
     // 停止监控线程
     g_monitor_thread_running = false;
+    
     pthread_join(monitor_thread, NULL);  // 等待线程退出
     pthread_attr_destroy(&attr);  // 清理线程属性
 
@@ -490,5 +501,6 @@ void log_mqtt_stop(void) {
 
     log_mqtt_disconnect();// 断开MQTT连接
 
-    os_mutex_del(&g_log_mqtt_mutex, 1);//删除互斥锁
+    g_mqtt_start = false;
+    os_mutex_post(&g_log_mqtt_mutex);
 }
