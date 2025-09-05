@@ -16,7 +16,7 @@
 #include "app_mode/lwl_app_framework.h"
 
 #define LOG_QUEUE_MAX_COUNT 15    // 最大元素个数（原LOG_QUEUE_SIZE）
-#define LOG_QUEUE_ITEM_MAX_LEN 120 // 单个元素最大长度（字节）（原LOG_ITEM_MAXLEN）
+#define LOG_QUEUE_ITEM_MAX_LEN 256 // 单个元素最大长度（字节）（原LOG_ITEM_MAXLEN）
 
 #define LOG_UPLOAD_INTERVAL 1000  // 1000ms 上传间隔
 #define LOG_QUEUE_THRESHOLD 10  // 添加新的阈值定义
@@ -227,6 +227,8 @@ static void upload_all_logs(void) {
             cJSON *item = cJSON_Parse(temp);
             if (item) {
                 cJSON_AddItemToArray(array, item);
+            } else {
+                log_i("Failed to parse log item to JSON: %s\n", temp);
             }
         }
     }
