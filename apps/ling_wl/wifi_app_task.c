@@ -77,13 +77,25 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         wifi_default_mode_parm.mode = STA_MODE;
         wifi_default_mode_parm.sta_cnt = 1;
         wifi_default_mode_parm.connect_best_network = 1;
-
+        
+        struct wifi_stored_sta_info app_wifi_stored_ssid[NETWORK_SSID_INFO_CNT] = {0};
+        int ret = 0;
+        ret = wifi_get_stored_sta_info(app_wifi_stored_ssid); // 刷固件会清空VM
+        log_i("wifi_get_stored_sta_info: %d\n", ret);
+        if (ret > 0) {
         // TODO READ ssid pwd from VM
-        get_wifi_config(wifi_default_mode_parm.ssid[0],wifi_default_mode_parm.pwd[0]);
+            log_i("get stored ssid %d\n", app_wifi_stored_ssid[0].ssid);
+            memcpy(wifi_default_mode_parm.ssid[0], app_wifi_stored_ssid[0].ssid, strlen((const char *)app_wifi_stored_ssid[0].ssid));
+            memcpy(wifi_default_mode_parm.pwd[0], app_wifi_stored_ssid[0].pwd, strlen((const char *)app_wifi_stored_ssid[0].pwd));
 
-        wifi_set_sta_connect_timeout(5);
-        wifi_set_sta_connect_best_ssid(1);
-        wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
+            wifi_set_default_mode(&wifi_default_mode_parm, 0, 1);
+        } else {
+            log_i("no stored ssid\n");
+            get_wifi_config(wifi_default_mode_parm.ssid[0],wifi_default_mode_parm.pwd[0]);
+            wifi_set_sta_connect_timeout(5);
+            wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
+        }
+        // wifi_set_sta_connect_best_ssid(1);
 
         /*wifi manager 所需要的一些初始化*/
         wifi_manage_init(NULL);
@@ -411,9 +423,26 @@ static void wifi_app_task(void *priv) // 主要是create wifi 线程的
     wifi_on();
 }
 
+void wifi_and_network_on(void)
+{
+    if (wifi_is_on()) {
+        return;
+    }
+    wifi_on();
+}
+
+void wifi_and_network_off(void)
+{
+    if (wifi_is_on() == 0) {
+        return;
+    }
+    wifi_off();
+}
+
 static int wireless_net_init(void) // 主要是create wifi 线程的
 {
     puts("wireless_net_init \n\n");
-    return thread_fork("wifi_app_task", 10, 1792, 0, 0, wifi_app_task, NULL);
+    wifi_app_task(NULL);
+    puts("wireless_net_init end \n\n");
 } 
 late_initcall(wireless_net_init);
