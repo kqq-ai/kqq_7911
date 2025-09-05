@@ -84,7 +84,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         log_i("wifi_get_stored_sta_info: %d\n", ret);
         if (ret > 0) {
         // TODO READ ssid pwd from VM
-            log_i("get stored ssid %d\n", app_wifi_stored_ssid[0].ssid);
+            log_i("get stored ssid %s\n", app_wifi_stored_ssid[0].ssid);
             memcpy(wifi_default_mode_parm.ssid[0], app_wifi_stored_ssid[0].ssid, strlen((const char *)app_wifi_stored_ssid[0].ssid));
             memcpy(wifi_default_mode_parm.pwd[0], app_wifi_stored_ssid[0].pwd, strlen((const char *)app_wifi_stored_ssid[0].pwd));
 
@@ -97,8 +97,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         }
         // wifi_set_sta_connect_best_ssid(1);
 
-        /*wifi manager 所需要的一些初始化*/
-        wifi_manage_init(NULL);
         break;
 
     case WIFI_EVENT_MODULE_START:

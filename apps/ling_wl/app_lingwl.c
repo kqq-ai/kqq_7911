@@ -235,6 +235,9 @@ static void app_lingwl_main(void)
     pool = threadpool_create(4, 10);
     context->threadpool = pool;
 
+    /*wifi manager 所需要的一些初始化*/
+    wifi_manage_init(NULL);
+
     /* 初始化RSSI测距 */
     monitor_init();
 

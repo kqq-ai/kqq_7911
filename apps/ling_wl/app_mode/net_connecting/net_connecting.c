@@ -80,7 +80,10 @@ static int net_connecting_init(void)
 static int net_connecting_unint(void)
 {
     lwl_event_handler_remove(net_connecting_event_handler_cb);
-    wifi_manager_state = false;
+    if (wifi_manager_state) {
+        wifi_manager_state = false;
+        ble_simple_server_exit();
+    }
     return 0;
 }
 
@@ -97,9 +100,15 @@ void app_net_connecting_loop()
             NULL);
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
     } else 
-    if (WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID == state && wifi_manager_state == false) {
+    if (wifi_manager_state == false && (
+            state == WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID ||
+            state == WIFI_STA_CONNECT_ASSOCIAT_FAIL ||
+            state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
+            state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT)) {
         // 判断联网不成功才启动wifi manager
+        ble_simple_server_init();
         wifi_manager_state = true;
+        
         printf("Network connection is WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID!\n");
         int err = app_music_play_local_music_with_callback(
             context->music_player,

@@ -89,7 +89,8 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("APPLICATION STOP");
         // lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-        wss_application_touch_key_exit();
+        wss_disconnect(); // for test
+        // wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("TOUCH KEY DOWN");

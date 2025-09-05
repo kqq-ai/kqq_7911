@@ -306,10 +306,6 @@ static void* log_monitor_thread(void* arg) {
         // 休眠100ms，避免CPU空转（可根据需求调整）
         os_time_dly(100);
     }
-
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    g_monitor_thread_running = false;
-    os_mutex_post(&g_log_mqtt_mutex);
     
     log_i("[MQTT log_monitor]Log monitor thread exited\n");
     return NULL;
@@ -488,11 +484,21 @@ int log_mqtt_start(void) {
 // 添加停止函数
 void log_mqtt_stop(void) {
     os_mutex_pend(&g_log_mqtt_mutex, 0);
+    if (!g_mqtt_start) {
+        os_mutex_post(&g_log_mqtt_mutex);
+        return;
+    }
     // 停止监控线程
     g_monitor_thread_running = false;
     
-    pthread_join(monitor_thread, NULL);  // 等待线程退出
-    pthread_attr_destroy(&attr);  // 清理线程属性
+    log_i("MQTT pthread_join\n");
+    os_mutex_post(&g_log_mqtt_mutex);
+    if (monitor_thread) {
+        pthread_join(monitor_thread, NULL);  // 等待线程退出
+        pthread_attr_destroy(&attr);  // 清理线程属性
+        monitor_thread = 0;
+    }
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
 
     // 确保最后的消息都发送出去
     upload_all_logs();

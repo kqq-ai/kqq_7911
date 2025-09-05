@@ -63,17 +63,8 @@ static int default_init(void)
     lwl_event_handler_add(default_input_event_handler_cb);
     set_led_idel(); // 设置LED为白色
     init_time = timer_get_ms();
-    enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
-    if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
-        wait_for_button = true;
-    } else {
-        wait_for_button = false;
-        int err = app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "NetCfgFail.mp3",
-            NULL,
-            NULL);
-    }
+    wifi_and_network_off();
+    wait_for_button = true;
     return 0;
 }
 
@@ -81,17 +72,14 @@ static int default_unint(void)
 {
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(default_input_event_handler_cb);
+    wifi_and_network_on();
     return 0;
 }
 
 void app_default_loop()
 {
     if (!wait_for_button) {
-        enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
-        if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
-            printf("Network connection is successful!\n");
-            lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-        }
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     }
 }
 
@@ -101,7 +89,7 @@ void app_default_mode(void)
     //mdelay(2000);
     while (1) {
         app_default_loop();
-        mdelay(10);
+        mdelay(100);
         if (lwl_app_mode_exitting()) {
             default_unint();
             return;

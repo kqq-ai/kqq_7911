@@ -51,12 +51,25 @@ static int wss_connected_unint(void)
 
 void app_wss_connected_mode(void)
 {
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     wss_connected_init();//application init 和blk RSSI测距 
     
     while (1) {
         // 应用代码
         if (wss_application_loop()) {
-            lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
+                lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+                printf("Network connection is WIFI_STA_DISCONNECT!\n");
+                int err = app_music_play_local_music_with_callback(
+                    context->music_player,
+                    CONFIG_CP_VOICE_FILE_PATH "NetCfgFail.mp3",
+                    NULL,
+                    NULL);
+            } else {
+                if (!wss_reconnect()) {
+                    lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+                }
+            }
         }
 
         mdelay(10);
