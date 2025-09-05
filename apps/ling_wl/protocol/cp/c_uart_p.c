@@ -2,13 +2,15 @@
 #include "cpu.h"
 #include "device/device.h"
 #include "app_mode/lwl_app_core.h"
-#include "gpio.h"                 // for gpio_direction_output
-
+#include "gpio.h" // for gpio_direction_output
+#include "log/log_mqtt.h"
 extern g_dev_uart_hdl;
 
-static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
+static void set_led_power_off(void) { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
 
-
+static void set_led_red(void) { uart_send_set_led_color(COLOR_RED); }
+static void set_led_blue(void) { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_green(void) { uart_send_set_led_color(COLOR_GREEN); }
 // 关机提示音播放完成后的回调：播放结束再触发关机事件
 static void power_off_prompt_end_cb(void *priv)
 {
@@ -26,67 +28,107 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
 {
     switch (cmd)
     {
-    case UART_CMD_NORMAL_KEY:{ // 普通按键控制
+    case UART_CMD_NORMAL_KEY:
+    { // 普通按键控制
+        static int value = 2;
+        value++;
+        value = value % 3;
+        if (value == 0)
+        {
+            set_led_blue();
+            log_mqtt("check led to BLUE===>Moveing START\r\n");
+        }
+        if (value == 1)
+        {
+            set_led_green();
+            log_mqtt("check led to GREEN===>GET 2m\r\n");
+        }
+        if (value == 2)
+        {
+            set_led_red();
+            log_mqtt("check led to RED===>Moveing STOP\r\n");
+        }
+
         log_i("the UART_CMD_NORMAL_KEY !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK;
         lwl_event_notify(&e);
-    }   break;
-    case UART_CMD_TOUCH_KEY:{ // 触摸按键控制
+    }
+    break;
+    case UART_CMD_TOUCH_KEY:
+    { // 触摸按键控制
         log_i("the UART_CMD_TOUCH_KEY !\r\n");
         lwl_event_t e;
-        
+
         // 根据payload[1]判断是按下还是抬起
         // 0: touch_key_down, 1: touch_key_up
-        if (payload[1] == 0) {
+        if (payload[1] == 0)
+        {
             e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
             log_i("Touch key PRESSED\r\n");
-        } else if (payload[1] == 1) {
+        }
+        else if (payload[1] == 1)
+        {
             e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_UP;
             log_i("Touch key RELEASED\r\n");
-        } else {
+        }
+        else
+        {
             log_w("Unknown touch key event type: %d\r\n", payload[1]);
             e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN; // 默认作为按下处理
         }
-        
+
         e.uart_cmd_touch.touch_key_event_type = payload[1];
         lwl_event_notify(&e);
-    }   break;
-    case UART_CMD_SYNCH_STATUS:{ // 同步状态
+    }
+    break;
+    case UART_CMD_SYNCH_STATUS:
+    { // 同步状态
         log_d("the UART_CMD_SYNCH_STATUS !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_SYNC;
         e.uart_cmd_sync.battery = payload[1];
         e.uart_cmd_sync.charging = payload[2];
         lwl_event_notify(&e);
-    }   break;
-    case UART_CMD_POWER_OFF:{ // 关机控制
+    }
+    break;
+    case UART_CMD_POWER_OFF:
+    { // 关机控制
         log_i("**********************************************************************!\r\n");
         log_i("the UART_CMD_POWER_OFF !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_SHUTDOWN;
         lwl_event_notify(&e);
-    }   break;
-    case UART_CMD_SET_BLESN:{ // 设置蓝牙SN
+    }
+    break;
+    case UART_CMD_SET_BLESN:
+    { // 设置蓝牙SN
         log_i("the UART_CMD_SET_BLESN !\r\n");
         // ignore
-    }   break;
-    case UART_CMD_MOVE_DETECT_EN:{ // 使能移动检测
+    }
+    break;
+    case UART_CMD_MOVE_DETECT_EN:
+    { // 使能移动检测
         log_i("the UART_CMD_MOVE_DETECT_EN !\r\n");
         // ignore
-    }   break;
-    case UART_CMD_MOVE_OVER_A_METER:{ // 通知检测距离大于一米
+    }
+    break;
+    case UART_CMD_MOVE_OVER_A_METER:
+    { // 通知检测距离大于一米
         log_i("the UART_CMD_MOVE_OVER_A_METER !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER;
         lwl_event_notify(&e);
-    }   break;
-    case UART_CMD_CLEAR_WIFI_SSID:{ // 清除WIFI SSID
+    }
+    break;
+    case UART_CMD_CLEAR_WIFI_SSID:
+    { // 清除WIFI SSID
         log_i("the UART_CMD_CLEAR_WIFI_SSID !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID;
         lwl_event_notify(&e);
-    }   break;
+    }
+    break;
     }
 }
 
@@ -157,7 +199,7 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
 /// @brief  调节音量
 /// @param busy_status 通常为 1
 /// @param volume 音量，范围 0-16
-/// @return 
+/// @return
 int uart_response_synch_status(uint8_t busy_status, uint8_t volume)
 {
     uint8_t busy_status_payload[2] = {busy_status, volume};
@@ -177,10 +219,10 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
     // 构造 HEADER + LEN + DATA(CMD + PAYLOAD) + CRC + PAYLOAD
     uint8_t send_packet[6 + len];
     send_packet[0] = PACKET_HEADER_CMD;
-    send_packet[1] = len & 0xFF; //低字节
-    send_packet[2] = (len >> 8) & 0xFF; //高字节
+    send_packet[1] = len & 0xFF;        // 低字节
+    send_packet[2] = (len >> 8) & 0xFF; // 高字节
     memcpy(&send_packet[3], payload, len);
-    
+
     // 计算 CRC
     uint16_t crc = calculate_crc(send_packet, 3 + len);
     send_packet[3 + len] = crc & 0xFF;
@@ -191,7 +233,7 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
     log_d("uart_send_inquiry: \r\n");
     log_d_buf(send_packet, 6 + len);
 
-    if (g_dev_uart_hdl == NULL) 
+    if (g_dev_uart_hdl == NULL)
         return -1;
     // 发送响应包
     return dev_write(g_dev_uart_hdl, send_packet, 6 + len);
@@ -201,9 +243,12 @@ int uart_send_set_sn(char *sn)
 {
     uint8_t busy_status_payload[1 + SN_SIZE] = {0};
     busy_status_payload[0] = UART_CMD_SET_BLESN;
-    if (strcmp(sn, "WECNC4H06CPLJE7") == 0) {
+    if (strcmp(sn, "WECNC4H06CPLJE7") == 0)
+    {
         memcpy(busy_status_payload + 1, "WCCN24H28FEEEFA", SN_SIZE);
-    } else {
+    }
+    else
+    {
         memcpy(busy_status_payload + 1, sn, SN_SIZE);
     }
     return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
@@ -223,7 +268,7 @@ int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b)
 {
     uint8_t send_led_payload[7];
     memset(send_led_payload, 0, sizeof(send_led_payload));
-    send_led_payload[0] = UART_CMD_SET_LED_COLOR;   
+    send_led_payload[0] = UART_CMD_SET_LED_COLOR;
     /* 小端序 */
     send_led_payload[1] = r & 0xFF;        // r 低字节
     send_led_payload[2] = (r >> 8) & 0xFF; // r 高字节
@@ -244,7 +289,7 @@ int uart_send_apply_soft_poweroff(void)
     return uart_send_inquiry(send_payload, 1);
 }
 
-void set_led_off(void)          { uart_send_set_led_color(COLOR_BLACK); }   //结束对话时灯光关闭
+void set_led_off(void) { uart_send_set_led_color(COLOR_BLACK); } // 结束对话时灯光关闭
 
 int uart_send_open_le_audio(uint8_t *mac)
 {

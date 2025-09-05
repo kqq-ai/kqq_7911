@@ -21,7 +21,7 @@
 
 #include "../../SC7A20/sc7a20.h"
 
-#define log_i log_mqtt
+// #define log_i log_mqtt
 
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 1000
@@ -105,7 +105,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
-        uart_response_synch_status(is_request_busy(), last_req_volume);/// 0是idle 1是busy，必须回复
+        uart_response_synch_status(1, last_req_volume);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
