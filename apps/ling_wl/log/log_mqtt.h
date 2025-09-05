@@ -13,21 +13,12 @@
 #include <time.h>
 #include "../../include_lib/net/mqtt/MQTTClient.h"
 
-/* 日志级别 */
-typedef enum {
-    LOG_DEBUG,
-    LOG_INFO,
-    LOG_WARN,
-    LOG_ERROR
-} LogLevel;
-
 /* 日志函数 */
 void log_mqtt(const char* format, ...);
+void log_mqtt_set_battery_level(char *sn_battery, int battery_level);
 
 /* MQTT连接管理函数 */
-int log_mqtt_batch_start(void);
+int log_mqtt_start(void);
+void log_mqtt_stop(void);
 
-int mqtt_subscribe_reset(void);
-
-void log_mqtt_batch_stop(void);
 #endif /* LOG_MQTT_H */
