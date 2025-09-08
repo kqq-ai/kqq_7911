@@ -96,7 +96,8 @@ void app_default_loop()
         enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
         if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
             printf("Network connection is successful!\n");
-            lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            ///lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE); ///脱离产品运行，进测试
         }
     }
 }

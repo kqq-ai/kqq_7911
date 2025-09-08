@@ -56,7 +56,8 @@ void app_wss_connected_mode(void)
     while (1) {
         // 应用代码
         if (wss_application_loop()) {
-            lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            ///lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE); ///脱离产品运行，进测试
         }
 
         mdelay(10);

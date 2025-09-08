@@ -498,7 +498,8 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
-            log_i("NET_NTP_GET_TIME_SUCC\n");
+            log_i("in app_music_net_event_handler NET_NTP_GET_TIME_SUCC in app_lingwl\n");
+            ///这句话不管用................. lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
             break;
         default:
             break;

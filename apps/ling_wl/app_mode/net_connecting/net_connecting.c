@@ -81,13 +81,15 @@ void app_net_connecting_loop()
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
-        printf("Network connection is successful!\n");
+        printf("Network connection is successful! in app_net_connecting_loop\n");
         int err = app_music_play_local_music_with_callback(
             context->music_player,
             CONFIG_CP_VOICE_FILE_PATH "NetCfgSucc.mp3",
             NULL,
             NULL);
-        lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+            mdelay(1000);
+        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE); ///脱离产品运行，进测试
+        ///lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
     }
     if (WIFI_STA_DISCONNECT == state) {
         // 判断联网不成功才启动wifi manager
