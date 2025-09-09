@@ -9,7 +9,7 @@
 #include "ble_att_util.h"
 #include "log/log_mqtt.h"
 #define APP_STATUS (1)
-#define RSSI_EXPIRE_TIME_MS (5000) // RSSI样本过期时间：5秒
+#define RSSI_EXPIRE_TIME_MS (1099) // RSSI样本过期时间：5秒
 
 // 消息类型
 enum
@@ -470,6 +470,10 @@ static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *
 
     if (rssi >= BLUE_DISTANCE_TWO_METER && rssi != -128)
     {
+        if (p_eend_dev->distance_info.distance_type != DISTANCE_0)
+        {
+            log_mqtt("BLE DISTANCE_0: %s, RSSI=%d lower than 60db", p_eend_dev->sn, rssi);
+        }
         p_eend_dev->distance_info.distance_type = DISTANCE_0;
     }
     else if (rssi < BLUE_DISTANCE_TWO_METER && rssi >= BLUE_DISTANCE_FIVE_METER && rssi != -128)
