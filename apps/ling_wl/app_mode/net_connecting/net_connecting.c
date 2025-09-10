@@ -55,11 +55,19 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         //     NULL,
         //     NULL);
         // play 提示音
+        // on_user_key_confirm();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
         // 处理触摸按键抬起事件
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "t_key.mp3",
+            NULL,
+            NULL);
+        on_user_key_confirm();
+        // 确认连接小程序
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);

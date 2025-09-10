@@ -37,7 +37,7 @@ static int bt_connction_status_event_handler(struct bt_event *bt)
     switch (bt->event) {
     case BT_STATUS_INIT_OK:
         // 主从一体 从机模块初始化
-        ble_simple_server_init();
+        // ble_simple_server_init();
         // 主从一体 主机模块初始化
         ble_simple_client_init();
         break;

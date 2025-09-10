@@ -225,6 +225,21 @@ u8 ble_update_get_ready_jump_flag(void)
 }
 
 
+int ble_wait_user_confirm = 0; // 1 等待用户确认
+u16 pending_con_handle = INVALID_HANDLE; // 等待用户确认的连接句柄
+
+void on_user_key_confirm()
+{
+    if (ble_wait_user_confirm && pending_con_handle != INVALID_HANDLE) {
+        server_profile_start(pending_con_handle); // 允许通讯
+        ble_wait_user_confirm = 0;
+        server_con_handle = pending_con_handle;
+        pending_con_handle = INVALID_HANDLE;
+        log_info("User confirmed, BLE profile started.\n");
+    }
+}
+
+
 
 //=BLE send==============================================================================================
 // BLE send
@@ -277,7 +292,9 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 log_info("i = %d, l = %d, t = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet)
                         , hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet)
                         , hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
-                server_profile_start(server_con_handle);
+                // server_profile_start(server_con_handle);
+                pending_con_handle = server_con_handle;
+                ble_wait_user_confirm = 1; // 等待用户确认
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
@@ -295,7 +312,9 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 connection_update_cnt = 0;
                 ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
                 connection_update_complete_success(server_con_handle, packet + 8);
-                server_profile_start(server_con_handle);
+                // server_profile_start(server_con_handle);
+                pending_con_handle = server_con_handle;
+                ble_wait_user_confirm = 1; // 等待用户确认
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE: {

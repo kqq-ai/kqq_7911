@@ -17,6 +17,8 @@ void ble_simple_server_adv_enable(u8 en);
 void ble_simple_server_init(void);
 void ble_simple_server_exit(void);
 
+void on_user_key_confirm();
+
 /*
     hzx add
     for 蓝牙配网任务 ： WiFi 获取到ip之后主动上报给 小程序（APP） 
