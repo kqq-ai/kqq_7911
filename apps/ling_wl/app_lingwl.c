@@ -36,6 +36,7 @@
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
+static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_WHITE); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -224,7 +225,7 @@ static void app_lingwl_main(void)
     /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
-
+    set_led_power_on();
     simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"poweron.mp3");
     //set_led_white(); /// on LED after power ON
 

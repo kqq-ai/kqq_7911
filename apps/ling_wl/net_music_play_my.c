@@ -899,6 +899,7 @@ int app_music_play_local_music_with_callback(music_player *player, void *fname, 
 
 int app_music_play_stop(music_player *player)
 {
+    log_i("app_music_play_stop");
     if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
         // 停止解码
         int ret = player->dec_ops->dec_stop(player);
