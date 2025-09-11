@@ -277,6 +277,15 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
 	../../../../apps/ling_wl/app_mode/devices_check/devices_check.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_1_key.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_2_LED.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_3_speaker.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_4_mic.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_5_acc.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_6_edev.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_7_wifi.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_8_SN.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_danzai.c \
 	../../../../apps/ling_wl/app_mode/update/update.c \
 	../../../../apps/ling_wl/app_mode/net_connected/net_connected.c \
 	../../../../apps/ling_wl/app_mode/net_connecting/net_connecting.c \

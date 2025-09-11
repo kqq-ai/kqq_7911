@@ -1,0 +1,97 @@
+#include "mode_list.h"
+#include "bt_ble/app_wifi_manage.h"
+// 模式7 wifi相关变量
+static int g_mode_7_wifi_checked = 0;
+static int g_mode_7_last_wifi_status = -1;
+static int g_mode_7_wifi_connected = 0;
+
+bool mode7_is_wifi_connected()
+{
+    return g_mode_7_wifi_checked && g_mode_7_wifi_connected;
+}
+
+// 模式7音频播放回调函数
+void mode7_audio_callback(void *priv)
+{
+    // 检查当前模式，如果不是模式5，则忽略回调
+    if (get_current_mode() != WORK_MODE_7) {
+        log_i("MODE 7: Audio callback ignored - not in mode 7 (current mode: %d)", get_current_mode());
+        return;
+    }
+    
+    log_i("MODE 7: Prompt audio callback - finished, starting wifi status monitoring");
+    g_audio_playing = 0;
+}
+
+void process_mode_7(void)
+{
+    // 等待NetConnting.mp3播放完成
+    if (g_audio_playing) {
+        return;
+    }
+
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    WIFI_connect_STATUES wifi_status = get_wifi_connect_status(NULL);
+    if ( wifi_status == WIFI_CONNECT_ASSOCIAT_FAIL || 
+                wifi_status == WIFI_CONNECT_ASSOCIAT_TIMEOUT ||
+                wifi_status == WIFI_CONNECT_STA_DISCONNECT ||
+                wifi_status == WIFI_CONNECT_TIMEOUT_NO_SSID) {
+        // 连接失败
+        if (!g_mode_7_wifi_checked || g_mode_7_wifi_connected) {
+            g_mode_7_wifi_connected = 0;
+            g_mode_7_wifi_checked = 1;
+            if (context && context->music_player) {
+                g_audio_playing = 1;
+                app_music_play_local_music_with_callback(
+                    context->music_player,
+                    CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3",
+                    mode7_audio_callback, NULL);
+            }
+            log_i("MODE 7: WiFi connect failed, playing NetCfgFail.mp3");
+            return;
+        }
+    } else if (wifi_status == WIFI_CONNECT_SUCC || wifi_status == WIFI_CONNECT_DHCP_SUCC) {
+            // 连接成功
+        if (!g_mode_7_wifi_checked || !g_mode_7_wifi_connected) {
+            g_mode_7_wifi_connected = 1;
+            g_mode_7_wifi_checked = 1;
+            if (context && context->music_player) {
+                g_audio_playing = 1;
+                app_music_play_local_music_with_callback(
+                    context->music_player,
+                    CONFIG_CP_VOICE_FILE_PATH"NetCfgSucc.mp3",
+                    mode7_audio_callback, NULL);
+            }
+            log_i("MODE 7: WiFi connected, playing NetCfgSucc.mp3");
+            return;
+        }
+    }
+
+    // 成功后允许按键切换到WORK_MODE_8，否则停留
+    // 这里不做自动切换，按键事件里判断
+}
+
+
+void mode7_init()
+{
+    wifi_and_network_on();
+
+    g_mode_7_wifi_checked = 0;
+    g_mode_7_wifi_connected = 0;
+    g_mode_7_last_wifi_status = -1;
+    {
+        lwl_app_context_t *context7 = lwl_app_core_context_get_instance();
+        app_music_play_local_music_with_callback(
+            context7->music_player,
+            CONFIG_CP_VOICE_FILE_PATH"NetConnting.mp3",
+            mode7_audio_callback, NULL);
+        g_audio_playing = 1;
+    }
+    log_i("MODE 7: WiFi connecting, playing NetConnting.mp3");
+}
+
+void mode7_uninit()
+{
+    
+}
