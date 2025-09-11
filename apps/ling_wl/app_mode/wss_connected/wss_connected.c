@@ -32,6 +32,9 @@
 #include "gpio.h"
 #include "protocol/cp/c_uart_p.h"
 
+static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
+
 static int wss_connected_init(void)
 {
     /* 开始RSSI测距 */
@@ -57,6 +60,7 @@ void app_wss_connected_mode(void)
     while (1) {
         // 应用代码
         if (wss_application_loop()) {
+            set_led_connect_error();// WSS ERROR
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
                 printf("Network connection is WIFI_STA_DISCONNECT!\n");
@@ -68,6 +72,8 @@ void app_wss_connected_mode(void)
             } else {
                 if (!wss_reconnect()) {
                     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
+                } else {
+                    set_led_connected();
                 }
             }
         }

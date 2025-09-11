@@ -24,15 +24,9 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
-#include "protocol/cp/c_uart_p.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
-
-        
-static void set_led_connecting(void)        { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 正在连接网络 蓝色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
-static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
 
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
 {
@@ -153,9 +147,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
-        /* 控制 led : 正在连接网络 蓝色 */
-        set_led_connecting();
-
         break;
 
     case WIFI_EVENT_MODULE_START_ERR:
@@ -208,10 +199,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         block_connect_sem_post(NULL); // 通知连接函数
 
-        /* 控制 led : 网络连接失败 灰色 */
-        //todo play audo 罗天宇///////////////////////////////////
-        set_led_connect_error();
-
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -233,9 +220,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         {
             wifi_connect_fail_cb_func_pri(NULL);
         }
-        //todo play audo 罗天宇///////////////////////////////////
-        /* 控制 led : 网络连接失败 灰色 */
-        set_led_connect_error();
 
         break;
 
@@ -249,9 +233,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
-        //   //todo play audo 罗天宇///////////////////////////////////
-        /* 控制 led : 网络连接失败 灰色 */
-        set_led_connect_error();
 
         break;
 
@@ -270,9 +251,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         block_connect_sem_post(NULL); // 通知连接函数
 
         // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
-
-        /* 控制 led : 联网成功 白色 */
-        set_led_connected();
 
         struct wifi_mode_info info = {0};
         info.mode = NONE_MODE;
@@ -313,9 +291,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
-        
-        /* 控制 led : 网络连接失败 灰色 */
-        set_led_connect_error();
 
         break;
 

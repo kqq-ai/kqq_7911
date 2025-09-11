@@ -126,20 +126,6 @@ static void my_task(void *priv)
     }
 }
 
-#include "bt_ble/client/ble_simple_client.h"
-
-static void ble_start_scan_rssi(void *priv, void *cb)
-{
-    // TODO
-    // struct ble_simple_client_operation_t *ops = ble_get_simple_client_operation_table();
-
-    // ops->start_scan_rssi(priv, cb);
-
-    printf("ble_start_scan_rssi\n");
-    set_scan_adv_callback(cb, priv);
-    ble_simple_client_module_enable(1);
-}
-
 static void let_eend_turn_off_cb(bka_cmd_code_e code, void *priv)
 {
     if (code == BKA_CMD_CODE_COMPL) {

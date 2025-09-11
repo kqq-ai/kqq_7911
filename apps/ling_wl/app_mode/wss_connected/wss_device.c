@@ -258,7 +258,6 @@ void wss_device_init()
 {
     log_i("Init WSS device\n");
     g_app_ctx = lwl_app_core_context_get_instance();
-    ble_simple_server_module_enable(0);
     ble_simple_client_module_enable(1);
 
     os_mutex_create(&edev_set_mutex);
@@ -276,6 +275,7 @@ void wss_device_init()
 void wss_device_uninit()
 {
     log_i("Uninit WSS device\n");
+    ble_simple_client_module_enable(0);
 
     clear_target_sn_set();
     /* 取消注册lwl事件处理回调 */

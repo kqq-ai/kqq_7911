@@ -2086,8 +2086,6 @@ static int devices_check_init(void)
     log_i("Multi-mode system ready");
     log_i("Key detection enabled");
     log_i("UART event monitoring active");
-    
-    ble_simple_server_module_enable(0);
     ble_simple_client_module_enable(1);
     /* UART指令开启C端le audio */
     uart_send_open_le_audio(g_app_ctx->mac);
@@ -2138,6 +2136,7 @@ static int devices_check_unint(void)
     }
     
     lwl_event_handler_remove(devices_check_lwl_event_handler_cb);
+    ble_simple_client_module_enable(0);
 
     // 销毁全局LFS读写锁
     rwlock_destroy(&g_lfs_rwlock);

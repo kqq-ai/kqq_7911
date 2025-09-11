@@ -34,7 +34,8 @@
 #define MODE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
 
 //=================================================================================================
 // LWL event callback
@@ -65,6 +66,7 @@ static int net_connected_init(void)
     init_time = timer_get_ms();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_add(net_connected_event_handler_cb);
+    set_led_connected();
     if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
         do_check_and_ota();
     }
@@ -91,8 +93,6 @@ static int net_connected_unint(void)
                 printf("Failed to add the notify_app_wifi_mqtt_succ task !\r\n");
             }
         }
-        ble_simple_server_module_enable(0);
-        ble_simple_client_module_enable(1);
         /* 等待ble与小程序断开 再进入小程序 */
         while(1) {
             if (get_ble_app_disconnect_flag()) {

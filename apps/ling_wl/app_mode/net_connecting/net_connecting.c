@@ -22,6 +22,7 @@
 #include "net_connecting.h"
 #include "app_mode/lwl_app_framework.h"
 #include "app_mode/lwl_app_core.h"
+#include "protocol/cp/c_uart_p.h"
 #include "os/os_api.h"
 #include "net/wifi/wifi_connect.h"
 #include "net_music_play_my.h"
@@ -31,6 +32,12 @@
 #define MODE_WIFI_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 bool wifi_manager_state = false; // wifi manager 状态
+
+        
+// static void set_led_connecting(void)        { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 正在连接网络 蓝色 */
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
+static void set_led_confirm(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //确认配网后灯光变橙色
 
 int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
 {
@@ -60,6 +67,14 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         // 处理触摸按键抬起事件
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+        int err = app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "t_key.mp3",
+            NULL,
+            NULL);
+        set_led_confirm();
+        // on_user_key_confirm();
+        // 确认连接小程序
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
@@ -82,7 +97,7 @@ static int net_connecting_unint(void)
     lwl_event_handler_remove(net_connecting_event_handler_cb);
     if (wifi_manager_state) {
         wifi_manager_state = false;
-        ble_simple_server_exit();
+        ble_simple_server_module_enable(0);
     }
     return 0;
 }
@@ -93,6 +108,9 @@ void app_net_connecting_loop()
     enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
         printf("Network connection is successful!\n");
+
+        /* 控制 led : 联网成功 白色 */
+        set_led_connected();
         int err = app_music_play_local_music_with_callback(
             context->music_player,
             CONFIG_CP_VOICE_FILE_PATH "NetCfgSucc.mp3",
@@ -106,10 +124,14 @@ void app_net_connecting_loop()
             state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
             state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT)) {
         // 判断联网不成功才启动wifi manager
-        ble_simple_server_init();
+        ble_simple_server_module_enable(1);
         wifi_manager_state = true;
         
-        printf("Network connection is WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID!\n");
+        printf("Network connection is failed!\n");
+
+        /* 控制 led : 网络连接失败 灰色 */
+        //todo play audo 罗天宇///////////////////////////////////
+        set_led_connect_error();
         int err = app_music_play_local_music_with_callback(
             context->music_player,
             CONFIG_CP_VOICE_FILE_PATH "NetCfgEnter.mp3",

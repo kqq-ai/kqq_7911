@@ -36,7 +36,7 @@
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
-static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_WHITE); }
+static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -57,8 +57,6 @@ const u8 sn1[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 
 const u8 sn2[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x38, 0x00 };
 //"WCCN24H28FEEEFE"
 const u8 sn3[SN_SIZE] = { 0x57, 0x43, 0x43, 0x4E, 0x32, 0x34, 0x48, 0x32, 0x38, 0x46, 0x45, 0x45, 0x45, 0x46, 0x00, 0x00 };
-
-static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }   /* 控制 led : 正常响应中 白色 */
 
 static void simple_play_prompt(const char *fname) 
 {
@@ -87,13 +85,6 @@ static void lwl_app_task(void *priv)
         lwl_app_mode_loop();
     }
     lwl_app_uninit();
-}
-
-static void open_scan_delay(void *priv)
-{
-    msleep(2000);
-
-    ble_simple_client_module_enable(1);
 }
 
 // 关机提示音播放完成后的回调：播放结束再触发关机事件
@@ -227,10 +218,6 @@ static void app_lingwl_main(void)
     context->music_player = &g_music_player;
     set_led_power_on();
     simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"poweron.mp3");
-    //set_led_white(); /// on LED after power ON
-
-    /* 创建异步任务处理任务 */
-    // start_async_msg_loop();
 
     /* 创建线程池 */
     pool = threadpool_create(4, 10);
@@ -497,7 +484,7 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
-            log_i("NET_NTP_GET_TIME_SUCC\n");
+            log_i("NET_NTP_GET_TIME_SUCC %d\n", timer_get_ms());
             break;
         default:
             break;
