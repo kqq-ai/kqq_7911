@@ -58,16 +58,11 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        printf("LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN\n");
-        // int err = app_music_play_local_music_with_callback(
-        //     context->music_player,
-        //     CONFIG_CP_VOICE_FILE_PATH "t_key.mp3",
-        //     NULL,
-        //     NULL);
-        // play 提示音
-        break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        // 处理触摸按键抬起事件
+        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+        } else {
+            log_i("Touch key released");
+        }
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         int err = app_music_play_local_music_with_callback(

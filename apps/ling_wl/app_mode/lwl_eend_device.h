@@ -12,6 +12,13 @@
 
 #define MAX_SAMPLES 1000 /**< Size of the RSSI sample array */
 
+typedef enum {
+    BDO_STATE_IDLE              = 0x00,         //!< 无操作
+    BDO_STATE_ACTIVATING        = 0x01,         //!< 正在激活中
+    BDO_STATE_TURNNING_ON       = 0x02,         //!< 正在开机
+    BDO_STATE_TURNNING_OFF      = 0x04,         //!< 正在关机
+} bdo_state_e;
+
 enum distance_type {
     DISTANCE_0,                                 //!< 小于2米
     DISTANCE_1,                                 //!< 2米到5米
@@ -73,38 +80,29 @@ typedef struct {
     void *priv;
 } bka_cmd_t;
 
-typedef struct {
-    bool need_handshake;   //!< 是否需要进行握手通信
-    bool alive;
-    bool handshake_flag;    // 握手标志，0表示没有握手，1表示已握手
-    uint8_t alive_hs_fail_cnt;  // 保活判断中，连续握手失败的次数
-    uint8_t address_type;  //冗余 用于连接 对方地址类型：0--public address,1--random address 
-    uint8_t address[6];    //冗余 用于连接 peer_address 
-
-    MyBlockingQueue cmd_buffer; // queue<bka_cmd_t>
-#if 1
-    uint8_t cache_buf[(sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM)]__attribute__((aligned(4)));
-#else
-    bka_cmd_t cache_buf[KEEP_ALIVE_CMD_NUM]__attribute__((aligned(4)));
-#endif
-    OS_MUTEX mutex;
-} bka_eend_dev_handshake_info_t;
-
 /**
  * @brief Structure representing an LWL EEND device
  */
 typedef struct {
     u8 sn[SN_SIZE];                               //!< Serial number of the device
 
-    u8 bat_level;                                 //!< E端设备电量
+    u8 bat_level;                                 //!< E 端设备电量
 
-    u8 power_on_state;                            //!< E端开机状态
+    u8 adv_state;                                 //!< E 端 ADV 状态 详情见 bdp_adv_stat_e
 
-    u8 bound_mac[6];                              //!< E端绑定的C端MAC
+    u8 op_state;                                  //!< 正在进行的操作状态 详情见 bdo_state_e
+
+    u8 has_deadline;                              //!< E 端 ADV 是否包含广播配对码
+    u32 deadline;                                 //!< E 端 激活状态截止时间
+
+    u8 address_type;                              //!< 用于连接 对方地址类型：0--public address,1--random address 
+    u8 address[6];                                //!< 用于连接 peer_address 
+
+    u8 ctrl_mask_flags;                           //!< 广播自定义数据 E 端控制字节 详情见 bdp_ctrl_mask_flags_t 和 bdp_ctrl_mask_e
+
+    uint32_t active_time;                         //!< 最近一次激活时间
 
     distance_info_t distance_info;                //!< Distance information
-
-    bka_eend_dev_handshake_info_t handshake_info; //!< Handshake information
 
     /**
      * @brief Callback to match advertisement data
@@ -121,6 +119,13 @@ typedef struct {
      * @param size Size of the output buffer
      */
     void (*get_string)(void *__this, char *buffer, int size);
+    /**
+     * @brief Callback to set ctrl byte
+     * @param __this Pointer to the device instance
+     * @param on E-end on/off state
+     * @param play E-end audio play state
+     */
+    void (*set_ctrl)(void *__this, uint8_t on, uint8_t play);
 } lwl_eend_dev_t;
 
 /**
@@ -150,6 +155,15 @@ bool adv_match_impl(const void *__this, const u8 *adv_data, const u16 adv_len);
  */
 void get_string_impl(const void *__this, char *buffer, const int size);
 
+
+/**
+ * @brief Default implementation to set ctrl byte
+ * @param __this Pointer to the device instance
+ * @param on E-end on/off state
+ * @param play E-end audio play state
+ */
+void set_ctrl_impl(void *__this, uint8_t on, uint8_t play);
+
 /**
  * @brief Initialize an LWL EEND device structure
  * @param sn Serial number to assign to the device
@@ -158,102 +172,5 @@ void get_string_impl(const void *__this, char *buffer, const int size);
  */
 void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev);
 
-
-
-/*===================================================================================================
- *  
- *===================================================================================================*/
-
-/**
- * 
- * @brief 往指定设备的控制指令队列中添加一条指令
- * 
- * @param[in]  p_eend_dev 设备引用
- * @param[in]  cmd_buffer 控制指令数据
- * @param[in]  size 控制指令数据长度
- * @param[in]  cb 函数指针，控制指令传输完成时的回调
- * @param[in]  priv 用户私有数据
- * @param[out] cmd_id_out 指令ID
- * 
- * @return BKACODE_Success       : 指令添加成功, 
- *         BKACODE_Not_Found     : 设备列表中未找到指定sn的设备, 
- *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
- */
-int ble_keep_alive_device_push_cmd(lwl_eend_dev_t *p_eend_dev, uint8_t *cmd_buffer, uint32_t size, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out);
-
-/**
- * @brief 删除指定设备的控制指令队列中的指定指令
- * 
- * @param[in] p_eend_dev 指定设备引用
- * @param[in] cmd_id 指定指令ID
- * 
- * @return BKACODE_Success : 删除成功
- *         BKACODE_Dev_Not_Found : 设备列表中未找到指定设备引用
- *         BKACODE_Cmd_Not_Found : 设备的控制指令队列中未找到指定指令ID的指令
- */
-int ble_keep_alive_device_remove_cmd(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id);
-
-/**
- * @brief 往指定设备的控制指令队列中添加一条开机指令
- * 
- * @param[in]  p_eend_dev 设备引用
- * @param[in]  cb 函数指针，控制指令传输完成时的回调
- * @param[in]  priv 用户私有数据
- * @param[out] cmd_id_out 指令ID
- * 
- * @return BKACODE_Success       : 指令添加成功
- *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
- * 
- * @note 执行cb时可能会持有部分锁
- *       - p_eend_dev->handshake_info.mutex
- */
-int bka_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out);
-
-/**
- * @brief 往指定设备的控制指令队列中添加一条关机指令
- * 
- * @param[in]  p_eend_dev 设备引用
- * @param[in]  cb 函数指针，控制指令传输完成时的回调
- * @param[in]  priv 用户私有数据
- * @param[out] cmd_id_out 指令ID
- * 
- * @return BKACODE_Success       : 指令添加成功
- *         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
- * 
- * @note 执行cb时可能会持有部分锁
- *       - p_eend_dev->handshake_info.mutex
- */
-int bka_e_turn_off(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out);
-
-/**
-* @brief 往指定设备的控制指令队列中添加一条e_set_LED指令
-* 
-* @param[in]  p_eend_dev 设备引用
-* @param[in]  cb 函数指针，控制指令传输完成时的回调
-* @param[in]  priv 用户私有数据
-* @param[out] cmd_id_out 指令ID
-* @param[in]  r, 占空比 0 - 10000
-* @param[in]  g, 占空比 0 - 10000
-* @param[in]  b, 占空比 0 - 10000
-* 
-* @return BKACODE_Success       : 指令添加成功
-*         BKACODE_Cmd_Queue_Full: 对应设备的控制指令队列已满
-* 
-* @note 执行cb时可能会持有部分锁
-*       - p_eend_dev->handshake_info.mutex
-*       LED 为共阳极的RGB灯 
-*/
-int bka_e_set_LED(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, u16 r, u16 g, u16 b, uint32_t *cmd_id_out);
-
-/**
- * @brief 删除指定设备的控制指令队列中的指定指令
- * 
- * @param[in] p_eend_dev 指定设备引用
- * @param[in] cmd_id 指定指令ID
- * 
- * @return BKACODE_Success : 删除成功
- *         BKACODE_Cmd_Not_Found : 设备的控制指令队列中未找到指定指令ID的指令
- */
-int bka_cmd_remove(lwl_eend_dev_t *p_eend_dev, uint32_t cmd_id);
 
 #endif

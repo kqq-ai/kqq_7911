@@ -50,7 +50,7 @@ void mode9_random_audio_end_cb(void *priv)
         log_i("MODE 9: Disconnecting E-device after playback: %s (RSSI: %d)", sn_string, previous_rssi);
         
         uint cmd_id;
-        bka_e_turn_off(g_mode9_current_pdev, NULL, g_mode9_current_pdev, &cmd_id);
+        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
         g_mode9_current_pdev = NULL;
     }
     
@@ -63,7 +63,7 @@ void mode9_random_audio_end_cb(void *priv)
         
         // 立即连接新设备
         uint cmd_id;
-        bka_e_turn_on(strongest_pdev, mode9_e_connect_cb, strongest_pdev, &cmd_id);
+        bdo_turn_on(strongest_pdev, 9000, 9000, mode9_e_connect_cb, strongest_pdev);
         g_mode9_current_pdev = strongest_pdev;
         return; // 不重新启用C端扬声器，因为即将播放新音频
     }
@@ -82,7 +82,7 @@ static void mode9_e_connect_cb(bka_cmd_code_e code, void *priv)
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
-    log_i("MODE 9: bka_e_turn_on code %d %s", code, sn_string);
+    log_i("MODE 9: bdo_turn_on code %d %s", code, sn_string);
 
     if (BKA_CMD_CODE_COMPL == code) {
         // 连接成功，播放随机音频
@@ -189,7 +189,7 @@ void process_mode_9(void)
                         g_mode9_current_pdev->get_string(g_mode9_current_pdev, current_sn, sizeof(current_sn));
                         log_i("MODE 9: Disconnecting current device: %s (RSSI: %d)", current_sn, current_rssi);
                         uint cmd_id;
-                        bka_e_turn_off(g_mode9_current_pdev, NULL, g_mode9_current_pdev, &cmd_id);
+                        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
                         g_mode9_current_pdev = NULL;
                     }
                     
@@ -200,7 +200,7 @@ void process_mode_9(void)
                         sn_string, current_rssi, best_rssi);
                     
                     uint cmd_id;
-                    bka_e_turn_on(strongest_pdev, mode9_e_connect_cb, strongest_pdev, &cmd_id);
+                    bdo_turn_on(strongest_pdev, 9000, 9000, mode9_e_connect_cb, strongest_pdev);
                     g_mode9_current_pdev = strongest_pdev;
                 } else {
                     log_i("MODE 9: Audio playing, waiting for completion before switching to stronger signal device");
@@ -249,7 +249,7 @@ void mode9_uninit()
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Disconnecting E-device during cleanup: %s", sn_string);
         uint cmd_id;
-        bka_e_turn_off(g_mode9_current_pdev, NULL, g_mode9_current_pdev, &cmd_id);
+        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
         g_mode9_current_pdev = NULL;
     }
     log_i("MODE 9: All state variables reset");

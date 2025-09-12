@@ -8,7 +8,6 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "app_mode/lwl_eend_device.h"
 #include "app_mode/lwl_app_core.h"
-#include "bt_ble/client/ble_keep_alive.h"
 #include "protocol/cp/c_uart_p.h"
 
 enum

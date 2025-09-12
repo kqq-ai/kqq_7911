@@ -23,7 +23,6 @@
 #include "async_msg_loop.h"
 #include "wait.h"
 #include "app_mode/7911_uart_7016/app_uart_task.h"
-#include "bt_ble/client/ble_keep_alive.h"
 #include "SC7A20/app_sc7a20_task.h"
 #include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_framework.h"
@@ -32,6 +31,7 @@
 #include "app_mode/lwl_app_core.h"
 
 #include "bt_ble/client/ble_distance.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
 #include "log/log_mqtt.h"
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
@@ -125,6 +125,7 @@ void base_lwl_event_handler(lwl_event_t *e)
 {
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
+        log_i("base_lwl_event_handler LWL_EVENT_TYPE_UART_SHUTDOWN\r\n");
         extern int OTA_download_running;
         if( OTA_download_running > 0){
             break; /// reset after OTA
@@ -132,12 +133,12 @@ void base_lwl_event_handler(lwl_event_t *e)
         do_shutdown();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        log_i("TOUCH KEY DOWN");
+        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+        } else {
+            log_i("Touch key released");
+        }
         // play 提示音
-        break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        log_i("TOUCH KEY UP");
-        // 处理触摸按键抬起事件
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("PRESS NORMAL KEY");
@@ -150,14 +151,17 @@ void base_lwl_event_handler(lwl_event_t *e)
         uart_send_apply_soft_poweroff(); // TODO restart
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-
         log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         if(lastbattery != e->uart_cmd_sync.battery) {
             lastbattery = e->uart_cmd_sync.battery;
             log_mqtt_set_battery_level(NULL, lastbattery);
         }
-        if(e->uart_cmd_sync.battery < 30 )
+        if(e->uart_cmd_sync.battery < 30 ) {
             set_led_red_low_power();
+        }
+        // if (1 == e->uart_cmd_sync.charging) {
+        //     uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
+        // }
         break;
     }
 }
@@ -219,6 +223,8 @@ static void app_lingwl_main(void)
     set_led_power_on();
     simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"poweron.mp3");
 
+    ble_dev_task_scheduler_init();
+
     /* 创建线程池 */
     pool = threadpool_create(4, 10);
     context->threadpool = pool;
@@ -231,9 +237,6 @@ static void app_lingwl_main(void)
 
     /* 开始RSSI测距 */
     monitor_start();
-
-    /* 初始化E端BLE握手处理任务 */
-    ble_keep_alive_init();
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");

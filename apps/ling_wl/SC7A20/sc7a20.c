@@ -232,3 +232,50 @@ int is_device_moving(){
 
     return sc7a20_interrupt_detect(g_iic_hdl);
 }
+
+/**
+ * @brief 失能 SC7A20H 加速度传感器
+ * @param iic_hdl I2C 设备句柄
+ * @return 0: 成功, -1: 失败
+ */
+int sc7a20h_disable(void *iic_hdl)
+{
+    int ret = 0;
+    // 0. 擦除中断
+    if (iic_write_one_byte(iic_hdl, SC7A20H_AOI1_SRC, 0x00) != 0)
+    {
+        printf("Failed to clear interrupt\r\n");
+    }
+    
+    // 1. 失能所有中断源
+    if (iic_write_one_byte(iic_hdl, SC7A20H_CTRL_REG3, 0x00) != 0) {
+        printf("Failed to disable interrupts\n");
+        ret = -1;
+    }
+    
+    // 2. 失能 AOI1 中断配置
+    if (iic_write_one_byte(iic_hdl, SC7A20H_AOI1_CFG, 0x00) != 0) {
+        printf("Failed to disable AOI1\n");
+        ret = -1;
+    }
+    
+    // // 3. 失能 AOI2 中断配置
+    // if (iic_write_one_byte(iic_hdl, 0x34, 0x00) != 0) {  // AOI2_CFG
+    //     printf("Failed to disable AOI2\n");
+    //     ret = -1;
+    // }
+    
+    // 4. 失能所有轴并进入掉电模式
+    if (iic_write_one_byte(iic_hdl, SC7A20H_CTRL_REG1, 0x00) != 0) {
+        printf("Failed to power down\n");
+        ret = -1;
+    }
+
+    // 5. 擦除中断
+    if (iic_write_one_byte(iic_hdl, SC7A20H_AOI1_SRC, 0x00) != 0)
+    {
+        printf("Failed to clear interrupt\r\n");
+    }
+    
+    return ret;
+}

@@ -291,7 +291,7 @@ void wss_request_stop()
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
         uint32_t cmd_id = 0;
-        bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
+        bdo_turn_off(g_edev_target, 9000, NULL, NULL);
         if (g_mode_state == STATE_DOWNLOAD) {
             send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
         }
@@ -340,11 +340,11 @@ bool wss_request_loop()
             last_message_received = 0;
             wss_mic_stop(); // 停止录音
             int cmd_id;
-            log_i("bka_e_turn_on %s\n", g_edev_target->sn);
+            log_i("bdo_turn_on %s\n", g_edev_target->sn);
             //上传E的电量
             log_mqtt_set_battery_level(g_edev_target->sn, (g_edev_target->bat_level)*10);
             
-            bka_e_turn_on(g_edev_target, e_turn_on_cb, g_edev_target, &cmd_id);
+            bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
@@ -380,11 +380,11 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
             int cmd_id;
-            log_i("bka_e_turn_on %s\n", g_edev_target->sn);
+            log_i("bdo_turn_on %s\n", g_edev_target->sn);
             if (g_edev_connected) {
-                bka_e_turn_off(g_edev_connected, NULL, g_edev_connected, &cmd_id);
+                bdo_turn_off(g_edev_connected, 9000, NULL, NULL);
             }
-            bka_e_turn_on(g_edev_target, e_turn_on_cb, g_edev_target, &cmd_id);
+            bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
         }
         break;
 
@@ -432,7 +432,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
             wss_ble_audio_stop();
             uint32_t cmd_id=0;
-            bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
+            bdo_turn_off(g_edev_target, 9000, NULL, NULL);
             wss_request_send_event(g_edev_target, ORMET_PLAY_END);
 
             wss_mic_start(get_time_stamp() + 600000); // 开始录音
