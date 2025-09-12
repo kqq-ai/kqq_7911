@@ -31,6 +31,7 @@
 #define MODE_TIMEOUT_MS 600000 // 600s
 #define MODE_WIFI_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
+static u32 key_times = 0;
 bool wifi_manager_state = false; // wifi manager 状态
 
         
@@ -44,6 +45,9 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
     return false;
 }
 
+u32 get_key_times_in_net_connecting(){
+    return key_times;
+} 
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -75,6 +79,10 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         set_led_confirm();
         // on_user_key_confirm();
         // 确认连接小程序
+        log_i("PRESS NORMAL KEY in net_connecting mode");
+        key_times++;
+        ble_simple_server_exit();
+        ble_simple_server_init();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);

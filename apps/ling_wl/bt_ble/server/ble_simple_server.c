@@ -815,7 +815,7 @@ void ble_simple_server_adv_enable(u8 en)
     os_mutex_post(&mutex);
 }
 
-
+extern u32 get_key_times_in_net_connecting();
 void ble_simple_server_init(void)
 {
     log_info("***** wifimgr_ble_init******\n");
@@ -833,11 +833,17 @@ void ble_simple_server_init(void)
 
     //增加后缀，区分名字
     memcpy(gap_device_name, name_p, gap_device_name_len);
-    memcpy(&gap_device_name[gap_device_name_len], "(BLE)", ext_name_len);
+    if( get_key_times_in_net_connecting() ) {
+        memcpy(&gap_device_name[gap_device_name_len], "(m)", ext_name_len);
+    } else {
+        memcpy(&gap_device_name[gap_device_name_len], "(t)", ext_name_len);
+    }
+    
     gap_device_name_len += ext_name_len;
+    gap_device_name_len = 10;               //固定长度
 
     gap_device_name[gap_device_name_len] = 0;//结束符
-    log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
+    log_info("ble name(%d): %s ;  key_times: %d \n", gap_device_name_len, gap_device_name, get_key_times_in_net_connecting() );
 
     set_ble_work_state(BLE_ST_INIT_OK);
     ble_simple_server_module_enable(1);

@@ -101,8 +101,15 @@ static char pincode[5] = "0000";
 
 const u8 *bt_get_mac_addr(void)
 {
-    static u8 mac_addr[6];
+    static u8 mac_addr[6]= {0x32, 0x1F, 0x33, 0x00, 0x7C, 0x95};
     const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    mac_addr[3] ++;
+    if( mac_addr[3] == 0x01 ){ //开机初始化，随机数。然后保持不变
+        mac_addr[4]  = rand32() & 0xFF;
+        mac_addr[5]  = rand32() & 0xFF;
+    }
+    le_controller_set_mac((void *)mac_addr);
+    return mac_addr;
 
 #if defined CONFIG_WIFI_ENABLE && !defined CONFIG_RF_TEST_ENABLE
     wifi_get_mac(mac_addr);
