@@ -64,6 +64,7 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
         current_pdev = pdev; // 设置当前连接的E端设备指针
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
+        current_pdev = NULL; // 设置当前连接的E端设备指针
     }
 }
 static void switch_to_e_target(lwl_eend_dev_t* pdev)
@@ -107,7 +108,7 @@ static void mode6_try_next_step(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     
     // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
-    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev || target_pdev == NULL)) {
+    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev && target_pdev != NULL)) {
         log_i("MODE 6: Starting loop audio playback");
         
         // 播放循环测试音频，使用回调
@@ -236,6 +237,7 @@ void mode6_init()
             CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3",
             mode6_audio_callback, NULL);
         g_mode6_action_in_progress = 1;
+        g_mode6_playing_prompt = 1;
     }
     log_i("MODE 6: 串行状态机启动");
 }
@@ -245,7 +247,7 @@ void mode6_uninit()
     log_i("Cleaning up MODE 6 audio functionality");
     ble_simple_client_module_enable(0);
     g_audio_playing = 0;
-    g_mode6_playing_prompt = 1;
+    g_mode6_playing_prompt = 0;
     g_mode6_action_in_progress = 0;  // 重置模式6动作进行标志
     g_mode6_state = MODE6_IDLE;      // 重置模式6状态机
     target_pdev = NULL;              // 清空目标设备指针
