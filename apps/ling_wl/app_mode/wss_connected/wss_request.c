@@ -18,6 +18,7 @@
 
 #include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
 
 // 提示音资源路径与本地播放接口
 #include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
@@ -243,7 +244,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 //=================================================================================================
 // pDev response callback
 //=================================================================================================
-static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
+static void e_turn_on_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     
@@ -252,7 +253,7 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
     switch(code) {
-    case BKA_CMD_CODE_COMPL:
+    case BDOCode_Success:
 
         log_i("Switch PortE %s OK\n", sn_string);
         g_edev_connected = g_edev_target;
@@ -260,26 +261,20 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
             send_message = ORMET_SWITCH_SUCCESS;
         }
         break;
-    case BKA_CMD_CODE_DEVLOST:
-        log_i("Switch PortE Dev Lost\n");
+    case BDOCode_Connection_Timeout:
+        log_i("Switch PortE BDOCode_Connection_Timeout\n");
         break;
-    case BKA_CMD_CODE_BUFFER_FULL:
-        log_i("Switch PortE BLE TX Buffer Full\n");
+    case BDOCode_Disconnect_Timeout:
+        log_i("Switch PortE BDOCode_Disconnect_Timeout\n");
         break;
-    case BKA_CMD_CODE_SEARCH_PROFILE_TIMEOUT:
-        log_i("Switch PoertE search GATT timeout\n");
+    case BDOCode_Scan_Adv_Stat_Timeout:
+        log_i("Switch PortE BDOCode_Scan_Adv_Stat_Timeout\n");
         break;
-    case BKA_CMD_CODE_E_TURN_ON_TIMEOUT:
-        log_i("Switch PortE Timeout\n");
-        break;
-    case BKA_CMD_CODE_E_TURN_ON_ALREADY_BOUND:
-        log_i("Switch PortE Failed: E is already bound\n");
-        break;
-    case BKA_CMD_CODE_UNEXPECTED:
+    case BDOCode_Unexpected_Error:
         log_i("Switch PortE Error\n");
         break;
     }
-    if (code != BKA_CMD_CODE_COMPL) {
+    if (code != BDOCode_Success) {
         send_message = ORMET_SWITCH_FAILED;
     }
 }

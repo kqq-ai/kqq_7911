@@ -51,7 +51,7 @@ static u8 g_mode6_action_in_progress = 0;
 
 // ========== 模式6回调函数声明 ===========
 void mode6_audio_callback(void *priv);
-static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
+static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     char sn_string[SN_SIZE] = "(NULL)";
@@ -60,7 +60,7 @@ static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
     }
     log_i("bdo_turn_on code %d %s\n", code, sn_string);
 
-    if (BKA_CMD_CODE_COMPL == code) {
+    if (BDOCode_Success == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
@@ -242,8 +242,8 @@ void mode6_init()
 
 void mode6_uninit()
 {
-    
     log_i("Cleaning up MODE 6 audio functionality");
+    ble_simple_client_module_enable(0);
     g_audio_playing = 0;
     g_mode6_playing_prompt = 1;
     g_mode6_action_in_progress = 0;  // 重置模式6动作进行标志
