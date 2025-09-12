@@ -113,61 +113,86 @@ void app_net_connecting_loop()
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
+
+    /* 网络连接成功处理 */
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
         printf("Network connection is successful!\n");
-
-        /* 控制 led : 联网成功 白色 */
-        set_led_connected();
-        int err = app_music_play_local_music_with_callback(
+        set_led_connected();  // 设置连接成功LED状态
+        
+        app_music_play_local_music_with_callback(
             context->music_player,
             CONFIG_CP_VOICE_FILE_PATH "NetCfgSucc.mp3",
             NULL,
             NULL);
+            
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
-    } else 
-    if (wifi_manager_state == false && (
-            state == WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID ||
-            state == WIFI_STA_CONNECT_ASSOCIAT_FAIL ||
-            state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
-            state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT)) {
-        // 判断联网不成功才启动wifi manager
-        ble_simple_server_init();
+        return;
+    }
 
+    /* 网络连接失败处理 */
+    bool is_connection_failed = (
+        state == WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID ||
+        state == WIFI_STA_CONNECT_ASSOCIAT_FAIL ||
+        state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
+        state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT
+    );
+
+    if (!wifi_manager_state && is_connection_failed) {
+        printf("Network connection is failed!\n");
+        set_led_connect_error();  // 设置连接错误LED状态
+        
+        ble_simple_server_init();
         wifi_manager_state = true;
         
-        printf("Network connection is failed!\n");
-
-        set_led_connect_error();
-        int err = app_music_play_local_music_with_callback(
+        app_music_play_local_music_with_callback(
             context->music_player,
             CONFIG_CP_VOICE_FILE_PATH "NetCfgEnter.mp3",
             NULL,
             NULL);
-    } else if (wifi_manager_state && key_times > 0){
-        if (timer_get_ms() - key_times > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
-            set_led_connect_error();
-            key_times = 0;
-            ble_simple_server_name_enable(0);
-            ble_connecting = false;
-            ble_connected = false;
-            printf("BLE timeout,restart ble\n");
-        }
-        if (ble_connecting == false && key_times > 0) {
-            set_led_confirm();
-            ble_simple_server_name_enable(1);
-            ble_connecting = true;
-            printf("try to connect ble\n");
-        }
-        if (!get_ble_app_disconnect_flag() && !ble_connected) {
-            set_led_connected();
-            int err = app_music_play_local_music_with_callback(
-                context->music_player,
-                CONFIG_CP_VOICE_FILE_PATH "bt_conneted.mp3",
-                NULL,
-                NULL);
-            ble_connected = true;
-            printf("BLE connected\n");
-        }
+            
+        return;
+    }
+
+    /* BLE连接处理 */
+    if (wifi_manager_state && key_times > 0) {
+        handle_ble_connection_state(context);
+    }
+}
+
+/* 处理BLE连接状态的辅助函数 */
+static void handle_ble_connection_state(lwl_app_context_t *context)
+{
+    /* BLE连接超时处理 */
+    if (timer_get_ms() - key_times > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
+        set_led_connect_error();
+        key_times = 0;
+        ble_simple_server_name_enable(0);
+        ble_connecting = false;
+        ble_connected = false;
+        printf("BLE timeout,restart ble\n");
+        return;
+    }
+
+    /* BLE连接尝试 */
+    if (!ble_connecting && key_times > 0) {
+        set_led_confirm();
+        ble_simple_server_name_enable(1);
+        ble_connecting = true;
+        printf("try to connect ble\n");
+    }
+
+    /* BLE连接成功处理 */
+    if (!get_ble_app_disconnect_flag() && !ble_connected) {
+        set_led_connected();
+        
+        app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "bt_conneted.mp3",
+            NULL,
+            NULL);
+            
+        ble_connected = true;
+        printf("BLE connected\n");
     }
 }
 
