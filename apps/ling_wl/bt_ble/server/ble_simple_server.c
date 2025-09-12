@@ -58,6 +58,8 @@ static u8 att_ram_buffer[ATT_RAM_BUFSIZE] __attribute__((aligned(4)));
 #define HOLD_LATENCY_CNT_ALL    (0xffff)
 
 static const char ble_ext_name[] = "(BLE)";
+static const char ble_ext_busy[] = "(m)";
+static const char ble_ext_idle[] = "(t)";
 
 //连接参数更新请求设置
 //是否使能参数请求更新,0--disable, 1--enable
@@ -92,7 +94,7 @@ static u8 adv_data[ADV_RSP_PACKET_MAX];//max is 31
 static u8 scan_rsp_data_len;
 static u8 scan_rsp_data[ADV_RSP_PACKET_MAX];//max is 31
 
-static char gap_device_name[BT_NAME_LEN_MAX] = "wl80_ble_test";
+static char gap_device_name[BT_NAME_LEN_MAX+1] = "wl80_ble_test";
 static u8 gap_device_name_len = 0; //名字长度，不包含结束符
 static u8 ble_work_state = 0;      //ble 状态变化
 static u8 adv_ctrl_en;             //广播控制
@@ -815,38 +817,43 @@ void ble_simple_server_adv_enable(u8 en)
     os_mutex_post(&mutex);
 }
 
-extern u32 get_key_times_in_net_connecting();
-void ble_simple_server_init(void)
+void ble_simple_server_name_enable(u8 en)
 {
-    log_info("***** wifimgr_ble_init******\n");
+    log_info("***** wifimgr_ble_name_enable******\n");
+    assert(os_mutex_valid(&mutex));
+    os_mutex_pend(&mutex, 0);
+    ble_simple_server_module_enable(0);
     const char *name_p = bt_get_local_name();
-    u8 ext_name_len = sizeof(ble_ext_name) - 1;
-
-    if (!os_mutex_valid(&mutex)) {
-        os_mutex_create(&mutex);
-    }
+    const char* ext_name = en ? ble_ext_busy : ble_ext_idle;
+    u8 ext_name_len = 3;
+    
 
     gap_device_name_len = strlen(name_p);
     if (gap_device_name_len > BT_NAME_LEN_MAX - ext_name_len) {
         gap_device_name_len = BT_NAME_LEN_MAX - ext_name_len;
     }
-
-    //增加后缀，区分名字
-    memcpy(gap_device_name, name_p, gap_device_name_len);
-    if( get_key_times_in_net_connecting() ) {
-        memcpy(&gap_device_name[gap_device_name_len], "(m)", ext_name_len);
-    } else {
-        memcpy(&gap_device_name[gap_device_name_len], "(t)", ext_name_len);
-    }
     
+    memcpy(gap_device_name, name_p, gap_device_name_len);
+    memcpy(&gap_device_name[gap_device_name_len], ext_name, ext_name_len);
+
     gap_device_name_len += ext_name_len;
-    gap_device_name_len = 10;               //固定长度
-
     gap_device_name[gap_device_name_len] = 0;//结束符
-    log_info("ble name(%d): %s ;  key_times: %d \n", gap_device_name_len, gap_device_name, get_key_times_in_net_connecting() );
 
+    
+    log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
     set_ble_work_state(BLE_ST_INIT_OK);
     ble_simple_server_module_enable(1);
+    os_mutex_post(&mutex);
+}
+
+void ble_simple_server_init(void)
+{
+    log_info("***** wifimgr_ble_init******\n");
+
+    if (!os_mutex_valid(&mutex)) {
+        os_mutex_create(&mutex);
+    }
+    ble_simple_server_name_enable(0);
 }
 
 void ble_simple_server_exit(void)

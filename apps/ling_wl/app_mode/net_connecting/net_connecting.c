@@ -29,10 +29,12 @@
 #include "log.h"
 
 #define MODE_TIMEOUT_MS 600000 // 600s
-#define MODE_WIFI_TIMEOUT_MS 10000 // 10s
+#define MODE_BLE_TIMEOUT_MS 15000 // 15s
 static u32 init_time = 0;
 static u32 key_times = 0;
 bool wifi_manager_state = false; // wifi manager 状态
+bool ble_connecting = false; // wifi manager 状态
+bool ble_connected = false; // wifi manager 状态
 
         
 // static void set_led_connecting(void)        { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 正在连接网络 蓝色 */
@@ -45,9 +47,6 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
     return false;
 }
 
-u32 get_key_times_in_net_connecting(){
-    return key_times;
-} 
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -76,13 +75,10 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
             CONFIG_CP_VOICE_FILE_PATH "t_key.mp3",
             NULL,
             NULL);
-        set_led_confirm();
         // on_user_key_confirm();
         // 确认连接小程序
         log_i("PRESS NORMAL KEY in net_connecting mode");
-        key_times++;
-        ble_simple_server_exit();
-        ble_simple_server_init();
+        key_times = timer_get_ms();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
@@ -96,6 +92,9 @@ static int net_connecting_init(void)
     init_time = timer_get_ms();
     lwl_event_handler_add(net_connecting_event_handler_cb);
     wifi_manager_state = false;
+    ble_connecting = false;
+    ble_connected = false;
+    key_times = 0;
 
     return 0;
 }
@@ -105,7 +104,7 @@ static int net_connecting_unint(void)
     lwl_event_handler_remove(net_connecting_event_handler_cb);
     if (wifi_manager_state) {
         wifi_manager_state = false;
-        ble_simple_server_module_enable(0);
+        ble_simple_server_exit();
     }
     return 0;
 }
@@ -132,21 +131,43 @@ void app_net_connecting_loop()
             state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
             state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT)) {
         // 判断联网不成功才启动wifi manager
-        ble_simple_server_module_enable(1);
+        ble_simple_server_init();
+
         wifi_manager_state = true;
         
         printf("Network connection is failed!\n");
 
-        /* 控制 led : 网络连接失败 灰色 */
-        //todo play audo 罗天宇///////////////////////////////////
         set_led_connect_error();
         int err = app_music_play_local_music_with_callback(
             context->music_player,
             CONFIG_CP_VOICE_FILE_PATH "NetCfgEnter.mp3",
             NULL,
             NULL);
-    } else {
-        // log_i("Network connecting... state=%d", state);
+    } else if (wifi_manager_state && key_times > 0){
+        if (timer_get_ms() - key_times > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
+            set_led_connect_error();
+            key_times = 0;
+            ble_simple_server_name_enable(0);
+            ble_connecting = false;
+            ble_connected = false;
+            printf("BLE timeout,restart ble\n");
+        }
+        if (ble_connecting == false && key_times > 0) {
+            set_led_confirm();
+            ble_simple_server_name_enable(1);
+            ble_connecting = true;
+            printf("try to connect ble\n");
+        }
+        if (!get_ble_app_disconnect_flag() && !ble_connected) {
+            set_led_connected();
+            int err = app_music_play_local_music_with_callback(
+                context->music_player,
+                CONFIG_CP_VOICE_FILE_PATH "bt_conneted.mp3",
+                NULL,
+                NULL);
+            ble_connected = true;
+            printf("BLE connected\n");
+        }
     }
 }
 

@@ -14,6 +14,7 @@ void ble_simple_server_disconnect(void);
 // void ble_simple_server_adv_enable(u8 en);
 void ble_simple_server_module_enable(u8 en);
 void ble_simple_server_adv_enable(u8 en);
+void ble_simple_server_name_enable(u8 en);
 void ble_simple_server_init(void);
 void ble_simple_server_exit(void);
 
