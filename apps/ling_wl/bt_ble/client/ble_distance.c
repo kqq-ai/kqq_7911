@@ -9,7 +9,7 @@
 #include "ble_att_util.h"
 #include "log/log_mqtt.h"
 #define APP_STATUS (1)
-#define RSSI_EXPIRE_TIME_MS (1099) // RSSI样本过期时间：5秒
+#define RSSI_EXPIRE_TIME_MS (1000) // RSSI样本过期时间：5秒
 
 // 消息类型
 enum
@@ -183,8 +183,8 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
 
     // 打印完整的原始RSSI信息
-    log_mqtt("%s", raw_samples_str);
-
+    // log_mqtt("%s", raw_samples_str);
+    log_i("[MQTT message] %s", raw_samples_str);
     // 使用简单均值：直接使用所有样本的平均值
     p_eend_dev->distance_info.rssi = (s8)original_average;
 

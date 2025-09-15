@@ -51,7 +51,7 @@
 #include "cJSON_common/cJSON.h"
 #include "bt_ble/app_wifi_manage.h"
 #include "http/http_cli.h"
-
+#include "log/log_mqtt.h"
 // 为模式7 SN/Key写入功能添加必要的头文件
 #include "../../../common/example/third_party/littlefs/lfs.h" // LittleFS文件系统
 
@@ -1607,6 +1607,8 @@ static void mode5_gsensor_status_update(void)
         printf("[GYROSCOPE] X:%d Y:%d Z:%d Motion:%s Total:%d Small:%d Large:%d Errors:%d\r\n",
                g_accel_x, g_accel_y, g_accel_z, motion_status,
                g_motion_count, g_small_motion_count, g_large_motion_count, read_error_count);
+        log_mqtt("[GYROSCOPE] X:%d Y:%d Z:%d Motion:%s ",
+                 g_accel_x, g_accel_y, g_accel_z, motion_status);
         last_print_time = current_time;
     }
 }
@@ -2002,7 +2004,7 @@ void app_devices_check_mode(void)
         u32 g_curr_time = timer_get_ms();
 
         // 定期输出设备信息（减少频率以避免日志过多）
-        if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 1)
+        if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 5)
         { // 每5秒输出一次
             log_i("=== SYSTEM STATUS ===");
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);

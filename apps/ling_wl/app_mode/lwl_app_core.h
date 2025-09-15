@@ -160,6 +160,8 @@ lwl_eend_dev_t *add_new_eend_dev(u8 *sn);
  */
 void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv);
 
+
+bool remove_eend_dev(const char *sn);
 /**
  * @brief 打印所有E端设备信息
  */
