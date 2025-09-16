@@ -92,19 +92,16 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("APPLICATION STOP");
         // lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-        wss_application_touch_key_exit();
-        break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        log_i("TOUCH KEY DOWN");
+        wss_disconnect(); // for test
         // wss_application_touch_key_exit();
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        log_i("TOUCH KEY UP");
-        // 处理触摸按键抬起事件
-        break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // Return to Default Mode
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+        } else {
+            log_i("Touch key released");
+        }
+        // wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);

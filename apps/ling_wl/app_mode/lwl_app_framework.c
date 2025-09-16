@@ -25,6 +25,9 @@ static int lwl_app_mode_switch_exit_check(u8 curr_task)
 {
     int ret = false;
     switch (curr_task) {
+    case APP_DEVICE_CHECK_MODE:
+        ret = false;
+        break;
     default:
         ret = TRUE;
         break;
@@ -44,6 +47,9 @@ static int lwl_app_mode_switch_check(u8 app_mode)
 {
     int ret = false;
     switch (app_mode) {
+    case APP_DEVICE_CHECK_MODE:
+        ret = false;
+        break;
     default:
         ret = TRUE;
         break;
@@ -62,10 +68,6 @@ int lwl_app_mode_switch_to(u8 app_mode)
 {
     os_mutex_pend(&g_mode_mutex, 0);
 
-    if (app_curr_mode == APP_DEVICE_CHECK_MODE) {
-        os_mutex_post(&g_mode_mutex);
-        return false;
-    }
     if (app_curr_mode == app_mode) {
         os_mutex_post(&g_mode_mutex);
         return false;
@@ -142,7 +144,15 @@ void lwl_app_init()
 {
     os_mutex_create(&g_mode_mutex);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    app_curr_mode = APP_POWER_ON_MODE;
+    char sn[25];
+    get_SN(sn);
+    if (sn[0] == 0) {
+        log_i("no sn, go to device check mode");
+        app_curr_mode = APP_DEVICE_CHECK_MODE;
+    } else {
+        log_i("have sn, go to power on mode");
+        app_curr_mode = APP_POWER_ON_MODE;
+    }
 }
 
 void lwl_app_mode_loop()

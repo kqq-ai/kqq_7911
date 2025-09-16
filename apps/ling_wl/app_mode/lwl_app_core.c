@@ -8,6 +8,19 @@ static OS_MUTEX g_mutex;
 
 static volatile int g_event_scheduler_exit = 0;
 
+static const char *adv_stat_text[] = {
+    [BDPAS_OFF]        = "OFF",
+    [BDPAS_CONNECTING] = "CONNECTING",
+    [BDPAS_CONNECTED]  = "CONNECTED",
+};
+
+inline const char *adv_stat_to_text(bdp_dev_op_type_e type) {
+    if (type >= sizeof(adv_stat_text) / sizeof(adv_stat_text[0])) {
+        return "\0";
+    }
+    return adv_stat_text[type];
+}
+
 static void lwl_simple_event_scheduler(void *priv)
 {
     ASSERT(s_app_context != NULL);
@@ -166,8 +179,6 @@ void clear_all_eend_dev(void)
         idx++;
 
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
-        bka_eend_dev_handshake_info_t *pdev_info = &pdev->handshake_info;
-        pdev_info->alive = 0;
     }
     map_iterator_unlock(it);
     // 删除并释放所有pdev
@@ -189,26 +200,23 @@ void dump_all_eend_info()
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
-    /**
-     * 
-     */
-
-    log_i("+-----------------+-----+---+-------------------+------+-----------+-----+");
-    log_i("|       sn        | bat | P |     bound_mac     | rssi |  distance | num |");
-    log_i("+-----------------+-----+---+-------------------+------+-----------+-----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
+    log_i("|       sn        | bat |  adv_state |  deadline  | rssi |  distance | OP | num |");
+    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
-        log_i("| %15.15s | %3d | %1d | %02X:%02X:%02X:%02X:%02X:%02X | %4d | %9s | %3d |", pdev->sn, 
-            pdev->bat_level, pdev->power_on_state, 
-            pdev->bound_mac[0], pdev->bound_mac[1], pdev->bound_mac[2], 
-            pdev->bound_mac[3], pdev->bound_mac[4], pdev->bound_mac[5],
-            pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type),pdev->distance_info.rssi_sample_count);
+        if (adv_stat_to_text(pdev->adv_state)[0] != '\0') {
+            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9s | %02X | %3d |", pdev->sn, 
+                pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline, 
+                pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
+        } else {
+            log_i("[ERROR]%s UNKNOWN type: %d", pdev->sn, pdev->adv_state);
+        }
     }
-    log_i("+-----------------+-----+---+-------------------+------+-----------+------+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
 
-    
     map_iterator_unlock(it); // 释放锁
 }
 

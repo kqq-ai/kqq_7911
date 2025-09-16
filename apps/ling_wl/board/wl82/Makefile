@@ -277,6 +277,15 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
 	../../../../apps/ling_wl/app_mode/devices_check/devices_check.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_1_key.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_2_LED.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_3_speaker.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_4_mic.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_5_acc.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_6_edev.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_7_wifi.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_8_SN.c \
+	../../../../apps/ling_wl/app_mode/devices_check/mode_danzai.c \
 	../../../../apps/ling_wl/app_mode/update/update.c \
 	../../../../apps/ling_wl/app_mode/net_connected/net_connected.c \
 	../../../../apps/ling_wl/app_mode/net_connecting/net_connecting.c \
@@ -311,9 +320,9 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/bt_ble/ble_combined.c \
 	../../../../apps/ling_wl/bt_ble/app_wifi_manage.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_simple_client.c \
-	../../../../apps/ling_wl/bt_ble/client/ble_keep_alive.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_att_util.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_distance.c \
+	../../../../apps/ling_wl/bt_ble/client/ble_dev_task_scheduler.c \
 	../../../../apps/ling_wl/bt_ble/server/ble_simple_server.c \
 	../../../../apps/ling_wl/board/wl82/board_7911B.c \
 	../../../../apps/ling_wl/board/wl82/board_7911D.c \

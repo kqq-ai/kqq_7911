@@ -24,15 +24,9 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
-#include "protocol/cp/c_uart_p.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
-
-        
-static void set_led_connecting(void)        { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 正在连接网络 蓝色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
-static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
 
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
 {
@@ -77,16 +71,26 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         wifi_default_mode_parm.mode = STA_MODE;
         wifi_default_mode_parm.sta_cnt = 1;
         wifi_default_mode_parm.connect_best_network = 1;
-
+        
+        struct wifi_stored_sta_info app_wifi_stored_ssid[NETWORK_SSID_INFO_CNT] = {0};
+        int ret = 0;
+        ret = wifi_get_stored_sta_info(app_wifi_stored_ssid); // 刷固件会清空VM
+        log_i("wifi_get_stored_sta_info: %d\n", ret);
+        if (ret > 0) {
         // TODO READ ssid pwd from VM
-        get_wifi_config(wifi_default_mode_parm.ssid[0],wifi_default_mode_parm.pwd[0]);
+            log_i("get stored ssid %s\n", app_wifi_stored_ssid[0].ssid);
+            memcpy(wifi_default_mode_parm.ssid[0], app_wifi_stored_ssid[0].ssid, strlen((const char *)app_wifi_stored_ssid[0].ssid));
+            memcpy(wifi_default_mode_parm.pwd[0], app_wifi_stored_ssid[0].pwd, strlen((const char *)app_wifi_stored_ssid[0].pwd));
 
-        wifi_set_sta_connect_timeout(5);
-        wifi_set_sta_connect_best_ssid(1);
-        wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
+            wifi_set_default_mode(&wifi_default_mode_parm, 0, 1);
+        } else {
+            log_i("no stored ssid\n");
+            get_wifi_config(wifi_default_mode_parm.ssid[0],wifi_default_mode_parm.pwd[0]);
+            wifi_set_sta_connect_timeout(5);
+            wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
+        }
+        // wifi_set_sta_connect_best_ssid(1);
 
-        /*wifi manager 所需要的一些初始化*/
-        wifi_manage_init(NULL);
         break;
 
     case WIFI_EVENT_MODULE_START:
@@ -143,9 +147,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
 
-        /* 控制 led : 正在连接网络 蓝色 */
-        set_led_connecting();
-
         break;
 
     case WIFI_EVENT_MODULE_START_ERR:
@@ -198,10 +199,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         block_connect_sem_post(NULL); // 通知连接函数
 
-        /* 控制 led : 网络连接失败 灰色 */
-        //todo play audo 罗天宇///////////////////////////////////
-        set_led_connect_error();
-
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -223,9 +220,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         {
             wifi_connect_fail_cb_func_pri(NULL);
         }
-        //todo play audo 罗天宇///////////////////////////////////
-        /* 控制 led : 网络连接失败 灰色 */
-        set_led_connect_error();
 
         break;
 
@@ -239,9 +233,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
-        //   //todo play audo 罗天宇///////////////////////////////////
-        /* 控制 led : 网络连接失败 灰色 */
-        set_led_connect_error();
 
         break;
 
@@ -260,9 +251,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         block_connect_sem_post(NULL); // 通知连接函数
 
         // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
-
-        /* 控制 led : 联网成功 白色 */
-        set_led_connected();
 
         struct wifi_mode_info info = {0};
         info.mode = NONE_MODE;
@@ -303,9 +291,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
-        
-        /* 控制 led : 网络连接失败 灰色 */
-        set_led_connect_error();
 
         break;
 
@@ -411,9 +396,26 @@ static void wifi_app_task(void *priv) // 主要是create wifi 线程的
     wifi_on();
 }
 
+void wifi_and_network_on(void)
+{
+    if (wifi_is_on()) {
+        return;
+    }
+    wifi_on();
+}
+
+void wifi_and_network_off(void)
+{
+    if (wifi_is_on() == 0) {
+        return;
+    }
+    wifi_off();
+}
+
 static int wireless_net_init(void) // 主要是create wifi 线程的
 {
     puts("wireless_net_init \n\n");
-    return thread_fork("wifi_app_task", 10, 1792, 0, 0, wifi_app_task, NULL);
+    wifi_app_task(NULL);
+    puts("wireless_net_init end \n\n");
 } 
 late_initcall(wireless_net_init);

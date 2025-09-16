@@ -7,7 +7,8 @@
 #include "btstack/le/le_common_define.h"
 #include "ble_simple_client.h"
 #include "ble_att_util.h"
-#include "log/log_mqtt.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
+
 #define APP_STATUS (1)
 #define RSSI_EXPIRE_TIME_MS (1000) // RSSI样本过期时间：5秒
 
@@ -297,148 +298,38 @@ void monitor_stop(void)
     log_i("[MEASDIST]monitor_stop : clear_all_eend_dev end\n");
 }
 
-extern bool g_handshake_is_ongoing;
+static void active_op_callback(uint8_t code, void *priv)
+{
+    lwl_eend_dev_t *dev = (lwl_eend_dev_t *)priv;
+
+    if (code == BDOCode_Success)
+    {
+        dev->active_time = timer_get_ms();
+        log_i("[BDO]Active success!");
+    }
+}
 
 static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
 {
-#define FORTEST 0
-#if FORTEST
-    uint8_t buffer[32];
-    memset(buffer, 0, sizeof(buffer));
-
-    int r = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_COMPLETE_LOCAL_NAME, buffer);
-    if (r == -1)
-    {
-        return;
-    }
-    char *name = buffer;
-    buffer[r] = '\0';
-
-    log_i("%s %d", name, r);
-
-    if (r != 7 || strcmp(name, "AIFANTA") != 0)
-    {
-        return;
-    }
-    char *sn = "WCCN24H28FEEEF7";
-    s8 rssi = report_pt->rssi;
-#else
     if (!adv_pre_match_impl(report_pt->data, report_pt->length))
     {
         return;
     }
 
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    lwl_cqueue_adv_data_t adv_queue_data;
-    memset(&adv_queue_data, 0, sizeof(adv_queue_data));
-    adv_queue_data.rssi = report_pt->rssi;
-    memcpy(adv_queue_data.address, report_pt->address, 6);
-    adv_queue_data.address_type = report_pt->address_type;
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
-    // s8 rssi = report_pt->rssi;
+    lwl_cqueue_adv_data_t adv_data;
 
-    /*
-    关机广播格式：2(固定前缀) + 1(电量) + 16(序列号)
-    开机广播格式：2(固定前缀) + 1(电量) + 16(序列号) + 6(绑定的C端MAC)
-    */
-    // uint8_t buffer[32];
-    int ret = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, adv_queue_data.adv_data);
-    adv_queue_data.adv_data_length = ret;
-    // log_i("ble_adv_report_get_data ret:%d",ret);
-    // log_i("adv cb adv_data_length:%d\r\n", report_pt->length);
-    ret = my_blocking_queue_try_enqueue(&ctx->adv_queue, &adv_queue_data);
-    if (MYERROR_Is_Full == ret)
+    memset(&adv_data, 0, sizeof(adv_data));
+    adv_data.rssi = report_pt->rssi;
+    memcpy(adv_data.address, report_pt->address, 6);
+    adv_data.address_type = report_pt->address_type;
+    adv_data.adv_data_length = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, adv_data.adv_data);
+
+    if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&context->adv_queue, &adv_data))
     {
-        log_i("adv_queue full\n");
+        log_e("adv_queue full\n");
     }
-// #if 1
-//     char sn[16] = "";
-//     memcpy(sn, buffer + 3, 15);
-// #else
-//     char *sn = (char *)buffer + 3;
-// #endif
-//     sn[15] = '\0'; // 确保字符串以 null 结尾
-//     uint8_t bat_level = buffer[2];
-//     uint8_t eend_power_state = (r == 25) ? 1 : 0;
-
-//     if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
-//         strcpy(sn, "WECNC4H06CPLJE7");
-//     }
-#endif
-#if 0 // 测试用
-    lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
-    if (dev == NULL) {
-        log_i("[MEASDIST]add new device: %s\n", sn);
-        dev = add_new_eend_dev(sn);
-
-        lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
-        e.new_in.pdev = dev;
-        lwl_event_notify(&e);
-    }
-    log_d("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
-    uint8_t power_on_state_latest = dev->power_on_state;
-    dev->bat_level = bat_level;
-    dev->power_on_state = eend_power_state;
-    
-    if (dev->power_on_state) {
-        memcpy(dev->bound_mac, buffer + 19, sizeof(dev->bound_mac));
-
-        /*
-        1. 上一次搜索的广播数据中，无C端MAC
-        2. 这一次搜索的广播数据中，有C端MAC
-        3. 广播数据中的C端MAC和自身匹配
-        */
-        if (power_on_state_latest != dev->power_on_state && 
-            memcmp(dev->bound_mac, lwl_app_core_context_get_instance()->mac, sizeof(dev->bound_mac)) == 0) {
-            extern void bka_notify_turn_on_success(void);
-            bka_notify_turn_on_success();
-        }
-    } else {
-        memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
-    }
-
-    os_mutex_pend(&dev->distance_info.mutex, 0);
-    // Store the RSSI value
-    dev->distance_info.rssi_samples[dev->distance_info.rssi_sample_count++] = rssi;
-    if (dev->distance_info.rssi_sample_count == MAX_SAMPLES) {
-        dev->distance_info.rssi_sample_count = 0;
-    }
-    os_mutex_post(&dev->distance_info.mutex);
-    
-
-    // 握手通信相关处理
-    if (dev->handshake_info.need_handshake) {
-        os_mutex_pend(&dev->handshake_info.mutex, 0);
-
-        if (dev->handshake_info.handshake_flag == 1) { /* 已经握手过了 */
-            os_mutex_post(&dev->handshake_info.mutex);
-            return;
-        }
-        
-        /* 更新状态 */
-        dev->handshake_info.alive = 1;
-        dev->handshake_info.alive_hs_fail_cnt = 0;
-        dev->handshake_info.address_type = report_pt->address_type;
-        memcpy(dev->handshake_info.address, report_pt->address, 6);
-
-        if (!g_handshake_is_ongoing) {
-            /* 如果没有正在进行的握手任务，就启动一次握手流程 */
-            extern void start_handshake(lwl_eend_dev_t *pdev);
-            start_handshake(dev);
-        }
-        os_mutex_post(&dev->handshake_info.mutex);
-    }
-
-    log_d("[MEASDIST]over");
-#endif
-}
-
-static void get_closest_devive(lwl_eend_dev_t *p_eend_dev, void *priv)
-{
-    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-    p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-    log_i("[MEASDIST] %s: %d\r\n", sn_string, p_eend_dev->distance_info.rssi);
 }
 
 static void blue_distance_notify_app()
@@ -561,6 +452,7 @@ static void distance_main(void *priv)
 
                 // 通知距离变化
                 blue_distance_notify_self();
+                // clean_all_dev_rssi_samples();
             }
 
             if (current_time - notify_self_time > NOTIFY_SELF_TIME)
@@ -597,168 +489,134 @@ static int creat_task_distance(void)
 static void scan_adv_process_task(void *priv)
 {
     lwl_app_context_t *temp_ctx = lwl_app_core_context_get_instance();
-    // 增加NULL检查
-    if (!temp_ctx)
-    {
-        log_i("[SCAN_ADV] ERROR: NULL context pointer");
-        return;
-    }
+    lwl_cqueue_adv_data_t adv_data;
 
-    lwl_cqueue_adv_data_t temp_adv_data;
-    memset(&temp_adv_data, 0, sizeof(temp_adv_data));
-    int ret = 0;
     while (1)
     {
-        ret = my_blocking_queue_dequeue(&temp_ctx->adv_queue, &temp_adv_data);
-        if (MYERROR_Success == ret)
-        {
-            // printf("my_blocking_queue_dequeue one time !\r\n");
-            // s8 rssi = temp_adv_data->rssi;
+        my_blocking_queue_dequeue(&temp_ctx->adv_queue, &adv_data);
 
-            /*
-            关机广播格式：2(固定前缀) + 1(电量) + 16(序列号)
-            开机广播格式：2(固定前缀) + 1(电量) + 16(序列号) + 6(绑定的C端MAC)
-            */
-            // uint8_t buffer[32];
-            // int r = ble_adv_report_get_data(temp_adv_data->data, temp_adv_data->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
-            int r = temp_adv_data.adv_data_length;
+        s8 rssi = adv_data.rssi;
+
+        /*
+        待激活广播格式：2(固定前缀) + 1(电量 + OFF) + 16(序列号)
+        已激活广播格式：2(固定前缀) + 1(电量 + OFF) + 16(序列号) + 4(截止时间)
+        开机/关机中广播格式：2(固定前缀) + 1(电量 + CONNECTING)
+        已开机广播格式：2(固定前缀) + 1(电量 + CONNECTED)
+        */
+        uint8_t *buffer = adv_data.adv_data;
+        int r = adv_data.adv_data_length;
+        if (r < 19 || r > 23)
+            continue; // 长度异常，忽略
+
 #if 1
-            // 增加数据长度检查，防止内存访问越界
-            if (r < 19)
-            {
-                log_i("[SCAN_ADV] ERROR: adv_data too short: %d bytes", r);
-                continue;
-            }
-
-            char sn[16] = "";
-            // 安全的内存拷贝，确保不会越界
-            int sn_len = (r >= 18) ? 15 : (r - 3);
-            if (sn_len > 0 && sn_len <= 15)
-            {
-                memcpy(sn, temp_adv_data.adv_data + 3, sn_len);
-            }
+        char sn[16] = "";
+        memcpy(sn, adv_data.adv_data + 3, 15);
+        if (sn[0] != 'K' || sn[1] != 'P')
+            continue; // 过滤非E端设备
 #else
-            char *sn = (char *)buffer + 3;
+        char *sn = (char *)buffer + 3;
 #endif
-            sn[sn_len] = '\0'; // 确保字符串以 null 结尾
-            uint8_t bat_level = (r >= 3) ? temp_adv_data.adv_data[2] : 0;
-            uint8_t eend_power_state = (r == 25) ? 1 : 0;
+        sn[15] = '\0'; // 确保字符串以 null 结尾
+        uint8_t bat_level = (buffer[2] >> 4) & 0x0F;
+        uint8_t adv_state = (buffer[2] >> 0) & 0x0F;
+        uint8_t has_deadline = (r == 23) ? 1 : 0;
+        if (bat_level == 0 || adv_state > 2)
+            continue; // 过滤0电量（针对老协议）和状态异常的广播
 
-            lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
-            if (dev == NULL)
-            {
-                log_i("[MEASDIST]add new device: %s\n", sn);
-                dev = add_new_eend_dev(sn);
-                // 增加NULL检查，防止设备创建失败
-                if (dev == NULL)
-                {
-                    log_i("[MEASDIST] ERROR: failed to create new device for %s", sn);
-                    continue;
-                }
-
-                lwl_event_t e;
-                e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
-                e.new_in.pdev = dev;
-                lwl_event_notify(&e);
-            }
-            // log_d("[MEASDIST]RSSI = %d bat = %d", temp_adv_data.rssi, bat_level);
-            uint8_t power_on_state_latest = dev->power_on_state;
-            /// log_i("power_on_state_latest: %d\r\n",power_on_state_latest);
-            dev->bat_level = bat_level;
-            dev->power_on_state = eend_power_state;
-            /// log_i("dev->power_on_state: %d\r\n",dev->power_on_state);
-            if (dev->power_on_state)
-            {
-                // 增加边界检查，防止访问越界
-                if (r >= 25)
-                {
-                    memcpy(dev->bound_mac, temp_adv_data.adv_data + 19, sizeof(dev->bound_mac));
-                }
-                else
-                {
-                    log_i("[MEASDIST] WARNING: adv_data too short for MAC addr, r=%d", r);
-                    memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
-                }
-                /// log_i("dev->bound_mac: %02x:%02x:%02x:%02x:%02x:%02x\r\n",dev->bound_mac[0],dev->bound_mac[1],dev->bound_mac[2],dev->bound_mac[3],dev->bound_mac[4],dev->bound_mac[5]);
-                /*
-                1. 上一次搜索的广播数据中，无C端MAC
-                2. 这一次搜索的广播数据中，有C端MAC
-                3. 广播数据中的C端MAC和自身匹配
-                */
-                if (power_on_state_latest != dev->power_on_state &&
-                    memcmp(dev->bound_mac, lwl_app_core_context_get_instance()->mac, sizeof(dev->bound_mac)) == 0)
-                {
-                    extern void bka_notify_turn_on_success(void);
-                    bka_notify_turn_on_success();
-                    log_i("MAC notify ok !\r\n");
-                }
-            }
-            else
-            {
-                memset(dev->bound_mac, 0, sizeof(dev->bound_mac));
-            }
-            /// log_i("os_mutex_pend dev->distance_info.mutex time :%d\n",timer_get_ms());
-            os_mutex_pend(&dev->distance_info.mutex, 0);
-            // Store the RSSI value and timestamp with safety checks
-            // 严格的边界检查，防止数组越界
-            if (dev->distance_info.rssi_sample_count >= 0 && dev->distance_info.rssi_sample_count < MAX_SAMPLES)
-            {
-                int idx = dev->distance_info.rssi_sample_count;
-                dev->distance_info.rssi_samples[idx] = temp_adv_data.rssi;
-                dev->distance_info.rssi_timestamps[idx] = timer_get_ms();
-                dev->distance_info.rssi_sample_count++;
-            }
-            else
-            {
-                // 数组已满或索引异常，记录错误
-                log_i("[RSSI_STORE] %s: ERROR - invalid sample_count=%d (MAX=%d)",
-                      sn, dev->distance_info.rssi_sample_count, MAX_SAMPLES);
-                // 重置为安全状态
-                dev->distance_info.rssi_sample_count = 0;
-            }
-            os_mutex_post(&dev->distance_info.mutex);
-
-            // 添加RSSI存储日志
-            log_d("[RSSI_STORE] %s: new_rssi=%d, sample_count=%d, timestamp=%u",
-                  sn, temp_adv_data.rssi, dev->distance_info.rssi_sample_count, timer_get_ms());
-
-            /// log_i("os_mutex_post dev->distance_info.mutex time :%d\n",timer_get_ms());
-
-            // 握手通信相关处理
-            if (dev->handshake_info.need_handshake)
-            {
-                /// log_i("os_mutex_pend dev->handshake_info.mutex time :%d\n",timer_get_ms());
-                os_mutex_pend(&dev->handshake_info.mutex, 0);
-                /// log_i("os_mutex_post dev->handshake_info.mutex time next :%d\n",timer_get_ms());
-                if (dev->handshake_info.handshake_flag == 1)
-                { /* 已经握手过了 */
-                    os_mutex_post(&dev->handshake_info.mutex);
-                    /// log_i("os_mutex_post dev->handshake_info.mutex time :%d\n",timer_get_ms());
-                    continue;
-                }
-
-                /* 更新状态 */
-                dev->handshake_info.alive = 1;
-                dev->handshake_info.alive_hs_fail_cnt = 0;
-                dev->handshake_info.address_type = temp_adv_data.address_type;
-                memcpy(dev->handshake_info.address, temp_adv_data.address, 6);
-
-                if (!g_handshake_is_ongoing)
-                {
-                    /* 如果没有正在进行的握手任务，就启动一次握手流程 */
-                    extern void start_handshake(lwl_eend_dev_t * pdev);
-                    start_handshake(dev);
-                }
-                os_mutex_post(&dev->handshake_info.mutex);
-                /// log_i("os_mutex_post dev->handshake_info.mutex time :%d\n",timer_get_ms());
-            }
-
-            log_d("[MEASDIST]over");
-        }
-        else if (MYERROR_Is_Empty == ret)
+        lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
+        if (dev == NULL)
         {
-            log_d("[MEASDIST]empty adv_queue");
+            log_i("[MEASDIST]add new device: %s\n", sn);
+            dev = add_new_eend_dev(sn);
+
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_EEND_DEV_NEW_IN;
+            e.new_in.pdev = dev;
+            lwl_event_notify(&e);
         }
+        uint8_t adv_state_latest = dev->adv_state;
+        /// log_i("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
+
+        dev->bat_level = bat_level;
+        dev->adv_state = adv_state;
+        dev->has_deadline = has_deadline;
+        dev->address_type = adv_data.address_type; // 其他任务会读，可能存在安全问题，也可能没问题
+        memcpy(dev->address, adv_data.address, 6); // 其他任务会读，可能存在安全问题，也可能没问题
+
+        if (dev->has_deadline)
+        {
+            dev->deadline = buffer[19] | (buffer[20] << 8) | (buffer[21] << 16) | (buffer[22] << 24);
+            log_i("[MEASDIST]Has deadline %d", dev->deadline);
+        }
+        else
+        {
+            log_i("[MEASDIST]Has not deadline");
+        }
+
+        if (adv_state_latest != BDPAS_CONNECTED && dev->adv_state == BDPAS_CONNECTED)
+        {
+            extern void notify_e_conncted();
+            notify_e_conncted();
+        }
+        if (adv_state_latest != BDPAS_OFF && dev->adv_state == BDPAS_OFF)
+        {
+            extern void notify_e_disconncted();
+            notify_e_disconncted();
+        }
+        os_mutex_pend(&dev->distance_info.mutex, 0);
+        // Store the RSSI value and timestamp with safety checks
+        // 严格的边界检查，防止数组越界
+        if (dev->distance_info.rssi_sample_count >= 0 && dev->distance_info.rssi_sample_count < MAX_SAMPLES)
+        {
+            int idx = dev->distance_info.rssi_sample_count;
+            dev->distance_info.rssi_samples[idx] = rssi;
+            dev->distance_info.rssi_timestamps[idx] = timer_get_ms();
+            dev->distance_info.rssi_sample_count++;
+        }
+        else
+        {
+            // 数组已满或索引异常，记录错误
+            log_i("[RSSI_STORE] %s: ERROR - invalid sample_count=%d (MAX=%d)",
+                  sn, dev->distance_info.rssi_sample_count, MAX_SAMPLES);
+            // 重置为安全状态
+            dev->distance_info.rssi_sample_count = 0;
+        }
+        os_mutex_post(&dev->distance_info.mutex);
+
+        // os_mutex_pend(&dev->distance_info.mutex, 0);
+        // // Store the RSSI value
+        // dev->distance_info.rssi_samples[dev->distance_info.rssi_sample_count++] = rssi;
+        // if (dev->distance_info.rssi_sample_count == MAX_SAMPLES) {
+        //     dev->distance_info.rssi_sample_count = 0;
+        // }
+        // os_mutex_post(&dev->distance_info.mutex);
+
+        u32 time_now = timer_get_ms(); // TODO
+
+        // 激活的前提条件：1. 广播状态为 OFF, 2. 当前没有正在进行的激活/开机/关机任务, 3. 距离最近一次激活时间超过3秒(防止短时间内重复激活)
+        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((time_now - dev->active_time) > 3000))
+        {
+            if (!dev->has_deadline)
+            {
+                // 如果广播是未激活的广播，则尝试进行激活
+                log_i("[MEASDIST]Active");
+                bdo_active(dev->sn, 9000, active_op_callback, dev);
+            }
+            else if (dev->has_deadline && dev->deadline < (time_now / 1000))
+            {
+                // 如果过期时间是一个过去的时间，则尝试进行激活
+                log_i("[MEASDIST]Active");
+                bdo_active(dev->sn, 9000, active_op_callback, dev);
+            }
+            else if (dev->has_deadline && (dev->deadline - 10) < (time_now / 1000))
+            {
+                // 如果距离过期时间仅剩 10s，则尝试进行激活
+                log_i("[MEASDIST]Active");
+                bdo_active(dev->sn, 9000, active_op_callback, dev);
+            }
+        }
+
+        log_d("[MEASDIST]over");
     }
 }
 

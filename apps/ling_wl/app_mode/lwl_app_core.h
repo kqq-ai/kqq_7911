@@ -19,6 +19,36 @@
 
 #define LWL_ADV_QUEUE_CAPACITY 60 /**< Capacity of the adv queue */
 
+typedef enum {
+    BDPCTRL_TURNON_FLAG = BIT(0),
+    BDPCTRL_PLAY_FLAG = BIT(1),
+} bdp_ctrl_mask_e;
+
+typedef enum {
+    BDPAS_OFF = 0,
+    BDPAS_CONNECTING,
+    BDPAS_CONNECTED,
+} bdp_adv_stat_e;
+
+typedef enum {
+    BDPDOS_ACTIVE_CONNECTING = 0,
+    BDPDOS_ACTIVE_SENDING_DATA,
+    BDPDOS_ACTIVE_DISCONNECTING,
+    BDPDOS_TURNON_CONNECTING,
+    BDPDOS_TURNON_DISCONNECTING,
+    BDPDOS_TURNON_WAITING_E_ADV_CONNECTED,
+    BDPDOS_TURNOFF_WAITING_E_ADV_DISCONNECTD,
+} bdp_dev_op_stat_e;
+
+typedef enum {
+    BDPDOT_ACTIVE = 0,
+    BDPDOT_TURNON,
+    BDPDOT_TURNOFF,
+} bdp_dev_op_type_e;
+
+const char *adv_stat_to_text(bdp_dev_op_type_e type);
+
+
 /**
  * @brief Enumeration of LWL event types
  */
@@ -26,7 +56,6 @@ typedef enum {
     LWL_EVENT_TYPE_UART_SYNC,                  /**< UART synchronization event */
     LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK,    /**< Short click on IO key */
     LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN,        /**< Touch key pressed event */
-    LWL_EVENT_TYPE_UART_TOUCH_KEY_UP,          /**< Touch key released event */
     LWL_EVENT_TYPE_UART_SHUTDOWN,              /**< System shutdown event */
     LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER, /**< Movement detection event */
 
@@ -38,6 +67,7 @@ typedef enum {
     LWL_EVENT_TYPE_BACKEND_DISCONNECTED,       /**< Backend service disconnected event */
 
     LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID,      /**< Clear stored WiFi SSID event */
+    LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF,   /**< Notify GSensor off event */
 } LWL_EVENT_TYPE;
 
 /**

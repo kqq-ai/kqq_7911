@@ -136,6 +136,7 @@ bool is_audio_playing(){
 }
 
 void wss_ble_audio_stop() {
+    log_i("wss_ble_audio_stop %d", g_audio_play_ongoing);
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_audio_play_end) {
         g_audio_play_end = true;

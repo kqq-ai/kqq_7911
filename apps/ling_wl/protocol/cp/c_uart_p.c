@@ -59,25 +59,7 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
     { // 触摸按键控制
         log_i("the UART_CMD_TOUCH_KEY !\r\n");
         lwl_event_t e;
-
-        // 根据payload[1]判断是按下还是抬起
-        // 0: touch_key_down, 1: touch_key_up
-        if (payload[1] == 0)
-        {
-            e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
-            log_i("Touch key PRESSED\r\n");
-        }
-        else if (payload[1] == 1)
-        {
-            e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_UP;
-            log_i("Touch key RELEASED\r\n");
-        }
-        else
-        {
-            log_w("Unknown touch key event type: %d\r\n", payload[1]);
-            e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN; // 默认作为按下处理
-        }
-
+        e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
         e.uart_cmd_touch.touch_key_event_type = payload[1];
         lwl_event_notify(&e);
     }
@@ -126,6 +108,14 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         log_i("the UART_CMD_CLEAR_WIFI_SSID !\r\n");
         lwl_event_t e;
         e.event_type = LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID;
+        lwl_event_notify(&e);
+    }
+    break;
+    case UART_CMD_NOTIFY_GSENSOR_OFF:
+    { // Gsensor 关闭
+        log_i("the UART_CMD_NOTIFY_GSENSOR_OFF !\r\n");
+        lwl_event_t e;
+        e.event_type = LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF;
         lwl_event_notify(&e);
     }
     break;
@@ -212,6 +202,13 @@ int uart_response_clear_wifi_ssid(void)
     return uart_send_response(UART_CMD_CLEAR_WIFI_SSID, CPCODE_SUCCESS, &normal_data, 1);
 }
 
+/* 1. 关闭加速度传感器的响应函数 */
+int uart_response_notify_gsensor_off(void)
+{
+    uint8_t normal_data = 0x00;
+    return uart_send_response(UART_CMD_NOTIFY_GSENSOR_OFF, CPCODE_SUCCESS, &normal_data, 1);
+}
+
 // 发送事件包
 int uart_send_inquiry(uint8_t *payload, uint16_t len)
 {
@@ -293,8 +290,30 @@ void set_led_off(void) { uart_send_set_led_color(COLOR_BLACK); } // 结束对话
 
 int uart_send_open_le_audio(uint8_t *mac)
 {
-    uint8_t payload[1 + 6] = {0};
+    // uint8_t payload[1 + 6] = {0};
+    // payload[0] = UART_CMD_OPEN_LE_AUDIO;
+    // memcpy(payload + 1, mac, 6);
+    /* test */
+    uint8_t payload[1 + 16] = {0};
     payload[0] = UART_CMD_OPEN_LE_AUDIO;
-    memcpy(payload + 1, mac, 6);
+    memcpy(payload + 1, mac, 16);
     return uart_send_inquiry(payload, sizeof(payload));
+}
+
+/* 7. 指定广播配对码重新打开Audio广播 */
+int uart_send_switch_audio_bc(uint8_t *broadcast_code)
+{
+    uint8_t payload[1 + 6] = {0};
+    payload[0] = UART_CMD_SWITCH_AUDIO_BC;
+    memcpy(payload + 1, broadcast_code, 6);
+    return uart_send_inquiry(payload, sizeof(payload));
+}
+
+/* 8. 指定广播配对码重新打开Audio广播 */
+int uart_send_set_ctrl(uint8_t ctrl)
+{
+    uint8_t busy_status_payload[1 + 1] = {0};
+    busy_status_payload[0] = UART_CMD_SET_CTRL;
+    busy_status_payload[1] = ctrl;
+    return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
 }

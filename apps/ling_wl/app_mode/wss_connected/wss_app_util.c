@@ -107,17 +107,20 @@ bool wss_check_exit()
     if (!websockets_info) {
         wss_exception_exit();
         log_i("websockets_info is NULL");
-    }
-    if (websockets_info->ping_thread_id == 0) {
-        wss_exception_exit();
-        log_i("websockets_client_recv_thread have exited!!!");
-    }
-    if (websockets_info->recv_thread_id == 0) {
-        wss_exception_exit();
-        log_i("websocket_client_heart have exited!!!");
+    } else {
+        if (websockets_info->ping_thread_id == 0) {
+            wss_exception_exit();
+            log_i("websockets_client_recv_thread have exited!!!");
+        }
+        if (websockets_info->recv_thread_id == 0) {
+            wss_exception_exit();
+            log_i("websocket_client_heart have exited!!!");
+        }
     }
     return g_exception_exit;
 }
+
+char* wss_url = NULL;
 
 bool wss_connect() {
     if (!os_mutex_valid(&g_wss_mutex)) {
@@ -126,13 +129,12 @@ bool wss_connect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
-    char* wss_url = get_wss_connection_url();
+    wss_url = get_wss_connection_url();
     if (wss_url == NULL) {
         os_mutex_post(&g_wss_mutex);
         return false;
     }
     context->websockets_info = wss_server_connect(wss_url);
-    free(wss_url);
     if (context->websockets_info == NULL) {
         os_mutex_post(&g_wss_mutex);
         return false;
@@ -150,9 +152,41 @@ void wss_disconnect() {
     if (context->websockets_info != NULL) {
         wss_server_disconnect(context->websockets_info);
         context->websockets_info = NULL;
+        free(wss_url);
+        wss_url = NULL;
     }
     log_mqtt_stop();
     os_mutex_post(&g_wss_mutex);
+}
+
+bool wss_reconnect() {
+    if (!os_mutex_valid(&g_wss_mutex)) {
+        os_mutex_create(&g_wss_mutex);
+    }
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if (context->websockets_info != NULL) {
+        wss_server_disconnect(context->websockets_info);
+        context->websockets_info = NULL;
+    }
+    if (wss_url == NULL) {
+        char* wss_url = get_wss_connection_url();
+    }
+    log_i("websockets reconnected %s",wss_url);
+
+    if (wss_url == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return false;
+    }
+    context->websockets_info = wss_server_connect(wss_url);
+    if (context->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return false;
+    }
+    g_exception_exit = false;
+    log_i("websockets reconnected succ");
+    os_mutex_post(&g_wss_mutex);
+    return true;
 }
 
 int send_audio_status(int type, int event) 

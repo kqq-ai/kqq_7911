@@ -136,9 +136,9 @@ static void gen_SN()
 bool get_SN(char* SN){
     if (snInVm[0] == 0) gen_SN();
     if (snInVm[0] == 0 || strlen(snInVm) != SN_SIZE || WRITE_SN_KEY) {
-        log_i("get_SN NULL, switch to device check mode\n");
-        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+        log_i("get_SN NULL\n");
         snInVm[0] = 0;
+        SN[0] = 0;
         return false;
     }
     snprintf(SN, KEY_SIZE, "%s", snInVm);

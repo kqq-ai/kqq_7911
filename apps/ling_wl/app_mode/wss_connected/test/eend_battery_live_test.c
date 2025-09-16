@@ -194,10 +194,11 @@ static void wss_app_lwl_event_handler_cb(lwl_event_t *e)
         uart_response_synch_status(g_mode_state != STATE_MODE_IDLE, 8);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        log_i("TOUCH KEY DOWN");
-        break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        log_i("TOUCH KEY UP");
+        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+        } else {
+            log_i("Touch key released");
+        }
         break;
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
         log_i("SHUTDOWN");

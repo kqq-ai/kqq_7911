@@ -20,13 +20,10 @@ static void update_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         // play 提示音
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        // 处理触摸按键抬起事件
-        break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // Reset WiFi SSID
+        // TODO STOP THE OTA
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by update_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
