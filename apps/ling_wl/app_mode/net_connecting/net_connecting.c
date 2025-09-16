@@ -46,7 +46,9 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
 {
     return false;
 }
-
+u32 get_key_times_in_net_connecting(){
+    return ble_connecting;
+} 
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -109,6 +111,43 @@ static int net_connecting_unint(void)
     return 0;
 }
 
+/* 处理BLE连接状态的辅助函数 */
+static void handle_ble_connection_state(lwl_app_context_t *context)
+{
+    /* BLE连接超时处理 */
+    if (timer_get_ms() - key_times > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
+        set_led_connect_error();
+        key_times = 0;
+        ble_simple_server_name_enable(0);
+        ble_connecting = false;
+        ble_connected = false;
+        printf("BLE timeout,restart ble\n");
+        return;
+    }
+
+    /* BLE连接尝试 */
+    if (!ble_connecting && key_times > 0) {
+        set_led_confirm();
+        ble_connecting = true;
+        ble_simple_server_name_enable(1);
+        printf("try to connect ble\n");
+    }
+
+    /* BLE连接成功处理 */
+    if (!get_ble_app_disconnect_flag() && !ble_connected) {
+        set_led_connected();
+        
+        app_music_play_local_music_with_callback(
+            context->music_player,
+            CONFIG_CP_VOICE_FILE_PATH "bt_conneted.mp3",
+            NULL,
+            NULL);
+            
+        ble_connected = true;
+        printf("BLE connected\n");
+    }
+}
+
 void app_net_connecting_loop()
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
@@ -159,42 +198,6 @@ void app_net_connecting_loop()
     }
 }
 
-/* 处理BLE连接状态的辅助函数 */
-static void handle_ble_connection_state(lwl_app_context_t *context)
-{
-    /* BLE连接超时处理 */
-    if (timer_get_ms() - key_times > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
-        set_led_connect_error();
-        key_times = 0;
-        ble_simple_server_name_enable(0);
-        ble_connecting = false;
-        ble_connected = false;
-        printf("BLE timeout,restart ble\n");
-        return;
-    }
-
-    /* BLE连接尝试 */
-    if (!ble_connecting && key_times > 0) {
-        set_led_confirm();
-        ble_simple_server_name_enable(1);
-        ble_connecting = true;
-        printf("try to connect ble\n");
-    }
-
-    /* BLE连接成功处理 */
-    if (!get_ble_app_disconnect_flag() && !ble_connected) {
-        set_led_connected();
-        
-        app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "bt_conneted.mp3",
-            NULL,
-            NULL);
-            
-        ble_connected = true;
-        printf("BLE connected\n");
-    }
-}
 
 void app_net_connecting_mode(void)
 {
