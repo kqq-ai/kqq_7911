@@ -70,7 +70,7 @@ static bool g_mqtt_connected = false;
 /* 互斥锁 */
 static OS_MUTEX g_log_mqtt_mutex;
 static bool g_mqtt_start = false;
-static bool g_mqtt_start = false;
+
 
 void log_mqtt_disconnect();
 void log_mqtt_battery(const char *sn_param, int battery);
