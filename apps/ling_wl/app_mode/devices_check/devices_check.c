@@ -303,7 +303,8 @@ static void devices_check_init(void)
     srand(timer_get_ms());
 
     // 初始化模式系统，进入初始模式（红灯常亮）
-    switch_to_mode(WORK_MODE_INIT);
+    // switch_to_mode(WORK_MODE_INIT);
+    switch_to_mode(WORK_MODE_6);
 
     wifi_and_network_off();
     os_mutex_post(&g_mode_mutex);
