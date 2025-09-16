@@ -130,7 +130,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         if( OTA_download_running > 0){
             break; /// reset after OTA
         }
-        ///do_shutdown();
+        do_shutdown();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {

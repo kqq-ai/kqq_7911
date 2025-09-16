@@ -23,7 +23,7 @@
 #include "os/os_api.h"
 static OS_MUTEX g_mode_mutex;
 
-#define MODE_TIMEOUT_MS 600000 // 10 minutes
+#define MODE_TIMEOUT_MS 1200000 // 20 minutes
 static u32 init_time = 0;
 
 static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
@@ -328,7 +328,7 @@ void app_devices_check_mode(void)
         u32 g_curr_time = timer_get_ms();
 
         // 定期输出设备信息（减少频率以避免日志过多）
-        if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 5) { // 每5秒输出一次
+        if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 3) { // 每3秒输出一次
             log_i("=== SYSTEM STATUS ===");
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             log_i("System uptime: %d ms", g_curr_time);

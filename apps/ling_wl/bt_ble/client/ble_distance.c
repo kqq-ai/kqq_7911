@@ -459,10 +459,12 @@ static void scan_adv_process_task(void *priv)
         */
         uint8_t *buffer = adv_data.adv_data;
         int r = adv_data.adv_data_length;
+        if (r < 19 || r > 23) continue; // 长度异常，忽略
     
     #if 1
         char sn[16] = "";
         memcpy(sn, adv_data.adv_data + 3, 15);
+        if (sn[0] !='K' || sn[1] !='P') continue; // 过滤非E端设备
     #else
         char *sn = (char *)buffer + 3;
     #endif
@@ -470,10 +472,7 @@ static void scan_adv_process_task(void *priv)
         uint8_t bat_level = (buffer[2] >> 4) & 0x0F;
         uint8_t adv_state = (buffer[2] >> 0) & 0x0F;
         uint8_t has_deadline = (r == 23) ? 1 : 0;
-
-        // if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
-        //     strcpy(sn, "WECNC4H06CPLJE7");
-        // }
+        if (bat_level == 0 || adv_state > 2) continue; // 过滤0电量（针对老协议）和状态异常的广播
 
         lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
         if (dev == NULL) {

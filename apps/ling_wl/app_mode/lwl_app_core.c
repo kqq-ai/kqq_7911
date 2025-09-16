@@ -208,14 +208,14 @@ void dump_all_eend_info()
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
         if (adv_stat_to_text(pdev->adv_state)[0] != '\0') {
-            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9s | %02X |", pdev->sn, 
+            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9s | %02X | %3d |", pdev->sn, 
                 pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline, 
                 pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
         } else {
             log_i("[ERROR]%s UNKNOWN type: %d", pdev->sn, pdev->adv_state);
         }
     }
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
 
     map_iterator_unlock(it); // 释放锁
 }
