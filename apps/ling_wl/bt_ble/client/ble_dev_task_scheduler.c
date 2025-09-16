@@ -23,6 +23,9 @@
 
 #define BLE_DISCONNECT_TIMEOUT 10000
 
+#define SET_PI_ADV_INTERVAL_MS   50 // unit: ms range: 20 ~ 1000
+#define SET_PI_ADV_DURATION_S    180 // unit: s  range: 0 ~ 65535
+
 // 0000fff0-0000-1000-8000-00805f9b34fb
 // 0000fff3-0000-1000-8000-00805f9b34fb
 // 0000fff4-0000-1000-8000-00805f9b34fb
@@ -90,9 +93,9 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     log_i("[BDO]ble connected %s\n", op->sn);
 
     /* - 发送激活数据 */
-    uint16_t quick_adv_interval = 160;              // unit: 0.625ms TODO
-    uint16_t quick_adv_count = 180;                 // unit: 1s TODO
-    uint32_t timestamp = timer_get_ms() / 1000;     // unit: 1s TODO
+    uint16_t quick_adv_interval = (SET_PI_ADV_INTERVAL_MS) * (1 / 0.625);               // unit: 0.625ms TODO
+    uint16_t quick_adv_count = SET_PI_ADV_DURATION_S;                                   // unit: 1s TODO
+    uint32_t timestamp = timer_get_ms() / 1000;                                         // unit: 1s TODO
 
     active_data[0] = 0xA0;                          // fixed 0xA0 cmd
     active_data[1] = (quick_adv_interval) & 0xFF;
