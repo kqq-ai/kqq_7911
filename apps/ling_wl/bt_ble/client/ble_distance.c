@@ -166,7 +166,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
     
     // 打印完整的原始RSSI信息
-    log_i("%s", raw_samples_str);
+    ///log_i("%s", raw_samples_str);
 
     // 使用简单均值：直接使用所有样本的平均值
     p_eend_dev->distance_info.rssi = (s8)original_average;
@@ -471,9 +471,9 @@ static void scan_adv_process_task(void *priv)
         uint8_t adv_state = (buffer[2] >> 0) & 0x0F;
         uint8_t has_deadline = (r == 23) ? 1 : 0;
 
-        if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
-            strcpy(sn, "WECNC4H06CPLJE7");
-        }
+        // if (strcmp(sn, "WCCN24H28FEEEFA") == 0) {
+        //     strcpy(sn, "WECNC4H06CPLJE7");
+        // }
 
         lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
         if (dev == NULL) {
@@ -486,7 +486,7 @@ static void scan_adv_process_task(void *priv)
             lwl_event_notify(&e);
         }
         uint8_t adv_state_latest = dev->adv_state;
-        log_i("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
+        ///log_i("[MEASDIST]RSSI = %d bat = %d", rssi, bat_level);
 
         dev->bat_level = bat_level;
         dev->adv_state = adv_state;

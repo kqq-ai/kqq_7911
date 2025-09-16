@@ -194,7 +194,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     }
 #else
     log_i("[BDO]Waiting...");
-    mdelay(1000);
+    mdelay(1);///000
 #endif
 
     log_i("[BDO]Turn on end");
