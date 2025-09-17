@@ -527,7 +527,7 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
-            log_i("NET_NTP_GET_TIME_SUCC %d\n", timer_get_ms());
+            log_i("NET_NTP_GET_TIME_SUCC %d\n", get_timestamp());
             break;
         default:
             break;
