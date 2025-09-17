@@ -194,9 +194,9 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         os_mutex_post(&g_mode_mutex);
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        ///log_i("battery: %d", e->uart_cmd_sync.battery);
-        ///log_i("SYNC response by devices_check_lwl_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
-        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
+        log_i("SYNC response E.. v=3; timer_get_ms() - init_time:%d ;  battery: %d", timer_get_ms() - init_time, e->uart_cmd_sync.battery);
+        log_i("SYNC response by devices_check_lwl_event_handler_cb (%d, 3)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 3);/// 超时后，返回idle
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
