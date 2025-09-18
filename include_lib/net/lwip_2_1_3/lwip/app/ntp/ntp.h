@@ -27,6 +27,7 @@
 
 //此处添加ntp服务器,请自行测试ntp服务器是否正常
 static const char *ntp_host[] = {
+    "time.pool.aliyun.com",
     "s2a.time.edu.cn",
     "s2b.time.edu.cn",
     "s2c.time.edu.cn",
@@ -42,7 +43,7 @@ static const char *ntp_host[] = {
 
 #define NTP_HOST_NUM ARRAY_SIZE(ntp_host)
 
-#define NTP_DBUG_INFO_ON	0		/*!< NTP client debug information on/off */
+#define NTP_DBUG_INFO_ON	1		/*!< NTP client debug information on/off */
 #define NTP_ERR_INFO_ON		1		/*!< NTP client error information on/off */
 /// \endcond
 

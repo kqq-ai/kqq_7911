@@ -118,6 +118,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     log_d("[MEASDIST]===process_rssi======\r\n");
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
     if (p_eend_dev->distance_info.rssi_sample_count <= 0) {
+        p_eend_dev->distance_info.rssi = -128;
         os_mutex_post(&p_eend_dev->distance_info.mutex);
         return;
     }
@@ -490,6 +491,7 @@ static void scan_adv_process_task(void *priv)
         dev->bat_level = bat_level;
         dev->adv_state = adv_state;
         dev->has_deadline = has_deadline;
+        dev->update_time = timer_get_ms();
         dev->address_type = adv_data.address_type;    // 其他任务会读，可能存在安全问题，也可能没问题
         memcpy(dev->address, adv_data.address, 6);    // 其他任务会读，可能存在安全问题，也可能没问题
 
@@ -533,7 +535,8 @@ static void scan_adv_process_task(void *priv)
         // }
         // os_mutex_post(&dev->distance_info.mutex);
 
-        u32 time_now = timer_get_ms(); // TODO
+        u32 time_now = timer_get_ms();
+        u32 timestamp_now = lwl_rtc_timer_get_sec();
 
         // 激活的前提条件：1. 广播状态为 OFF, 2. 当前没有正在进行的激活/开机/关机任务, 3. 距离最近一次激活时间超过3秒(防止短时间内重复激活)
         if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((time_now - dev->active_time) > 3000)) {
@@ -541,11 +544,11 @@ static void scan_adv_process_task(void *priv)
                 // 如果广播是未激活的广播，则尝试进行激活
                 log_i("[MEASDIST]Active");
                 bdo_active(dev->sn, 9000, active_op_callback, dev);
-            } else if (dev->has_deadline && dev->deadline < (time_now / 1000)) {
+            } else if (dev->has_deadline && dev->deadline < (timestamp_now)) {
                 // 如果过期时间是一个过去的时间，则尝试进行激活
                 log_i("[MEASDIST]Active");
                 bdo_active(dev->sn, 9000, active_op_callback, dev);
-            }else if (dev->has_deadline && (dev->deadline - 10) < (time_now / 1000)) {
+            }else if (dev->has_deadline && (dev->deadline - 10) < (timestamp_now)) {
                 // 如果距离过期时间仅剩 10s，则尝试进行激活
                 log_i("[MEASDIST]Active");
                 bdo_active(dev->sn, 9000, active_op_callback, dev);

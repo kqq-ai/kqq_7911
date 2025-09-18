@@ -196,6 +196,11 @@ void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv);
 void dump_all_eend_info();
 
 /**
+ * @brief 清除过期设备
+ */
+void clean_expired_eend();
+
+/**
  * @brief Find an EEND device by its serial number
  * @param sn Pointer to the serial number to search for
  * @return Pointer to the matching EEND device, or NULL if not found
@@ -261,5 +266,10 @@ void lwl_event_notify(lwl_event_t *event);
  * 注意：调用后，所有通过add_new_eend_dev分配的pdev指针都将失效。
  */
 void clear_all_eend_dev(void);
+
+/**
+ * @brief 获取 RTC 时间戳
+ */
+s32 lwl_rtc_timer_get_sec();
 
 #endif

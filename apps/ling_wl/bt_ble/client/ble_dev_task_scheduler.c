@@ -66,8 +66,8 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     /* - 查询当前设备状态，是否是一个 off stat，且有 broadcast code */
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
-    u32 time_now = timer_get_ms(); // TODO
-    if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && ((dev->deadline < 10 ? dev->deadline + 10 : dev->deadline) - 10) >= (time_now / 1000))) {
+    s32 timestamp_now = lwl_rtc_timer_get_sec();
+    if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && (dev->deadline - 10) >= (timestamp_now))) {
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
         return;
@@ -145,6 +145,12 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
+    if (dev->adv_state == BDPAS_CONNECTING || dev->adv_state == BDPAS_CONNECTED) {
+        log_i("[BDO]Error dev busy!");
+        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        process_cb(op, BDOCode_Dev_Busy);
+        return;
+    }
 
     /* - 建立连接 */
     log_i("[BDO]ble handshake_task %s\n", op->sn);
