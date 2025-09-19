@@ -32,7 +32,7 @@ static void switch_to_mode(work_mode_e new_mode);
 
 // 全局变量
 work_mode_e g_current_mode = WORK_MODE_INIT;
-work_mode_e g_new_mode = WORK_MODE_INIT;
+work_mode_e g_new_mode = WORK_MODE_6;
 u8 g_audio_playing = 0;
 u8 g_mode_switching = 0; // 模式切换锁定标志，防止重复切换导致问题
 
@@ -187,7 +187,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             next_mode = WORK_MODE_6;
             break;
         case WORK_MODE_6:
-            next_mode = WORK_MODE_7;
+            // next_mode = WORK_MODE_7;
             break;
         case WORK_MODE_7:
             if (mode7_is_wifi_connected())
@@ -333,6 +333,7 @@ static void devices_check_unint(void)
 void app_devices_check_mode(void)
 {
     devices_check_init();
+    mdelay(500);
     static u32 g_heat_timer;
     g_heat_timer = timer_get_ms();
 

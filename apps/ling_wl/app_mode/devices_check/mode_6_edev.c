@@ -183,16 +183,16 @@ void process_mode_6(void)
             log_i("MODE 6: Loop audio start failed, error: %d", err);
         }
     }
-    if (!target_pdev && !current_pdev) {
-        // 没有目标设备，尝试设置一个
-        if (pdev_list_count > 0) {
-            switch_to_e_target(pdev_list[g_mode6_e_index]);
-            g_mode6_e_index++;
-            if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
-        } else {
-            log_i("MODE 6: No devices in pdev_list, cannot set target");
-        }
-    }
+    // if (!target_pdev && !current_pdev) {
+    //     // 没有目标设备，尝试设置一个
+    //     if (pdev_list_count > 0) {
+    //         switch_to_e_target(pdev_list[g_mode6_e_index]);
+    //         g_mode6_e_index++;
+    //         if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
+    //     } else {
+    //         log_i("MODE 6: No devices in pdev_list, cannot set target");
+    //     }
+    // }
 }
 
 void mode6_init()

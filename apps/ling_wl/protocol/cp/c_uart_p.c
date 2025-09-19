@@ -36,17 +36,17 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         if (value == 0)
         {
             set_led_blue();
-            log_mqtt("check led to BLUE===>Moveing START\r\n");
+            log_i("check led to BLUE===>Moveing START\r\n");
         }
         if (value == 1)
         {
             set_led_green();
-            log_mqtt("check led to GREEN===>GET 2m\r\n");
+            log_i("check led to GREEN===>GET 2m\r\n");
         }
         if (value == 2)
         {
             set_led_red();
-            log_mqtt("check led to RED===>Moveing STOP\r\n");
+            log_i("check led to RED===>Moveing STOP\r\n");
         }
 
         log_i("the UART_CMD_NORMAL_KEY !\r\n");
