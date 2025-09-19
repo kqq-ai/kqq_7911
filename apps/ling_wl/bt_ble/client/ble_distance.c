@@ -408,6 +408,8 @@ static void distance_main(void *priv)
                 
                 // 通知距离变化
                 blue_distance_notify_self();
+
+                clean_expired_eend();
                 // clean_all_dev_rssi_samples();
             }
 
@@ -473,7 +475,7 @@ static void scan_adv_process_task(void *priv)
         uint8_t bat_level = (buffer[2] >> 4) & 0x0F;
         uint8_t adv_state = (buffer[2] >> 0) & 0x0F;
         uint8_t has_deadline = (r == 23) ? 1 : 0;
-        if (bat_level == 0 || adv_state > 2) continue; // 过滤0电量（针对老协议）和状态异常的广播
+        if (adv_state > 2) continue; // 过滤状态异常的广播
 
         lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
         if (dev == NULL) {
@@ -535,11 +537,10 @@ static void scan_adv_process_task(void *priv)
         // }
         // os_mutex_post(&dev->distance_info.mutex);
 
-        u32 time_now = timer_get_ms();
         u32 timestamp_now = lwl_rtc_timer_get_sec();
 
         // 激活的前提条件：1. 广播状态为 OFF, 2. 当前没有正在进行的激活/开机/关机任务, 3. 距离最近一次激活时间超过3秒(防止短时间内重复激活)
-        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((time_now - dev->active_time) > 3000)) {
+        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timestamp_now - dev->active_time) > 3000)) {
             if (!dev->has_deadline) {
                 // 如果广播是未激活的广播，则尝试进行激活
                 log_i("[MEASDIST]Active");

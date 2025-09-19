@@ -6,7 +6,7 @@
 #define SERVER_DOMAIN  "test.coolqq.com"
 // #define SERVER_DOMAIN  "coolqq.com"
 
-#define WRITE_SN_KEY 1 // 设置为1以强制写入SN/Key，忽略已有SN
+#define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 
 char *get_mqtt_token();
 char *get_wss_connection_url();

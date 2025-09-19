@@ -455,10 +455,21 @@ void lwl_event_notify(lwl_event_t *event)
     my_blocking_queue_enqueue(&s_app_context->event_queue, event);
 }
 
+u32 rtc_time_delta = 0;
 /**
  * @brief 获取 RTC 时间戳
  */
-s32 lwl_rtc_timer_get_sec()
+u32 lwl_rtc_timer_get_sec()
+{
+    ASSERT(s_app_context != NULL);
+    u32 time_now = timer_get_ms() / 1000;
+    return time_now + rtc_time_delta;
+}
+
+/**
+ * @brief 获取 RTC 时间戳
+ */
+void lwl_rtc_timer_update()
 {
     ASSERT(s_app_context != NULL);
 
@@ -477,5 +488,5 @@ s32 lwl_rtc_timer_get_sec()
     timeinfo.tm_sec = t.sec;
     timeinfo.tm_isdst = -1;  // -1 表示不确定是否夏令时
     // 转换为 Unix 时间戳
-    return (s32)mktime(&timeinfo) - 28800;
+    rtc_time_delta = mktime(&timeinfo) - 28800;
 }

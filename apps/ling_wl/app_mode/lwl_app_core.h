@@ -270,6 +270,8 @@ void clear_all_eend_dev(void);
 /**
  * @brief 获取 RTC 时间戳
  */
-s32 lwl_rtc_timer_get_sec();
+u32 lwl_rtc_timer_get_sec();
+
+void lwl_rtc_timer_update();
 
 #endif

@@ -333,7 +333,6 @@ void app_devices_check_mode(void)
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             log_i("System uptime: %d ms", g_curr_time);
             log_i("System uptime: %d ms", lwl_rtc_timer_get_sec());
-            clean_expired_eend();
             dump_all_eend_info();
             g_heat_timer = g_curr_time;
         }

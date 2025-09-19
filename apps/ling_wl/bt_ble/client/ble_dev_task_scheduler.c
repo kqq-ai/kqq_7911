@@ -66,7 +66,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     /* - 查询当前设备状态，是否是一个 off stat，且有 broadcast code */
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
-    s32 timestamp_now = lwl_rtc_timer_get_sec();
+    u32 timestamp_now = lwl_rtc_timer_get_sec();
     if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && (dev->deadline - 10) >= (timestamp_now))) {
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
