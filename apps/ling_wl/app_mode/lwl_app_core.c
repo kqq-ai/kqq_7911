@@ -208,16 +208,54 @@ void dump_all_eend_info()
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
         if (adv_stat_to_text(pdev->adv_state)[0] != '\0') {
-            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9s | %02X |", pdev->sn, 
+            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9s | %02X | %3d |", pdev->sn, 
                 pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline, 
                 pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
         } else {
             log_i("[ERROR]%s UNKNOWN type: %d", pdev->sn, pdev->adv_state);
         }
     }
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
 
     map_iterator_unlock(it); // 释放锁
+}
+
+void clean_expired_eend()
+{
+    ASSERT(s_app_context != NULL);
+    
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
+
+    // 先收集所有key，防止遍历过程中修改map导致崩溃
+    int dev_count = map_size(s_app_context->dev_map);
+    char **sn_list = malloc(dev_count * sizeof(char *));
+    int idx = 0;
+
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    uint32_t now = timer_get_ms();
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
+        if (pdev->update_time + 15000 < now) {
+            sn_list[idx++] = strdup((char *)pdev->sn);
+        }
+    }
+    map_iterator_unlock(it); // 释放锁
+    // 删除并释放所有pdev
+    for (int i = 0; i < idx; ++i) {
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
+        if (pdev) {
+            map_erase(s_app_context->dev_map, sn_list[i]);
+            free(pdev);
+        }
+        free(sn_list[i]);
+    }
+    free(sn_list);
+
+
+    os_mutex_post(&s_app_context->dev_map_mutex);
 }
 
 /**
@@ -417,3 +455,27 @@ void lwl_event_notify(lwl_event_t *event)
     my_blocking_queue_enqueue(&s_app_context->event_queue, event);
 }
 
+/**
+ * @brief 获取 RTC 时间戳
+ */
+s32 lwl_rtc_timer_get_sec()
+{
+    ASSERT(s_app_context != NULL);
+
+    struct sys_time t;
+    void *dev = dev_open("rtc", NULL);
+    dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
+    dev_close(dev);
+
+    struct tm timeinfo = {0};
+    // 填充 tm 结构体
+    timeinfo.tm_year = t.year - 1900;  // tm_year 是从 1900 开始的年数
+    timeinfo.tm_mon = t.month - 1;     // tm_mon 是 0-11
+    timeinfo.tm_mday = t.day;
+    timeinfo.tm_hour = t.hour;
+    timeinfo.tm_min = t.min;
+    timeinfo.tm_sec = t.sec;
+    timeinfo.tm_isdst = -1;  // -1 表示不确定是否夏令时
+    // 转换为 Unix 时间戳
+    return (s32)mktime(&timeinfo) - 28800;
+}

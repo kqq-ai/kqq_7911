@@ -23,6 +23,9 @@
 
 #define BLE_DISCONNECT_TIMEOUT 10000
 
+#define SET_PI_ADV_INTERVAL_MS   100 // unit: ms range: 20 ~ 1000
+#define SET_PI_ADV_DURATION_S    180 // unit: s  range: 0 ~ 65535
+
 // 0000fff0-0000-1000-8000-00805f9b34fb
 // 0000fff3-0000-1000-8000-00805f9b34fb
 // 0000fff4-0000-1000-8000-00805f9b34fb
@@ -63,8 +66,8 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     /* - 查询当前设备状态，是否是一个 off stat，且有 broadcast code */
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
-    u32 time_now = timer_get_ms(); // TODO
-    if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && ((dev->deadline < 10 ? dev->deadline + 10 : dev->deadline) - 10) >= (time_now / 1000))) {
+    s32 timestamp_now = lwl_rtc_timer_get_sec();
+    if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && (dev->deadline - 10) >= (timestamp_now))) {
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
         return;
@@ -90,9 +93,9 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     log_i("[BDO]ble connected %s\n", op->sn);
 
     /* - 发送激活数据 */
-    uint16_t quick_adv_interval = 160;              // unit: 0.625ms TODO
-    uint16_t quick_adv_count = 180;                 // unit: 1s TODO
-    uint32_t timestamp = timer_get_ms() / 1000;     // unit: 1s TODO
+    uint16_t quick_adv_interval = (SET_PI_ADV_INTERVAL_MS) * (1 / 0.625);               // unit: 0.625ms TODO
+    uint16_t quick_adv_count = SET_PI_ADV_DURATION_S;                                   // unit: 1s TODO
+    uint32_t timestamp = timer_get_ms() / 1000;                                         // unit: 1s TODO
 
     active_data[0] = 0xA0;                          // fixed 0xA0 cmd
     active_data[1] = (quick_adv_interval) & 0xFF;
@@ -142,6 +145,12 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
+    if (dev->adv_state == BDPAS_CONNECTING || dev->adv_state == BDPAS_CONNECTED) {
+        log_i("[BDO]Error dev busy!");
+        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        process_cb(op, BDOCode_Dev_Busy);
+        return;
+    }
 
     /* - 建立连接 */
     log_i("[BDO]ble handshake_task %s\n", op->sn);
@@ -194,7 +203,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     }
 #else
     log_i("[BDO]Waiting...");
-    mdelay(1000);
+    mdelay(1);///000
 #endif
 
     log_i("[BDO]Turn on end");

@@ -50,7 +50,6 @@ static u8 g_mode6_action_in_progress = 0;
 
 
 // ========== 模式6回调函数声明 ===========
-void mode6_audio_callback(void *priv);
 static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
@@ -85,62 +84,7 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
 static void test_turn_off_callback(uint8_t code, void *priv)
 {
     log_i("turn off result code: %d", code);
-}
-
-//TODO test
-static void turn_off_e_target(char *target)
-{
-    if (target == NULL) return;
-    log_i("turn off EEEEEEEEEEEE target: %s", target);
-    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(target);  // 查找目标设备
-    if (pdev == NULL) return;
-    
-    uint cmd_id;
-    // -- pdev->handshake_info.need_handshake = true;
-    bdo_turn_off(pdev, 9000, test_turn_off_callback, pdev);
-    log_i("+-- -+");
-    // 参考default_e_turn_on函数中的命令发送方式
-}
-
-// 模式6推进函数
-static void mode6_try_next_step(void)
-{
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    
-    // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
-    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev && target_pdev != NULL)) {
-        log_i("MODE 6: Starting loop audio playback");
-        
-        // 播放循环测试音频，使用回调
-        int err = 0;
-        if((g_mode6_e_index&1) == 0 ){
-            err = app_music_play_local_music_with_callback(
-            context->music_player, 
-            CONFIG_CP_VOICE_FILE_PATH"test_dev1.mp3", 
-            mode6_audio_callback, NULL);
-        }else{
-            err = app_music_play_local_music_with_callback(
-            context->music_player, 
-            CONFIG_CP_VOICE_FILE_PATH"test_dev2.mp3", 
-            mode6_audio_callback, NULL);
-        }
-        
-            
-        if (err == 0) {
-            g_audio_playing = 1;
-            log_i("MODE 6: Loop audio started successfully");
-        } else {
-            log_i("MODE 6: Loop audio start failed, error: %d", err);
-        }
-    }
-    if (!target_pdev) {
-        // 没有目标设备，尝试设置一个
-        if (pdev_list_count > 0) {
-            switch_to_e_target(pdev_list[g_mode6_e_index]);
-        } else {
-            log_i("MODE 6: No devices in pdev_list, cannot set target");
-        }
-    }
+    current_pdev = NULL; // 清空当前连接设备指针
 }
 
 // 音频播放回调
@@ -160,16 +104,8 @@ void mode6_audio_callback(void *priv)
         current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 6: Turn OFF current E device: %s", sn_string);
         uint cmd_id;
-        bdo_turn_off(current_pdev, 9000, test_turn_off_callback, current_pdev);
-        current_pdev = NULL; // 清空当前连接设备指针
-    }
-
-    g_mode6_e_index++;
-    if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
-    if (pdev_list_count > 0) {
-        switch_to_e_target(pdev_list[g_mode6_e_index]);
-    } else {
-        log_i("MODE 6: pdev_list empty, skip switching target");
+        bdo_turn_off(current_pdev, 1000, test_turn_off_callback, current_pdev);
+        target_pdev = NULL; // 清空目标设备指针
     }
     if (g_mode6_playing_prompt) {
         // 提示音播放完成，开始播放循环音频
@@ -219,8 +155,44 @@ static void devices_check_cb(uint8_t code, void *priv)
 // 模式6处理函数
 void process_mode_6(void)
 {
-    // 只需定期推进状态机
-    mode6_try_next_step();
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    
+    // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
+    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev && target_pdev != NULL)) {
+        log_i("MODE 6: Starting loop audio playback");
+        
+        // 播放循环测试音频，使用回调
+        int err = 0;
+        if((g_mode6_e_index&1) == 0 ){
+            err = app_music_play_local_music_with_callback(
+            context->music_player, 
+            CONFIG_CP_VOICE_FILE_PATH"test_dev1.mp3", 
+            mode6_audio_callback, NULL);
+        }else{
+            err = app_music_play_local_music_with_callback(
+            context->music_player, 
+            CONFIG_CP_VOICE_FILE_PATH"test_dev2.mp3", 
+            mode6_audio_callback, NULL);
+        }
+        
+            
+        if (err == 0) {
+            g_audio_playing = 1;
+            log_i("MODE 6: Loop audio started successfully");
+        } else {
+            log_i("MODE 6: Loop audio start failed, error: %d", err);
+        }
+    }
+    if (!target_pdev && !current_pdev) {
+        // 没有目标设备，尝试设置一个
+        if (pdev_list_count > 0) {
+            switch_to_e_target(pdev_list[g_mode6_e_index]);
+            g_mode6_e_index++;
+            if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
+        } else {
+            log_i("MODE 6: No devices in pdev_list, cannot set target");
+        }
+    }
 }
 
 void mode6_init()

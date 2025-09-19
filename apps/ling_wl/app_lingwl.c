@@ -429,7 +429,47 @@ static int app_lingwl_device_event_handler(struct sys_event *sys_eve)
     }
     return false;
 }
+static struct sys_time set_alarm = {
+    .year 	= 2020,
+    .month 	= 10,
+    .day 	= 10,
+    .hour 	= 10,
+    .min 	= 10,
+    .sec 	= 10,
+};
+typedef struct {
+    u16 year;
+    u8 month;
+    u8 day;
+    u8 hour;
+    u8 min;
+    u8 sec;
+} DateTime;
+// 将日期时间转换为 Unix 时间戳
+time_t datetime_to_unixtime(const DateTime* dt) {
+    struct tm timeinfo = {0};
+    // 填充 tm 结构体
+    timeinfo.tm_year = dt->year - 1900;  // tm_year 是从 1900 开始的年数
+    timeinfo.tm_mon = dt->month - 1;     // tm_mon 是 0-11
+    timeinfo.tm_mday = dt->day;
+    timeinfo.tm_hour = dt->hour;
+    timeinfo.tm_min = dt->min;
+    timeinfo.tm_sec = dt->sec;
+    timeinfo.tm_isdst = -1;  // -1 表示不确定是否夏令时
+    // 转换为 Unix 时间戳
+    return mktime(&timeinfo) - 28800;
+}
+u32 get_timestamp(void){
+    void *dev = dev_open("rtc", NULL);
+    dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&set_alarm);
+    log_i("\n\ntime_get: %d-%d-%d %d:%d:%d\n", set_alarm.year, set_alarm.month, set_alarm.day, set_alarm.hour, set_alarm.min, set_alarm.sec);
+    dev_close(dev);
+    dev = NULL;
 
+    time_t timestamp = datetime_to_unixtime(&set_alarm);
+    log_i("Unix . timestamp: %ld\n\n", timestamp); //格林威治时间, Unix时间戳
+    return (u32)timestamp;
+}
 static int app_music_net_event_handler(struct net_event *event)
 {
     log_i("app_music_net_event_handler");
@@ -487,7 +527,7 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
-            log_i("NET_NTP_GET_TIME_SUCC %d\n", timer_get_ms());
+            log_i("NET_NTP_GET_TIME_SUCC %d\n", get_timestamp());
             break;
         default:
             break;
