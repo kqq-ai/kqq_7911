@@ -149,7 +149,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         work_mode_e next_mode;
         switch (g_current_mode) {
         case WORK_MODE_INIT:
-            next_mode = WORK_MODE_6;
+            next_mode = WORK_MODE_1;
             break;
         case WORK_MODE_1:
             next_mode = WORK_MODE_2;

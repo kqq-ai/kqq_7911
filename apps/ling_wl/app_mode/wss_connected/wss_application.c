@@ -101,7 +101,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         // wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
+        // log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
         uart_response_synch_status(is_request_busy(), last_req_volume);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
@@ -182,6 +182,7 @@ void wss_application_init()
     g_audio_playing = false;
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time;
+    last_req_volume = 12;
 }
 
 void wss_application_uninit()

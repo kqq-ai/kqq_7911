@@ -9,8 +9,10 @@
 #include "ble_att_util.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
 
+#define swap(a,b) {a =a ^ b; b = a ^ b; a = a ^ b;}
+
 #define APP_STATUS (1)
-#define RSSI_EXPIRE_TIME_MS (5000)  // RSSI样本过期时间：5秒
+#define RSSI_EXPIRE_TIME_MS (3000)  // RSSI样本过期时间：3秒
 
 // 消息类型
 enum
@@ -118,7 +120,8 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     log_d("[MEASDIST]===process_rssi======\r\n");
     os_mutex_pend(&p_eend_dev->distance_info.mutex, 0);
     if (p_eend_dev->distance_info.rssi_sample_count <= 0) {
-        p_eend_dev->distance_info.rssi = -128;
+        // p_eend_dev->distance_info.rssi = -128;
+        p_eend_dev->distance_info.rssi = p_eend_dev->distance_info.rssi >= -118? p_eend_dev->distance_info.rssi - 10 : -128;
         os_mutex_post(&p_eend_dev->distance_info.mutex);
         return;
     }
@@ -135,22 +138,32 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     int sum = 0;
     int sample_count = p_eend_dev->distance_info.rssi_sample_count;
     
+    distance_info_t* distance_info = &p_eend_dev->distance_info;
     // 严格的边界检查，防止数组越界
-    if (sample_count > MAX_SAMPLES) {
-        log_i("[PROCESS_RSSI] %s: ERROR - sample_count %d exceeds MAX_SAMPLES %d, resetting", 
-              sn_string, sample_count, MAX_SAMPLES);
-        sample_count = 0;
-        p_eend_dev->distance_info.rssi_sample_count = 0;
-        os_mutex_post(&p_eend_dev->distance_info.mutex);
-        return;
+    assert(sample_count <= MAX_SAMPLES);
+    
+    // 简单冒泡排序（从大到小）
+    for (int i = 0; i < sample_count - 1; ++i) {
+        for (int j = 0; j < sample_count - i - 1; ++j) {
+            if (distance_info->rssi_samples[j] < distance_info->rssi_samples[j + 1]) {
+                swap(distance_info->rssi_samples[j],    distance_info->rssi_samples[j+1]);
+                swap(distance_info->rssi_timestamps[j], distance_info->rssi_timestamps[j+1]);
+            }
+        }
     }
+
+    int index = sample_count>=3? 2: sample_count-1;
     
     for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i) {
         sum += p_eend_dev->distance_info.rssi_samples[i];
     }
     int original_average = sum / sample_count;
     log_d("[MEASDIST]original_average : %d\n",original_average);
+
+    // 使用简单均值：直接使用所有样本的平均值
+    p_eend_dev->distance_info.rssi = (s8)distance_info->rssi_samples[index];
     
+#if PRINT_RSSI_LOG
     // 构建原始RSSI样本数组字符串（加强边界检查）
     char raw_samples_str[512] = {0};
     int offset = 0;
@@ -167,14 +180,12 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
     
     // 打印完整的原始RSSI信息
-    ///log_i("%s", raw_samples_str);
-
-    // 使用简单均值：直接使用所有样本的平均值
-    p_eend_dev->distance_info.rssi = (s8)original_average;
+    log_i("%s", raw_samples_str);
     
     // 打印最终RSSI信息
-    // log_i("[FINAL_RSSI] %s: simple_average=%d (using all %d samples)", 
-    //       sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.rssi_sample_count);
+    log_i("[FINAL_RSSI] %s: simple_average=%d (using all %d samples)", 
+          sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.rssi_sample_count);
+#endif
 
     // log_d("[MEASDIST]%s  Average RSSI: %d\n", sn_string, p_eend_dev->distance_info.rssi);
     os_mutex_post(&p_eend_dev->distance_info.mutex);

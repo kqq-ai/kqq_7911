@@ -23,7 +23,7 @@
 
 #define BLE_DISCONNECT_TIMEOUT 10000
 
-#define SET_PI_ADV_INTERVAL_MS   100 // unit: ms range: 20 ~ 1000
+#define SET_PI_ADV_INTERVAL_MS   50 // unit: ms range: 20 ~ 1000
 #define SET_PI_ADV_DURATION_S    180 // unit: s  range: 0 ~ 65535
 
 // 0000fff0-0000-1000-8000-00805f9b34fb
@@ -145,7 +145,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
-    if (dev->adv_state == BDPAS_CONNECTING || dev->adv_state == BDPAS_CONNECTED) {
+    if (dev->adv_state == BDPAS_CONNECTING || dev->adv_state == BDPAS_CONNECTED || dev->distance_info.rssi_sample_count < 1) {
         log_i("[BDO]Error dev busy!");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Dev_Busy);
