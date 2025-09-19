@@ -1,5 +1,7 @@
 #include "mode_list.h"
 #include "gpio.h"
+#include "../../bt_ble/client/ble_distance.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
 
 #include "../../protocol/cp/c_uart_p.h"
 
@@ -12,7 +14,7 @@ static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
 static lwl_eend_dev_t *g_mode9_current_pdev = NULL; // 模式9当前连接的E端设备指针
 static u8 g_mode9_prompt_finished = 0;              // 模式9提示音是否播放完成
 
-static void mode9_e_connect_cb(bka_cmd_code_e code, void *priv);
+static void mode9_e_connect_cb(bdo_code_e code, void *priv);
 
 // 模式9随机音频播放结束回调
 void mode9_random_audio_end_cb(void *priv)
@@ -50,7 +52,7 @@ void mode9_random_audio_end_cb(void *priv)
         log_i("MODE 9: Disconnecting E-device after playback: %s (RSSI: %d)", sn_string, previous_rssi);
         
         uint cmd_id;
-        bka_e_turn_off(g_mode9_current_pdev, NULL, g_mode9_current_pdev, &cmd_id);
+        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
         g_mode9_current_pdev = NULL;
     }
     
@@ -63,7 +65,7 @@ void mode9_random_audio_end_cb(void *priv)
         
         // 立即连接新设备
         uint cmd_id;
-        bka_e_turn_on(strongest_pdev, mode9_e_connect_cb, strongest_pdev, &cmd_id);
+        bdo_turn_on(strongest_pdev, 9000, 9000, mode9_e_connect_cb, strongest_pdev);
         g_mode9_current_pdev = strongest_pdev;
         return; // 不重新启用C端扬声器，因为即将播放新音频
     }
@@ -75,16 +77,16 @@ void mode9_random_audio_end_cb(void *priv)
 
 
 // 模式9 E端设备连接回调
-static void mode9_e_connect_cb(bka_cmd_code_e code, void *priv)
+static void mode9_e_connect_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     char sn_string[SN_SIZE] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
-    log_i("MODE 9: bka_e_turn_on code %d %s", code, sn_string);
+    log_i("MODE 9: bdo_turn_on code %d %s", code, sn_string);
 
-    if (BKA_CMD_CODE_COMPL == code) {
+    if (BDOCode_Success == code) {
         // 连接成功，播放随机音频
         log_i("MODE 9: E-device connected successfully, playing random audio");
         gpio_direction_output(IO_PORTA_00, 0);  // 禁用C端扬声器，使用E端播放
@@ -189,7 +191,7 @@ void process_mode_9(void)
                         g_mode9_current_pdev->get_string(g_mode9_current_pdev, current_sn, sizeof(current_sn));
                         log_i("MODE 9: Disconnecting current device: %s (RSSI: %d)", current_sn, current_rssi);
                         uint cmd_id;
-                        bka_e_turn_off(g_mode9_current_pdev, NULL, g_mode9_current_pdev, &cmd_id);
+                        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
                         g_mode9_current_pdev = NULL;
                     }
                     
@@ -200,7 +202,7 @@ void process_mode_9(void)
                         sn_string, current_rssi, best_rssi);
                     
                     uint cmd_id;
-                    bka_e_turn_on(strongest_pdev, mode9_e_connect_cb, strongest_pdev, &cmd_id);
+                    bdo_turn_on(strongest_pdev, 9000, 9000, mode9_e_connect_cb, strongest_pdev);
                     g_mode9_current_pdev = strongest_pdev;
                 } else {
                     log_i("MODE 9: Audio playing, waiting for completion before switching to stronger signal device");
@@ -225,6 +227,7 @@ static void mode9_audio_callback(void *priv)
 
 void mode9_init()
 {
+    ble_simple_client_module_enable(1); // enable BLE client to connect E device
     g_audio_playing = 1;
     g_mode9_prompt_finished = 0;            // 重置提示音状态
     g_mode9_current_pdev = NULL;            // 重置连接设备指针
@@ -241,6 +244,7 @@ void mode9_init()
 void mode9_uninit()
 {
     log_i("Cleaning up MODE 9 E-device functionality");
+    ble_simple_client_module_enable(0);
     g_audio_playing = 0;
     g_mode9_prompt_finished = 0;
     // 断开当前连接的E端设备
@@ -249,7 +253,7 @@ void mode9_uninit()
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Disconnecting E-device during cleanup: %s", sn_string);
         uint cmd_id;
-        bka_e_turn_off(g_mode9_current_pdev, NULL, g_mode9_current_pdev, &cmd_id);
+        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
         g_mode9_current_pdev = NULL;
     }
     log_i("MODE 9: All state variables reset");

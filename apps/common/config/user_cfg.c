@@ -442,6 +442,8 @@ void cfg_file_parse(void)
 #endif
 
     extern void bt_max_pwr_set(u8 pwr, u8 pg_pwr, u8 iq_pwr, u8 ble_pwr);
+    bt_power = 11;
+    ble_power = 11;
     bt_max_pwr_set(bt_power, 6, 6, ble_power);	//0-11 设置蓝牙发射功率
     log_info("rf bt_power:%d, ble_power:%d\n", bt_power, ble_power);
 

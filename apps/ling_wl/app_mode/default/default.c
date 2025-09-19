@@ -43,9 +43,6 @@ static void default_input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         // play 提示音
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        // 处理触摸按键抬起事件
-        break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         wait_for_button = false;
         break;

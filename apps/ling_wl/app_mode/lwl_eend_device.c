@@ -1,4 +1,5 @@
 #include "lwl_eend_device.h"
+#include "lwl_app_core.h"
 
 bool adv_pre_match_impl(const u8 *adv_data, const u16 adv_len)
 {
@@ -25,11 +26,34 @@ void get_string_impl(const void *__this, char *buffer, const int size)
 #endif
 }
 
+void set_ctrl_impl(void *__this, uint8_t on, uint8_t play)
+{
+    lwl_eend_dev_t * that = (lwl_eend_dev_t *)__this;
+    uint8_t ctrl = 0;
+    if (on) {
+        ctrl |= BDPCTRL_TURNON_FLAG;
+    }
+    if (play) {
+        ctrl |= BDPCTRL_PLAY_FLAG;
+    }
+    that->ctrl_mask_flags = ctrl;
+    uart_send_set_ctrl(that->ctrl_mask_flags);
+}
+
 void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
 {
     memcpy(dev->sn, sn, SN_SIZE);
     dev->adv_match = adv_match_impl;
     dev->get_string = get_string_impl;
+    dev->set_ctrl = set_ctrl_impl;
+
+    dev->bat_level = 0;
+    dev->adv_state = BDPAS_OFF;
+    dev->op_state = BDO_STATE_IDLE;
+    dev->has_deadline = false;
+    dev->deadline = 0;
+    dev->ctrl_mask_flags = BDPCTRL_TURNON_FLAG | BDPCTRL_PLAY_FLAG;
+    dev->active_time = 0;
 
     os_mutex_create(&dev->distance_info.mutex);
     dev->distance_info.rssi = -128;
@@ -37,13 +61,4 @@ void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
     dev->distance_info.distance_type = DISTANCE_3;
     dev->distance_info.distance_type_last = DISTANCE_3;
     memset(dev->distance_info.rssi_samples, -128, sizeof(dev->distance_info.rssi_samples));
-
-    os_mutex_create(&dev->handshake_info.mutex);
-    dev->handshake_info.need_handshake = false;
-    dev->handshake_info.alive = 1;
-    dev->handshake_info.alive_hs_fail_cnt = 0;
-    dev->handshake_info.handshake_flag = 0;
-    memset(&dev->handshake_info.cache_buf, 0, (sizeof(bka_cmd_t) * KEEP_ALIVE_CMD_NUM));
-    
-    my_blocking_queue_init_static(&dev->handshake_info.cmd_buffer, dev->handshake_info.cache_buf, sizeof(bka_cmd_t), KEEP_ALIVE_CMD_NUM);
 }

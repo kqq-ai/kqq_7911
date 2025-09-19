@@ -22,6 +22,7 @@
 
 #include "mode_list.h"
 #include "gpio.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
  
 static u8 g_mode6_playing_prompt = 1; // 模式6状态：1=播放提示音，0=循环播放测试音
 
@@ -50,20 +51,20 @@ static u8 g_mode6_action_in_progress = 0;
 
 // ========== 模式6回调函数声明 ===========
 void mode6_audio_callback(void *priv);
-static void mode6_e_connect_cb(bka_cmd_code_e code, void *priv)
+static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     char sn_string[SN_SIZE] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
-    log_i("bka_e_turn_on code %d %s\n", code, sn_string);
+    log_i("bdo_turn_on code %d %s\n", code, sn_string);
 
-    if (BKA_CMD_CODE_COMPL == code) {
+    if (BDOCode_Success == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
-        uint cmd_id;
+        current_pdev = NULL; // 设置当前连接的E端设备指针
     }
 }
 static void switch_to_e_target(lwl_eend_dev_t* pdev)
@@ -75,10 +76,15 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
     
     // 设置新的目标设备
     target_pdev = pdev;
-    uint cmd_id;
-    bka_e_turn_on(pdev, mode6_e_connect_cb, pdev, &cmd_id); // E ON~  start_handshake
+    // -- pdev->handshake_info.need_handshake = true;
+    bdo_turn_on(pdev, 9000, 9000, mode6_e_connect_cb, pdev); // E ON~  start_handshake
     log_i("+-- -+");
     // 参考default_e_turn_on函数中的命令发送方式
+}
+
+static void test_turn_off_callback(uint8_t code, void *priv)
+{
+    log_i("turn off result code: %d", code);
 }
 
 //TODO test
@@ -90,7 +96,8 @@ static void turn_off_e_target(char *target)
     if (pdev == NULL) return;
     
     uint cmd_id;
-    bka_e_turn_off(pdev, NULL, pdev, &cmd_id); // E OFF
+    // -- pdev->handshake_info.need_handshake = true;
+    bdo_turn_off(pdev, 9000, test_turn_off_callback, pdev);
     log_i("+-- -+");
     // 参考default_e_turn_on函数中的命令发送方式
 }
@@ -101,7 +108,7 @@ static void mode6_try_next_step(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     
     // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
-    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev || target_pdev == NULL)) {
+    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev && target_pdev != NULL)) {
         log_i("MODE 6: Starting loop audio playback");
         
         // 播放循环测试音频，使用回调
@@ -126,6 +133,14 @@ static void mode6_try_next_step(void)
             log_i("MODE 6: Loop audio start failed, error: %d", err);
         }
     }
+    if (!target_pdev) {
+        // 没有目标设备，尝试设置一个
+        if (pdev_list_count > 0) {
+            switch_to_e_target(pdev_list[g_mode6_e_index]);
+        } else {
+            log_i("MODE 6: No devices in pdev_list, cannot set target");
+        }
+    }
 }
 
 // 音频播放回调
@@ -145,14 +160,14 @@ void mode6_audio_callback(void *priv)
         current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 6: Turn OFF current E device: %s", sn_string);
         uint cmd_id;
-        bka_e_turn_off(current_pdev, NULL, current_pdev, &cmd_id);
+        bdo_turn_off(current_pdev, 9000, test_turn_off_callback, current_pdev);
         current_pdev = NULL; // 清空当前连接设备指针
     }
 
     g_mode6_e_index++;
     if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
     if (pdev_list_count > 0) {
-    switch_to_e_target(pdev_list[g_mode6_e_index]);
+        switch_to_e_target(pdev_list[g_mode6_e_index]);
     } else {
         log_i("MODE 6: pdev_list empty, skip switching target");
     }
@@ -165,6 +180,39 @@ void mode6_audio_callback(void *priv)
         // 循环音频播放完成，准备重新播放
         log_i("MODE 6: Loop audio callback - finished, will restart");
         g_audio_playing = 0;
+    }
+}
+
+static void devices_check_cb(uint8_t code, void *priv)
+{
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    log_i("devices_check_cb  %s\n", pdev->sn);
+
+    switch (code) {
+    case BDOCode_Success:                //!< 操作成功通用返回码
+        log_i("BDOCode_Success");
+        break;
+    case BDOCode_Skip:                   //!< 操作被跳过
+        log_i("BDOCode_Skip");
+        break;
+    case BDOCode_Null_Pointer:           //!< 操作失败，空指针错误
+        log_i("BDOCode_Null_Pointer");
+        break;
+    case BDOCode_BLE_Api_Error:          //!< 操作失败，BLE 接口调用失败
+        log_i("BDOCode_BLE_Api_Error");
+        break;
+    case BDOCode_BLE_Buffer_Full:        //!< 操作失败，BLE 缓冲满了
+        log_i("BDOCode_BLE_Buffer_Full");
+        break;
+    case BDOCode_Connection_Timeout:     //!< 操作失败，连接超时
+        log_i("BDOCode_Connection_Timeout");
+        break;
+    case BDOCode_Scan_Adv_Stat_Timeout:  //!< 操作失败，扫描ADV状态变化超时
+        log_i("BDOCode_Scan_Adv_Stat_Timeout");
+        break;
+    case BDOCode_Unexpected_Error:       //!< 意外错误
+        log_i("BDOCode_Unexpected_Error");
+        break;
     }
 }
 
@@ -189,16 +237,17 @@ void mode6_init()
             CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3",
             mode6_audio_callback, NULL);
         g_mode6_action_in_progress = 1;
+        g_mode6_playing_prompt = 1;
     }
     log_i("MODE 6: 串行状态机启动");
 }
 
 void mode6_uninit()
 {
-    
     log_i("Cleaning up MODE 6 audio functionality");
+    ble_simple_client_module_enable(0);
     g_audio_playing = 0;
-    g_mode6_playing_prompt = 1;
+    g_mode6_playing_prompt = 0;
     g_mode6_action_in_progress = 0;  // 重置模式6动作进行标志
     g_mode6_state = MODE6_IDLE;      // 重置模式6状态机
     target_pdev = NULL;              // 清空目标设备指针

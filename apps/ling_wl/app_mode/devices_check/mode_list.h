@@ -50,10 +50,10 @@ typedef enum {
 #define MAX_PDEV_LIST 16
 
 // 全局变量
-static u8 g_audio_playing;
-static u8 g_mode_switching;      // 模式切换锁定标志，防止重复切换导致问题
-static lwl_eend_dev_t* pdev_list[MAX_PDEV_LIST];
-static int pdev_list_count;
+extern u8 g_audio_playing;
+extern u8 g_mode_switching;      // 模式切换锁定标志，防止重复切换导致问题
+extern lwl_eend_dev_t* pdev_list[MAX_PDEV_LIST];
+extern int pdev_list_count;
 
 
 work_mode_e get_current_mode();

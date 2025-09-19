@@ -18,6 +18,7 @@
 
 #include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
 
 // 提示音资源路径与本地播放接口
 #include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
@@ -243,7 +244,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 //=================================================================================================
 // pDev response callback
 //=================================================================================================
-static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
+static void e_turn_on_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     
@@ -252,7 +253,7 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
     switch(code) {
-    case BKA_CMD_CODE_COMPL:
+    case BDOCode_Success:
 
         log_i("Switch PortE %s OK\n", sn_string);
         g_edev_connected = g_edev_target;
@@ -260,26 +261,20 @@ static void e_turn_on_cb(bka_cmd_code_e code, void *priv)
             send_message = ORMET_SWITCH_SUCCESS;
         }
         break;
-    case BKA_CMD_CODE_DEVLOST:
-        log_i("Switch PortE Dev Lost\n");
+    case BDOCode_Connection_Timeout:
+        log_i("Switch PortE BDOCode_Connection_Timeout\n");
         break;
-    case BKA_CMD_CODE_BUFFER_FULL:
-        log_i("Switch PortE BLE TX Buffer Full\n");
+    case BDOCode_Disconnect_Timeout:
+        log_i("Switch PortE BDOCode_Disconnect_Timeout\n");
         break;
-    case BKA_CMD_CODE_SEARCH_PROFILE_TIMEOUT:
-        log_i("Switch PoertE search GATT timeout\n");
+    case BDOCode_Scan_Adv_Stat_Timeout:
+        log_i("Switch PortE BDOCode_Scan_Adv_Stat_Timeout\n");
         break;
-    case BKA_CMD_CODE_E_TURN_ON_TIMEOUT:
-        log_i("Switch PortE Timeout\n");
-        break;
-    case BKA_CMD_CODE_E_TURN_ON_ALREADY_BOUND:
-        log_i("Switch PortE Failed: E is already bound\n");
-        break;
-    case BKA_CMD_CODE_UNEXPECTED:
+    case BDOCode_Unexpected_Error:
         log_i("Switch PortE Error\n");
         break;
     }
-    if (code != BKA_CMD_CODE_COMPL) {
+    if (code != BDOCode_Success) {
         send_message = ORMET_SWITCH_FAILED;
     }
 }
@@ -291,7 +286,7 @@ void wss_request_stop()
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
         uint32_t cmd_id = 0;
-        bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
+        bdo_turn_off(g_edev_target, 9000, NULL, NULL);
         if (g_mode_state == STATE_DOWNLOAD) {
             send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
         }
@@ -340,11 +335,11 @@ bool wss_request_loop()
             last_message_received = 0;
             wss_mic_stop(); // 停止录音
             int cmd_id;
-            log_i("bka_e_turn_on %s\n", g_edev_target->sn);
+            log_i("bdo_turn_on %s\n", g_edev_target->sn);
             //上传E的电量
             log_mqtt_set_battery_level(g_edev_target->sn, (g_edev_target->bat_level)*10);
             
-            bka_e_turn_on(g_edev_target, e_turn_on_cb, g_edev_target, &cmd_id);
+            bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
@@ -380,11 +375,11 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
             int cmd_id;
-            log_i("bka_e_turn_on %s\n", g_edev_target->sn);
+            log_i("bdo_turn_on %s\n", g_edev_target->sn);
             if (g_edev_connected) {
-                bka_e_turn_off(g_edev_connected, NULL, g_edev_connected, &cmd_id);
+                bdo_turn_off(g_edev_connected, 9000, NULL, NULL);
             }
-            bka_e_turn_on(g_edev_target, e_turn_on_cb, g_edev_target, &cmd_id);
+            bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
         }
         break;
 
@@ -432,7 +427,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
             wss_ble_audio_stop();
             uint32_t cmd_id=0;
-            bka_e_turn_off(g_edev_target, NULL, g_edev_target, &cmd_id);
+            bdo_turn_off(g_edev_target, 9000, NULL, NULL);
             wss_request_send_event(g_edev_target, ORMET_PLAY_END);
 
             wss_mic_start(get_time_stamp() + 600000); // 开始录音

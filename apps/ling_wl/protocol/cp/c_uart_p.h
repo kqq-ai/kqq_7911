@@ -26,6 +26,9 @@ typedef enum {
     UART_CMD_OPEN_LE_AUDIO       = 0xA8, // 通知打开LE Audio
     UART_CMD_CLEAR_WIFI_SSID     = 0xA9, // 通知7911 清除WIFI SSID
     UART_CMD_APPLY_SOFT_POWEROFF = 0xAA, // 7911申请软关机
+    UART_CMD_NOTIFY_GSENSOR_OFF  = 0xAB, // 通知关闭加速度传感器
+    UART_CMD_SWITCH_AUDIO_BC     = 0xAC, // 7911重新打开7016 Audio广播
+    UART_CMD_SET_CTRL            = 0xAD, // 7911设置7016 Audio广播ctrl字段
 } uart_cmd_t;
 
 // 返回码表
@@ -61,6 +64,9 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
 
 /* 0. 清除wifi ssid 的响应函数 */
 int uart_response_clear_wifi_ssid(void);
+
+/* 1. 关闭加速度传感器的响应函数 */
+int uart_response_notify_gsensor_off(void);
 
 // 发送事件包
 int uart_send_inquiry(uint8_t *payload, uint16_t len);
@@ -106,6 +112,13 @@ int uart_send_apply_soft_poweroff(void);
 int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b);
 void set_led_off(void);
 
+/* 6. 指定广播配对码重新打开Audio广播 */
 int uart_send_open_le_audio(uint8_t *mac);
+
+/* 7. 指定广播配对码重新打开Audio广播 */
+int uart_send_switch_audio_bc(uint8_t *broadcast_code);
+
+/* 8. 指定广播配对码重新打开Audio广播 */
+int uart_send_set_ctrl(uint8_t ctrl);
 
 #endif

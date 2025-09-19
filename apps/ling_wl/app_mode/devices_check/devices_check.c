@@ -6,6 +6,7 @@
 #include "mode_list.h"
 #include "gpio.h"
 #include "log.h"
+#include "bt_ble/client/ble_dev_task_scheduler.h"
 #include "../../bt_ble/client/ble_simple_client.h"
 #include "../../include/app_config.h"
 #include "../../protocol/cp/c_uart_p.h"
@@ -19,6 +20,8 @@
 #include "http/http_cli.h"
 #include <stdlib.h> // For rand() and srand()
 
+#include "os/os_api.h"
+static OS_MUTEX g_mode_mutex;
 
 #define MODE_TIMEOUT_MS 600000 // 10 minutes
 static u32 init_time = 0;
@@ -28,31 +31,21 @@ static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
 static void switch_to_mode(work_mode_e new_mode);
 
 // 全局变量
-static work_mode_e g_current_mode = WORK_MODE_INIT;
-static u8 g_audio_playing = 0;
-static u8 g_mode_switching = 0;      // 模式切换锁定标志，防止重复切换导致问题
+work_mode_e g_current_mode = WORK_MODE_INIT;
+work_mode_e g_new_mode = WORK_MODE_INIT;
+u8 g_audio_playing = 0;
+u8 g_mode_switching = 0;      // 模式切换锁定标志，防止重复切换导致问题
 
 
-static lwl_eend_dev_t* pdev_list[MAX_PDEV_LIST] = {0};
-static int pdev_list_count = 0;
+lwl_eend_dev_t* pdev_list[MAX_PDEV_LIST] = {0};
+int pdev_list_count = 0;
 
 work_mode_e get_current_mode()
 {
     return g_current_mode;
 }
 
-int devices_check_e_turn_on(lwl_eend_dev_t *p_eend_dev, bka_cmd_cb_funp_t cb, void *priv, uint32_t *cmd_id_out) 
-{
-    ASSERT(p_eend_dev != NULL);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
 
-    uart_send_set_sn(p_eend_dev->sn);
-
-    u8 cmd_turn_on[] = {0xA0, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    memcpy(cmd_turn_on + 2, ctx->mac, 6);
-
-    return ble_keep_alive_device_push_cmd(p_eend_dev, cmd_turn_on, sizeof(cmd_turn_on), cb, priv, cmd_id_out);
-}
 
 // 判断pdev是否已在列表中
 static int is_pdev_in_list(lwl_eend_dev_t* pdev) {
@@ -70,9 +63,9 @@ static void add_pdev_to_list(lwl_eend_dev_t* pdev) {
     pdev->get_string(pdev, sn_string, sizeof(sn_string));
     log_i("[PDEV_LIST] Added: %s, total: %d", sn_string, pdev_list_count);
     
-    uint32_t cmd_id;
-    int ret = devices_check_e_turn_on(pdev, NULL, pdev, &cmd_id);
-    log_i("turn on cmd_id: %d", ret);
+    // uint32_t cmd_id;
+    // int ret = devices_check_e_turn_on(pdev, NULL, pdev, &cmd_id);
+    // log_i("turn on cmd_id: %d", ret);
 }
 
 // 从列表中移除pdev
@@ -189,13 +182,16 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             next_mode = WORK_MODE_INIT; // 模式8后回到初始模式，形成循环
             break;
         }
-        
-        switch_to_mode(next_mode);
+        os_mutex_pend(&g_mode_mutex, 0);
+        g_new_mode = next_mode;
+        os_mutex_post(&g_mode_mutex);
 
     }   break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         // return to WORK_MODE_1
-        switch_to_mode(WORK_MODE_INIT);
+        os_mutex_pend(&g_mode_mutex, 0);
+        g_new_mode = WORK_MODE_INIT;
+        os_mutex_post(&g_mode_mutex);
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("battery: %d", e->uart_cmd_sync.battery);
@@ -204,45 +200,61 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
-        log_i("Touch key pressed down");
-        log_i("Event timestamp: %d ms", timer_get_ms());
-        log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
-        
-        log_i("Touch key event type: %d",e->uart_cmd_touch.touch_key_event_type);
-        
-        // 特殊处理模式8的触摸按键检测
-        if (g_current_mode == WORK_MODE_8) {
-            process_mode_8_touch_key(e->uart_cmd_touch.touch_key_event_type);
-        }
-        // 特殊处理模式1的触摸按键检测
-        else if (g_current_mode == WORK_MODE_1) {
-            process_mode_1_touch_key(e->uart_cmd_touch.touch_key_event_type);
-        }
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_UP:
-        log_i("=== UART TOUCH KEY UP DETECTED ===");
-        log_i("Touch key released");
-        log_i("Event timestamp: %d ms", timer_get_ms());
-        log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
-        
-        log_i("Touch key event type: %d", e->uart_cmd_touch.touch_key_event_type);
-        
-        // 可以在这里添加触摸按键抬起的特殊处理逻辑
-        if (g_current_mode == WORK_MODE_1) {
-            process_mode_1_touch_key(1);
+        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+            log_i("Event timestamp: %d ms", timer_get_ms());
+            log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
+            
+            log_i("Touch key event type: %d",e->uart_cmd_touch.touch_key_event_type);
+            
+            // 特殊处理模式8的触摸按键检测
+            if (g_current_mode == WORK_MODE_8) {
+                process_mode_8_touch_key(e->uart_cmd_touch.touch_key_event_type);
+            }
+            // 特殊处理模式1的触摸按键检测
+            else if (g_current_mode == WORK_MODE_1) {
+                process_mode_1_touch_key(e->uart_cmd_touch.touch_key_event_type);
+            }
         } else {
-            log_i("Touch key released in mode %s", mode_names[g_current_mode]);
+            log_i("Touch key released");
+            log_i("Event timestamp: %d ms", timer_get_ms());
+            log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
+            
+            log_i("Touch key event type: %d", e->uart_cmd_touch.touch_key_event_type);
+            
+            // 可以在这里添加触摸按键抬起的特殊处理逻辑
+            if (g_current_mode == WORK_MODE_1) {
+                process_mode_1_touch_key(1);
+            } else {
+                log_i("Touch key released in mode %s", mode_names[g_current_mode]);
+            }
         }
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
         break;
+    case LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF:
+        log_i("NOTIFY_GSENSOR_OFF");
+        extern void * g_iic_hdl;
+        int ret = 0;
+        ret = sc7a20h_disable(g_iic_hdl);
+        if (0 == ret)
+        {
+            uart_response_notify_gsensor_off();
+            log_i("GSENSOR OFF");
+        }
     }
 }
 static void devices_check_init(void)
 {
     init_time = timer_get_ms();
     lwl_app_context_t *g_app_ctx = lwl_app_core_context_get_instance();
+    
+    if (!os_mutex_valid(&g_mode_mutex)) {
+        os_mutex_create(&g_mode_mutex);
+    }
+    os_mutex_pend(&g_mode_mutex, 0);
     
     msleep(5000);
     log_i("=== DEFAULT MODE INITIALIZED ===");
@@ -265,6 +277,7 @@ static void devices_check_init(void)
     switch_to_mode(WORK_MODE_INIT);
 
     wifi_and_network_off();
+    os_mutex_post(&g_mode_mutex);
     
     log_i("=== MODE SYSTEM INITIALIZED ===");
     log_i("Press key to switch modes:");
@@ -279,8 +292,11 @@ static void devices_check_init(void)
 
 static void devices_check_unint(void)
 {
+    os_mutex_pend(&g_mode_mutex, 0);
     lwl_event_handler_remove(devices_check_lwl_event_handler_cb);
     ble_simple_client_module_enable(0);
+    os_mutex_post(&g_mode_mutex);
+    os_mutex_del(&g_mode_mutex, 1);
 }
 
 #define HEAT_TIMEOUT 1000
@@ -296,6 +312,11 @@ void app_devices_check_mode(void)
     while (1) {
         // 主循环延时
         mdelay(100);
+
+        os_mutex_pend(&g_mode_mutex, 0);
+        if (g_new_mode != g_current_mode) {
+            switch_to_mode(g_new_mode);
+        }
         
         // 执行当前模式的处理函数
         if (g_current_mode < WORK_MODE_MAX && mode_process_functions[g_current_mode]) {
@@ -314,6 +335,7 @@ void app_devices_check_mode(void)
             dump_all_eend_info();
             g_heat_timer = g_curr_time;
         }
+        os_mutex_post(&g_mode_mutex);
 
         if (lwl_app_mode_exitting()) {
             log_i("=== EXITING MULTI-MODE SYSTEM ===");
@@ -360,14 +382,16 @@ static void switch_to_mode(work_mode_e new_mode)
         log_i("Mode switching in progress, ignoring new request");
         return;
     }
+    // 设置切换锁定
+    g_mode_switching = 1;
+    os_mutex_pend(&g_mode_mutex, 0);
+    
     
     if (new_mode >= WORK_MODE_MAX) {
         log_i("Invalid mode: %d, staying in current mode", new_mode);
+        os_mutex_post(&g_mode_mutex);
         return;
     }
-    
-    // 设置切换锁定
-    g_mode_switching = 1;
     
     log_i("=== MODE SWITCH ===");
     log_i("From: %s (%d) -> To: %s (%d)", 
@@ -451,5 +475,6 @@ static void switch_to_mode(work_mode_e new_mode)
     
     // 解除切换锁定
     g_mode_switching = 0;
+    os_mutex_post(&g_mode_mutex);
     log_i("=== MODE SWITCH COMPLETED ===");
 }
