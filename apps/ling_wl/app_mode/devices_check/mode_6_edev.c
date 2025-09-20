@@ -162,6 +162,7 @@ void process_mode_6(void)
         log_i("MODE 6: Starting loop audio playback");
         
         // 播放循环测试音频，使用回调
+        set_dec_volume(context->music_player, 50); // 保护E的电池，需要设置最高默认音量为50
         int err = 0;
         if((g_mode6_e_index&1) == 0 ){
             err = app_music_play_local_music_with_callback(
@@ -226,6 +227,7 @@ void mode6_uninit()
     current_pdev = NULL;             // 清空当前设备指针
     // 停止当前播放的音频
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
     if (context && context->music_player) {
         // 这里可能需要调用停止音频的函数，但先尝试重置状态
         // app_music_stop(context->music_player);

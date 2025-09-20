@@ -382,6 +382,7 @@ void wss_audio_init()
 
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
+    set_dec_volume(g_app_ctx->music_player, 50); // 保护E的电池，需要设置最高默认音量为50
 
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);
@@ -404,6 +405,7 @@ void wss_audio_uninit()
     
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker
+    set_dec_volume(g_app_ctx->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);
