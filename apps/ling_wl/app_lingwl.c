@@ -159,9 +159,9 @@ void base_lwl_event_handler(lwl_event_t *e)
         if(e->uart_cmd_sync.battery < 30 ) {
             set_led_red_low_power();
         }
-        // if (1 == e->uart_cmd_sync.charging) {
-        //     uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
-        // }
+        if (e->uart_cmd_sync.charging == 1) {
+            // log_mqtt_set_battery_level(NULL, lastbattery); // 上报充电状态
+        }
         break;
     }
 }

@@ -126,6 +126,13 @@ void wss_mic_start(uint timestamp) {
     os_mutex_post(&g_audio_mutex);
 }
 
+#define G_MAX_VOLUME 70
+
+void set_Pi_volume(int volume) {
+    if (volume < 0) volume = 0;
+    if (volume > G_MAX_VOLUME) volume = G_MAX_VOLUME;
+    set_dec_volume(g_app_ctx->music_player, volume); // 恢复默认音量
+}
 
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);

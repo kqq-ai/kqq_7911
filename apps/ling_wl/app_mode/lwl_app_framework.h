@@ -17,6 +17,8 @@ enum {
     APP_DEVICE_CHECK_MODE       = 7, /**< Check device and write SN */
 };
 
+#define MAX_LE_AUDIO_VOLUME 12
+
 /**
  * @brief Switch application to a specific mode
  * @param app_task Target mode to switch to (from the mode enumeration)

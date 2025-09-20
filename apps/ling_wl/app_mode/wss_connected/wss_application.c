@@ -27,7 +27,6 @@ static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 1000
 static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
-static u8 last_req_volume = 12;
 
 static int g_audio_playing = false;
 
@@ -39,9 +38,8 @@ typedef enum {
 
 AppTaskStepState g_device_state = DEVICE_IDLE;
 
-void wss_application_vailed(int Volume)
+void wss_application_vailed()
 {
-    last_req_volume = Volume;
     last_req_time = g_curr_time;
 }
 
@@ -101,8 +99,8 @@ static void input_event_handler_cb(lwl_event_t *e)
         // wss_application_touch_key_exit();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        // log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), last_req_volume);
-        uart_response_synch_status(is_request_busy(), last_req_volume);/// 0是idle 1是busy，必须回复
+        // log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), MAX_LE_AUDIO_VOLUME);
+        uart_response_synch_status(is_request_busy(), MAX_LE_AUDIO_VOLUME);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
@@ -182,7 +180,6 @@ void wss_application_init()
     g_audio_playing = false;
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time;
-    last_req_volume = 12;
 }
 
 void wss_application_uninit()
