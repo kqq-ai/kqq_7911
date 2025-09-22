@@ -17,5 +17,6 @@ bool is_mic_on();
 void wss_mic_start(uint timestamp);
 void wss_mic_stop();
 
+void set_Pi_volume(int volume);
 
 #endif

@@ -35,8 +35,6 @@ static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
 
-#define G_MAX_VOLUME 12
-
 static int g_exception_exit = false;
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -52,7 +50,6 @@ static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_R
 int wait_time = 0;
 int last_message_received = 0;
 int last_event = 0;
-int last_volume = 12;
 
 int send_message = 0;
 
@@ -175,15 +172,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
         log_i("volume: %d\n", pkg->tts_bind.volume);
-        int mapped_volume = pkg->tts_bind.volume * G_MAX_VOLUME / 100;
-        if (mapped_volume > G_MAX_VOLUME) mapped_volume = G_MAX_VOLUME;
-        if (mapped_volume < 0) mapped_volume = 0;
-        last_volume = mapped_volume;
-
-        uart_response_synch_status(1, mapped_volume);/// 音量 E
-        
-        // lwl_app_context_t *context = lwl_app_core_context_get_instance();
-        // set_dec_volume(context->music_player, 80);
+        set_Pi_volume(pkg->tts_bind.volume);
 
         last_message_received = OR_TTS_BIND;
         wait_time = pkg->tts_bind.wait_time;
@@ -399,7 +388,7 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
         }
-        wss_application_vailed(last_volume);
+        wss_application_vailed();
         break;
 
     case STATE_UPLOAD:
@@ -409,7 +398,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "VAD state is not voice");
             wss_request_send_event(g_edev_target, ORMET_VAD_SPEAKER_END);
         }
-        wss_application_vailed(last_volume);
+        wss_application_vailed();
         break;
 
     case STATE_PLAYING:
@@ -434,7 +423,7 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
         } else {
-            wss_application_vailed(last_volume);
+            wss_application_vailed();
         }
         break;
     }

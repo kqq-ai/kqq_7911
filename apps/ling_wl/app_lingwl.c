@@ -170,9 +170,10 @@ void base_lwl_event_handler(lwl_event_t *e)
         {
             set_led_red_low_power();
         }
-        // if (1 == e->uart_cmd_sync.charging) {
-        //     uart_response_synch_status(0, 8); // 充电的时候会回复，目的是进入 soft power off
-        // }
+        if (e->uart_cmd_sync.charging == 1)
+        {
+            // log_mqtt_set_battery_level(NULL, lastbattery); // 上报充电状态
+        }
         break;
     }
 }
@@ -511,7 +512,8 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
         case NET_NTP_GET_TIME_SUCC: // NTP获取成功事件返回 同步网络时间
-            log_i("NET_NTP_GET_TIME_SUCC %d\n", timer_get_ms());
+            lwl_rtc_timer_update();
+            log_i("NET_NTP_GET_TIME_SUCC %d\n", lwl_rtc_timer_get_sec());
             break;
         default:
             break;

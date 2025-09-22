@@ -13,6 +13,7 @@ typedef enum {
     BDOCode_Connection_Timeout,     //!< 操作失败，BLE 连接超时
     BDOCode_Disconnect_Timeout,     //!< 操作失败，BLE 断连超时
     BDOCode_Scan_Adv_Stat_Timeout,  //!< 操作失败，扫描ADV状态变化超时
+    BDOCode_Dev_Busy,               //!< 操作失败，设备繁忙
     BDOCode_Unexpected_Error,       //!< 意外错误
 } bdo_code_e;
 

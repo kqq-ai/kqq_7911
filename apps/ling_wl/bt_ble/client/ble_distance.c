@@ -8,6 +8,13 @@
 #include "ble_simple_client.h"
 #include "ble_att_util.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
+
+#define swap(a, b) \
+    {              \
+        a = a ^ b; \
+        b = a ^ b; \
+        a = a ^ b; \
+    }
 #include "math.h"
 #define APP_STATUS (1)
 #define RSSI_EXPIRE_TIME_MS (1100) // RSSI样本过期时间：5秒
@@ -191,22 +198,24 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     int max_sample;
     int max_2_sample;
     double possible = 0.0;
+    distance_info_t *distance_info = &p_eend_dev->distance_info;
     // 严格的边界检查，防止数组越界
-    if (sample_count > MAX_SAMPLES)
+    assert(sample_count <= MAX_SAMPLES);
+
+    // 简单冒泡排序（从大到小）
+    for (int i = 0; i < sample_count - 1; ++i)
     {
-        log_i("[PROCESS_RSSI] %s: ERROR - sample_count %d exceeds MAX_SAMPLES %d, resetting",
-              sn_string, sample_count, MAX_SAMPLES);
-        sample_count = 0;
-        p_eend_dev->distance_info.rssi_sample_count = 0;
-        os_mutex_post(&p_eend_dev->distance_info.mutex);
-        return;
+        for (int j = 0; j < sample_count - i - 1; ++j)
+        {
+            if (distance_info->rssi_samples[j] < distance_info->rssi_samples[j + 1])
+            {
+                swap(distance_info->rssi_samples[j], distance_info->rssi_samples[j + 1]);
+                swap(distance_info->rssi_timestamps[j], distance_info->rssi_timestamps[j + 1]);
+            }
+        }
     }
 
-    // for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i)
-    // {
-    //     sum += p_eend_dev->distance_info.rssi_samples[i];
-    // }
-    // int original_average = sum / sample_count;
+    int index = sample_count >= 3 ? 2 : sample_count - 1;
 
     for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i)
     {
@@ -541,6 +550,8 @@ static void distance_main(void *priv)
 
                 // 通知距离变化
                 blue_distance_notify_self();
+
+                clean_expired_eend();
                 // clean_all_dev_rssi_samples();
             }
 
@@ -609,8 +620,8 @@ static void scan_adv_process_task(void *priv)
         uint8_t bat_level = (buffer[2] >> 4) & 0x0F;
         uint8_t adv_state = (buffer[2] >> 0) & 0x0F;
         uint8_t has_deadline = (r == 23) ? 1 : 0;
-        if (bat_level == 0 || adv_state > 2)
-            continue; // 过滤0电量（针对老协议）和状态异常的广播
+        if (adv_state > 2)
+            continue; // 过滤状态异常的广播
 
         lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
         if (dev == NULL)
@@ -629,6 +640,7 @@ static void scan_adv_process_task(void *priv)
         dev->bat_level = bat_level;
         dev->adv_state = adv_state;
         dev->has_deadline = has_deadline;
+        dev->update_time = timer_get_ms();
         dev->address_type = adv_data.address_type; // 其他任务会读，可能存在安全问题，也可能没问题
         memcpy(dev->address, adv_data.address, 6); // 其他任务会读，可能存在安全问题，也可能没问题
 
@@ -680,46 +692,53 @@ static void scan_adv_process_task(void *priv)
         // }
         // os_mutex_post(&dev->distance_info.mutex);
 
-        u32 time_now = timer_get_ms(); // TODO
+        u32 timestamp_now = lwl_rtc_timer_get_sec();
 
         // 激活的前提条件：1. 广播状态为 OFF, 2. 当前没有正在进行的激活/开机/关机任务, 3. 距离最近一次激活时间超过3秒(防止短时间内重复激活)
-        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((time_now - dev->active_time) > 3000))
+        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timestamp_now - dev->active_time) > 3000))
         {
             if (!dev->has_deadline)
             {
-                // 如果广播是未激活的广播，则尝试进行激活
-                log_i("[MEASDIST]Active");
-                bdo_active(dev->sn, 9000, active_op_callback, dev);
-            }
-            else if (dev->has_deadline && dev->deadline < (time_now / 1000))
-            {
-                // 如果过期时间是一个过去的时间，则尝试进行激活
-                log_i("[MEASDIST]Active");
-                bdo_active(dev->sn, 9000, active_op_callback, dev);
-            }
-            else if (dev->has_deadline && (dev->deadline - 10) < (time_now / 1000))
-            {
-                // 如果距离过期时间仅剩 10s，则尝试进行激活
-                log_i("[MEASDIST]Active");
-                bdo_active(dev->sn, 9000, active_op_callback, dev);
+                if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((time_now - dev->active_time) > 3000))
+                {
+                    if (!dev->has_deadline)
+                    {
+                        // 如果广播是未激活的广播，则尝试进行激活
+                        log_i("[MEASDIST]Active");
+                        bdo_active(dev->sn, 9000, active_op_callback, dev);
+                    }
+                    else if (dev->has_deadline && dev->deadline < (time_now / 1000))
+                    {
+                    }
+                    else if (dev->has_deadline && dev->deadline < (timestamp_now))
+                    {
+                        // 如果过期时间是一个过去的时间，则尝试进行激活
+                        log_i("[MEASDIST]Active");
+                        bdo_active(dev->sn, 9000, active_op_callback, dev);
+                    }
+                    else if (dev->has_deadline && (dev->deadline - 10) < (timestamp_now))
+                    {
+                        // 如果距离过期时间仅剩 10s，则尝试进行激活
+                        log_i("[MEASDIST]Active");
+                        bdo_active(dev->sn, 9000, active_op_callback, dev);
+                    }
+                }
+
+                log_d("[MEASDIST]over");
             }
         }
 
-        log_d("[MEASDIST]over");
-    }
-}
+        static int creat_scan_adv_process_task(void)
+        {
+            int ret = 0;
+            // 创建任务
+            ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
+            if (ret != 0)
+            {
+                log_i("[MEASDIST]scan_adv_process task create failed\n");
+                return -1;
+            }
+            return 0;
+        }
 
-static int creat_scan_adv_process_task(void)
-{
-    int ret = 0;
-    // 创建任务
-    ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
-    if (ret != 0)
-    {
-        log_i("[MEASDIST]scan_adv_process task create failed\n");
-        return -1;
-    }
-    return 0;
-}
-
-late_initcall(creat_task_distance);
+        late_initcall(creat_task_distance);

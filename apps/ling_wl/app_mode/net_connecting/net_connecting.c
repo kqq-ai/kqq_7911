@@ -46,7 +46,9 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
 {
     return false;
 }
-
+u32 get_key_times_in_net_connecting(){
+    return ble_connecting;
+} 
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -77,7 +79,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
-        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, 12);/// 超时后，返回idle
+        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
         break;
     }
 }
@@ -121,8 +123,8 @@ static void handle_ble_connection_state(lwl_app_context_t *context)
     /* BLE连接尝试 */
     if (!ble_connecting && key_times > 0) {
         set_led_confirm();
-        ble_simple_server_name_enable(1);
         ble_connecting = true;
+        ble_simple_server_name_enable(1);
         printf("try to connect ble\n");
     }
 
@@ -191,6 +193,7 @@ void app_net_connecting_loop()
     }
 }
 
+
 void app_net_connecting_mode(void)
 {
     net_connecting_init();
@@ -205,4 +208,3 @@ void app_net_connecting_mode(void)
         mdelay(10);
     }
 }
-

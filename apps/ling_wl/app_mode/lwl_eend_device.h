@@ -93,7 +93,7 @@ typedef struct {
     u8 op_state;                                  //!< 正在进行的操作状态 详情见 bdo_state_e
 
     u8 has_deadline;                              //!< E 端 ADV 是否包含广播配对码
-    u32 deadline;                                 //!< E 端 激活状态截止时间
+    s32 deadline;                                 //!< E 端 激活状态截止时间
 
     u8 address_type;                              //!< 用于连接 对方地址类型：0--public address,1--random address 
     u8 address[6];                                //!< 用于连接 peer_address 
@@ -101,6 +101,8 @@ typedef struct {
     u8 ctrl_mask_flags;                           //!< 广播自定义数据 E 端控制字节 详情见 bdp_ctrl_mask_flags_t 和 bdp_ctrl_mask_e
 
     uint32_t active_time;                         //!< 最近一次激活时间
+
+    uint32_t update_time;                         //!< 最近一次更新广播时间
 
     distance_info_t distance_info;                //!< Distance information
 

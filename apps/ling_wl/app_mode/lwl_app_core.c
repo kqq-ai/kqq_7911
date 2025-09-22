@@ -220,6 +220,44 @@ void dump_all_eend_info()
     map_iterator_unlock(it); // 释放锁
 }
 
+void clean_expired_eend()
+{
+    ASSERT(s_app_context != NULL);
+    
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
+
+    // 先收集所有key，防止遍历过程中修改map导致崩溃
+    int dev_count = map_size(s_app_context->dev_map);
+    char **sn_list = malloc(dev_count * sizeof(char *));
+    int idx = 0;
+
+    MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
+    MapIterator end = map_end(s_app_context->dev_map);
+
+    uint32_t now = timer_get_ms();
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
+        if (pdev->update_time + 15000 < now) {
+            sn_list[idx++] = strdup((char *)pdev->sn);
+        }
+    }
+    map_iterator_unlock(it); // 释放锁
+    // 删除并释放所有pdev
+    for (int i = 0; i < idx; ++i) {
+        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
+        if (pdev) {
+            map_erase(s_app_context->dev_map, sn_list[i]);
+            free(pdev);
+        }
+        free(sn_list[i]);
+    }
+    free(sn_list);
+
+
+    os_mutex_post(&s_app_context->dev_map_mutex);
+}
+
 /**
  * @brief 查找信号最强的E端设备
  * @return 信号最强的设备对象引用，如果未找到返回 NULL
@@ -417,3 +455,38 @@ void lwl_event_notify(lwl_event_t *event)
     my_blocking_queue_enqueue(&s_app_context->event_queue, event);
 }
 
+u32 rtc_time_delta = 0;
+/**
+ * @brief 获取 RTC 时间戳
+ */
+u32 lwl_rtc_timer_get_sec()
+{
+    ASSERT(s_app_context != NULL);
+    u32 time_now = timer_get_ms() / 1000;
+    return time_now + rtc_time_delta;
+}
+
+/**
+ * @brief 获取 RTC 时间戳
+ */
+void lwl_rtc_timer_update()
+{
+    ASSERT(s_app_context != NULL);
+
+    struct sys_time t;
+    void *dev = dev_open("rtc", NULL);
+    dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
+    dev_close(dev);
+
+    struct tm timeinfo = {0};
+    // 填充 tm 结构体
+    timeinfo.tm_year = t.year - 1900;  // tm_year 是从 1900 开始的年数
+    timeinfo.tm_mon = t.month - 1;     // tm_mon 是 0-11
+    timeinfo.tm_mday = t.day;
+    timeinfo.tm_hour = t.hour;
+    timeinfo.tm_min = t.min;
+    timeinfo.tm_sec = t.sec;
+    timeinfo.tm_isdst = -1;  // -1 表示不确定是否夏令时
+    // 转换为 Unix 时间戳
+    rtc_time_delta = mktime(&timeinfo) - 28800;
+}
