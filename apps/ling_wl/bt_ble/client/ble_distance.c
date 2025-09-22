@@ -699,7 +699,7 @@ static void scan_adv_process_task(void *priv)
         {
             if (!dev->has_deadline)
             {
-                if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((time_now - dev->active_time) > 3000))
+                if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timestamp_now - dev->active_time) > 3000))
                 {
                     if (!dev->has_deadline)
                     {
@@ -707,7 +707,7 @@ static void scan_adv_process_task(void *priv)
                         log_i("[MEASDIST]Active");
                         bdo_active(dev->sn, 9000, active_op_callback, dev);
                     }
-                    else if (dev->has_deadline && dev->deadline < (time_now / 1000))
+                    else if (dev->has_deadline && dev->deadline < (timestamp_now / 1000))
                     {
                     }
                     else if (dev->has_deadline && dev->deadline < (timestamp_now))
@@ -727,18 +727,19 @@ static void scan_adv_process_task(void *priv)
                 log_d("[MEASDIST]over");
             }
         }
+    }
+}
+static int creat_scan_adv_process_task(void)
+{
+    int ret = 0;
+    // 创建任务
+    ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
+    if (ret != 0)
+    {
+        log_i("[MEASDIST]scan_adv_process task create failed\n");
+        return -1;
+    }
+    return 0;
+}
 
-        static int creat_scan_adv_process_task(void)
-        {
-            int ret = 0;
-            // 创建任务
-            ret = os_task_create(scan_adv_process_task, NULL, 14, 1024, 256, "scan_adv_process");
-            if (ret != 0)
-            {
-                log_i("[MEASDIST]scan_adv_process task create failed\n");
-                return -1;
-            }
-            return 0;
-        }
-
-        late_initcall(creat_task_distance);
+late_initcall(creat_task_distance);
