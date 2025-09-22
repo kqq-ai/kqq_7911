@@ -229,6 +229,9 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    if (target_sn_count == 0 && send_id != NULL) {
+        add_target_sn(send_id); // 至少包含自己
+    }
 
     char *send_data = odmp_req_message(target_sn_set, target_sn_count, sn_c_id, send_id, is_play, event_type);
 

@@ -312,7 +312,7 @@ void wss_request_uninit()
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
-    wss_mic_stop();
+    wss_mic_stop(0);
 }
 
 bool wss_request_loop()
@@ -326,7 +326,7 @@ bool wss_request_loop()
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
-            wss_mic_stop(); // 停止录音
+            wss_mic_stop(0); // 停止录音
             log_i("bdo_turn_on %s\n", g_edev_target->sn);
             //上传E的电量
             log_mqtt_set_battery_level(g_edev_target->sn, (g_edev_target->bat_level)*10);
@@ -435,7 +435,7 @@ void wss_request_send_event(lwl_eend_dev_t *p_dev, int msg_event)
 {
     wss_request_print_event(msg_event, "wss_request_send_event");
     
-    if (send_req_message(p_dev ? p_dev->sn : "", is_audio_playing(), msg_event)) {
+    if (send_req_message(p_dev, is_audio_playing(), msg_event)) {
         return;
     }
 }

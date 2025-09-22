@@ -29,7 +29,7 @@ static u32 last_dequeue_time = 0;
 // #define log_d log_i // Debug log macro
 
 static lwl_app_context_t *g_app_ctx = NULL;
-static lwl_eend_dev_t *g_edev_closest = NULL; // 服务器维护
+static lwl_eend_dev_t *g_edev_closest = NULL; // 本地维护
 
 static bool is_edev_far_away(lwl_eend_dev_t *pdev)
 {
@@ -221,6 +221,13 @@ static void device_event_handler_cb(lwl_event_t *e)
         log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
         log_i("LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE");
         if (!p_eend_dev) break;
+        if (g_edev_closest == NULL && p_eend_dev->distance_info.rssi_sample_count > 0) {
+            g_edev_closest = p_eend_dev;
+        } else if (g_edev_closest->distance_info.rssi < p_eend_dev->distance_info.rssi) { // TODO 注意 E 的回收机制，指针会删除内存
+            g_edev_closest = p_eend_dev;
+        } else if (g_edev_closest->distance_info.rssi_sample_count == 0) { // RSSI样本数为0时，强制更新
+            g_edev_closest = NULL;
+        }
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
             log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
@@ -270,6 +277,7 @@ void wss_device_init()
     clear_edev_set();
     clear_edev_queue();
     clear_target_sn_set();
+    g_edev_closest = NULL;
 }
 
 void wss_device_uninit()
@@ -282,6 +290,7 @@ void wss_device_uninit()
     lwl_event_handler_remove(device_event_handler_cb);
     os_mutex_del(&edev_set_mutex, 1);
     os_mutex_del(&edev_queue_mutex, 1);
+    g_edev_closest = NULL;
 }
 
 lwl_eend_dev_t *wss_device_loop()
@@ -300,4 +309,19 @@ lwl_eend_dev_t *wss_device_loop()
         return pdev;
     }
     return NULL;
+}
+
+bool wss_device_call()
+{
+    if (g_edev_closest == NULL) {
+        return false;
+    }
+    u32 now = timer_get_ms();
+
+    lwl_eend_dev_t *pdev = g_edev_closest;
+    if (pdev) {
+        wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
+        last_dequeue_time = now;
+    }
+    return true;
 }

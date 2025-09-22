@@ -158,7 +158,7 @@ char *odmp_req_message(const char **targets, int targets_num, const char *c_id, 
     cJSON_AddItemToObject(nroot_data, "targets", aroot_data_targets);
     
     cJSON_AddStringToObject(nroot_data, "c_id", c_id);
-    cJSON_AddStringToObject(nroot_data, "send_id", send_id);
+    cJSON_AddStringToObject(nroot_data, "send_id", send_id ? send_id : "");
     cJSON_AddBoolToObject(nroot_data, "is_play", is_play);
     cJSON_AddNumberToObject(nroot_data, "event", event_type);
 

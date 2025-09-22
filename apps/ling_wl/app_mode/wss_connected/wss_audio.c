@@ -108,10 +108,14 @@ bool is_mic_on() {
     return recording;
 }
 
-void wss_mic_stop() {
+void wss_mic_stop(bool need_upload) {
     os_mutex_pend(&g_audio_mutex, 0);
     wss_app_recorder_data_upstream(NULL);
-    wss_app_recorder_en(DISABLE);
+    if (need_upload) {
+        g_recording_upload = false; // 停止上传
+    } else {
+        wss_app_recorder_en(DISABLE);
+    }
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -236,11 +240,15 @@ static void start_audio_upload(void *priv)
             wss_asr_data_to_server(&asr_data_frame);
         }
 
-        if (g_recording == false) { /* VAD结束 */
+        if (g_recording == false || g_recording_upload == false) { /* VAD结束 */
             g_recording_upload = false;
             wss_app_recorder_data_upstream(NULL);
             set_led_tts_wait();
-            log_i("Stop VAD because VAD END.");
+            if (g_recording == false){
+                log_i("Stop VAD because VAD END.");
+            } else {
+                log_i("Stop VAD because Short Key.");
+            }
             if (send_audio_status(OAST_ASR, OASE_END) == -1) {
                 return;
             }
@@ -409,7 +417,7 @@ void wss_audio_uninit()
 {
     log_i("Uninit WSS audio\n");
     wss_ble_audio_stop(); // 停止音频播放
-    wss_mic_stop();
+    wss_mic_stop(0); // 停止录音
     
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker

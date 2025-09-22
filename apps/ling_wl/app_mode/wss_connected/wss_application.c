@@ -224,8 +224,14 @@ bool wss_application_loop()
             log_i("STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
+            if (is_request_busy()) {
+                log_i("is_request_busy, wss_mic_stop.");
+                wss_mic_stop(1); // 停止录音 上传音频 1
+                break;
+            } else {
+                wss_device_call();
+            }
             // multi_player_game();
-            // wss_mic_stop(); // 停止录音 TODO 上传音频
             // wss_request_stop(); // 按键打断对话
         }
         break;
