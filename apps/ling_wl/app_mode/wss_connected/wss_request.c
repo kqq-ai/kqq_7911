@@ -71,6 +71,13 @@ bool is_request_busy(){
     return (g_mode_state != STATE_IDLE);
 }
 
+void turn_off_Pi() {
+    if (g_edev_connected) {
+        bdo_turn_off(g_edev_connected, 500, NULL, NULL);
+        g_edev_connected = NULL;
+    }
+}
+
 static void wss_request_print_state(AppRequestState mode_state, char* tag)
 {
     switch (mode_state) {
@@ -274,16 +281,12 @@ void wss_request_stop()
 
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
-        uint32_t cmd_id = 0;
-        bdo_turn_off(g_edev_target, 9000, NULL, NULL);
-        if (g_mode_state == STATE_DOWNLOAD) {
-            send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
-        }
+        turn_off_Pi();
+        g_mode_state = STATE_IDLE;
+        wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
+        wss_ble_audio_stop(); // 停止音频播放
     }
     g_edev_target = NULL; // 清除目标设备
-
-    wss_ble_audio_stop(); // 停止音频播放
-    wss_mic_stop(); // 停止录音
 
     // 重置状态到IDLE
     g_mode_state = STATE_IDLE;
@@ -309,6 +312,7 @@ void wss_request_uninit()
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
+    wss_mic_stop();
 }
 
 bool wss_request_loop()
@@ -323,7 +327,6 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
             wss_mic_stop(); // 停止录音
-            int cmd_id;
             log_i("bdo_turn_on %s\n", g_edev_target->sn);
             //上传E的电量
             log_mqtt_set_battery_level(g_edev_target->sn, (g_edev_target->bat_level)*10);
@@ -363,11 +366,8 @@ bool wss_request_loop()
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
-            int cmd_id;
             log_i("bdo_turn_on %s\n", g_edev_target->sn);
-            if (g_edev_connected) {
-                bdo_turn_off(g_edev_connected, 9000, NULL, NULL);
-            }
+            turn_off_Pi();
             bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
         }
         break;
@@ -415,8 +415,7 @@ bool wss_request_loop()
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
             wss_ble_audio_stop();
-            uint32_t cmd_id=0;
-            bdo_turn_off(g_edev_target, 9000, NULL, NULL);
+            turn_off_Pi();
             wss_request_send_event(g_edev_target, ORMET_PLAY_END);
 
             wss_mic_start(get_time_stamp() + 600000); // 开始录音

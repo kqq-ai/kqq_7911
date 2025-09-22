@@ -42,7 +42,7 @@ u32 get_time_stamp() {
 /*=================================================================================================
  * Audio dec app context
  *=================================================================================================*/
-static int g_audio_play_end = true; // 音频播放结束标志（外部请求状态）
+static int g_audio_off = true; // 音频播放结束标志（外部请求状态）
 static int g_audio_play_ongoing = false; // 音频播放进行中标志（播放器状态）
 /*=================================================================================================
  * Record app context
@@ -136,7 +136,7 @@ void set_Pi_volume(int volume) {
 
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    // bool playing = (g_audio_play_end == false);
+    // bool playing = (g_audio_off == false);
     bool playing = g_audio_play_ongoing;
     os_mutex_post(&g_audio_mutex);
     return g_audio_play_ongoing;
@@ -145,8 +145,9 @@ bool is_audio_playing(){
 void wss_ble_audio_stop() {
     log_i("wss_ble_audio_stop %d", g_audio_play_ongoing);
     os_mutex_pend(&g_audio_mutex, 0);
-    if (!g_audio_play_end) {
-        g_audio_play_end = true;
+    if (g_audio_play_ongoing) {
+        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
+        g_audio_off = true;
         g_audio_play_ongoing = false; // 停止音频播放
         app_music_play_stop(g_app_ctx->music_player);
     }
@@ -156,7 +157,7 @@ void wss_ble_audio_stop() {
 
 void wss_ble_audio_start() {
     os_mutex_pend(&g_audio_mutex, 0);
-    g_audio_play_end = false;
+    g_audio_off = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -302,7 +303,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     uint32_t remaining = len;
 
     os_mutex_pend(&g_audio_mutex, 0);
-    if (g_audio_play_end) {
+    if (g_audio_off) {
         os_mutex_post(&g_audio_mutex);
         return 0;
     }
@@ -316,7 +317,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     set_led_tts_play();
     os_mutex_post(&g_audio_mutex);
     
-    while (remaining > 0 && g_audio_play_end == false) {
+    while (remaining > 0 && g_audio_off == false) {
         uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
         uint32_t written = app_music_play_stream_write(
             g_app_ctx->music_player, 

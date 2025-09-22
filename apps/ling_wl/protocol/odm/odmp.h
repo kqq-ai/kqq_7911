@@ -69,7 +69,7 @@ enum ORX_EVENT_TYPE {
 static const int ORX_EVENT_CLASS[]= {
     -1,
     1,
-    2,
+    1,
     0,
     0,
     0,

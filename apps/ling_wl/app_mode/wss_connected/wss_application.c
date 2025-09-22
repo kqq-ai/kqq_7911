@@ -64,15 +64,17 @@ static void wss_application_print_state(int mode_state, char* tag)
 static int g_touch_key_exit = false;
 
 // 设置退出标志
-static void wss_application_touch_key_exit()
+static void wss_application_touch_key()
 {
     g_touch_key_exit = true;
 }
 
 // 查询退出标志
-static bool wss_application_check_touch_key_exit()
+static bool wss_application_check_touch_key()
 {
-    return g_touch_key_exit;
+    bool rst = g_touch_key_exit;
+    g_touch_key_exit = false;
+    return rst;
 }
 
 //=================================================================================================
@@ -85,10 +87,8 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("APPLICATION STOP");
-        // lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-        wss_disconnect(); // for test
-        // wss_application_touch_key_exit();
+        log_i("APPLICATION SHORT_CLICK");
+        wss_application_touch_key();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
@@ -96,7 +96,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         } else {
             log_i("Touch key released");
         }
-        // wss_application_touch_key_exit();
+        // wss_application_touch_key();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         // log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), MAX_LE_AUDIO_VOLUME);
@@ -223,24 +223,21 @@ bool wss_application_loop()
             g_device_state = DEVICE_AUDIO;
             log_i("STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
-        } else if (wss_application_check_touch_key_exit()) {
+        } else if (wss_application_check_touch_key()) {
             // multi_player_game();
-            wss_mic_stop(); // 停止录音
-            wss_request_stop(); // 按键打断对话
-            wss_application_vailed(12);
-            wss_request_send_event(NULL, ORMET_BUTTON_PRESS);
-            g_touch_key_exit = false; // 清除标志
+            // wss_mic_stop(); // 停止录音 TODO 上传音频
+            // wss_request_stop(); // 按键打断对话
         }
         break;
 
     case DEVICE_AUDIO:
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (wss_application_check_touch_key_exit()) {
+        if (wss_application_check_touch_key()) {
             g_device_state = DEVICE_IDLE;
             wss_request_stop(); // 按键打断对话
+            wss_mic_start(get_time_stamp() + 60000); // 开始录音
             last_req_time = g_curr_time;
-            log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE (touch key down)");
-            g_touch_key_exit = false; // 清除标志
+            wss_application_print_state(g_device_state, "touch key down");
         }
         if (!is_audio_playing()) {
             g_device_state = DEVICE_IDLE;
