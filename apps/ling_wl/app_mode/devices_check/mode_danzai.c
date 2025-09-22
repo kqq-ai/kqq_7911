@@ -52,7 +52,7 @@ void mode9_random_audio_end_cb(void *priv)
         log_i("MODE 9: Disconnecting E-device after playback: %s (RSSI: %d)", sn_string, previous_rssi);
         
         uint cmd_id;
-        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
+        bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
         g_mode9_current_pdev = NULL;
     }
     
@@ -65,13 +65,15 @@ void mode9_random_audio_end_cb(void *priv)
         
         // 立即连接新设备
         uint cmd_id;
-        bdo_turn_on(strongest_pdev, 9000, 9000, mode9_e_connect_cb, strongest_pdev);
+        bdo_turn_on(strongest_pdev, 3000, 3000, mode9_e_connect_cb, strongest_pdev);
         g_mode9_current_pdev = strongest_pdev;
         return; // 不重新启用C端扬声器，因为即将播放新音频
     }
     
     // 如果没有更强信号的设备，重新启用C端扬声器
     gpio_direction_output(IO_PORTA_00, 1);
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
     log_i("MODE 9: No stronger signal device found (current strongest RSSI: %d), C speaker re-enabled", strongest_rssi);
 }
 
@@ -90,6 +92,10 @@ static void mode9_e_connect_cb(bdo_code_e code, void *priv)
         // 连接成功，播放随机音频
         log_i("MODE 9: E-device connected successfully, playing random audio");
         gpio_direction_output(IO_PORTA_00, 0);  // 禁用C端扬声器，使用E端播放
+        lwl_app_context_t *context = lwl_app_core_context_get_instance();
+        set_dec_volume(context->music_player, 70); // 恢复默认音量
+        
+        msleep(800); // 等待扬声器切换稳定
         
         const char *audio_files[] = {
             CONFIG_VOICE_PROMPT_FILE_PATH"d_jd.MP3",
@@ -102,7 +108,6 @@ static void mode9_e_connect_cb(bdo_code_e code, void *priv)
 
         log_i("MODE 9: Randomly selected audio for E-device: %s", file_to_play);
 
-        lwl_app_context_t *context = lwl_app_core_context_get_instance();
         if (context && context->music_player) {
             g_audio_playing = 1;
             int err = app_music_play_local_music_with_callback(
@@ -191,7 +196,7 @@ void process_mode_9(void)
                         g_mode9_current_pdev->get_string(g_mode9_current_pdev, current_sn, sizeof(current_sn));
                         log_i("MODE 9: Disconnecting current device: %s (RSSI: %d)", current_sn, current_rssi);
                         uint cmd_id;
-                        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
+                        bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
                         g_mode9_current_pdev = NULL;
                     }
                     
@@ -202,7 +207,7 @@ void process_mode_9(void)
                         sn_string, current_rssi, best_rssi);
                     
                     uint cmd_id;
-                    bdo_turn_on(strongest_pdev, 9000, 9000, mode9_e_connect_cb, strongest_pdev);
+                    bdo_turn_on(strongest_pdev, 3000, 3000, mode9_e_connect_cb, strongest_pdev);
                     g_mode9_current_pdev = strongest_pdev;
                 } else {
                     log_i("MODE 9: Audio playing, waiting for completion before switching to stronger signal device");
@@ -253,7 +258,7 @@ void mode9_uninit()
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Disconnecting E-device during cleanup: %s", sn_string);
         uint cmd_id;
-        bdo_turn_off(g_mode9_current_pdev, 9000, NULL, NULL);
+        bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
         g_mode9_current_pdev = NULL;
     }
     log_i("MODE 9: All state variables reset");

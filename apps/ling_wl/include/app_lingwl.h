@@ -8,5 +8,6 @@ struct app_lingwl_hdl {
 };
 void do_shutdown();
 
+#define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 
 #endif

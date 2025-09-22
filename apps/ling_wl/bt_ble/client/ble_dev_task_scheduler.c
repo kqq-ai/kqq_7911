@@ -90,22 +90,21 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         process_cb(op, BDOCode_Connection_Timeout);
         return;
     }
-    log_i("[BDO]ble connected %s\n", op->sn);
+    log_i("[BDO]ble connected %s Send deadline = %d\n", op->sn, timestamp_now);
 
     /* - 发送激活数据 */
-    uint16_t quick_adv_interval = (SET_PI_ADV_INTERVAL_MS) * (1 / 0.625);               // unit: 0.625ms TODO
-    uint16_t quick_adv_count = SET_PI_ADV_DURATION_S;                                   // unit: 1s TODO
-    uint32_t timestamp = timer_get_ms() / 1000;                                         // unit: 1s TODO
+    uint16_t quick_adv_interval = (SET_PI_ADV_INTERVAL_MS) * (1 / 0.625);
+    uint16_t quick_adv_count = SET_PI_ADV_DURATION_S;
 
     active_data[0] = 0xA0;                          // fixed 0xA0 cmd
     active_data[1] = (quick_adv_interval) & 0xFF;
     active_data[2] = (quick_adv_interval >> 8) & 0xFF;
     active_data[3] = (quick_adv_count) & 0xFF;
     active_data[4] = (quick_adv_count >> 8) & 0xFF;
-    active_data[5] = (timestamp) & 0xFF;
-    active_data[6] = (timestamp >> 8) & 0xFF;
-    active_data[7] = (timestamp >> 16) & 0xFF;
-    active_data[8] = (timestamp >> 24) & 0xFF;
+    active_data[5] = (timestamp_now) & 0xFF;
+    active_data[6] = (timestamp_now >> 8) & 0xFF;
+    active_data[7] = (timestamp_now >> 16) & 0xFF;
+    active_data[8] = (timestamp_now >> 24) & 0xFF;
 
     log_i_buf(active_data, sizeof(active_data));
     if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, active_data, sizeof(active_data))) {

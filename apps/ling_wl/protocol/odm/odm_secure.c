@@ -1,4 +1,5 @@
 #include "odm_secure.h"
+#include "app_lingwl.h"
 
 #include "http/http_cli.h"
 #include "cJSON_common/cJSON.h"

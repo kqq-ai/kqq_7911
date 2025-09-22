@@ -551,7 +551,7 @@ static void scan_adv_process_task(void *priv)
         u32 timestamp_now = lwl_rtc_timer_get_sec();
 
         // 激活的前提条件：1. 广播状态为 OFF, 2. 当前没有正在进行的激活/开机/关机任务, 3. 距离最近一次激活时间超过3秒(防止短时间内重复激活)
-        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timestamp_now - dev->active_time) > 3000)) {
+        if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timer_get_ms() - dev->active_time) > 3000)) {
             if (!dev->has_deadline) {
                 // 如果广播是未激活的广播，则尝试进行激活
                 log_i("[MEASDIST]Active");
