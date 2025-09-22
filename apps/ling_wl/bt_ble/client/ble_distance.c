@@ -119,42 +119,73 @@ static void simple_expire_cleanup(lwl_eend_dev_t *dev, void *priv)
 // 逻辑回归截距 : [1.2385184]
 // 特征缩放均值 : [-70.87293993 - 76.96748184 - 71.51834131 16.8227893]
 // 特征缩放标准差 : [8.11150689 7.21031345 7.92898719 6.48619069]
-bool logistic_regression_predict(const double x[4], double *prob)
+void distance_predict(const double x[5], double *prob)
 {
-    // 均值 (训练时保存的)
-    double mean[4] = {-70.87293993, -76.96748184, -71.51834131, 16.8227893};
-    // 标准差
-    double std[4] = {8.11150689, 7.21031345, 7.92898719, 6.48619069};
-    // 权重系数
-    double w[4] = {0.59431181, 4.63600231, 0.88283592, -0.16861603};
-    // 截距
-    double b = 1.2385184;
+    // // 均值 (训练时保存的)
+    // double mean[4] = {-70.87293993, -76.96748184, -71.51834131, 16.8227893};
+    // // 标准差
+    // double std[4] = {8.11150689, 7.21031345, 7.92898719, 6.48619069};
+    // // 权重系数
+    // double w[4] = {0.59431181, 4.63600231, 0.88283592, -0.16861603};
+    // // 截距
+    // double b = 1.2385184;
 
-    // 1. 特征标准化
-    double x_scaled[4];
-    for (int i = 0; i < 4; i++)
+    // // 1. 特征标准化
+    // double x_scaled[4];
+    // for (int i = 0; i < 4; i++)
+    // {
+    //     x_scaled[i] = (x[i] - mean[i]) / std[i];
+    // }
+
+    // // 2. 线性组合 z = w*x' + b
+    // double z = b;
+    // for (int i = 0; i < 4; i++)
+    // {
+    //     z += w[i] * x_scaled[i];
+    // }
+
+    // // 3. Sigmoid 函数
+    // double y_hat = 1.0 / (1.0 + exp(-z));
+
+    // // 如果调用者需要概率，赋值
+    // if (prob != NULL)
+    // {
+    //     *prob = y_hat;
+    // }
+
+    // // 4. 返回分类结果
+    // return (y_hat >= 0.5) ? true : false;
+    double mean[5] = {-66.56941176, -76.34352941, -71.87529412, -67.84941176, 1.57436167};
+    double scale[5] = {8.76680938, -8.93898859, -7.15046532, -9.17571762, 0.60134052};
+
+    // 回归系数
+    double coef[5] = {-0.15424498, 0.06495728, -0.41693145, -0.11034294, 0.05529889};
+    double intercept = 0.7422134703873213;
+
+    // 输入特征
+    // double x[5] = {sample_max, sample_min, median, max_2, sum};
+    double x_scaled[5];
+
+    // 1. 标准化
+    for (int i = 0; i < 5; i++)
     {
-        x_scaled[i] = (x[i] - mean[i]) / std[i];
+        x_scaled[i] = (x[i] - mean[i]) / scale[i];
     }
 
-    // 2. 线性组合 z = w*x' + b
-    double z = b;
-    for (int i = 0; i < 4; i++)
+    // 2. 线性组合 (log(y_pred))
+    double log_y = intercept;
+    for (int i = 0; i < 5; i++)
     {
-        z += w[i] * x_scaled[i];
+        log_y += coef[i] * x_scaled[i];
     }
 
-    // 3. Sigmoid 函数
-    double y_hat = 1.0 / (1.0 + exp(-z));
-
-    // 如果调用者需要概率，赋值
+    // 3. exp 还原
+    double y_pred = exp(log_y);
     if (prob != NULL)
     {
-        *prob = y_hat;
+        *prob = y_pred;
     }
-
-    // 4. 返回分类结果
-    return (y_hat >= 0.5) ? true : false;
+    // return y_pred;
 }
 // RSSI处理
 // 计算平均RSSI并过滤掉低于平均值一半的数据点
@@ -190,6 +221,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     static int samples[MAX_SAMPLES];
     int max_sample;
     int max_2_sample;
+    int min_sample;
     double possible = 0.0;
     // 严格的边界检查，防止数组越界
     if (sample_count > MAX_SAMPLES)
@@ -229,7 +261,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
 
     max_sample = samples[sample_count - 1];
     max_2_sample = samples[sample_count - 2];
-
+    min_sample = samples[0];
     int median = 0;
     if (sample_count > 0)
     {
@@ -244,7 +276,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     }
     // if (sample_count >= 10)
     // {
-    logistic_regression_predict((double[4]){max_sample, median, max_2_sample, sample_count}, &possible);
+    distance_predict((double[5]){max_sample, min_sample, median, max_2_sample, log(sample_count)}, &possible);
     // log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn_string, max_sample, max_2_sample, median, sample_count, possible);
     // }
 
