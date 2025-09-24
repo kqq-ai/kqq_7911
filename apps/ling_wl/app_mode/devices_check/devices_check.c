@@ -234,16 +234,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
         break;
-    case LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF:
-        log_i("NOTIFY_GSENSOR_OFF");
-        extern void * g_iic_hdl;
-        int ret = 0;
-        ret = sc7a20h_disable(g_iic_hdl);
-        if (0 == ret)
-        {
-            uart_response_notify_gsensor_off();
-            log_i("GSENSOR OFF");
-        }
     }
 }
 static void devices_check_init(void)

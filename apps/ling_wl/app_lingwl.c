@@ -163,6 +163,16 @@ void base_lwl_event_handler(lwl_event_t *e)
             // log_mqtt_set_battery_level(NULL, lastbattery); // 上报充电状态
         }
         break;
+    case LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF:
+        log_i("NOTIFY_GSENSOR_OFF");
+        extern void * g_iic_hdl;
+        int ret = 0;
+        ret = sc7a20h_disable(g_iic_hdl);
+        if (0 == ret)
+        {
+            uart_response_notify_gsensor_off();
+            log_i("GSENSOR OFF");
+        }
     }
 }
 
