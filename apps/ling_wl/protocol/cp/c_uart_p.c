@@ -259,11 +259,12 @@ int uart_send_open_le_audio(uint8_t *mac)
 }
 
 /* 7. 指定广播配对码重新打开Audio广播 */
-int uart_send_switch_audio_bc(uint8_t *broadcast_code)
+int uart_send_switch_audio_bc(uint8_t *broadcast_code, uint8_t ctrl)
 {
-    uint8_t payload[1 + 6] = {0};
+    uint8_t payload[1 + 7] = {0};
     payload[0] = UART_CMD_SWITCH_AUDIO_BC;
     memcpy(payload + 1, broadcast_code, 6);
+    payload[7] = ctrl;
     return uart_send_inquiry(payload, sizeof(payload));
 }
 

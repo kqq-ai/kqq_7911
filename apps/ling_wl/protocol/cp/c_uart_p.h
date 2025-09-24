@@ -116,7 +116,7 @@ void set_led_off(void);
 int uart_send_open_le_audio(uint8_t *mac);
 
 /* 7. 指定广播配对码重新打开Audio广播 */
-int uart_send_switch_audio_bc(uint8_t *broadcast_code);
+int uart_send_switch_audio_bc(uint8_t *broadcast_code, uint8_t ctrl);
 
 /* 8. 指定广播配对码重新打开Audio广播 */
 int uart_send_set_ctrl(uint8_t ctrl);
