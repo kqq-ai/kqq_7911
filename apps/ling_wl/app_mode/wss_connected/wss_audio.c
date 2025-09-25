@@ -124,9 +124,7 @@ void wss_mic_start(uint timestamp) {
     log_i("wss_mic_start set timeout %d", timestamp);
     wss_app_recorder_en(ENABLE);
     vad_stop_time = timestamp; // 设置VAD超时时间
-    // if (!is_mic_on()) {
-        threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
-    // }
+    threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -140,7 +138,6 @@ void set_Pi_volume(int volume) {
 
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    // bool playing = (g_audio_off == false);
     bool playing = g_audio_play_ongoing;
     os_mutex_post(&g_audio_mutex);
     return g_audio_play_ongoing;
@@ -277,6 +274,7 @@ void wait_vad_task(void *priv)
     my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
     set_led_mic_on(); // 开启录音时灯光变橙色
+    msleep(500);
 
     while (get_time_stamp() < vad_stop_time && is_mic_on()) {
         msleep(10);
@@ -323,8 +321,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     }
 
     set_led_tts_play();
-    os_mutex_post(&g_audio_mutex);
     
+    os_mutex_post(&g_audio_mutex);
     while (1) {
         os_mutex_pend(&g_audio_mutex, 0);
         uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
@@ -357,8 +355,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 void app_music_play_end_cb(void *priv)
 {
     os_mutex_pend(&g_audio_mutex, 0);
-    g_audio_play_ongoing = false; // 音乐播放结束标志
     log_i("app_music_play_end_cb end");
+    g_audio_play_ongoing = false; // 音乐播放结束标志
     os_mutex_post(&g_audio_mutex);
 }
 
