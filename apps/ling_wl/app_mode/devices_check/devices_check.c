@@ -135,6 +135,9 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         } else if (p_eend_dev->distance_info.distance_type == DISTANCE_2 || p_eend_dev->distance_info.distance_type == DISTANCE_3) {
             remove_pdev_from_list(p_eend_dev); // 新增：从列表中移除pdev
         }
+        if (p_eend_dev->distance_info.rssi_sample_count == 0) {
+            remove_pdev_from_list(p_eend_dev); // 新增：从列表中移除pdev
+        }
     }   break;
     case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
         log_i("ORMET_NEW_DEVICE_IN");
