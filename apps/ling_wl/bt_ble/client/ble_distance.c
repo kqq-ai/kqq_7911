@@ -675,11 +675,11 @@ static void scan_adv_process_task(void *priv)
         if (dev->has_deadline)
         {
             dev->deadline = buffer[19] | (buffer[20] << 8) | (buffer[21] << 16) | (buffer[22] << 24);
-            log_i("[MEASDIST]Has deadline %d", dev->deadline);
+            log_d("[MEASDIST]Has deadline %d", dev->deadline);
         }
         else
         {
-            log_i("[MEASDIST]Has not deadline");
+            log_d("[MEASDIST]Has not deadline");
         }
 
         if (adv_state_latest != BDPAS_CONNECTED && dev->adv_state == BDPAS_CONNECTED)
@@ -726,16 +726,10 @@ static void scan_adv_process_task(void *priv)
         if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timer_get_ms() - dev->active_time) > 3000)) {
             if (!dev->has_deadline) {
                 // 如果广播是未激活的广播，则尝试进行激活
-                log_i("[MEASDIST]Active");
-                bdo_active(dev->sn, 9000, active_op_callback, dev);
-            } else if (dev->has_deadline && dev->deadline < (timestamp_now)) {
-                // 如果过期时间是一个过去的时间，则尝试进行激活
-                log_i("[MEASDIST]Active");
-                bdo_active(dev->sn, 9000, active_op_callback, dev);
-            }else if (dev->has_deadline && (dev->deadline - 10) < (timestamp_now)) {
+                bdo_active(dev, 9000, active_op_callback, dev);
+            } else if (dev->has_deadline && dev->deadline < (timestamp_now + 10)) {
                 // 如果距离过期时间仅剩 10s，则尝试进行激活
-                log_i("[MEASDIST]Active");
-                bdo_active(dev->sn, 9000, active_op_callback, dev);
+                bdo_active(dev, 9000, active_op_callback, dev);
             }
         }
 

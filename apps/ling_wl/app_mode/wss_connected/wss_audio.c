@@ -306,7 +306,7 @@ void wait_vad_task(void *priv)
  */
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
-    const uint32_t MAX_CHUNK_SIZE = 50000;
+    const uint32_t MAX_CHUNK_SIZE = 16000;
     uint32_t total_written = 0;
     uint32_t remaining = len;
 
@@ -325,7 +325,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     set_led_tts_play();
     os_mutex_post(&g_audio_mutex);
     
-    while (remaining > 0 && g_audio_off == false) {
+    while (1) {
+        os_mutex_pend(&g_audio_mutex, 0);
         uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
         uint32_t written = app_music_play_stream_write(
             g_app_ctx->music_player, 
@@ -337,11 +338,15 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             log_e("Failed to write audio data chunk,odmp_audio_data_cbk");
             break; // 错误处理，可根据需求调整
         }
-        
         total_written += written;
         remaining -= written;
         log_d("Written chunk: %u bytes (total: %u / %u)", written, total_written, len);
+        if (remaining == 0 || g_audio_off)  break;
+        
+        os_mutex_post(&g_audio_mutex);
+        msleep(10);
     }
+    os_mutex_post(&g_audio_mutex);
     log_i("Total stream write: %u / %u bytes", total_written, len);
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
 }

@@ -27,7 +27,7 @@ struct websocket_struct *wss_server_connect(char *url);
  * @param size Size of the data to send
  * @return Number of bytes sent on success, negative value on error
  */
-int  wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size);
+int  wss_send_message(struct websocket_struct *websockets_info, u8 *buf, int size);
 
 /**
  * @brief Sends binary data through an established WebSocket connection
@@ -36,7 +36,7 @@ int  wss_server_send(struct websocket_struct *websockets_info, u8 *buf, int size
  * @param size Size of the data to send
  * @return Number of bytes sent on success, negative value on error
  */
-int  wss_server_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size);
+int  wss_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size);
 
 /**
  * @brief Closes an established WebSocket connection

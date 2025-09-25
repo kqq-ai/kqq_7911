@@ -25,17 +25,9 @@
 
 #include "log/log_mqtt.h"
 
-
-// 调试：无论后端返回结果如何，强制播放“未注册”提示音
-#ifndef DEBUG_FORCE_UNREGISTERED_PROMPT
-#define DEBUG_FORCE_UNREGISTERED_PROMPT 1
-#endif
-
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
-
-static int g_exception_exit = false;
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
@@ -312,10 +304,12 @@ void wss_request_uninit()
 {
     log_i("Uninit WSS request\n");
 
+    turn_off_Pi();
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
     wss_mic_stop(0);
+    // msleep(500);
 }
 
 bool wss_request_loop()
@@ -328,10 +322,10 @@ bool wss_request_loop()
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
             log_i("bdo_turn_on %s\n", g_edev_target_sn);
+            last_message_received = 0;
             if (!pdev) break;
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
-            last_message_received = 0;
             wss_mic_stop(0); // 停止录音
             //上传E的电量
             log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);

@@ -67,7 +67,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     ASSERT(dev);
     u32 timestamp_now = lwl_rtc_timer_get_sec();
-    if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && (dev->deadline - 10) >= (timestamp_now))) {
+    if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && dev->deadline >= timestamp_now + 10)) {
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
         return;
@@ -287,6 +287,7 @@ void ble_dev_task_scheduler_init()
 
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
+    log_i("[MEASDIST]Active %s", dev->sn);
     if (dev->op_state & BDO_STATE_ACTIVATING)
         return 0;
     dev->op_state |= BDO_STATE_ACTIVATING;
@@ -304,6 +305,7 @@ int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *
 
 int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
+    log_i("[MEASDIST]bdo_turn_on %s", dev->sn);
     if (dev->op_state & BDO_STATE_TURNNING_ON)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_ON;
@@ -323,6 +325,7 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
 
 int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
+    log_i("[MEASDIST]bdo_turn_off %s", dev->sn);
     if (dev->op_state & BDO_STATE_TURNNING_OFF)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_OFF;

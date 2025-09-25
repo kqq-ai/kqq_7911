@@ -87,15 +87,6 @@ int is_target_sn_in_set(const char* sn) {
     return found;
 }
 
-// 获取当前集合及数量
-char** get_target_sn_set(int* count) {
-    os_mutex_pend(&g_wss_mutex, 0);
-    if (count) *count = target_sn_count;
-    char** set = target_sn_set;
-    os_mutex_post(&g_wss_mutex);
-    return set;
-}
-
 void wss_exception_exit()
 {
     g_exception_exit = true;
@@ -202,7 +193,7 @@ int send_audio_status(int type, int event)
 
     char *send_data = odmp_audio_status(sn_c_id, type, event);
 
-    if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
@@ -237,7 +228,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     char *send_data = odmp_req_message(target_sn_set, target_sn_count, sn_c_id, send_id, is_play, event_type);
     log_i("wbs send msg : %s", send_data);
 
-    if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
@@ -265,7 +256,7 @@ int send_bin_data(uint8_t *data, uint32_t len)
         return -1;
     }
 
-    if (FALSE == wss_server_send_bin(ctx->websockets_info, data, len)) {
+    if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
         log_e("Error %s %d.", __FILE__, __LINE__);
         
         if (ctx->websockets_info != NULL) {
