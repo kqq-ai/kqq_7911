@@ -201,6 +201,10 @@ static lwl_eend_dev_t* dequeue_edev() {
 static void device_event_handler_cb(lwl_event_t *e)
 {
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+    
+    if (g_edev_closest == NULL || g_edev_closest->distance_info.rssi_sample_count == 0) {
+        g_edev_closest = NULL;
+    }
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE:
@@ -220,13 +224,11 @@ static void device_event_handler_cb(lwl_event_t *e)
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
         log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
         log_i("LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE");
-        if (!p_eend_dev) break;
-        if (g_edev_closest == NULL && p_eend_dev->distance_info.rssi_sample_count > 0) {
+        if (!p_eend_dev || p_eend_dev->distance_info.rssi_sample_count == 0) break;
+        if (g_edev_closest == NULL) {
             g_edev_closest = p_eend_dev;
-        } else if (g_edev_closest->distance_info.rssi < p_eend_dev->distance_info.rssi) { // TODO 注意 E 的回收机制，指针会删除内存
+        } else if (g_edev_closest->distance_info.rssi < p_eend_dev->distance_info.rssi) {
             g_edev_closest = p_eend_dev;
-        } else if (g_edev_closest->distance_info.rssi_sample_count == 0) { // RSSI样本数为0时，强制更新
-            g_edev_closest = NULL;
         }
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
@@ -313,9 +315,6 @@ lwl_eend_dev_t *wss_device_loop()
 
 bool wss_device_call()
 {
-    if (g_edev_closest == NULL) {
-        return false;
-    }
     u32 now = timer_get_ms();
 
     lwl_eend_dev_t *pdev = g_edev_closest;

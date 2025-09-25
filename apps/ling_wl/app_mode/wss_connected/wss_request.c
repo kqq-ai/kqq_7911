@@ -39,8 +39,8 @@ static int g_exception_exit = false;
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
-static lwl_eend_dev_t *g_edev_target = NULL; // 服务器维护
-static lwl_eend_dev_t *g_edev_connected = NULL; // E 已连接
+static char g_edev_target_sn[SN_SIZE]; // 服务器维护
+static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 
@@ -72,9 +72,11 @@ bool is_request_busy(){
 }
 
 void turn_off_Pi() {
-    if (g_edev_connected) {
-        bdo_turn_off(g_edev_connected, 500, NULL, NULL);
-        g_edev_connected = NULL;
+    if (g_edev_connected_sn[0] != 0) {
+        
+        lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
+        bdo_turn_off(pdev, 500, NULL, NULL);
+        g_edev_connected_sn[0] = 0;
     }
 }
 
@@ -183,7 +185,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 
         last_message_received = OR_TTS_BIND;
         wait_time = pkg->tts_bind.wait_time;
-        g_edev_target = find_eend_dev_by_sn(pkg->tts_bind.send_id);
+        memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
     }   break;
     case OR_AUDIO_STATUS:
         log_i("AUDIO_STATUS\n");
@@ -252,8 +254,8 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     case BDOCode_Success:
 
         log_i("Switch PortE %s OK\n", sn_string);
-        g_edev_connected = g_edev_target;
-        if (pdev == g_edev_target) {
+        memcpy(g_edev_connected_sn, g_edev_target_sn, SN_SIZE);
+        if (strcmp(pdev->sn,g_edev_target_sn)==0) {
             send_message = ORMET_SWITCH_SUCCESS;
         }
         break;
@@ -286,7 +288,7 @@ void wss_request_stop()
         wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
         wss_ble_audio_stop(); // 停止音频播放
     }
-    g_edev_target = NULL; // 清除目标设备
+    g_edev_target_sn[0] = 0; // 清除目标设备
 
     // 重置状态到IDLE
     g_mode_state = STATE_IDLE;
@@ -327,17 +329,18 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
             wss_mic_stop(0); // 停止录音
-            log_i("bdo_turn_on %s\n", g_edev_target->sn);
+            log_i("bdo_turn_on %s\n", g_edev_target_sn);
+            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
             //上传E的电量
-            log_mqtt_set_battery_level(g_edev_target->sn, (g_edev_target->bat_level)*10);
+            log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
             
-            bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
+            bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
             g_mode_state = STATE_UPLOAD;
             wss_request_print_state(g_mode_state, "Vioce On");
-            wss_request_send_event(g_edev_target, ORMET_VAD_SPEAKER_START);
+            wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
         }
         break;
 
@@ -345,14 +348,14 @@ bool wss_request_loop()
         // TTS下载流程
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("Switch success, starting audio playback");
-            wss_request_send_event(g_edev_target, ORMET_SWITCH_SUCCESS);
+            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
             last_message_received = 0;
             last_event = 0;
             send_message = 0; // 重置发送消息标志
         } else if (send_message == ORMET_SWITCH_FAILED) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "SWITCH_FAILED");
-            wss_request_send_event(g_edev_target, ORMET_SWITCH_FAILED);
+            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
             last_message_received = 0;
             last_event = 0;
             send_message = 0; // 重置发送消息标志
@@ -366,9 +369,10 @@ bool wss_request_loop()
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
-            log_i("bdo_turn_on %s\n", g_edev_target->sn);
+            log_i("bdo_turn_on %s\n", g_edev_target_sn);
+            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
             turn_off_Pi();
-            bdo_turn_on(g_edev_target, 9000, 9000, e_turn_on_cb, g_edev_target);
+            bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
         }
         break;
 
@@ -396,7 +400,7 @@ bool wss_request_loop()
         if (!is_voice_availble()) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "VAD state is not voice");
-            wss_request_send_event(g_edev_target, ORMET_VAD_SPEAKER_END);
+            wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_END);
         }
         wss_application_vailed();
         break;
@@ -416,7 +420,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
             wss_ble_audio_stop();
             turn_off_Pi();
-            wss_request_send_event(g_edev_target, ORMET_PLAY_END);
+            wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
 
             wss_mic_start(get_time_stamp() + 600000); // 开始录音
             last_message_received = 0;
@@ -431,11 +435,13 @@ bool wss_request_loop()
     return (g_mode_state == STATE_IDLE);
 }
 
-void wss_request_send_event(lwl_eend_dev_t *p_dev, int msg_event)
+void wss_request_send_event(char *sn, int msg_event)
 {
     wss_request_print_event(msg_event, "wss_request_send_event");
-    
-    if (send_req_message(p_dev, is_audio_playing(), msg_event)) {
+    if (sn!=NULL && (sn[0]==0 || sn[6]==0)) {
+        sn = NULL;
+    }
+    if (send_req_message(sn, is_audio_playing(), msg_event)) {
         return;
     }
 }
