@@ -797,8 +797,8 @@ void ble_simple_server_module_enable(u8 en)
         bt_ble_adv_enable(1);
     } else {
         adv_ctrl_en = 0;
-        bt_ble_adv_enable(0);
         ble_simple_server_disconnect();
+        bt_ble_adv_enable(0);
     }
     os_mutex_post(&mutex);
 }
