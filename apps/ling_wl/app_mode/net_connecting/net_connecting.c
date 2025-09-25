@@ -31,12 +31,17 @@
 #define MODE_TIMEOUT_MS 600000 // 600s
 #define MODE_BLE_TIMEOUT_MS 15000 // 15s
 static u32 init_time = 0;
-static u32 key_times = 0;
+static u32 key_press_time_ms = 0;
 bool wifi_manager_state = false; // wifi manager 状态
 bool ble_connecting = false; // wifi manager 状态
 bool ble_connected = false; // wifi manager 状态
 
-        
+void clear_key_press_time_ms(){
+    
+    ble_connecting = false;
+    ble_connected = false;
+    key_press_time_ms = 0;
+}
 // static void set_led_connecting(void)        { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 正在连接网络 蓝色 */
 static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
 static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
@@ -75,7 +80,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         // on_user_key_confirm();
         // 确认连接小程序
         log_i("PRESS NORMAL KEY in net_connecting mode");
-        key_times = timer_get_ms();
+        key_press_time_ms = timer_get_ms();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
@@ -91,7 +96,7 @@ static int net_connecting_init(void)
     wifi_manager_state = false;
     ble_connecting = false;
     ble_connected = false;
-    key_times = 0;
+    key_press_time_ms = 0;
 
     return 0;
 }
@@ -110,9 +115,9 @@ static int net_connecting_unint(void)
 static void handle_ble_connection_state(lwl_app_context_t *context)
 {
     /* BLE连接超时处理 */
-    if (timer_get_ms() - key_times > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
+    if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
         set_led_connect_error();
-        key_times = 0;
+        key_press_time_ms = 0;
         ble_simple_server_name_enable(0);
         ble_connecting = false;
         ble_connected = false;
@@ -121,7 +126,7 @@ static void handle_ble_connection_state(lwl_app_context_t *context)
     }
 
     /* BLE连接尝试 */
-    if (!ble_connecting && key_times > 0) {
+    if (!ble_connecting && key_press_time_ms > 0) {
         set_led_confirm();
         ble_connecting = true;
         ble_simple_server_name_enable(1);
@@ -188,7 +193,7 @@ void app_net_connecting_loop()
     }
 
     /* BLE连接处理 */
-    if (wifi_manager_state && key_times > 0) {
+    if (wifi_manager_state && key_press_time_ms > 0) {
         handle_ble_connection_state(context);
     }
 }

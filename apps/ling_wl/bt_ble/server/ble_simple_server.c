@@ -336,7 +336,11 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
             set_ble_work_state(BLE_ST_DISCONN);
             ble_op_multi_att_send_conn_handle(0, 0, MULTI_ROLE_SERVER);
 
-            bt_ble_adv_enable(1);
+            if( WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL) ) {
+                clear_key_press_time_ms();
+                ble_simple_server_name_enable(0); //重新广播BLE
+            }
+            ///bt_ble_adv_enable(1);
         }   break;
 
         case ATT_EVENT_MTU_EXCHANGE_COMPLETE: {
@@ -817,14 +821,14 @@ void ble_simple_server_adv_enable(u8 en)
     os_mutex_post(&mutex);
 }
 
-void ble_simple_server_name_enable(u8 en)
+void ble_simple_server_name_enable(u8 idle_busy)
 {
     log_info("***** wifimgr_ble_name_enable******\n");
     assert(os_mutex_valid(&mutex));
     os_mutex_pend(&mutex, 0);
     ble_simple_server_module_enable(0);
     const char *name_p = bt_get_local_name();
-    const char* ext_name = en ? ble_ext_busy : ble_ext_idle;
+    const char* ext_name = idle_busy ? ble_ext_busy : ble_ext_idle;
     u8 ext_name_len = 3;
     
 
