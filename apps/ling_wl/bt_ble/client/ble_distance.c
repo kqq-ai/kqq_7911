@@ -1,4 +1,5 @@
 #include "ble_distance.h"
+#include "app_lingwl.h"
 #include "string.h"
 #include "system/os/os_api.h"
 #include "system/os/os_error.h"
@@ -285,7 +286,8 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     // }
 
     // int original_average = sum / sample_count;
-    int original_average = median;
+    int original_average = (-45-10*possible)*0.50 + (p_eend_dev->distance_info.rssi)*0.50;
+    if (original_average < -128) original_average = -128;
 
     log_d("[MEASDIST]original_average : %d\n", original_average);
 #if PRINT_RSSI_LOG

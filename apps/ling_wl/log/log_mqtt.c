@@ -484,6 +484,9 @@ int log_mqtt_start(void) {
 
 // 添加停止函数
 void log_mqtt_stop(void) {
+    if (!os_mutex_valid(&g_log_mqtt_mutex)) {
+        return;
+    }
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     if (!g_mqtt_start) {
         os_mutex_post(&g_log_mqtt_mutex);

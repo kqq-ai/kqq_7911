@@ -14,4 +14,6 @@ void do_shutdown();
 #define SERVER_DOMAIN  "test.coolqq.com"
 // #define SERVER_DOMAIN  "coolqq.com"
 
+#define PRINT_RSSI_LOG 0 // 是否打印RSSI日志
+
 #endif

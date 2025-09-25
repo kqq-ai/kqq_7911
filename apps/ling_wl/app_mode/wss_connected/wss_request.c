@@ -322,14 +322,13 @@ bool wss_request_loop()
 {
     // 使用 last_message_received 和 last_event 替代 last_audio_status_type、last_audio_status_event、last_tts_bind_received
 
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
     switch (g_mode_state) {
     case STATE_IDLE:
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
             log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
             if (!pdev) break;
-
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
@@ -355,7 +354,7 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
             send_message = 0; // 重置发送消息标志
-        } else if (send_message == ORMET_SWITCH_FAILED) {
+        } else if (send_message == ORMET_SWITCH_FAILED || !pdev) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "SWITCH_FAILED");
             wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
@@ -370,7 +369,6 @@ bool wss_request_loop()
             last_event = 0;
         } else if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
-            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
             if (!pdev) break;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
