@@ -23,6 +23,7 @@ static int target_sn_count = 0;
 // 添加SN到集合
 void add_target_sn(const char* sn) {
     if (!sn) return;
+    if (strlen(sn)!= SN_SIZE-1) return;
     os_mutex_pend(&g_wss_mutex, 0);
     // 检查是否已存在
     for (int i = 0; i < target_sn_count; ++i) {
@@ -234,6 +235,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     }
 
     char *send_data = odmp_req_message(target_sn_set, target_sn_count, sn_c_id, send_id, is_play, event_type);
+    log_i("wbs send msg : %s", send_data);
 
     if (FALSE == wss_server_send(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);
@@ -248,7 +250,6 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    log_i("wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;

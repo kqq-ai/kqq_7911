@@ -181,6 +181,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
         log_i("volume: %d\n", pkg->tts_bind.volume);
+        if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
         set_Pi_volume(pkg->tts_bind.volume);
 
         last_message_received = OR_TTS_BIND;
@@ -325,12 +326,14 @@ bool wss_request_loop()
     case STATE_IDLE:
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
+            log_i("bdo_turn_on %s\n", g_edev_target_sn);
+            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
+            if (!pdev) break;
+
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
             wss_mic_stop(0); // 停止录音
-            log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
             //上传E的电量
             log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
             
@@ -367,10 +370,11 @@ bool wss_request_loop()
             last_event = 0;
         } else if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
+            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
+            if (!pdev) break;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
             log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
             turn_off_Pi();
             bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
         }
@@ -438,7 +442,7 @@ bool wss_request_loop()
 void wss_request_send_event(char *sn, int msg_event)
 {
     wss_request_print_event(msg_event, "wss_request_send_event");
-    if (sn!=NULL && (sn[0]==0 || sn[6]==0)) {
+    if (sn != NULL && strlen(sn)!= SN_SIZE-1) {
         sn = NULL;
     }
     if (send_req_message(sn, is_audio_playing(), msg_event)) {
