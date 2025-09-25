@@ -12,8 +12,8 @@
 #define MAX_VOLUME_VALUE	100        /**< Maximum volume value */
 #define INIT_VOLUME_VALUE   100         /**< Initial volume value */
 
-#define DEC_BUF_LEN      32 * 1024     /**< Decoder buffer length (32KB) */
-#define STREAM_BUF_LEN   300 * 1024    /**< Stream buffer length (300KB) */
+#define DEC_BUF_LEN      6 * 1024     /**< Decoder buffer length (4KB) */
+#define STREAM_BUF_LEN   200 * 1024    /**< Stream buffer length (200KB) */
 
 /**
  * @brief Forward declaration of music player structure

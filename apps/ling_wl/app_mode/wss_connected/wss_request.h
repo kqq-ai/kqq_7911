@@ -4,7 +4,7 @@
 #include "cpu.h"
 #include "app_mode/lwl_app_core.h"
 
-void wss_request_send_event(lwl_eend_dev_t *p_dev, int msg_event);
+void wss_request_send_event(char *sn, int msg_event);
 
 void wss_request_init();
 void wss_request_uninit();

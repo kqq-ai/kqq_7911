@@ -2,9 +2,8 @@
 #define __ODM_SECURE_H__
 #include <cpu.h>
 
-// #define TEST_LOCOL_MODE
-#define SERVER_DOMAIN  "test.coolqq.com"
-// #define SERVER_DOMAIN  "coolqq.com"
+
+#define TEST_IP_GET "https://kqq.tos-cn-beijing.volces.com/kqq_debug.json"
 
 char *get_mqtt_token();
 char *get_wss_connection_url();

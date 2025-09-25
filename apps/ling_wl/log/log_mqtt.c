@@ -155,6 +155,7 @@ int log_mqtt_connect(void) {
     if (rc != 0) {
         log_i("MQTT connection failed, error code: %d\n", rc);
         log_mqtt_disconnect();  // 连接失败，清理资源
+        os_mutex_post(&g_log_mqtt_mutex);
         return rc;
     }
     
@@ -165,7 +166,7 @@ int log_mqtt_connect(void) {
 
 /* 检查MQTT连接状态 */
 bool log_mqtt_is_connected(void) {
-    if (!os_mutex_valid(&g_log_mqtt_mutex)) return false;
+    if (!os_mutex_valid(&g_log_mqtt_mutex) || !g_mqtt_connected) return false;
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     bool ret = (g_mqtt_client != NULL && g_mqtt_connected);
     os_mutex_post(&g_log_mqtt_mutex);
@@ -483,6 +484,9 @@ int log_mqtt_start(void) {
 
 // 添加停止函数
 void log_mqtt_stop(void) {
+    if (!os_mutex_valid(&g_log_mqtt_mutex)) {
+        return;
+    }
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     if (!g_mqtt_start) {
         os_mutex_post(&g_log_mqtt_mutex);

@@ -33,7 +33,7 @@
 #include "protocol/cp/c_uart_p.h"
 
 static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接中 蓝色 */
 
 static int wss_connected_init(void)
 {

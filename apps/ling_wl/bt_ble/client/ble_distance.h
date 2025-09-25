@@ -13,9 +13,6 @@
 #define NOTIFY_APP_TIME 1000 // 1s
 #define NOTIFY_SELF_TIME 10000 // 10S
 
-
-#define PRINT_RSSI_LOG 0 // 是否打印RSSI日志
-
 const char *distance_type_to_text(enum distance_type type);
 
 // 开始检测RSSI
