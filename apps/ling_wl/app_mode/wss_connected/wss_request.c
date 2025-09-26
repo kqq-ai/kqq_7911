@@ -160,25 +160,12 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     switch (type) {
     case OR_INITIAL_SETUP_RESPONSE:
         log_i("INITIAL_SETUP_RESPONSE\n");
-        log_i("setup_complete: %d\n", pkg->initial_setup_response.setup_complete);
         break;
     case OR_DEVICE_SWITCH_RESPONSE:
         log_i("DEVICE_SWITCH_RESPONSE\n");
-        log_i("device_id: %s\n", pkg->device_switch_response.device_id);
-        log_i("status: %s\n", pkg->device_switch_response.status);
         break;
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");
-        log_i("c_id: %s\n", pkg->tts_bind.c_id);
-        log_i("send_id: %s\n", pkg->tts_bind.send_id);
-        log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
-        log_i("volume: %d\n", pkg->tts_bind.volume);
-        if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
-        set_Pi_volume(pkg->tts_bind.volume);
-
-        last_message_received = OR_TTS_BIND;
-        wait_time = pkg->tts_bind.wait_time;
-        memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
     }   break;
     case OR_AUDIO_STATUS:
         log_i("AUDIO_STATUS\n");
@@ -319,57 +306,18 @@ bool wss_request_loop()
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
     switch (g_mode_state) {
     case STATE_IDLE:
-        // 等待 OR_TTS_BIND 事件
-        if (last_message_received == OR_TTS_BIND) {
-            g_mode_state = STATE_TTS_BIND;
-            wss_request_print_state(g_mode_state, "receive TTS_BIND");
+        if (last_message_received == OAST_TTS && last_event == OASE_START) {
+            g_mode_state = STATE_DOWNLOAD;
+            wss_request_print_state(g_mode_state, "receive AUDIO START");
+            wss_ble_audio_start();
             last_message_received = 0;
-            wss_mic_stop(0); // 停止录音
-            if (pdev != NULL) {
-                //上传E的电量
-                log_i("bdo_turn_on %s\n", g_edev_target_sn);
-                log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-                bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
-            }
+            last_event = 0;
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
             g_mode_state = STATE_UPLOAD;
             wss_request_print_state(g_mode_state, "Vioce On");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-        }
-        break;
-
-    case STATE_TTS_BIND:
-        // TTS下载流程
-        if (send_message == ORMET_SWITCH_SUCCESS) {
-            log_i("Switch success, starting audio playback");
-            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
-            last_message_received = 0;
-            last_event = 0;
-            send_message = 0; // 重置发送消息标志
-        } else if (send_message == ORMET_SWITCH_FAILED || !pdev) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "SWITCH_FAILED");
-            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
-            last_message_received = 0;
-            last_event = 0;
-            send_message = 0; // 重置发送消息标志
-        } else if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_START) {
-            g_mode_state = STATE_DOWNLOAD;
-            wss_request_print_state(g_mode_state, "receive AUDIO START");
-            wss_ble_audio_start();
-            last_message_received = 0;
-            last_event = 0;
-        } else if (last_message_received == OR_TTS_BIND) {
-            g_mode_state = STATE_TTS_BIND;
-            wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
-            last_message_received = 0;
-            if (pdev != NULL) {
-                log_i("bdo_turn_on %s\n", g_edev_target_sn);
-                turn_off_Pi();
-                bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
-            }
         }
         break;
 
@@ -413,13 +361,13 @@ bool wss_request_loop()
         }
         // 播放结束，打开麦克风
         if (!is_audio_playing()) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
+            g_mode_state = STATE_UPLOAD;
             wss_ble_audio_stop();
-            turn_off_Pi();
             wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
+            wss_request_print_state(g_mode_state, "Vioce On");
+            wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
+            wss_mic_start(0);
 
-            wss_mic_start(get_time_stamp() + 600000); // 开始录音
             last_message_received = 0;
             last_event = 0;
         } else {
