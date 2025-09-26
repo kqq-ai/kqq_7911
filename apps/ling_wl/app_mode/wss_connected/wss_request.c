@@ -276,7 +276,7 @@ void wss_request_stop()
 
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
-        turn_off_Pi();
+        // turn_off_Pi();
         g_mode_state = STATE_IDLE;
         wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
         wss_ble_audio_stop(); // 停止音频播放
@@ -304,7 +304,7 @@ void wss_request_uninit()
 {
     log_i("Uninit WSS request\n");
 
-    turn_off_Pi();
+    // turn_off_Pi();
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
@@ -328,9 +328,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             wss_mic_stop(0); // 停止录音
             //上传E的电量
-            log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-            
-            bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
+            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
@@ -367,8 +365,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
             log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            turn_off_Pi();
-            bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
+            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
         }
         break;
 
@@ -415,7 +412,7 @@ bool wss_request_loop()
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
             wss_ble_audio_stop();
-            turn_off_Pi();
+            // turn_off_Pi();
             wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
 
             wss_mic_start(get_time_stamp() + 600000); // 开始录音
