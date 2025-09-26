@@ -196,6 +196,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                     last_event = OASE_ABNORMAL;
                 }
             }
+            if (pkg->audio_status.event == OASE_START) {
+                last_message_received = OR_AUDIO_STATUS;
+                last_event = 5 + OASE_START;
+            }
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START\n");
@@ -331,6 +335,11 @@ bool wss_request_loop()
                 log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
                 bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
             }
+        } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
+            wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
+            wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            last_message_received = 0;
+            last_event = 0;
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
