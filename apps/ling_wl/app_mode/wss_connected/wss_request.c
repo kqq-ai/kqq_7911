@@ -281,6 +281,8 @@ void wss_request_stop()
         g_mode_state = STATE_IDLE;
         wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
         wss_ble_audio_stop(); // 停止音频播放
+    } else if (g_mode_state == STATE_TTS_BIND) {
+        send_message = ORMET_SWITCH_FAILED;
     }
     g_edev_target_sn[0] = 0; // 清除目标设备
 

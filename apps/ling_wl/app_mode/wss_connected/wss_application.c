@@ -226,7 +226,11 @@ bool wss_application_loop()
         } else if (wss_application_check_touch_key()) {
             if (is_request_busy()) {
                 log_i("is_request_busy, wss_mic_stop.");
-                wss_mic_stop(1); // 停止录音 上传音频 1
+                if (is_voice_availble()) {
+                    wss_mic_stop(1); // 停止录音 上传音频 1
+                } else {
+                    wss_request_stop();
+                }
                 break;
             } else {
                 wss_device_call();
