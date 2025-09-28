@@ -123,11 +123,13 @@ bool wss_connect() {
 
     wss_url = get_wss_connection_url();
     if (wss_url == NULL) {
+        log_i("get_wss_connection_url failed wss_url=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
     context->websockets_info = wss_server_connect(wss_url);
     if (context->websockets_info == NULL) {
+        log_i("wss_server_connect failed websockets_info=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
