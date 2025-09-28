@@ -160,12 +160,9 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     switch (type) {
     case OR_INITIAL_SETUP_RESPONSE:
         log_i("INITIAL_SETUP_RESPONSE\n");
-        log_i("setup_complete: %d\n", pkg->initial_setup_response.setup_complete);
         break;
     case OR_DEVICE_SWITCH_RESPONSE:
         log_i("DEVICE_SWITCH_RESPONSE\n");
-        log_i("device_id: %s\n", pkg->device_switch_response.device_id);
-        log_i("status: %s\n", pkg->device_switch_response.status);
         break;
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");

@@ -170,6 +170,8 @@ exit_ws:
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
+    os_mutex_post(&wss_mutex_bin); 
+    os_mutex_del(&wss_mutex_bin, 0);  
 
     return NULL;
 }
