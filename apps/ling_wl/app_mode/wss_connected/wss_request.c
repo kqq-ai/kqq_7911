@@ -196,6 +196,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                     last_event = OASE_ABNORMAL;
                 }
             }
+            if (pkg->audio_status.event == OASE_START) {
+                last_message_received = OR_AUDIO_STATUS;
+                last_event = 5 + OASE_START;
+            }
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START\n");
@@ -321,14 +325,16 @@ bool wss_request_loop()
     case STATE_IDLE:
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
-            log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            last_message_received = 0;
-            if (!pdev) break;
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
+            last_message_received = 0;
             wss_mic_stop(0); // 停止录音
-            //上传E的电量
             wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
+        } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
+            wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
+            wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            last_message_received = 0;
+            last_event = 0;
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
@@ -361,7 +367,6 @@ bool wss_request_loop()
             last_event = 0;
         } else if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
-            if (!pdev) break;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
             log_i("bdo_turn_on %s\n", g_edev_target_sn);

@@ -106,8 +106,8 @@ static int net_connecting_unint(void)
     lwl_event_handler_remove(net_connecting_event_handler_cb);
     if (wifi_manager_state) {
         wifi_manager_state = false;
-        ble_simple_server_exit();
     }
+    ble_simple_server_name_enable(0);
     return 0;
 }
 
