@@ -201,6 +201,7 @@ static void wss_asr_data_to_server(AsrData *asr_data)
 {
     uint8_t *pdata = (uint8_t *)asr_data->data + 2;
     size_t len = (asr_data->data[0] * 256)+asr_data->data[1];
+    total_len += len;
     log_i("Total stream upload: %u / %u bytes", len, total_len);
 
     if (send_bin_data(pdata, len)) {
@@ -310,8 +311,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 //=================================================================================================
 void app_music_play_end_cb(void *priv)
 {
-    os_mutex_pend(&g_audio_mutex, 0);
     log_i("app_music_play_end_cb end");
+    os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_ongoing = false; // 音乐播放结束标志
     os_mutex_post(&g_audio_mutex);
 }

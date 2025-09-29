@@ -61,6 +61,11 @@ void app_wss_connected_mode(void)
         // 应用代码
         if (wss_application_loop()) {
             set_led_connect_error();// WSS ERROR
+
+            while (!wss_application_check_touch_key()) {
+                msleep(100);
+            }
+
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
                 printf("Network connection is WIFI_STA_DISCONNECT!\n");

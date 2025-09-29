@@ -9,5 +9,6 @@ void wss_application_vailed();
 void wss_application_init();
 void wss_application_uninit();
 bool wss_application_loop();
+bool wss_application_check_touch_key();
 
 #endif
