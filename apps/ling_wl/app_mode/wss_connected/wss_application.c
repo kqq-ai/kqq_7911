@@ -23,6 +23,10 @@
 
 #define log_i log_mqtt
 
+#define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
+#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
+#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
+
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 1000
 static u32 g_heat_timer = 0;
@@ -67,6 +71,7 @@ static int g_touch_key_exit = false;
 static void wss_application_touch_key()
 {
     g_touch_key_exit = true;
+    wss_application_vailed();
 }
 
 // 查询退出标志
@@ -100,7 +105,10 @@ static void input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         // log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), MAX_LE_AUDIO_VOLUME);
-        uart_response_synch_status(is_request_busy(), MAX_LE_AUDIO_VOLUME);/// 0是idle 1是busy，必须回复
+        if (is_request_busy()) {
+            wss_application_vailed();
+        }
+        uart_response_synch_status(timer_get_ms() - last_req_time < NO_REQ_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
         log_i("MOVE_MORE_THAN_ONE_METER");
@@ -112,9 +120,6 @@ static void input_event_handler_cb(lwl_event_t *e)
 
 static pthread_t monitor_thread = NULL;
 static bool monitor_thread_running = false;
-#define NO_REQ_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
-#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
-#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
 // 模式5 加速度传感器相关变量
 
 void *wss_condition_monitor_thread(void *arg)
