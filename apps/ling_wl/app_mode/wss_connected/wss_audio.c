@@ -139,8 +139,10 @@ void set_Pi_volume(int volume) {
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
     bool playing = g_audio_play_ongoing;
+    // bool playing = (app_music_play_get_status(g_app_ctx->music_player)==AUDIO_DEC_START);
+    // log_i("app_music_play_get_status(AUDIO_DEC) = %d", app_music_play_get_status(g_app_ctx->music_player)); //AUDIO_DEC_START / AUDIO_DEC_STOP
     os_mutex_post(&g_audio_mutex);
-    return g_audio_play_ongoing;
+    return playing;
 }
 
 void wss_ble_audio_stop() {
