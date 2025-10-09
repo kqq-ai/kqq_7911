@@ -172,6 +172,7 @@ void app_net_connecting_loop()
     bool is_connection_failed = (
         state == WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID ||
         state == WIFI_STA_CONNECT_ASSOCIAT_FAIL ||
+        state == WIFI_STA_DISCONNECT ||
         state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
         state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT
     );
