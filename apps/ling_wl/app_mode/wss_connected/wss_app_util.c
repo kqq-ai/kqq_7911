@@ -160,11 +160,14 @@ bool wss_reconnect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context->websockets_info != NULL) {
+        log_i("websockets disconnect by wss_reconnect");
         wss_server_disconnect(context->websockets_info);
         context->websockets_info = NULL;
     }
     if (wss_url == NULL) {
         char* wss_url = get_wss_connection_url();
+    } else {
+        msleep(100); // 断线后等待100ms再重连
     }
     log_i("websockets reconnected %s",wss_url);
 
