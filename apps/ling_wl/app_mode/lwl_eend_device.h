@@ -64,6 +64,10 @@ typedef struct {
     s8 rssi_samples[MAX_SAMPLES];
     u32 rssi_timestamps[MAX_SAMPLES];
     s8 rssi;
+    double distance;        //距离的回归预测值
+    double distance_change;  //记录上一次数据之间的速度
+    double last_distance;
+    int test_count;
     int distance_type;
     int distance_type_last;
     OS_MUTEX mutex;

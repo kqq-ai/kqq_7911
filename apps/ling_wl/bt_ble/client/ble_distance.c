@@ -8,13 +8,21 @@
 #include "ble_simple_client.h"
 #include "ble_att_util.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
-
+#include "../../protocol/cp/c_uart_p.h"
 #define swap(a,b) {a =a ^ b; b = a ^ b; a = a ^ b;}
 
 #include "math.h"
 #define APP_STATUS (1)
-#define RSSI_EXPIRE_TIME_MS (1100) // RSSI样本过期时间：5秒
+#define RSSI_EXPIRE_TIME_MS (2200) // RSSI样本过期时间：5秒
+#define step_max_change (0.3) // m/s
 
+
+// 使用系统预定义的颜色常量
+static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
+static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
+static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
+static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_purple(void)     { uart_send_set_led_color(COLOR_PURPLE); }
 // 消息类型······························
 enum
 {
@@ -124,47 +132,28 @@ static void simple_expire_cleanup(lwl_eend_dev_t *dev, void *priv)
 // 特征缩放标准差 : [8.11150689 7.21031345 7.92898719 6.48619069]
 void distance_predict(const double x[5], double *prob)
 {
-    // // 均值 (训练时保存的)
-    // double mean[4] = {-70.87293993, -76.96748184, -71.51834131, 16.8227893};
-    // // 标准差
-    // double std[4] = {8.11150689, 7.21031345, 7.92898719, 6.48619069};
-    // // 权重系数
-    // double w[4] = {0.59431181, 4.63600231, 0.88283592, -0.16861603};
-    // // 截距
-    // double b = 1.2385184;
 
-    // // 1. 特征标准化
-    // double x_scaled[4];
-    // for (int i = 0; i < 4; i++)
-    // {
-    //     x_scaled[i] = (x[i] - mean[i]) / std[i];
-    // }
 
-    // // 2. 线性组合 z = w*x' + b
-    // double z = b;
-    // for (int i = 0; i < 4; i++)
-    // {
-    //     z += w[i] * x_scaled[i];
-    // }
 
-    // // 3. Sigmoid 函数
-    // double y_hat = 1.0 / (1.0 + exp(-z));
 
-    // // 如果调用者需要概率，赋值
-    // if (prob != NULL)
-    // {
-    //     *prob = y_hat;
-    // }
+// scale: [8.61450156 9.16385475 7.90461619 8.0518822  0.60653504]
+    // double mean[5] = {-70.16632919, -78.29563205, -74.61802141, -70.76800694, 2.65483616};
+    // double mean[5] = {-68.51584699 , -76.78142077, -72.85846995, -69.6284153 , 1.94710464};
+    double mean[5] = {-67.80083565 ,-76.8551532 ,-72.53203343 ,-68.89415042 ,2.24017005};
 
-    // // 4. 返回分类结果
-    // return (y_hat >= 0.5) ? true : false;
-    double mean[5] = {-70.16632919, -78.29563205, -74.61802141, -70.76800694, 2.65483616};
-    double scale[5] = {8.03458968, 8.73837695, 7.82651692, 8.22573379, 0.64757132};
+    // double scale[5] = {8.03458968, 8.73837695, 7.82651692, 8.22573379, 0.64757132};
+    // double scale[5] = {8.16111801, 8.61998467, 7.47205518, 7.59577544, 0.76510294};
+    double scale[5] = {8.61450156,9.16385475, 7.90461619, 8.0518822, 0.60653504};
 
     // 回归系数
-    double coef[5] = {-0.04444551, -0.12459655, -0.2989419, -0.02093879, 0.05144372};
-    double intercept = 1.086524432284897;
-
+    // double coef[5] = {-0.04444551, -0.12459655, -0.2989419, -0.02093879, 0.05144372};
+    // double coef[5] = {-0.08298197, -0.04560951, -0.32894203, -0.11677333, 0.09981421};
+    double coef[5] = {-0.09285038, -0.02243895, -0.4047161, -0.06951638, 0.0952348};
+    
+    // double intercept = 1.086524432284897;
+    // double intercept = 0.8484964330457704;
+    double intercept = 0.8503851306122057;
+    // intercept: 0.8484964330457704
     // 输入特征
     // double x[5] = {sample_max, sample_min, median, max_2, sum};
     double x_scaled[5];
@@ -222,11 +211,11 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     // 计算原始平均RSSI（加强边界检查）
     int sum = 0;
     int sample_count = p_eend_dev->distance_info.rssi_sample_count;
-    static int samples[MAX_SAMPLES];
-    int max_sample;
-    int max_2_sample;
-    int min_sample;
-    double possible = 0.0;
+    // static int samples[MAX_SAMPLES];
+    // int max_sample;
+    // int max_2_sample;
+    // int min_sample;
+    // double possible = 0.0;
     // 严格的边界检查，防止数组越界
     if (sample_count > MAX_SAMPLES)
     {
@@ -238,54 +227,55 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
         return;
     }
 
-    // for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i)
-    // {
-    //     sum += p_eend_dev->distance_info.rssi_samples[i];
-    // }
-    // int original_average = sum / sample_count;
-
     for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i)
     {
         sum += p_eend_dev->distance_info.rssi_samples[i];
-        samples[i] = p_eend_dev->distance_info.rssi_samples[i];
     }
+    int original_average = sum / sample_count;
 
-    for (int i = 0; i < sample_count - 1; i++)
-    {
-        for (int j = 0; j < sample_count - i - 1; j++)
-        {
-            if (samples[j] > samples[j + 1])
-            {
-                int temp = samples[j];
-                samples[j] = samples[j + 1];
-                samples[j + 1] = temp;
-            }
-        }
-    }
+    //预测处理
+    // for (int i = 0; i < sample_count && i < MAX_SAMPLES; ++i)
+    // {
+    //     sum += p_eend_dev->distance_info.rssi_samples[i];
+    //     samples[i] = p_eend_dev->distance_info.rssi_samples[i];
+    // }
 
-    max_sample = samples[sample_count - 1];
-    max_2_sample = samples[sample_count - 2];
-    min_sample = samples[0];
-    int median = 0;
-    if (sample_count > 0)
-    {
-        if (sample_count % 2 == 0)
-        {
-            median = (samples[sample_count / 2 - 1] + samples[sample_count / 2]) / 2;
-        }
-        else
-        {
-            median = samples[sample_count / 2];
-        }
-    }
+    // for (int i = 0; i < sample_count - 1; i++)
+    // {
+    //     for (int j = 0; j < sample_count - i - 1; j++)
+    //     {
+    //         if (samples[j] > samples[j + 1])
+    //         {
+    //             int temp = samples[j];
+    //             samples[j] = samples[j + 1];
+    //             samples[j + 1] = temp;
+    //         }
+    //     }
+    // }
+
+    // max_sample = samples[sample_count - 1];
+    // max_2_sample = samples[sample_count - 2];
+    // min_sample = samples[0];
+    // int median = 0;
+    // if (sample_count > 0)
+    // {
+    //     if (sample_count % 2 == 0)
+    //     {
+    //         median = (samples[sample_count / 2 - 1] + samples[sample_count / 2]) / 2;
+    //     }
+    //     else
+    //     {
+    //         median = samples[sample_count / 2];
+    //     }
+    // }
     // if (sample_count >= 10)
     // {
-    distance_predict((double[5]){max_sample, min_sample, median, max_2_sample, log(sample_count)}, &possible);
+    // distance_predict((double[5]){max_sample, min_sample, median, max_2_sample, log(sample_count)}, &possible);
     // log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn_string, max_sample, max_2_sample, median, sample_count, possible);
     // }
 
     // int original_average = sum / sample_count;
-    int original_average = median;
+    // int original_average = median;
 
     log_d("[MEASDIST]original_average : %d\n", original_average);
 #if PRINT_RSSI_LOG
@@ -312,7 +302,7 @@ static void process_rssi_samples(lwl_eend_dev_t *p_eend_dev, void *priv)
     log_i("[MQTT message] %s, possible=%f", raw_samples_str, possible);
 #endif
     // 使用简单均值：直接使用所有样本的平均值
-    p_eend_dev->distance_info.rssi = (s8)original_average;
+    // p_eend_dev->distance_info.rssi = (s8)original_average;
     // 打印最终RSSI信息
     // log_i("[FINAL_RSSI] %s: simple_average=%d (using all %d samples)",
     //       sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.rssi_sample_count);
@@ -486,10 +476,10 @@ static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *
 
     if (rssi >= BLUE_DISTANCE_TWO_METER && rssi != -128)
     {
-        if (p_eend_dev->distance_info.distance_type != DISTANCE_0)
-        {
-            log_mqtt("BLE DISTANCE_0: %s, RSSI=%d lower than 60db", p_eend_dev->sn, rssi);
-        }
+        // if (p_eend_dev->distance_info.distance_type != DISTANCE_0)
+        // {
+        //      log_mqtt("BLE DISTANCE_0: %s, RSSI=%d lower than 60db", p_eend_dev->sn, rssi);
+        // }
         p_eend_dev->distance_info.distance_type = DISTANCE_0;
     }
     else if (rssi < BLUE_DISTANCE_TWO_METER && rssi >= BLUE_DISTANCE_FIVE_METER && rssi != -128)
@@ -504,6 +494,13 @@ static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *
     {
         p_eend_dev->distance_info.distance_type = DISTANCE_3;
     }
+    
+    // if(p_eend_dev->distance_info.distance<2.0f&& p_eend_dev->distance_info.distance!=0.0f){
+    //     p_eend_dev->distance_info.distance_type = DISTANCE_0;
+    // }else if(p_eend_dev->distance_info.distance>=2.0f && p_eend_dev->distance_info.distance<5.0f){
+    //     p_eend_dev->distance_info.distance_type = DISTANCE_1;
+    // }else if(p_eend_dev->distance_info.distance>=5.0f){
+    //     p_eend_dev->distance_info.distance_type = DISTANCE_2;
 
     if (p_eend_dev->distance_info.distance_type != p_eend_dev->distance_info.distance_type_last)
     {
@@ -579,7 +576,7 @@ static void distance_main(void *priv)
                 blue_distance_notify_self();
 
                 clean_expired_eend();
-                // clean_all_dev_rssi_samples();
+                // clean_all_dev_rssi_samples();distance_change
             }
 
             if (current_time - notify_self_time > NOTIFY_SELF_TIME)
@@ -699,6 +696,132 @@ static void scan_adv_process_task(void *priv)
             dev->distance_info.rssi_samples[idx] = rssi;
             dev->distance_info.rssi_timestamps[idx] = timer_get_ms();
             dev->distance_info.rssi_sample_count++;
+            log_d("[RSSI_STORE] %s: Stored RSSI=%d", sn, rssi);
+
+            char raw_samples_str[512] = {0};
+            int offset = 0;
+            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset,
+                            "[RAW_RSSI] %s: count=%d, samples=[", sn, dev->distance_info.rssi_sample_count);
+
+            for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i)
+            {
+                if (i > 0)
+                {
+                    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
+                }
+                offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%d",
+                                dev->distance_info.rssi_samples[i]);
+            }
+            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], timestamps=[");
+            for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i)
+            {
+                if (i > 0)
+                {
+                    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
+                }
+                offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%u",
+                                dev->distance_info.rssi_timestamps[idx]-dev->distance_info.rssi_timestamps[i]);
+            }
+
+            // offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
+            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "]");
+            log_i("%s,distance=%.2f", raw_samples_str,dev->distance_info.distance);
+            if(dev->distance_info.rssi_sample_count>3){
+                static int samples[MAX_SAMPLES];
+                int samples_count=0;
+                int max_sample;
+                int max_2_sample;
+                int min_sample;
+                double possible = 0.0;
+                int median = 0;
+                for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES; i++)
+                {
+                    if(dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[i]<1000){
+                        samples[samples_count] = dev->distance_info.rssi_samples[i];
+                        samples_count++;
+                    }
+
+                }
+
+                for (int i = 0; i < samples_count - 1; i++)
+                {
+                    for (int j = 0; j < samples_count - i - 1; j++)
+                    {
+                        if (samples[j] > samples[j + 1])
+                        {
+                            int temp = samples[j];
+                            samples[j] = samples[j + 1];
+                            samples[j + 1] = temp;
+                        }
+                    }
+                }
+                if (samples_count> 0)
+                {
+                    if (samples_count % 2 == 0)
+                    {
+                        median = (samples[samples_count / 2 - 1] + samples[samples_count / 2]) / 2;
+                    }
+                    else
+                    {
+                        median = samples[samples_count / 2];
+                    }
+                }
+
+                max_sample = samples[samples_count- 1];
+                max_2_sample = samples[samples_count- 2];
+                min_sample = samples[0];
+                double delta_time = (dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-2])/1000.0f;
+                // log_i("[Distance_Filter]: sn: %s delta_time : %.2f\n", sn, delta_time);
+                distance_predict((double[5]){max_sample, min_sample, median, max_2_sample, log(samples_count)}, &possible);
+                log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn, max_sample, max_2_sample, median, samples_count, possible);
+                // double step_max_change=0.5f;
+                double change_rate=0.5f; // 每秒最大变化率，单位米/秒
+                double step_change=delta_time>step_max_change?step_max_change:delta_time;
+                step_change=step_change<0.1f?0.1f:step_change;
+                double last_impace=0.35f*dev->distance_info.distance_change*delta_time>0.1f?0.1f:0.35f*dev->distance_info.distance_change*delta_time;
+                double distance_max=dev->distance_info.distance+step_change+last_impace;
+                double distance_min=dev->distance_info.distance-step_change+last_impace;
+                if(distance_min<0.2f) distance_min=0.2f;
+                distance_max=distance_max<distance_min?distance_min+0.3f:distance_max;
+                log_d("[Distance_Filter]: sn: %s distance_max : %f, distance_min : %f, distance:%f\n", sn, distance_max, distance_min,possible);
+                dev->distance_info.last_distance=dev->distance_info.distance;
+                dev->distance_info.distance=fmax(fmin(possible, distance_max), distance_min);
+                dev->distance_info.distance_change=(dev->distance_info.distance-dev->distance_info.last_distance)/delta_time;
+                // dev->distance_info.speed=speed_limited;
+                log_d("[Distance_Filter]: sn: %s distance : %f\n", sn, dev->distance_info.distance);
+                if (strcmp(sn, "KPCNC5F10AEEFE2") == 0)
+                {
+                    
+                    log_i("dect id:%s",sn);
+                    if(dev->distance_info.distance<2.0f){
+                        if(dev->distance_info.last_distance<2.0f){
+                            dev->distance_info.test_count++;
+                            if(dev->distance_info.test_count>3){
+                                // set_led_red();
+                                dev->distance_info.rssi=-40;
+                            }
+                        }else{
+                            dev->distance_info.test_count=0;
+                            // set_led_orange();
+                        }
+                    }else if(dev->distance_info.distance>=2.0f && dev->distance_info.distance<3.5f){
+                        // set_led_green();
+                        dev->distance_info.rssi=-70;
+                    }else{
+                        if(dev->distance_info.last_distance>3.5f){
+                            dev->distance_info.test_count++;
+                            dev->distance_info.rssi=-90;
+                            // set_led_blue();
+                        }else{
+                            dev->distance_info.test_count=0;
+                            // set_led_purple();
+                        }
+                        
+                    }
+                }
+
+        }
+
         }
         else
         {
