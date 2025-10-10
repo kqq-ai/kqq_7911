@@ -484,7 +484,24 @@ void monitor_stop(void)
     clear_all_eend_dev(); // 清空所有E端设备信息
     log_i("[MEASDIST]monitor_stop : clear_all_eend_dev end\n");
 }
-
+void soomth_distance(lwl_eend_dev_t *dev, double possible){
+    
+    double delta_time = (dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-2])/1000.0f;
+    double change_rate=0.5f; // 每秒最大变化率，单位米/秒
+    double step_change=delta_time>step_max_change?step_max_change:delta_time;
+    step_change=step_change<0.1f?0.1f:step_change;
+    double last_impace=0.35f*dev->distance_info.distance_change*delta_time>0.1f?0.1f:0.35f*dev->distance_info.distance_change*delta_time;
+    double distance_max=dev->distance_info.distance+step_change+last_impace;
+    double distance_min=dev->distance_info.distance-step_change+last_impace;
+    if(distance_min<0.2f) distance_min=0.2f;
+    distance_max=distance_max<distance_min?distance_min+0.3f:distance_max;
+    log_d("[Distance_Filter]: sn: %s distance_max : %f, distance_min : %f, distance:%f\n", dev->sn, distance_max, distance_min,possible);
+    dev->distance_info.last_distance=dev->distance_info.distance;
+    dev->distance_info.distance=fmax(fmin(possible, distance_max), distance_min);
+    dev->distance_info.distance_change=(dev->distance_info.distance-dev->distance_info.last_distance)/delta_time;
+    // dev->distance_info.speed=speed_limited;
+    log_d("[Distance_Filter]: sn: %s distance : %f\n", dev->sn, dev->distance_info.distance);
+}
 static void scan_adv_process_task(void *priv)
 {
     lwl_app_context_t *temp_ctx = lwl_app_core_context_get_instance();
@@ -574,23 +591,22 @@ static void scan_adv_process_task(void *priv)
             log_d("[RSSI_STORE] %s: Stored RSSI=%d", sn, rssi);
 
             print_rssi_samples(dev, NULL);
-
-            if(dev->distance_info.rssi_sample_count>3){
-                static int samples[MAX_SAMPLES];
-                int samples_count=0;
+            static int samples[MAX_SAMPLES];
+            int samples_count=0;
+            for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES; i++)
+            {
+                if(dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[i]<1000){
+                    samples[samples_count] = dev->distance_info.rssi_samples[i];
+                    samples_count++;
+                }
+            }
+            if(samples_count>3){
+                
                 int max_sample;
                 int max_2_sample;
                 int min_sample;
                 double possible = 0.0;
                 int median = 0;
-                for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES; i++)
-                {
-                    if(dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[i]<1000){
-                        samples[samples_count] = dev->distance_info.rssi_samples[i];
-                        samples_count++;
-                    }
-                }
-
                 for (int i = 0; i < samples_count - 1; i++)
                 {
                     for (int j = 0; j < samples_count - i - 1; j++)
@@ -618,25 +634,11 @@ static void scan_adv_process_task(void *priv)
                 max_sample = samples[samples_count- 1];
                 max_2_sample = samples[samples_count- 2];
                 min_sample = samples[0];
-                double delta_time = (dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-2])/1000.0f;
+                
                 // log_i("[Distance_Filter]: sn: %s delta_time : %.2f\n", sn, delta_time);
                 distance_predict((double[5]){max_sample, min_sample, median, max_2_sample, log(samples_count)}, &possible);
                 log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn, max_sample, max_2_sample, median, samples_count, possible);
-                // double step_max_change=0.5f;
-                double change_rate=0.5f; // 每秒最大变化率，单位米/秒
-                double step_change=delta_time>step_max_change?step_max_change:delta_time;
-                step_change=step_change<0.1f?0.1f:step_change;
-                double last_impace=0.35f*dev->distance_info.distance_change*delta_time>0.1f?0.1f:0.35f*dev->distance_info.distance_change*delta_time;
-                double distance_max=dev->distance_info.distance+step_change+last_impace;
-                double distance_min=dev->distance_info.distance-step_change+last_impace;
-                if(distance_min<0.2f) distance_min=0.2f;
-                distance_max=distance_max<distance_min?distance_min+0.3f:distance_max;
-                log_d("[Distance_Filter]: sn: %s distance_max : %f, distance_min : %f, distance:%f\n", sn, distance_max, distance_min,possible);
-                dev->distance_info.last_distance=dev->distance_info.distance;
-                dev->distance_info.distance=fmax(fmin(possible, distance_max), distance_min);
-                dev->distance_info.distance_change=(dev->distance_info.distance-dev->distance_info.last_distance)/delta_time;
-                // dev->distance_info.speed=speed_limited;
-                log_d("[Distance_Filter]: sn: %s distance : %f\n", sn, dev->distance_info.distance);
+                soomth_distance(dev, possible);
                 
                 blue_distance_notify_self_process(dev, NULL);
             }
