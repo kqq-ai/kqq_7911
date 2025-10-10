@@ -6,13 +6,6 @@
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_eend_device.h"
 
-// 三个距离的宏定义
-#define BLUE_DISTANCE_TWO_METER (-60)
-#define BLUE_DISTANCE_FIVE_METER (-85)
-
-#define NOTIFY_APP_TIME 1000 // 1s
-#define NOTIFY_SELF_TIME 10000 // 10S
-
 const char *distance_type_to_text(enum distance_type type);
 
 // 开始检测RSSI

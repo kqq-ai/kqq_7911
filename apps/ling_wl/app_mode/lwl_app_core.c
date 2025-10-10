@@ -238,7 +238,7 @@ void clean_expired_eend()
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (pdev->update_time + 15000 < now) {
+        if (pdev->update_time + LWL_EDEV_EXPIRE_TIME_MS < now) {
             sn_list[idx++] = strdup((char *)pdev->sn);
         }
     }
@@ -267,7 +267,7 @@ lwl_eend_dev_t *find_eend_dev_closest(void)
     ASSERT(s_app_context != NULL);
     
     lwl_eend_dev_t *result = NULL;
-    double distance = -128;
+    double distance = MAX_BLUE_DISTANCE;
 
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);

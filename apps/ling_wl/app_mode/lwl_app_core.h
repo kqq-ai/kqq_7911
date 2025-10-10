@@ -19,6 +19,16 @@
 
 #define LWL_ADV_QUEUE_CAPACITY 60 /**< Capacity of the adv queue */
 
+// 三个距离的宏定义
+#define BLUE_DISTANCE_TWO_METER (2.0)
+#define BLUE_DISTANCE_FIVE_METER (3.5)
+#define MAX_BLUE_DISTANCE (5.0)
+
+#define NOTIFY_APP_TIME 1000 // 1s
+#define RSSI_EXPIRE_TIME_MS (2000) // RSSI样本过期时间：2秒
+#define EDEV_EXPIRE_TIME_MS (10000) // 设备过期时间：10秒
+#define LWL_EDEV_EXPIRE_TIME_MS (15000) // 设备过期时间：15秒
+
 typedef enum {
     BDPCTRL_TURNON_FLAG = BIT(0),
     BDPCTRL_PLAY_FLAG = BIT(1),

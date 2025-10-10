@@ -14,9 +14,7 @@
 
 #include "math.h"
 #define APP_STATUS (1)
-#define RSSI_EXPIRE_TIME_MS (2200) // RSSI样本过期时间：5秒
 #define step_max_change (0.3) // m/s
-
 
 // 消息类型······························
 enum
@@ -38,11 +36,6 @@ static int argc = 2;
 static int argv[30] = {0};
 static int recv_argv[30] = {0};
 
-static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv);
-static int creat_scan_adv_process_task(void);
-
-static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *priv);
-
 static const char *distance_type_text[] = {
     [DISTANCE_0] = "e < 2    ",
     [DISTANCE_1] = "2 < e < 5",
@@ -53,6 +46,107 @@ static const char *distance_type_text[] = {
 inline const char *distance_type_to_text(enum distance_type type)
 {
     return distance_type_text[type];
+}
+
+static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *priv)
+{
+    // 增加NULL指针检查
+    if (!p_eend_dev)
+    {
+        log_i("[DISTANCE_NOTIFY] ERROR: NULL device pointer");
+        return;
+    }
+
+    double distance = p_eend_dev->distance_info.distance;
+
+    int distance_type_last = p_eend_dev->distance_info.distance_type;
+    
+    u32 current_time = timer_get_ms();
+    if (p_eend_dev->update_time + EDEV_EXPIRE_TIME_MS < current_time)
+    {
+        p_eend_dev->distance_info.distance_type = DISTANCE_3;
+    }
+    else if (distance <= BLUE_DISTANCE_TWO_METER)
+    {
+        p_eend_dev->distance_info.distance_type = DISTANCE_0;
+    }
+    else if (distance >= BLUE_DISTANCE_TWO_METER && distance < BLUE_DISTANCE_FIVE_METER)
+    {
+        p_eend_dev->distance_info.distance_type = DISTANCE_1;
+    }
+    else if (distance >= BLUE_DISTANCE_FIVE_METER)
+    {
+        p_eend_dev->distance_info.distance_type = DISTANCE_2;
+    }
+
+    if (p_eend_dev->distance_info.distance_type != distance_type_last)
+    {
+        p_eend_dev->distance_info.test_count=0;
+        if (p_eend_dev->distance_info.distance_type != DISTANCE_0) {
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
+            e.distance_change.pdev = p_eend_dev;
+            lwl_event_notify(&e);
+        }
+    } else {
+        p_eend_dev->distance_info.test_count++;
+        if (p_eend_dev->distance_info.test_count == 4 && p_eend_dev->distance_info.distance_type == DISTANCE_0) {
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
+            e.distance_change.pdev = p_eend_dev;
+            lwl_event_notify(&e);
+        }
+    }
+}
+
+// RSSI打印
+static void print_rssi_samples(lwl_eend_dev_t *dev, void *priv)
+{
+    // 增加NULL指针检查
+    if (!dev)
+    {
+        log_i("[PROCESS_RSSI] ERROR: NULL device pointer");
+        return;
+    }
+#if PRINT_RSSI_LOG
+    char sn[SN_SIZE * 2 + 1] = "(NULL)";
+    // 增加get_string回调函数的NULL检查
+    if (dev->get_string)
+    {
+        dev->get_string(dev, sn, sizeof(sn));
+    }
+    int idx = dev->distance_info.rssi_sample_count-1;
+
+    
+    char raw_samples_str[512] = {0};
+    int offset = 0;
+    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset,
+                    "[RAW_RSSI] %s: count=%d, samples=[", sn, dev->distance_info.rssi_sample_count);
+
+    for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i)
+    {
+        if (i > 0)
+        {
+            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
+        }
+        offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%d",
+                        dev->distance_info.rssi_samples[i]);
+    }
+    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], timestamps=[");
+    for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i)
+    {
+        if (i > 0)
+        {
+            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
+        }
+        offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%u",
+                        dev->distance_info.rssi_timestamps[idx]-dev->distance_info.rssi_timestamps[i]);
+    }
+
+    // offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
+    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "]");
+    log_i("%s,distance=%.2f", raw_samples_str,dev->distance_info.distance);
+#endif
 }
 
 // 清空RSSI样本
@@ -120,7 +214,11 @@ static void simple_expire_cleanup(lwl_eend_dev_t *dev, void *priv)
     }
     dev->distance_info.rssi_sample_count = valid;
     if (valid == 0) {
-        dev->distance_info.distance += 0.3;
+        dev->distance_info.distance += step_max_change;
+        if (dev->distance_info.distance > MAX_BLUE_DISTANCE) {
+            dev->distance_info.distance = MAX_BLUE_DISTANCE;
+        }
+        print_rssi_samples(dev, NULL);
         blue_distance_notify_self_process(dev, NULL);
     }
     os_mutex_post(&dev->distance_info.mutex);
@@ -162,57 +260,6 @@ void distance_predict(const double x[5], double *prob)
     // return y_pred;
 }
 
-// RSSI处理
-// 计算平均RSSI并过滤掉低于平均值一半的数据点
-static void print_rssi_samples(lwl_eend_dev_t *dev, void *priv)
-{
-    // 增加NULL指针检查
-    if (!dev)
-    {
-        log_i("[PROCESS_RSSI] ERROR: NULL device pointer");
-        return;
-    }
-#if PRINT_RSSI_LOG
-    char sn[SN_SIZE * 2 + 1] = "(NULL)";
-    // 增加get_string回调函数的NULL检查
-    if (dev->get_string)
-    {
-        dev->get_string(dev, sn, sizeof(sn));
-    }
-    int idx = dev->distance_info.rssi_sample_count-1;
-
-    
-    char raw_samples_str[512] = {0};
-    int offset = 0;
-    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset,
-                    "[RAW_RSSI] %s: count=%d, samples=[", sn, dev->distance_info.rssi_sample_count);
-
-    for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i)
-    {
-        if (i > 0)
-        {
-            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
-        }
-        offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%d",
-                        dev->distance_info.rssi_samples[i]);
-    }
-    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], timestamps=[");
-    for (int i = 0; i < dev->distance_info.rssi_sample_count && i < MAX_SAMPLES && offset < (sizeof(raw_samples_str) - 50); ++i)
-    {
-        if (i > 0)
-        {
-            offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, ",");
-        }
-        offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "%u",
-                        dev->distance_info.rssi_timestamps[idx]-dev->distance_info.rssi_timestamps[i]);
-    }
-
-    // offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "], original_average=%d", original_average);
-    offset += snprintf(raw_samples_str + offset, sizeof(raw_samples_str) - offset, "]");
-    log_i("%s,distance=%.2f", raw_samples_str,dev->distance_info.distance);
-#endif
-}
-
 // 清除所有RSSI样本（初始化用）
 static void clean_all_dev_rssi_samples()
 
@@ -224,6 +271,135 @@ static void clean_all_dev_rssi_samples()
 static void remove_all_dev_expired_rssi_samples()
 {
     eend_dev_traverse(simple_expire_cleanup, NULL);
+}
+
+static void active_op_callback(uint8_t code, void *priv)
+{
+    lwl_eend_dev_t *dev = (lwl_eend_dev_t *)priv;
+
+    if (code == BDOCode_Success)
+    {
+        dev->active_time = timer_get_ms();
+        log_i("[BDO]Active success!");
+    }
+}
+
+static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
+{
+    if (!adv_pre_match_impl(report_pt->data, report_pt->length))
+    {
+        return;
+    }
+
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    lwl_cqueue_adv_data_t adv_data;
+
+    memset(&adv_data, 0, sizeof(adv_data));
+    adv_data.rssi = report_pt->rssi;
+    memcpy(adv_data.address, report_pt->address, 6);
+    adv_data.address_type = report_pt->address_type;
+    adv_data.adv_data_length = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, adv_data.adv_data);
+
+    if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&context->adv_queue, &adv_data))
+    {
+        log_e("adv_queue full\n");
+    }
+}
+
+static void blue_distance_notify_app()
+{
+    lwl_eend_dev_t *p_eend_dev = find_eend_dev_closest();
+    if (p_eend_dev == NULL)
+    {
+        return;
+    }
+
+    lwl_event_t e;
+    e.event_type = LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE;
+    e.distance_change.pdev = p_eend_dev;
+    lwl_event_notify(&e);
+}
+
+// 把这个单独用一个任务来完成
+static void distance_main(void *priv)
+{
+    log_i("[MEASDIST] =======================================distance_main task ================================\r\n");
+    int ret = 0;
+    int current_time = 0;
+    int notify_app_time = 0;
+    distance_task_status_t current_task_state = DISTANCE_TASK_STOP;
+
+    while (APP_STATUS)
+    {
+        if (current_task_state == DISTANCE_TASK_STOP)
+        {
+            ret = os_taskq_pend("taskq", recv_argv, ARRAY_SIZE(recv_argv));
+            if (ret == OS_TASKQ || recv_argv[0] == Q_USER)
+            {
+                if (recv_argv[1] == MESSAGE_INIT)
+                {
+                    current_task_state = DISTANCE_TASK_INIT;
+                }
+                if (recv_argv[1] == MESSAGE_START)
+                {
+                    current_task_state = DISTANCE_TASK_START;
+                }
+            }
+            else
+                continue;
+        }
+        else if (current_task_state == DISTANCE_TASK_INIT)
+        {
+            ret = os_taskq_pend("taskq", recv_argv, ARRAY_SIZE(recv_argv));
+            if (ret == OS_TASKQ || recv_argv[0] == Q_USER)
+            {
+                if (recv_argv[1] == MESSAGE_START)
+                {
+                    current_task_state = DISTANCE_TASK_START;
+                }
+            }
+            else
+                continue;
+        }
+        else if (current_task_state == DISTANCE_TASK_START)
+        {
+            current_time = timer_get_ms();
+            // log_i("[MEASDIST]------------------start measure ble rssi distance---------------\n");
+            if (current_time - notify_app_time > NOTIFY_APP_TIME)
+            {
+                notify_app_time = current_time;
+
+                // 首先清理过期数据
+                remove_all_dev_expired_rssi_samples();
+
+                blue_distance_notify_app();
+
+                clean_expired_eend();
+            }
+            ret = __os_taskq_pend(recv_argv, ARRAY_SIZE(recv_argv), 100);
+            if (ret == OS_TASKQ || recv_argv[0] == Q_USER)
+            {
+                if (recv_argv[1] == MESSAGE_STOP)
+                {
+                    current_task_state = DISTANCE_TASK_STOP;
+                }
+            }
+        }
+        mdelay(100);
+    }
+}
+static int creat_task_distance(void)
+{
+    int ret = 0;
+    // 创建任务
+    ret = os_task_create(distance_main, NULL, 10, 1024, 256, "distance_main");
+    if (ret != 0)
+    {
+        log_i("[MEASDIST]distance_main task create failed\n");
+        return -1;
+    }
+    return 0;
 }
 
 void monitor_init(void)
@@ -307,202 +483,6 @@ void monitor_stop(void)
     log_i("[MEASDIST]monitor_stop : clear_all_eend_dev\n");
     clear_all_eend_dev(); // 清空所有E端设备信息
     log_i("[MEASDIST]monitor_stop : clear_all_eend_dev end\n");
-}
-
-static void active_op_callback(uint8_t code, void *priv)
-{
-    lwl_eend_dev_t *dev = (lwl_eend_dev_t *)priv;
-
-    if (code == BDOCode_Success)
-    {
-        dev->active_time = timer_get_ms();
-        log_i("[BDO]Active success!");
-    }
-}
-
-static void scan_rssi_record_cb(adv_report_t *report_pt, u16 len, void *priv)
-{
-    if (!adv_pre_match_impl(report_pt->data, report_pt->length))
-    {
-        return;
-    }
-
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-
-    lwl_cqueue_adv_data_t adv_data;
-
-    memset(&adv_data, 0, sizeof(adv_data));
-    adv_data.rssi = report_pt->rssi;
-    memcpy(adv_data.address, report_pt->address, 6);
-    adv_data.address_type = report_pt->address_type;
-    adv_data.adv_data_length = ble_adv_report_get_data(report_pt->data, report_pt->length, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, adv_data.adv_data);
-
-    if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&context->adv_queue, &adv_data))
-    {
-        log_e("adv_queue full\n");
-    }
-}
-
-static void blue_distance_notify_app()
-{
-    lwl_eend_dev_t *p_eend_dev = find_eend_dev_closest();
-    if (p_eend_dev == NULL)
-    {
-        return;
-    }
-
-    lwl_event_t e;
-    e.event_type = LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE;
-    e.distance_change.pdev = p_eend_dev;
-    lwl_event_notify(&e);
-}
-
-static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *priv)
-{
-    // 增加NULL指针检查
-    if (!p_eend_dev)
-    {
-        log_i("[DISTANCE_NOTIFY] ERROR: NULL device pointer");
-        return;
-    }
-
-    double distance = p_eend_dev->distance_info.distance;
-
-    int distance_type_last = p_eend_dev->distance_info.distance_type;
-    
-    u32 current_time = timer_get_ms();
-    if (p_eend_dev->update_time + 10000 < current_time)
-    {
-        p_eend_dev->distance_info.distance_type = DISTANCE_3;
-    }
-    else if (distance <= 2.0f)
-    {
-        p_eend_dev->distance_info.distance_type = DISTANCE_0;
-    }
-    else if (distance>=2.0f && distance<3.5f)
-    {
-        p_eend_dev->distance_info.distance_type = DISTANCE_1;
-    }
-    else if (distance>=3.5f)
-    {
-        p_eend_dev->distance_info.distance_type = DISTANCE_2;
-    }
-
-    if (p_eend_dev->distance_info.distance_type != distance_type_last)
-    {
-        p_eend_dev->distance_info.test_count=0;
-        if (p_eend_dev->distance_info.distance_type != DISTANCE_0) {
-            lwl_event_t e;
-            e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
-            e.distance_change.pdev = p_eend_dev;
-            lwl_event_notify(&e);
-        }
-    } else {
-        p_eend_dev->distance_info.test_count++;
-        if (p_eend_dev->distance_info.test_count == 4 && p_eend_dev->distance_info.distance_type == DISTANCE_0) {
-            lwl_event_t e;
-            e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
-            e.distance_change.pdev = p_eend_dev;
-            lwl_event_notify(&e);
-        }
-    }
-}
-
-static void blue_distance_notify_self()
-{
-    eend_dev_traverse(blue_distance_notify_self_process, NULL);
-}
-
-// 把这个单独用一个任务来完成
-static void distance_main(void *priv)
-{
-    log_i("[MEASDIST] =======================================distance_main task ================================\r\n");
-    int ret = 0;
-    int current_time = 0;
-    int notify_app_time = 0;
-    int notify_self_time = 0;
-    distance_task_status_t current_task_state = DISTANCE_TASK_STOP;
-
-    while (APP_STATUS)
-    {
-        if (current_task_state == DISTANCE_TASK_STOP)
-        {
-            ret = os_taskq_pend("taskq", recv_argv, ARRAY_SIZE(recv_argv));
-            if (ret == OS_TASKQ || recv_argv[0] == Q_USER)
-            {
-                if (recv_argv[1] == MESSAGE_INIT)
-                {
-                    current_task_state = DISTANCE_TASK_INIT;
-                }
-                if (recv_argv[1] == MESSAGE_START)
-                {
-                    current_task_state = DISTANCE_TASK_START;
-                }
-            }
-            else
-                continue;
-        }
-        else if (current_task_state == DISTANCE_TASK_INIT)
-        {
-            ret = os_taskq_pend("taskq", recv_argv, ARRAY_SIZE(recv_argv));
-            if (ret == OS_TASKQ || recv_argv[0] == Q_USER)
-            {
-                if (recv_argv[1] == MESSAGE_START)
-                {
-                    current_task_state = DISTANCE_TASK_START;
-                }
-            }
-            else
-                continue;
-        }
-        else if (current_task_state == DISTANCE_TASK_START)
-        {
-            current_time = timer_get_ms();
-            // log_i("[MEASDIST]------------------start measure ble rssi distance---------------\n");
-            if (current_time - notify_app_time > NOTIFY_APP_TIME)
-            {
-                notify_app_time = current_time;
-
-                // 首先清理过期数据
-                remove_all_dev_expired_rssi_samples();
-
-                blue_distance_notify_app();
-
-                // 通知距离变化
-                // blue_distance_notify_self(); // TODO
-
-                clean_expired_eend();
-            }
-
-            if (current_time - notify_self_time > NOTIFY_SELF_TIME)
-            {
-                // process_distance_info_array(moniter_ble_numbers,current_ble_num);
-                //  blue_distance_notify_self(self_function);
-                notify_self_time = current_time;
-            }
-            ret = __os_taskq_pend(recv_argv, ARRAY_SIZE(recv_argv), 100);
-            if (ret == OS_TASKQ || recv_argv[0] == Q_USER)
-            {
-                if (recv_argv[1] == MESSAGE_STOP)
-                {
-                    current_task_state = DISTANCE_TASK_STOP;
-                }
-            }
-        }
-        mdelay(100);
-    }
-}
-static int creat_task_distance(void)
-{
-    int ret = 0;
-    // 创建任务
-    ret = os_task_create(distance_main, NULL, 10, 1024, 256, "distance_main");
-    if (ret != 0)
-    {
-        log_i("[MEASDIST]distance_main task create failed\n");
-        return -1;
-    }
-    return 0;
 }
 
 static void scan_adv_process_task(void *priv)
