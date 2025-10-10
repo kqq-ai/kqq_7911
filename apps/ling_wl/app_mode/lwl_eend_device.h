@@ -10,7 +10,7 @@
 
 #define SN_SIZE 16 /**< Size of the serial number buffer */
 
-#define MAX_SAMPLES 1000 /**< Size of the RSSI sample array */
+#define MAX_SAMPLES 64 /**< Size of the RSSI sample array */
 
 typedef enum {
     BDO_STATE_IDLE              = 0x00,         //!< 无操作
@@ -63,9 +63,11 @@ typedef struct {
     int rssi_sample_count;
     s8 rssi_samples[MAX_SAMPLES];
     u32 rssi_timestamps[MAX_SAMPLES];
-    s8 rssi;
+    double distance;        //距离的回归预测值
+    double distance_change;  //记录上一次数据之间的速度
+    double last_distance;
+    int test_count;
     int distance_type;
-    int distance_type_last;
     OS_MUTEX mutex;
 } distance_info_t;
 

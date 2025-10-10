@@ -27,20 +27,20 @@ void mode9_random_audio_end_cb(void *priv)
     
     // 播放完成后，寻找RSSI值最大（信号最强）的设备
     lwl_eend_dev_t *strongest_pdev = NULL;
-    int strongest_rssi = -128; // RSSI最小值，用作初始比较基准
+    double strongest_distance = 10; // RSSI最小值，用作初始比较基准
     lwl_eend_dev_t *previous_pdev = g_mode9_current_pdev;
-    int previous_rssi = -128;
+    double previous_distance = 10;
     
     // 记录之前设备的RSSI值
     if (previous_pdev) {
-        previous_rssi = previous_pdev->distance_info.rssi;
+        previous_distance = previous_pdev->distance_info.distance;
     }
     
     // 遍历所有设备，找到RSSI值最大的设备
     for (int i = 0; i < pdev_list_count; i++) {
         lwl_eend_dev_t *pdev = pdev_list[i];
-        if (pdev && pdev->distance_info.rssi > strongest_rssi) {
-            strongest_rssi = pdev->distance_info.rssi;
+        if (pdev && pdev->distance_info.distance < strongest_distance) {
+            strongest_distance = pdev->distance_info.distance;
             strongest_pdev = pdev;
         }
     }
@@ -49,7 +49,7 @@ void mode9_random_audio_end_cb(void *priv)
     if (g_mode9_current_pdev) {
         char sn_string[SN_SIZE] = "(NULL)";
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
-        log_i("MODE 9: Disconnecting E-device after playback: %s (RSSI: %d)", sn_string, previous_rssi);
+        log_i("MODE 9: Disconnecting E-device after playback: %s (DISTANCE: %.2f)", sn_string, previous_distance);
         
         uint cmd_id;
         bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
@@ -57,11 +57,11 @@ void mode9_random_audio_end_cb(void *priv)
     }
     
     // 如果找到了信号更强的设备，立即连接并播放
-    if (strongest_pdev && strongest_rssi > previous_rssi) {
+    if (strongest_pdev && strongest_distance > previous_distance) {
         char sn_string[SN_SIZE] = "(NULL)";
         strongest_pdev->get_string(strongest_pdev, sn_string, sizeof(sn_string));
-        log_i("MODE 9: Found stronger signal device after playback, switching to: %s (RSSI: %d -> %d)", 
-            sn_string, previous_rssi, strongest_rssi);
+        log_i("MODE 9: Found stronger signal device after playback, switching to: %s (DISTANCE: %.2f -> %.2f)", 
+            sn_string, previous_distance, strongest_distance);
         
         // 立即连接新设备
         uint cmd_id;
@@ -74,7 +74,7 @@ void mode9_random_audio_end_cb(void *priv)
     gpio_direction_output(IO_PORTA_00, 1);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
-    log_i("MODE 9: No stronger signal device found (current strongest RSSI: %d), C speaker re-enabled", strongest_rssi);
+    log_i("MODE 9: No stronger signal device found (current nearest DISTANCE: %.2f), C speaker re-enabled", strongest_distance);
 }
 
 
@@ -143,14 +143,14 @@ void process_mode_9(void)
     if (g_mode9_prompt_finished) {
         // 找到RSSI值最大（信号最强）的设备并设置对应的灯效
         lwl_eend_dev_t *strongest_pdev = NULL;
-        int strongest_rssi = -128; // RSSI最小值，用作初始比较基准
+        double strongest_distance = 10; // RSSI最小值，用作初始比较基准
         int closest_distance_type = DISTANCE_3; // 用于LED显示，基于最强信号设备的距离类型
         
         // 遍历所有设备，找到RSSI值最大的设备
         for (int i = 0; i < pdev_list_count; i++) {
             lwl_eend_dev_t *pdev = pdev_list[i];
-            if (pdev && pdev->distance_info.rssi > strongest_rssi) {
-                strongest_rssi = pdev->distance_info.rssi;
+            if (pdev && pdev->distance_info.distance < strongest_distance) {
+                strongest_distance = pdev->distance_info.distance;
                 strongest_pdev = pdev;
                 closest_distance_type = pdev->distance_info.distance_type; // 更新LED显示依据
             }
@@ -170,7 +170,7 @@ void process_mode_9(void)
                 set_led_white();
                 log_d("MODE 9: LED set to GRAY - strongest device >5m away (RSSI: %d)", strongest_rssi);
                 break;
-            case DISTANCE_3: // 无检测到或RSSI=-128 - 深蓝色
+            case DISTANCE_3: // 无检测到 - 深蓝色
             default:
                 set_led_green();
                 log_d("MODE 9: LED set to DARK_BLUE - no device detected");
@@ -180,13 +180,13 @@ void process_mode_9(void)
         // 检查是否有RSSI更强的E端设备需要连接
         if (strongest_pdev) {
             // 比较当前设备和最强信号设备
-            int current_rssi = -128;
+            double current_distance = 10;
             if (g_mode9_current_pdev) {
-                current_rssi = g_mode9_current_pdev->distance_info.rssi;
+                current_distance = g_mode9_current_pdev->distance_info.distance;
             }
-            int best_rssi = strongest_pdev->distance_info.rssi;
+            double best_distance = strongest_pdev->distance_info.distance;
             
-            if (g_mode9_current_pdev != strongest_pdev && best_rssi > current_rssi) {
+            if (g_mode9_current_pdev != strongest_pdev && best_distance > current_distance) {
                 // 如果找到的设备不是当前设备，且RSSI更强，需要切换
                 // 但是如果正在播放音频，则等待播放完成后再切换
                 if (!g_audio_playing) {
@@ -194,7 +194,7 @@ void process_mode_9(void)
                         // 先断开当前连接的设备
                         char current_sn[SN_SIZE] = "(NULL)";
                         g_mode9_current_pdev->get_string(g_mode9_current_pdev, current_sn, sizeof(current_sn));
-                        log_i("MODE 9: Disconnecting current device: %s (RSSI: %d)", current_sn, current_rssi);
+                        log_i("MODE 9: Disconnecting current device: %s (DISTANCE: %.2f)", current_sn, current_distance);
                         uint cmd_id;
                         bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
                         g_mode9_current_pdev = NULL;
@@ -203,8 +203,8 @@ void process_mode_9(void)
                     // 连接信号更强的设备
                     char sn_string[SN_SIZE] = "(NULL)";
                     strongest_pdev->get_string(strongest_pdev, sn_string, sizeof(sn_string));
-                    log_i("MODE 9: Connecting to stronger signal device: %s (RSSI: %d -> %d)", 
-                        sn_string, current_rssi, best_rssi);
+                    log_i("MODE 9: Connecting to stronger signal device: %s (DISTANCE: %.2f -> %.2f)", 
+                        sn_string, current_distance, best_distance);
                     
                     uint cmd_id;
                     bdo_turn_on(strongest_pdev, 3000, 3000, mode9_e_connect_cb, strongest_pdev);

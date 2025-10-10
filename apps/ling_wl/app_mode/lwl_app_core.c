@@ -208,9 +208,9 @@ void dump_all_eend_info()
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
         if (adv_stat_to_text(pdev->adv_state)[0] != '\0') {
-            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9s | %02X | %3d |", pdev->sn, 
+            log_i("| %15.15s | %3d | %10s | %10d | %.2f | %9s | %02X | %3d |", pdev->sn, 
                 pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline, 
-                pdev->distance_info.rssi, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
+                pdev->distance_info.distance, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
         } else {
             log_i("[ERROR]%s UNKNOWN type: %d", pdev->sn, pdev->adv_state);
         }
@@ -267,15 +267,15 @@ lwl_eend_dev_t *find_eend_dev_closest(void)
     ASSERT(s_app_context != NULL);
     
     lwl_eend_dev_t *result = NULL;
-    s8 rssi = -128;
+    double distance = -128;
 
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (rssi < dev->distance_info.rssi) {
-            rssi = dev->distance_info.rssi;
+        if (distance > dev->distance_info.distance) {
+            distance = dev->distance_info.distance;
             result = dev;
         }
     }
