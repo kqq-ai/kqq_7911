@@ -545,11 +545,11 @@ static void scan_adv_process_task(void *priv)
         if (dev->has_deadline)
         {
             dev->deadline = buffer[19] | (buffer[20] << 8) | (buffer[21] << 16) | (buffer[22] << 24);
-            log_i("[MEASDIST]Has deadline %d", dev->deadline);
+            log_d("[MEASDIST]Has deadline %d", dev->deadline);
         }
         else
         {
-            log_i("[MEASDIST]Has not deadline");
+            log_d("[MEASDIST]Has not deadline");
         }
 
         if (adv_state_latest != BDPAS_CONNECTED && dev->adv_state == BDPAS_CONNECTED)
@@ -621,7 +621,7 @@ static void scan_adv_process_task(void *priv)
                 double delta_time = (dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-1]-dev->distance_info.rssi_timestamps[dev->distance_info.rssi_sample_count-2])/1000.0f;
                 // log_i("[Distance_Filter]: sn: %s delta_time : %.2f\n", sn, delta_time);
                 distance_predict((double[5]){max_sample, min_sample, median, max_2_sample, log(samples_count)}, &possible);
-                log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn, max_sample, max_2_sample, median, samples_count, possible);
+                // log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn, max_sample, max_2_sample, median, samples_count, possible);
                 // double step_max_change=0.5f;
                 double change_rate=0.5f; // 每秒最大变化率，单位米/秒
                 double step_change=delta_time>step_max_change?step_max_change:delta_time;

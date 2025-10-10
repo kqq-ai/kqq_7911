@@ -43,7 +43,8 @@ u32 get_time_stamp() {
  * Audio dec app context
  *=================================================================================================*/
 static int g_audio_off = true; // 音频播放结束标志（外部请求状态）
-static int g_audio_play_ongoing = false; // 音频播放进行中标志（播放器状态）
+static int g_audio_play_ongoing = false; // 音频启动中标志（播放器状态）
+static int g_audio_playing = false; // 音频播放中标志（播放器状态）
 /*=================================================================================================
  * Record app context
  *=================================================================================================*/
@@ -138,7 +139,7 @@ void set_Pi_volume(int volume) {
 
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    bool playing = g_audio_play_ongoing;
+    bool playing = g_audio_playing;
     // bool playing = (app_music_play_get_status(g_app_ctx->music_player)==AUDIO_DEC_START);
     // log_i("app_music_play_get_status(AUDIO_DEC) = %d", app_music_play_get_status(g_app_ctx->music_player)); //AUDIO_DEC_START / AUDIO_DEC_STOP
     os_mutex_post(&g_audio_mutex);
@@ -318,7 +319,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 
     if (g_audio_play_ongoing == false) {
         g_audio_play_ongoing = true;
-        log_i("start to play.");
+        log_i("set up to play.");
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
     }
 
@@ -346,6 +347,12 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         os_mutex_post(&g_audio_mutex);
         msleep(10);
     }
+    if (g_audio_playing == false) {
+        if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+            log_d("Audio start to play...");
+            g_audio_playing = true;
+        }
+    }
     os_mutex_post(&g_audio_mutex);
     log_i("Total stream write: %u / %u bytes", total_written, len);
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
@@ -359,6 +366,7 @@ void app_music_play_end_cb(void *priv)
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("app_music_play_end_cb end");
     g_audio_play_ongoing = false; // 音乐播放结束标志
+    g_audio_playing = false;
     os_mutex_post(&g_audio_mutex);
 }
 

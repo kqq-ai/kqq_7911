@@ -369,6 +369,16 @@ bool wss_request_loop()
             wss_ble_audio_start();
             last_message_received = 0;
             last_event = 0;
+        } else if (last_message_received == OR_AUDIO_STATUS && (last_event == OASE_END || last_event == OASE_ABNORMAL)) {
+            g_mode_state = STATE_IDLE;
+            wss_request_print_state(g_mode_state, "OR_AUDIO_STATUS ABNORMAL/END");
+            // wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
+            last_message_received = 0;
+            last_event = 0;
+            send_message = 0; // 重置发送消息标志
+            turn_off_Pi();
+            wss_ble_audio_stop();
+            set_led_red_low_power();
         } else if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
