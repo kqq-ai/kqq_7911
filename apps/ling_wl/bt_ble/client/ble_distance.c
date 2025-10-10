@@ -8,7 +8,7 @@
 #include "ble_simple_client.h"
 #include "ble_att_util.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
-#include "../../protocol/cp/c_uart_p.h"
+
 #define swap(a,b) {a =a ^ b; b = a ^ b; a = a ^ b;}
 
 #include "math.h"
@@ -17,12 +17,6 @@
 #define step_max_change (0.3) // m/s
 
 
-// 使用系统预定义的颜色常量
-static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
-static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
-static void set_led_purple(void)     { uart_send_set_led_color(COLOR_PURPLE); }
 // 消息类型······························
 enum
 {
@@ -789,36 +783,35 @@ static void scan_adv_process_task(void *priv)
                 dev->distance_info.distance_change=(dev->distance_info.distance-dev->distance_info.last_distance)/delta_time;
                 // dev->distance_info.speed=speed_limited;
                 log_d("[Distance_Filter]: sn: %s distance : %f\n", sn, dev->distance_info.distance);
-                if (strcmp(sn, "KPCNC5F10AEEFE2") == 0)
-                {
+                
                     
-                    log_i("dect id:%s",sn);
-                    if(dev->distance_info.distance<2.0f){
-                        if(dev->distance_info.last_distance<2.0f){
-                            dev->distance_info.test_count++;
-                            if(dev->distance_info.test_count>3){
-                                // set_led_red();
-                                dev->distance_info.rssi=-40;
-                            }
-                        }else{
-                            dev->distance_info.test_count=0;
-                            // set_led_orange();
+                // log_i("dect id:%s",sn);
+                if(dev->distance_info.distance<2.0f){
+                    if(dev->distance_info.last_distance<2.0f){
+                        dev->distance_info.test_count++;
+                        if(dev->distance_info.test_count>3){
+                            // set_led_red();
+                            dev->distance_info.rssi=-40;
                         }
-                    }else if(dev->distance_info.distance>=2.0f && dev->distance_info.distance<3.5f){
-                        // set_led_green();
-                        dev->distance_info.rssi=-70;
                     }else{
-                        if(dev->distance_info.last_distance>3.5f){
-                            dev->distance_info.test_count++;
-                            dev->distance_info.rssi=-90;
-                            // set_led_blue();
-                        }else{
-                            dev->distance_info.test_count=0;
-                            // set_led_purple();
-                        }
-                        
+                        dev->distance_info.test_count=0;
+                        // set_led_orange();
                     }
+                }else if(dev->distance_info.distance>=2.0f && dev->distance_info.distance<3.5f){
+                    // set_led_green();
+                    dev->distance_info.rssi=-70;
+                }else{
+                    if(dev->distance_info.last_distance>3.5f){
+                        dev->distance_info.test_count++;
+                        dev->distance_info.rssi=-90;
+                        // set_led_blue();
+                    }else{
+                        dev->distance_info.test_count=0;
+                        // set_led_purple();
+                    }
+                    
                 }
+                
 
         }
 
