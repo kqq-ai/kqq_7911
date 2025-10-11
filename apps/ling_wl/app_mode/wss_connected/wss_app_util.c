@@ -217,6 +217,37 @@ int send_audio_status(int type, int event)
     return 0;
 }
 
+int send_audio_format(int type) 
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_set_audio_format(sn_c_id, type);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        
+        if (ctx->websockets_info != NULL) {
+            wss_server_disconnect(ctx->websockets_info);
+            ctx->websockets_info = NULL;
+        }
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("wbs send msg : %s", send_data);
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
 int send_req_message(const char *send_id, bool is_play, int event_type) 
 {
     os_mutex_pend(&g_wss_mutex, 0);

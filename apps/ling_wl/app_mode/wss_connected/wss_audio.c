@@ -305,10 +305,10 @@ void wait_vad_task(void *priv)
  * @param len  音频数据长度
  * @return 总是返回0（可根据需要返回写入状态）
  */
+    uint32_t total_written = 0;
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
-    uint32_t total_written = 0;
     uint32_t remaining = len;
 
     os_mutex_pend(&g_audio_mutex, 0);
@@ -320,6 +320,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     if (g_audio_play_ongoing == false) {
         g_audio_play_ongoing = true;
         log_i("set up to play.");
+        total_written = 0;
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
     }
 
@@ -341,7 +342,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         }
         total_written += written;
         remaining -= written;
-        log_d("Written chunk: %u bytes (total: %u / %u)", written, total_written, len);
+        log_d("Written chunk: %u bytes (total: %u / %u)", written, len, total_written);
         if (remaining == 0 || g_audio_off)  break;
         
         os_mutex_post(&g_audio_mutex);
@@ -354,7 +355,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         }
     }
     os_mutex_post(&g_audio_mutex);
-    log_i("Total stream write: %u / %u bytes", total_written, len);
+    log_i("Total stream write: %u / %u bytes", len, total_written);
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
 }
 

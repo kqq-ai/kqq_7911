@@ -52,7 +52,7 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
     case AUDIO_SERVER_EVENT_ERR:
         log_i("app_music: AUDIO_SERVER_EVENT_ERR\n");
     case AUDIO_SERVER_EVENT_END:
-        log_i("app_music: AUDIO_SERVER_EVENT_END\n");
+        log_i("app_server, music: AUDIO_SERVER_EVENT_END\n");
         if (player->cmp_file != (void *)argv[1]) {
             printf("not the same file, may be closed! %p %p\n", player->cmp_file, (void *)argv[1]);
         }
