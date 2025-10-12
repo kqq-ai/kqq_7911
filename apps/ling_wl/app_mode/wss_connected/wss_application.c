@@ -49,7 +49,7 @@ void wss_application_vailed()
 
 static int odmp_disconnect_cbk(void)
 {
-    log_i("odmp disconnect!!!");
+    log_i("[wss_application]odmp disconnect!!!");
     wss_exception_exit();
 }
 
@@ -57,10 +57,10 @@ static void wss_application_print_state(int mode_state, char* tag)
 {
     switch (mode_state) {
     case DEVICE_IDLE:
-        log_i("[%s]DEVICE_IDLE", tag);
+        log_i("[wss_application][%s]DEVICE_IDLE", tag);
         break;
     case DEVICE_AUDIO:
-        log_i("[%s]DEVICE_AUDIO", tag);
+        log_i("[wss_application][%s]DEVICE_AUDIO", tag);
         break;
     }
 }
@@ -92,26 +92,25 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("APPLICATION SHORT_CLICK");
+        log_i("[wss_application]APPLICATION SHORT_CLICK");
         wss_application_touch_key();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
-            log_i("Touch key pressed down");
+            log_i("[wss_application]Touch key pressed down");
         } else {
-            log_i("Touch key released");
+            log_i("[wss_application]Touch key released");
         }
         // wss_application_touch_key();
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
-        // log_i("SYNC response by input_event_handler_cb (%d, %d)", is_request_busy(), MAX_LE_AUDIO_VOLUME);
         if (is_request_busy()) {
             wss_application_vailed();
         }
         uart_response_synch_status(timer_get_ms() - last_req_time < NO_REQ_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 0是idle 1是busy，必须回复
         break;
     case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
-        log_i("MOVE_MORE_THAN_ONE_METER");
+        log_i("[wss_application]MOVE_MORE_THAN_ONE_METER");
         break;
     }
 }
@@ -127,7 +126,7 @@ void *wss_condition_monitor_thread(void *arg)
     u32 current_time = timer_get_ms();
     u32 last_E_found_time = current_time;
     u32 last_move_time = current_time;
-    log_i("Starting WSS condition monitor thread...");
+    log_i("[wss_application]Starting WSS condition monitor thread...");
     while (monitor_thread_running) {
         current_time = timer_get_ms();
         
@@ -150,7 +149,7 @@ void *wss_condition_monitor_thread(void *arg)
 
             // 任一超时条件满足就切换模式
             if (e_timeout || move_timeout) {
-                log_i("No E found or device not moving for a long time, switching to default mode.");
+                log_i("[wss_application]No E found or device not moving for a long time, switching to default mode.");
                 lwl_app_mode_switch_to(APP_DEFAULT_MODE);
                 monitor_thread_running = false;
                 return NULL;
@@ -164,7 +163,7 @@ void *wss_condition_monitor_thread(void *arg)
 
 void wss_application_init()
 {
-    log_i("Init WSS application\n");
+    log_i("[wss_application]Init WSS application\n");
     lwl_event_handler_add(input_event_handler_cb);
     odmp_register_disconnect_cbk(odmp_disconnect_cbk);
     
@@ -189,7 +188,7 @@ void wss_application_init()
 
 void wss_application_uninit()
 {
-    log_i("Uninit WSS application\n");
+    log_i("[wss_application]Uninit WSS application\n");
 
     monitor_thread_running = false;
     if (!monitor_thread) {
@@ -226,11 +225,11 @@ bool wss_application_loop()
         // 这里只做示例，假设有某事件触发进入AUDIO
         if (is_audio_playing()) {
             g_device_state = DEVICE_AUDIO;
-            log_i("STATE: DEVICE_IDLE -> DEVICE_AUDIO");
+            log_i("[wss_application]STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
             if (is_request_busy()) {
-                log_i("is_request_busy, wss_mic_stop.");
+                log_i("[wss_application]is_request_busy, wss_mic_stop.");
                 if (is_voice_availble()) {
                     wss_mic_stop(1); // 停止录音 上传音频 1
                 } else {
@@ -238,6 +237,8 @@ bool wss_application_loop()
                 }
                 break;
             } else {
+                log_i("[wss_application]wss_device_call.");
+                wss_mic_stop(0); // 停止录音
                 wss_device_call();
             }
             // multi_player_game();
@@ -256,7 +257,7 @@ bool wss_application_loop()
         }
         if (!is_audio_playing()) {
             g_device_state = DEVICE_IDLE;
-            log_i("STATE: DEVICE_AUDIO -> DEVICE_IDLE");
+            log_i("[wss_application]STATE: DEVICE_AUDIO -> DEVICE_IDLE");
             wss_application_print_state(g_device_state, "STEP_TO");
         }
         break;

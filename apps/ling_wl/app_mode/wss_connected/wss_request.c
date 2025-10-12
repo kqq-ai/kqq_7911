@@ -26,8 +26,8 @@
 #include "log/log_mqtt.h"
 
 static u32 g_curr_time = 0;
-#define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
+#define WSS_TIMEOUT 12000
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
@@ -320,6 +320,7 @@ bool wss_request_loop()
 {
     // 使用 last_message_received 和 last_event 替代 last_audio_status_type、last_audio_status_event、last_tts_bind_received
 
+    g_curr_time = timer_get_ms();
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
     switch (g_mode_state) {
     case STATE_IDLE:
@@ -347,6 +348,11 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "Vioce On");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
         }
+        if (g_curr_time - g_heat_timer >= WSS_TIMEOUT) {
+            wss_request_send_event(NULL, ORMET_MOVE_PATROL);
+            g_heat_timer = g_curr_time;
+        }
+
         break;
 
     case STATE_TTS_BIND:
@@ -460,4 +466,5 @@ void wss_request_send_event(char *sn, int msg_event)
     if (send_req_message(sn, is_audio_playing(), msg_event)) {
         return;
     }
+    g_curr_time = g_curr_time;
 }
