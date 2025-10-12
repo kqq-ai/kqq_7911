@@ -222,8 +222,7 @@ static void device_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE:
         char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST] %s: %.2f %d\r\n", sn_string, p_eend_dev->distance_info.distance, p_eend_dev->distance_info.distance_type);
-        log_i("LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE");
+        log_i("[MEASDIST] LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE %s: %d\r\n", sn_string, p_eend_dev->distance_info.distance_type);
         if (!p_eend_dev || p_eend_dev->distance_info.rssi_sample_count == 0) break;
         if (g_edev_closest == NULL) {
             g_edev_closest = p_eend_dev;
