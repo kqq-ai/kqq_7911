@@ -49,11 +49,6 @@ static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
 static u8 g_mode6_action_in_progress = 0;
 
 
-static void test_turn_off_callback(uint8_t code, void *priv)
-{
-    log_i("turn off result code: %d", code);
-    current_pdev = NULL; // 清空当前连接设备指针
-}
 // ========== 模式6回调函数声明 ===========
 static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 {
@@ -69,33 +64,6 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针
-    }
-
-    ///log_i("~~~~~~~~~~~    e_connect_cb,  No PLAY.");
-    
-    gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
-
-    // 播放结束后，先关闭当前已连接的E端设备（如果有）
-    if (current_pdev) {
-        char sn_string[SN_SIZE] = "(NULL)";
-        current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
-        log_i("~~~~~~~~~~~    e_connect_cb,  No PLAY. 6: Turn OFF 2s delay & 3s  current E device: %s", sn_string);
-        uint cmd_id;
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-        //mdelay(2000);
-        //delay(2000);
-        bdo_turn_off(current_pdev, 3000, test_turn_off_callback, current_pdev);
-        target_pdev = NULL; // 清空目标设备指针
-    }
-    if (g_mode6_playing_prompt) {
-        // 提示音播放完成，开始播放循环音频
-        log_i("~~~~~~~~~~~    e_connect_cb,  No PLAY. 6: Prompt audio callback - finished, starting loop audio");
-        g_mode6_playing_prompt = 0;
-        g_audio_playing = 0;
-    } else {
-        // 循环音频播放完成，准备重新播放
-        log_i("~~~~~~~~~~~    e_connect_cb,  No PLAY. 6: Loop audio callback - finished, will restart");
-        g_audio_playing = 0;
     }
 }
 static void switch_to_e_target(lwl_eend_dev_t* pdev)
@@ -113,6 +81,11 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
     // 参考default_e_turn_on函数中的命令发送方式
 }
 
+static void test_turn_off_callback(uint8_t code, void *priv)
+{
+    log_i("turn off result code: %d", code);
+    current_pdev = NULL; // 清空当前连接设备指针
+}
 
 // 音频播放回调
 void mode6_audio_callback(void *priv)
@@ -129,7 +102,7 @@ void mode6_audio_callback(void *priv)
     if (current_pdev) {
         char sn_string[SN_SIZE] = "(NULL)";
         current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
-        log_i("MODE 6: Turn OFF with delay 2s current E device: %s", sn_string);
+        log_i("MODE 6: Turn OFF current E device: %s", sn_string);
         uint cmd_id;
         bdo_turn_off(current_pdev, 1000, test_turn_off_callback, current_pdev);
         target_pdev = NULL; // 清空目标设备指针
@@ -191,7 +164,7 @@ void process_mode_6(void)
         // 播放循环测试音频，使用回调
         set_dec_volume(context->music_player, 50); // 保护E的电池，需要设置最高默认音量为50
         int err = 0;
-/*         if((g_mode6_e_index&1) == 0 ){
+        if((g_mode6_e_index&1) == 0 ){
             err = app_music_play_local_music_with_callback(
             context->music_player, 
             CONFIG_CP_VOICE_FILE_PATH"test_dev1.mp3", 
@@ -201,7 +174,7 @@ void process_mode_6(void)
             context->music_player, 
             CONFIG_CP_VOICE_FILE_PATH"test_dev2.mp3", 
             mode6_audio_callback, NULL);
-        } */
+        }
         
             
         if (err == 0) {
