@@ -43,7 +43,8 @@ u32 get_time_stamp() {
  * Audio dec app context
  *=================================================================================================*/
 static int g_audio_off = true; // 音频播放结束标志（外部请求状态）
-static int g_audio_play_ongoing = false; // 音频播放进行中标志（播放器状态）
+static int g_audio_play_ongoing = false; // 音频启动中标志（播放器状态）
+static int g_audio_playing = false; // 音频播放中标志（播放器状态）
 /*=================================================================================================
  * Record app context
  *=================================================================================================*/
@@ -138,9 +139,11 @@ void set_Pi_volume(int volume) {
 
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    bool playing = g_audio_play_ongoing;
+    bool playing = g_audio_playing;
+    // bool playing = (app_music_play_get_status(g_app_ctx->music_player)==AUDIO_DEC_START);
+    // log_i("app_music_play_get_status(AUDIO_DEC) = %d", app_music_play_get_status(g_app_ctx->music_player)); //AUDIO_DEC_START / AUDIO_DEC_STOP
     os_mutex_post(&g_audio_mutex);
-    return g_audio_play_ongoing;
+    return playing;
 }
 
 void wss_ble_audio_stop() {
@@ -302,11 +305,11 @@ void wait_vad_task(void *priv)
  * @param len  音频数据长度
  * @return 总是返回0（可根据需要返回写入状态）
  */
+    uint32_t total_written = 0;
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
-    uint32_t total_written = 0;
-    uint32_t remaining = len;
+    uint32_t idx = 0;
 
     os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_off) {
@@ -316,7 +319,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 
     if (g_audio_play_ongoing == false) {
         g_audio_play_ongoing = true;
-        log_i("start to play.");
+        log_i("set up to play.");
+        total_written = 0;
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
     }
 
@@ -325,10 +329,10 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     os_mutex_post(&g_audio_mutex);
     while (1) {
         os_mutex_pend(&g_audio_mutex, 0);
-        uint32_t chunk_size = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
+        uint32_t chunk_size = (len - idx > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len - idx;
         uint32_t written = app_music_play_stream_write(
             g_app_ctx->music_player, 
-            data + total_written, 
+            data + idx, 
             chunk_size
         );
         
@@ -336,16 +340,22 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             log_e("Failed to write audio data chunk,odmp_audio_data_cbk");
             break; // 错误处理，可根据需求调整
         }
+        idx += written;
         total_written += written;
-        remaining -= written;
-        log_d("Written chunk: %u bytes (total: %u / %u)", written, total_written, len);
-        if (remaining == 0 || g_audio_off)  break;
+        log_d("Written chunk: %u bytes (total: %u / %u)", written, len, total_written);
+        if (idx == len || g_audio_off)  break;
         
         os_mutex_post(&g_audio_mutex);
         msleep(10);
     }
+    if (g_audio_playing == false) {
+        if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+            log_d("Audio start to play...");
+            g_audio_playing = true;
+        }
+    }
     os_mutex_post(&g_audio_mutex);
-    log_i("Total stream write: %u / %u bytes", total_written, len);
+    log_i("Total stream write: %u / %u bytes -> %u", idx, len, total_written);
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
 }
 
@@ -357,6 +367,7 @@ void app_music_play_end_cb(void *priv)
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("app_music_play_end_cb end");
     g_audio_play_ongoing = false; // 音乐播放结束标志
+    g_audio_playing = false;
     os_mutex_post(&g_audio_mutex);
 }
 

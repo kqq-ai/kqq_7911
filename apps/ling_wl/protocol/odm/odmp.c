@@ -20,6 +20,7 @@ g_odmp_disconnect_cbk_t g_odmp_disconnect_cbk = NULL;
 static const char *odmp_et_str[] = {
     [OET_REQ_MESSAGE]           = "req_message",
     [OET_AUDIO_STATUS]          = "audio_status",
+    [OET_SET_AUDIO_FORMAT]      = "set_audio_format",
 };
 
 static const char *odmp_ast_str[] = {
@@ -199,6 +200,42 @@ char *odmp_audio_status(const char *c_id, int type, int event)
         cJSON *naudio_params = cJSON_CreateObject();
         cJSON_AddStringToObject(naudio_params, "format", "mp3");
         cJSON_AddNumberToObject(naudio_params, "sample_rate", 16000);
+        cJSON_AddItemToObject(nroot_data, "audio_params", naudio_params);
+    }
+
+	char *json_str = cJSON_PrintUnformatted(nroot);
+
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+
+    return json_str;
+}
+char *odmp_set_audio_format(const char *c_id, int type)
+{
+    /*
+    {
+        "uuid":"98f3501d-4b20-43dd-92bd-58f92a9f6a7f",
+        "event":"set_audio_format",
+        "data":{
+            "c_id":"ZYCNC5E21XEEEF0",
+            "audio_params":{
+                "format":"opus",
+                "sample_rate":16000
+                }
+            },
+        "storage":{}
+    }
+    */
+    cJSON *nroot = odmp_message_base(OET_SET_AUDIO_FORMAT);
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+
+	cJSON_AddStringToObject(nroot_data, "c_id", c_id);
+    if (type == OAST_TTS) {
+        cJSON *naudio_params = cJSON_CreateObject();
+        cJSON_AddStringToObject(naudio_params, "format", "mp3");///opus
+        cJSON_AddNumberToObject(naudio_params, "sample_rate", 8000);
         cJSON_AddItemToObject(nroot_data, "audio_params", naudio_params);
     }
 

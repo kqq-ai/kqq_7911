@@ -56,9 +56,9 @@ void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
     dev->active_time = 0;
 
     os_mutex_create(&dev->distance_info.mutex);
-    dev->distance_info.rssi = -128;
+    dev->distance_info.distance = 5;
     dev->distance_info.rssi_sample_count = 0;
+    dev->distance_info.test_count = 0;
     dev->distance_info.distance_type = DISTANCE_3;
-    dev->distance_info.distance_type_last = DISTANCE_3;
     memset(dev->distance_info.rssi_samples, -128, sizeof(dev->distance_info.rssi_samples));
 }

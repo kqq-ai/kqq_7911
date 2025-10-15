@@ -139,11 +139,15 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
 
 static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 {
-    log_i("[BDO]Turn on");
+    log_i("[BDO]Turn on %s", op->sn);
     uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
-    ASSERT(dev);
+    if (!dev) {
+        log_i("[BDO]Error dev not found!");
+        process_cb(op, BDOCode_Null_Pointer);
+        return;
+    }
     if (dev->adv_state == BDPAS_CONNECTING || dev->adv_state == BDPAS_CONNECTED || dev->distance_info.rssi_sample_count < 1) {
         log_i("[BDO]Error dev busy!");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
@@ -212,10 +216,14 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 
 static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
 {
-    log_i("[BDO]Turn off");
+    log_i("[BDO]Turn off %s", op->sn);
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
-    ASSERT(dev);
+    if (!dev) {
+        log_i("[BDO]Error dev not found!");
+        process_cb(op, BDOCode_Null_Pointer);
+        return;
+    }
     
     dev->set_ctrl(dev, 0, 0);
 

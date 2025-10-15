@@ -129,6 +129,7 @@ void app_net_connected_loop()
     } else {
         log_i("websockets init failed\n");
         set_led_connect_error();// WSS ERROR
+        msleep(1000);
         
         // 无网络超时10s，进入配网
         // if (timer_get_ms() - init_time >= 10000) {

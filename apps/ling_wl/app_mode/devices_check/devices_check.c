@@ -129,7 +129,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE: {
         char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST] %s: %d %d\r\n", sn_string, p_eend_dev->distance_info.rssi, p_eend_dev->distance_info.distance_type);
+        log_i("[MEASDIST] LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE %s: %d\r\n", sn_string, p_eend_dev->distance_info.distance_type);
         if (p_eend_dev->distance_info.distance_type == DISTANCE_0) {
             add_pdev_to_list(p_eend_dev); // 新增：维护pdev列表
         } else if (p_eend_dev->distance_info.distance_type == DISTANCE_2 || p_eend_dev->distance_info.distance_type == DISTANCE_3) {

@@ -123,11 +123,13 @@ bool wss_connect() {
 
     wss_url = get_wss_connection_url();
     if (wss_url == NULL) {
+        log_i("get_wss_connection_url failed wss_url=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
     context->websockets_info = wss_server_connect(wss_url);
     if (context->websockets_info == NULL) {
+        log_i("wss_server_connect failed websockets_info=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
@@ -158,11 +160,14 @@ bool wss_reconnect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context->websockets_info != NULL) {
+        log_i("websockets disconnect by wss_reconnect");
         wss_server_disconnect(context->websockets_info);
         context->websockets_info = NULL;
     }
     if (wss_url == NULL) {
         char* wss_url = get_wss_connection_url();
+    } else {
+        msleep(100); // 断线后等待100ms再重连
     }
     log_i("websockets reconnected %s",wss_url);
 
@@ -192,6 +197,37 @@ int send_audio_status(int type, int event)
     }
 
     char *send_data = odmp_audio_status(sn_c_id, type, event);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        
+        if (ctx->websockets_info != NULL) {
+            wss_server_disconnect(ctx->websockets_info);
+            ctx->websockets_info = NULL;
+        }
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("wbs send msg : %s", send_data);
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+int send_audio_format(int type) 
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_set_audio_format(sn_c_id, type);
 
     if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);

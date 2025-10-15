@@ -26,15 +26,15 @@
 #include "log/log_mqtt.h"
 
 static u32 g_curr_time = 0;
-#define HEAT_TIMEOUT 5000
 static u32 g_heat_timer = 0;
+#define WSS_TIMEOUT 12000
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
 static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
-static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 
 /*=================================================================================================
  * Audio dec app context
@@ -160,12 +160,9 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     switch (type) {
     case OR_INITIAL_SETUP_RESPONSE:
         log_i("INITIAL_SETUP_RESPONSE\n");
-        log_i("setup_complete: %d\n", pkg->initial_setup_response.setup_complete);
         break;
     case OR_DEVICE_SWITCH_RESPONSE:
         log_i("DEVICE_SWITCH_RESPONSE\n");
-        log_i("device_id: %s\n", pkg->device_switch_response.device_id);
-        log_i("status: %s\n", pkg->device_switch_response.status);
         break;
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");
@@ -195,6 +192,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                     last_message_received = OR_AUDIO_STATUS;
                     last_event = OASE_ABNORMAL;
                 }
+            }
+            if (pkg->audio_status.event == OASE_START) {
+                last_message_received = OR_AUDIO_STATUS;
+                last_event = 5 + OASE_START;
             }
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
@@ -242,15 +243,16 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
+        if (strcmp(sn_string,g_edev_target_sn)!=0) {
+            turn_off_Pi();
+        }
     }
     switch(code) {
     case BDOCode_Success:
 
         log_i("Switch PortE %s OK\n", sn_string);
-        memcpy(g_edev_connected_sn, g_edev_target_sn, SN_SIZE);
-        if (strcmp(pdev->sn,g_edev_target_sn)==0) {
-            send_message = ORMET_SWITCH_SUCCESS;
-        }
+        send_message = ORMET_SWITCH_SUCCESS;
         break;
     case BDOCode_Connection_Timeout:
         log_i("Switch PortE BDOCode_Connection_Timeout\n");
@@ -280,6 +282,8 @@ void wss_request_stop()
         g_mode_state = STATE_IDLE;
         wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
         wss_ble_audio_stop(); // 停止音频播放
+    } else if (g_mode_state == STATE_TTS_BIND) {
+        send_message = ORMET_SWITCH_FAILED;
     }
     g_edev_target_sn[0] = 0; // 清除目标设备
 
@@ -298,6 +302,7 @@ void wss_request_init()
 
     g_mode_state = STATE_IDLE;
     wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
+    send_audio_format(OAST_TTS);
 }
 
 void wss_request_uninit()
@@ -316,21 +321,27 @@ bool wss_request_loop()
 {
     // 使用 last_message_received 和 last_event 替代 last_audio_status_type、last_audio_status_event、last_tts_bind_received
 
+    g_curr_time = timer_get_ms();
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_target_sn);
     switch (g_mode_state) {
     case STATE_IDLE:
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
-            log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            last_message_received = 0;
-            if (!pdev) break;
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
+            last_message_received = 0;
             wss_mic_stop(0); // 停止录音
-            //上传E的电量
-            log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-            
-            bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
+            if (pdev != NULL) {
+                //上传E的电量
+                log_i("bdo_turn_on %s\n", g_edev_target_sn);
+                log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
+                bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
+            }
+        } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
+            wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
+            wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            last_message_received = 0;
+            last_event = 0;
         }
         // VAD信号响应，进入上传
         if (is_voice_availble()) {
@@ -338,6 +349,7 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "Vioce On");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
         }
+
         break;
 
     case STATE_TTS_BIND:
@@ -355,20 +367,33 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
             send_message = 0; // 重置发送消息标志
+            turn_off_Pi();
+            set_led_red_error();
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_START) {
             g_mode_state = STATE_DOWNLOAD;
             wss_request_print_state(g_mode_state, "receive AUDIO START");
             wss_ble_audio_start();
             last_message_received = 0;
             last_event = 0;
+        } else if (last_message_received == OR_AUDIO_STATUS && (last_event == OASE_END || last_event == OASE_ABNORMAL)) {
+            g_mode_state = STATE_IDLE;
+            wss_request_print_state(g_mode_state, "OR_AUDIO_STATUS ABNORMAL/END");
+            // wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
+            last_message_received = 0;
+            last_event = 0;
+            send_message = 0; // 重置发送消息标志
+            turn_off_Pi();
+            wss_ble_audio_stop();
+            set_led_red_error();
         } else if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
-            if (!pdev) break;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
             last_message_received = 0;
-            log_i("bdo_turn_on %s\n", g_edev_target_sn);
-            turn_off_Pi();
-            bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
+            if (pdev != NULL) {
+                log_i("bdo_turn_on %s\n", g_edev_target_sn);
+                turn_off_Pi();
+                bdo_turn_on(pdev, 9000, 9000, e_turn_on_cb, pdev);
+            }
         }
         break;
 
@@ -440,4 +465,5 @@ void wss_request_send_event(char *sn, int msg_event)
     if (send_req_message(sn, is_audio_playing(), msg_event)) {
         return;
     }
+    g_curr_time = g_curr_time;
 }

@@ -52,6 +52,7 @@ enum odmp_audio_status_event_e{
 enum odmp_event_type_e {
     OET_REQ_MESSAGE             = 1,
     OET_AUDIO_STATUS            = 2,
+    OET_SET_AUDIO_FORMAT        = 3,
 };
 
 
@@ -151,6 +152,8 @@ const char *odmp_rmet_to_text(int req_message_event_type);
 
 char *odmp_req_message(const char **targets, int targets_num, const char *c_id, const char *send_id, bool is_play, int ormet);
 char *odmp_audio_status(const char *c_id, int oast, int oase);
+
+char *odmp_set_audio_format(const char *c_id, int type);
 
 char *odmp_req_message_initial_setup(const char **targets, int targets_num, const char *c_id, const char *send_id);
 char *odmp_req_message_near_trigger(const char **targets, int targets_num, const char *c_id, const char *send_id);
