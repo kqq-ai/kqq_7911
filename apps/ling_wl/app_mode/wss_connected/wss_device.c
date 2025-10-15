@@ -317,6 +317,7 @@ bool wss_device_call()
     u32 now = timer_get_ms();
 
     lwl_eend_dev_t *pdev = g_edev_closest;
+    // lwl_eend_dev_t *pdev = find_eend_dev_by_sn("KPCNC5J26SEEGG8");
     if (pdev) {
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         last_dequeue_time = now;

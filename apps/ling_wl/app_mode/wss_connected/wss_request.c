@@ -34,7 +34,7 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
-static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 
 /*=================================================================================================
  * Audio dec app context
@@ -243,15 +243,16 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
+        if (strcmp(sn_string,g_edev_target_sn)!=0) {
+            turn_off_Pi();
+        }
     }
     switch(code) {
     case BDOCode_Success:
 
         log_i("Switch PortE %s OK\n", sn_string);
-        memcpy(g_edev_connected_sn, g_edev_target_sn, SN_SIZE);
-        if (strcmp(pdev->sn,g_edev_target_sn)==0) {
-            send_message = ORMET_SWITCH_SUCCESS;
-        }
+        send_message = ORMET_SWITCH_SUCCESS;
         break;
     case BDOCode_Connection_Timeout:
         log_i("Switch PortE BDOCode_Connection_Timeout\n");
@@ -348,10 +349,6 @@ bool wss_request_loop()
             wss_request_print_state(g_mode_state, "Vioce On");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
         }
-        if (g_curr_time - g_heat_timer >= WSS_TIMEOUT) {
-            wss_request_send_event(NULL, ORMET_MOVE_PATROL);
-            g_heat_timer = g_curr_time;
-        }
 
         break;
 
@@ -370,6 +367,8 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
             send_message = 0; // 重置发送消息标志
+            turn_off_Pi();
+            set_led_red_error();
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_START) {
             g_mode_state = STATE_DOWNLOAD;
             wss_request_print_state(g_mode_state, "receive AUDIO START");
@@ -385,7 +384,7 @@ bool wss_request_loop()
             send_message = 0; // 重置发送消息标志
             turn_off_Pi();
             wss_ble_audio_stop();
-            set_led_red_low_power();
+            set_led_red_error();
         } else if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
             wss_request_print_state(g_mode_state, "receive TTS_BIND Again");

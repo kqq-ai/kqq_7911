@@ -235,7 +235,7 @@ char *odmp_set_audio_format(const char *c_id, int type)
     if (type == OAST_TTS) {
         cJSON *naudio_params = cJSON_CreateObject();
         cJSON_AddStringToObject(naudio_params, "format", "mp3");///opus
-        cJSON_AddNumberToObject(naudio_params, "sample_rate", 16000);
+        cJSON_AddNumberToObject(naudio_params, "sample_rate", 8000);
         cJSON_AddItemToObject(nroot_data, "audio_params", naudio_params);
     }
 
