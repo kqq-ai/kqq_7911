@@ -1,6 +1,7 @@
 #include "wss_device.h"
 #include "wss_request.h"
 #include "cpu.h"
+#include "app_lingwl.h"
 
 #include "../lwl_app_framework.h"
 #include "util/cqueue.h"
@@ -315,9 +316,11 @@ lwl_eend_dev_t *wss_device_loop()
 bool wss_device_call()
 {
     u32 now = timer_get_ms();
-
+#ifdef C_SPEAKLER
+    char* pdev = "KPCNC5J26AEEGJ8";//小智
+#else
     lwl_eend_dev_t *pdev = g_edev_closest;
-    // lwl_eend_dev_t *pdev = find_eend_dev_by_sn("KPCNC5J26SEEGG8");
+#endif
     if (pdev) {
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         last_dequeue_time = now;
