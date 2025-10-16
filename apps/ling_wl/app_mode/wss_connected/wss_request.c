@@ -364,7 +364,6 @@ bool wss_request_loop()
         if (is_voice_availble()) {
             g_mode_state = STATE_UPLOAD;
             wss_request_print_state(g_mode_state, "Vioce On");
-            wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
         }
 
         break;
@@ -456,6 +455,7 @@ bool wss_request_loop()
             turn_off_Pi();
             wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
 
+            wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
             wss_mic_start(get_time_stamp() + 600000); // 开始录音
             last_message_received = 0;
             last_event = 0;
