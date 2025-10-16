@@ -230,11 +230,11 @@ bool wss_application_loop()
         } else if (wss_application_check_touch_key()) {
             if (is_request_busy()) {
                 log_i("[wss_application]is_request_busy, wss_mic_stop.");
-                if (is_voice_availble()) {
-                    wss_mic_stop(1); // 停止录音 上传音频 1
-                } else {
+                // if (is_voice_availble()) {
+                //     wss_mic_stop(1); // 停止录音 上传音频 1
+                // } else {
                     wss_request_stop();
-                }
+                // }    
                 break;
             } else {
                 log_i("[wss_application]wss_device_call.");
