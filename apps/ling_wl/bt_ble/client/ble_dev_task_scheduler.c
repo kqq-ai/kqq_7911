@@ -21,7 +21,7 @@
 #define SET_SCAN_HIGH_DUTY_INTERVAL   ADV_SCAN_MS(24) // unit: ms
 #define SET_SCAN_HIGH_DUTY_WINDOW     ADV_SCAN_MS(16) // unit: ms
 
-#define BLE_DISCONNECT_TIMEOUT 10000
+#define BLE_DISCONNECT_TIMEOUT 3000
 
 #define SET_PI_ADV_INTERVAL_MS 20 // unit: ms range: 20 ~ 1000
 #define SET_PI_ADV_DURATION_S 600 // unit: s  range: 0 ~ 65535
