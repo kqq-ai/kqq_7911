@@ -21,7 +21,7 @@
 #define SET_SCAN_HIGH_DUTY_INTERVAL   ADV_SCAN_MS(24) // unit: ms
 #define SET_SCAN_HIGH_DUTY_WINDOW     ADV_SCAN_MS(16) // unit: ms
 
-#define BLE_DISCONNECT_TIMEOUT 10000
+#define BLE_DISCONNECT_TIMEOUT 3000
 
 #define SET_PI_ADV_INTERVAL_MS   100 // unit: ms range: 20 ~ 1000
 #define SET_PI_ADV_DURATION_S    180 // unit: s  range: 0 ~ 65535
@@ -140,7 +140,6 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
 static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 {
     log_i("[BDO]Turn on %s", op->sn);
-    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     if (!dev) {
@@ -174,6 +173,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         return;
     }
     log_i("[BDO]ble connected");
+    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
 
     /* - 关闭连接 */
     os_sem_set(&g_disconn_sem, 0);
