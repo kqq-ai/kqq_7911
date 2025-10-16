@@ -140,7 +140,6 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
 static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 {
     log_i("[BDO]Turn on %s", op->sn);
-    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     if (!dev) {
@@ -174,6 +173,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         return;
     }
     log_i("[BDO]ble connected");
+    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
 
     /* - 关闭连接 */
     os_sem_set(&g_disconn_sem, 0);
