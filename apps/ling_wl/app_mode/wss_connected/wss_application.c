@@ -75,7 +75,7 @@ static void wss_application_touch_key()
 }
 
 // 查询退出标志
-static bool wss_application_check_touch_key()
+bool wss_application_check_touch_key()
 {
     bool rst = g_touch_key_exit;
     g_touch_key_exit = false;
