@@ -64,11 +64,6 @@ static int net_connected_init(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_add(net_connected_event_handler_cb);
     set_led_connected();
-    if (WIFI_CONNECT_SUCC == get_wifi_connect_status(NULL)) {
-        do_check_and_ota();
-    }
-    
-    // OTA check version
     context->websockets_info = NULL;
     return 0;
 }
@@ -110,16 +105,12 @@ void app_net_connected_loop()
     if (WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL)) {
         lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
         printf("Network connection is WIFI_STA_DISCONNECT!\n");
-        lwl_app_context_t *context = lwl_app_core_context_get_instance();
-        int err = app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "NetCfgFail.mp3",
-            NULL,
-            NULL);
+        play_system_music("NetCfgFail.mp3");
         return;
     }
-    extern int OTA_download_running;
-    if( OTA_download_running > 0){
+    // OTA check version
+    if (check_ota_info()==1) {
+        play_system_music("OtaInUpdate.mp3");
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return;
     }
