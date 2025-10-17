@@ -229,6 +229,7 @@ static void app_lingwl_main(void)
     context->music_player = &g_music_player;
 
     ble_dev_task_scheduler_init();
+    bdo_disable();
 
     /* 创建线程池 */
     pool = threadpool_create(4, 10);

@@ -200,6 +200,7 @@ void wss_application_uninit()
     wss_request_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
+    bdo_disable();
 
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);
