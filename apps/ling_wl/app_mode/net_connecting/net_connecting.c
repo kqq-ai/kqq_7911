@@ -42,8 +42,7 @@ void clear_key_press_time_ms(){
     ble_connected = false;
     key_press_time_ms = 0;
 }
-// static void set_led_connecting(void)        { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 正在连接网络 蓝色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 蓝色 */
 static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
 static void set_led_confirm(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //确认配网后灯光变橙色
 
@@ -61,7 +60,6 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 {
     static int en = 1;
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
@@ -72,11 +70,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         }
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        int err = app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "t_key.mp3",
-            NULL,
-            NULL);
+        play_system_music("t_key.mp3");
         // on_user_key_confirm();
         // 确认连接小程序
         log_i("PRESS NORMAL KEY in net_connecting mode");
@@ -112,7 +106,7 @@ static int net_connecting_unint(void)
 }
 
 /* 处理BLE连接状态的辅助函数 */
-static void handle_ble_connection_state(lwl_app_context_t *context)
+static void handle_ble_connection_state()
 {
     /* BLE连接超时处理 */
     if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
@@ -136,13 +130,7 @@ static void handle_ble_connection_state(lwl_app_context_t *context)
     /* BLE连接成功处理 */
     if (!get_ble_app_disconnect_flag() && !ble_connected) {
         set_led_connected();
-        
-        app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "bt_conneted.mp3",
-            NULL,
-            NULL);
-            
+        play_system_music("bt_conneted.mp3");
         ble_connected = true;
         printf("BLE connected\n");
     }
@@ -150,7 +138,6 @@ static void handle_ble_connection_state(lwl_app_context_t *context)
 
 void app_net_connecting_loop()
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
 
     /* 网络连接成功处理 */
@@ -158,11 +145,7 @@ void app_net_connecting_loop()
         printf("Network connection is successful!\n");
         set_led_connected();  // 设置连接成功LED状态
         
-        app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "NetCfgSucc.mp3",
-            NULL,
-            NULL);
+        play_system_music("NetCfgSucc.mp3");
             
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
@@ -184,18 +167,14 @@ void app_net_connecting_loop()
         ble_simple_server_init();
         wifi_manager_state = true;
         
-        app_music_play_local_music_with_callback(
-            context->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "NetCfgEnter.mp3",
-            NULL,
-            NULL);
+        play_system_music("NetCfgEnter.mp3");
             
         return;
     }
 
     /* BLE连接处理 */
     if (wifi_manager_state && key_press_time_ms > 0) {
-        handle_ble_connection_state(context);
+        handle_ble_connection_state();
     }
 }
 

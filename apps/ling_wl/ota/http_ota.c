@@ -16,34 +16,8 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE "v0.0.51" 
+#define LOCAL_VERSION_CODE "v0.0.53" 
 
-static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
-
-// 提示音播放完成后再启动下载，避免与写闪存竞争导致播放被打断
-extern int OTA_download_running; // 前置声明
-static void ota_prompt_end_cb(void *priv)
-{
-    char *url = (char *)priv; // 由调用者分配，回调中接管所有权
-    OTA_download_running = 1;
-    http_create_download_task(url);
-}
-
-static int play_ota_start_prompt_then_download(char *url)
-{
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx && ctx->music_player) {
-        int err = app_music_play_local_music_with_callback(
-            ctx->music_player,
-            CONFIG_CP_VOICE_FILE_PATH "OtaInUpdate.mp3",
-            ota_prompt_end_cb,
-            url);
-        if (!err) {
-            return 0; // 成功启动播放，下载将在回调里启动
-        }
-    }
-    return -1; // 启动播放失败，需要立即进入下载
-}
 
 struct download_hdl {
     char *url;                    //下载链接
@@ -56,14 +30,12 @@ struct download_hdl {
     const struct net_download_ops *download_ops; //http操作集
 };
 
-struct download_parm {
-    char *url;  //下载链接
-};
-int OTA_download_running = 0;
+struct download_hdl *ota_hdl = NULL;
+char *ufw_url = NULL;
 //http回调函数
 static int http_user_cb(void *ctx, void *buf, unsigned int size, void *priv, httpin_status status)
 {
-    struct download_hdl *hdl = (struct download_hdl *)priv;
+    struct download_hdl *hdl = ota_hdl;
 
     if (status == HTTPIN_HEADER) {
         //第一次连接时，记录文件总长度
@@ -78,7 +50,7 @@ static int http_user_cb(void *ctx, void *buf, unsigned int size, void *priv, htt
 
 static void download_task(void *priv)
 {
-    struct download_hdl *hdl = priv;
+    struct download_hdl *hdl = ota_hdl;
     void *update_fd = NULL;
     int ret = 0;
     int err = 0;
@@ -139,26 +111,23 @@ _out_:
     free(hdl->recv_buf);
     memset(hdl, 0, sizeof(struct download_hdl));
     free(hdl);
+    hdl = NULL;
 }
 
 int http_create_download_task(char *url)
 {
-    struct download_parm parm = {0};
-    struct download_hdl *hdl = NULL;
-
-    parm.url = url;
-
     //申请堆内存
-    hdl = (struct download_hdl *)calloc(1, sizeof(struct download_hdl));
+    ota_hdl = (struct download_hdl *)calloc(1, sizeof(struct download_hdl));
 
-    if (hdl == NULL) {
+    if (ota_hdl == NULL) {
         return -ENOMEM;
     }
+    struct download_hdl *hdl = ota_hdl;
 
     hdl->download_ops = &http_ops;
     hdl->recv_buf_size = DEFAULT_RECV_BUF_SIZE;
 
-    hdl->url = (char *)calloc(1, strlen(parm.url) + 1);
+    hdl->url = (char *)calloc(1, strlen(url) + 1);
 
     if (hdl->url == NULL) {
         return -ENOMEM;
@@ -170,7 +139,7 @@ int http_create_download_task(char *url)
         return -ENOMEM;
     }
 
-    strcpy(hdl->url, parm.url);
+    strcpy(hdl->url, url);
 
     //http请求参数赋值
     hdl->ctx.url = hdl->url;
@@ -379,44 +348,44 @@ int compare_versions(const char* ver1, const char* ver2) {
     return 0; // 版本相同
 }
 
-int do_check_and_ota()
+int check_ota_info()
 {
+    int ret = 0;
     char *ota_info_json = NULL;
-    int ret = request_ota_info(&ota_info_json);
-    if (ret < 0 || ota_info_json == NULL) {
-        log_e("[UPGRADE]failed to request OTA info: %d", ret);
-        return -1;
+    if (ufw_url == NULL) {
+        ret = request_ota_info(&ota_info_json);
+        if (ret < 0 || ota_info_json == NULL) {
+            log_e("[UPGRADE]failed to request OTA info: %d", ret);
+            return -1;
+        }
+        log_i("ota_info: %s", ota_info_json);
+    } else {
+        return 1;
     }
-    log_i("ota_info  22222: %s", ota_info_json);
 
-    const cJSON *nroot = cjson_parse(ota_info_json);
+    cJSON *nroot = cjson_parse(ota_info_json);
     if (nroot == NULL) {
         goto error_ret;
     }
-
     ota_info_t ota_info;
+    if (ufw_url != NULL) {
+        free(ufw_url);
+        ufw_url = NULL;
+    }
+
     if (parse_ota_info(nroot, &ota_info) != OTAERROR_Success) {
         goto error_ret;
     }
+    log_i("net:%s ===== LOCAL_VERSION_CODE:%s \r\n", ota_info.version_name, LOCAL_VERSION_CODE);
 
-    int net_ver_big = compare_versions(ota_info.version_name, LOCAL_VERSION_CODE);
-    if ( 0 == net_ver_big) { log_i("net:%s ===== LOCAL_VERSION_CODE:%s \r\n", ota_info.version_name, LOCAL_VERSION_CODE);}
-    if ( 1 == net_ver_big) { //< ota_info.version_code) {
-        log_i("%s < %s, need OTA.", LOCAL_VERSION_CODE, ota_info.version_name);
-        log_i("download %s", ota_info.file_url);
-        set_led_OTA_on();  // 控制 led : 正在升级 黄色
-
+    if (compare_versions(ota_info.version_name, LOCAL_VERSION_CODE) == 1) {
+        log_i("need OTA \r\n");
         size_t url_len = strlen(ota_info.file_url);
-        char *ufw_url = malloc(url_len + 1);
+        ufw_url = malloc(url_len + 1);
         strncpy(ufw_url, ota_info.file_url, url_len + 1);
-        if (play_ota_start_prompt_then_download(ufw_url) == 0) {
-            ret = 1; // 播放中，下载将在回调中启动
-        } else {
-            OTA_download_running = 1;   /// reset after OTA
-            http_create_download_task(ufw_url);
-            ret = 1;
-        }
+        ret = 1;
     } else {
+        log_i("no need OTA \r\n");
         ret = 0;
     }
     
@@ -429,7 +398,6 @@ int do_check_and_ota()
         ota_info_json = NULL;
     }
     return ret;
-
 error_ret:
     if (nroot != NULL) {
         cJSON_Delete(nroot);
@@ -440,4 +408,23 @@ error_ret:
         ota_info_json = NULL;
     }
     return -1;
+}
+
+void do_OTA()
+{
+    if (ufw_url != NULL) {
+        log_i("download %s", ufw_url);
+        http_create_download_task(ufw_url);
+    } else {
+        log_i("No need OTA.");
+    }
+}
+
+int get_download_progress()
+{
+    if (ota_hdl != NULL && ota_hdl->file_size > 0) {
+        return (ota_hdl->download_len * 100) / ota_hdl->file_size;
+    } else {
+        return 0;
+    }
 }

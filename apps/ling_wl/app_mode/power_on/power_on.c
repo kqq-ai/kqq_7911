@@ -24,9 +24,11 @@
 #include "app_mode/lwl_app_core.h"
 #include "log.h"
 #include "app_lfs.h"
+#include "protocol/cp/c_uart_p.h"
 
 #define MODE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
+static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 上电 蓝色 */
 
 int app_power_on_event_handler(struct application *app, struct sys_event *event)
 {
@@ -62,6 +64,8 @@ static void power_on_input_event_handler_cb(lwl_event_t *e)
 static int power_on_init(void)
 {
     init_time = timer_get_ms();
+    play_system_music("poweron.mp3");
+    set_led_power_on();
     lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     char sn[25];
     get_SN(sn);

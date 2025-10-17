@@ -22,6 +22,7 @@
 #include "../../SC7A20/sc7a20.h"
 
 #define log_i log_mqtt
+static void set_led_on_touch(void)     { uart_send_set_led_color(COLOR_PURPLE); }
 
 #define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
@@ -71,13 +72,17 @@ static int g_touch_key_exit = false;
 static void wss_application_touch_key()
 {
     g_touch_key_exit = true;
+    set_led_on_touch();
     wss_application_vailed();
 }
 
 // 查询退出标志
-static bool wss_application_check_touch_key()
+bool wss_application_check_touch_key()
 {
     bool rst = g_touch_key_exit;
+    if (g_touch_key_exit) {
+        set_led_on_touch();
+    }
     g_touch_key_exit = false;
     return rst;
 }
@@ -200,6 +205,7 @@ void wss_application_uninit()
     wss_request_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
+    bdo_disable();
 
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);
@@ -230,11 +236,11 @@ bool wss_application_loop()
         } else if (wss_application_check_touch_key()) {
             if (is_request_busy()) {
                 log_i("[wss_application]is_request_busy, wss_mic_stop.");
-                if (is_voice_availble()) {
-                    wss_mic_stop(1); // 停止录音 上传音频 1
-                } else {
+                // if (is_voice_availble()) {
+                //     wss_mic_stop(1); // 停止录音 上传音频 1
+                // } else {
                     wss_request_stop();
-                }
+                // }    
                 break;
             } else {
                 log_i("[wss_application]wss_device_call.");

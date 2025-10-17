@@ -15,7 +15,7 @@
 #define SN_LEN 16
 
 char sn_c_id[25];
-static int g_exception_exit = false;
+static int g_exception_exit = true;
 static OS_MUTEX g_wss_mutex;
 static char* target_sn_set[MAX_TARGET_SN_SET] = {0};
 static int target_sn_count = 0;
@@ -94,6 +94,9 @@ void wss_exception_exit()
 
 bool wss_check_exit()
 {
+    if (g_exception_exit) {
+        return true;
+    }
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     struct websocket_struct *websockets_info = context->websockets_info;
     if (!websockets_info) {
@@ -149,6 +152,7 @@ void wss_disconnect() {
         free(wss_url);
         wss_url = NULL;
     }
+    g_exception_exit = true;
     log_mqtt_stop();
     os_mutex_post(&g_wss_mutex);
 }

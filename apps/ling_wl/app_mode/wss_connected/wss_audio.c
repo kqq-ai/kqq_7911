@@ -336,6 +336,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             data + idx, 
             chunk_size
         );
+        edev_working();
         
         if (written == 0) {
             log_e("Failed to write audio data chunk,odmp_audio_data_cbk");

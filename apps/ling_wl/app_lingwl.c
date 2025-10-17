@@ -126,10 +126,6 @@ void base_lwl_event_handler(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_SHUTDOWN:
         log_i("base_lwl_event_handler LWL_EVENT_TYPE_UART_SHUTDOWN\r\n");
-        extern int OTA_download_running;
-        if( OTA_download_running > 0){
-            break; /// reset after OTA
-        }
         do_shutdown();
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
@@ -148,7 +144,8 @@ void base_lwl_event_handler(lwl_event_t *e)
         // Reset WiFi SSID
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         uart_response_clear_wifi_ssid();
-        uart_send_apply_soft_poweroff(); // TODO restart
+        // uart_send_apply_soft_poweroff(); // TODO restart
+        system_reset(); //restart
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
@@ -230,10 +227,9 @@ static void app_lingwl_main(void)
     /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
-    set_led_power_on();
-    simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"poweron.mp3");
 
     ble_dev_task_scheduler_init();
+    bdo_disable();
 
     /* 创建线程池 */
     pool = threadpool_create(4, 10);
@@ -449,13 +445,11 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_CONNECT_TIMEOUT_NOT_FOUND_SSID");
             // TODO: 可能在配网时需要发送ble通知
             // 播放WiFi连接失败提示音（未找到SSID）
-            //simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_CONNECT_ASSOCIAT_FAIL:
             log_i("NET_CONNECT_ASSOCIAT_FAIL");
             // TODO: 可能在配网时需要发送ble通知
             // 播放WiFi连接失败提示音（关联失败）
-            //simple_play_prompt(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3");
             break;
         case NET_EVENT_SMP_CFG_FIRST:
             log_i("NET_EVENT_SMP_CFG_FIRST");

@@ -33,12 +33,14 @@
 #include "protocol/cp/c_uart_p.h"
 
 static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接中 蓝色 */
+static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接中 红色 */
+bool play_prompt_flag = 0;
 
 static int wss_connected_init(void)
 {
     /* 开始RSSI测距 */
     wss_application_init();
+    play_prompt_flag = 1;
     return 0;
 }
 
@@ -54,7 +56,6 @@ static int wss_connected_unint(void)
 
 void app_wss_connected_mode(void)
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     wss_connected_init();//application init 和blk RSSI测距 
     
     while (1) {
@@ -64,17 +65,17 @@ void app_wss_connected_mode(void)
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
                 printf("Network connection is WIFI_STA_DISCONNECT!\n");
-                int err = app_music_play_local_music_with_callback(
-                    context->music_player,
-                    CONFIG_CP_VOICE_FILE_PATH "NetCfgFail.mp3",
-                    NULL,
-                    NULL);
-            } else {
+                play_system_music("NetCfgFail.mp3");
+            } else if (wss_application_check_touch_key()) {
                 if (!wss_reconnect()) {
                     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
                 } else {
                     set_led_connected();
+                    play_prompt_flag = 1;
                 }
+            } else if (play_prompt_flag) {
+                play_prompt_flag = 0;
+                play_system_music("NetDisc.mp3");
             }
         }
 

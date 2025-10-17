@@ -4,6 +4,9 @@
 #include "cpu.h"
 #include "app_core.h"
 
+#define play_system_music(x) lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH x);
+void lwl_app_mode_play(const char *fname);
+
 /**
  * @brief Application mode enumeration
  */

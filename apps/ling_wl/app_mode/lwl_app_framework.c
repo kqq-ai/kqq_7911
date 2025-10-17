@@ -7,12 +7,36 @@
 #include "power_on/power_on.h"
 #include "app_core.h"
 #include "os/os_api.h"
+#include "gpio.h"
 
 static u8 app_prev_mode = 0;
 static u8 app_curr_mode = 0;
 static u8 app_next_mode = 0;
 static u8 mode_exitting = 0;
 static OS_MUTEX g_mode_mutex;
+
+static bool play_voice_prompt = 0;
+
+static void lwl_app_mode_play_cb(void *priv)
+{
+    os_mutex_pend(&g_mode_mutex, 0);
+    play_voice_prompt = 0;
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    os_mutex_post(&g_mode_mutex);
+}
+
+void lwl_app_mode_play(const char *fname) 
+{
+    os_mutex_pend(&g_mode_mutex, 0);
+    log_i("play: %s", fname);
+    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    int err = app_music_play_local_music_with_callback(context->music_player, fname, lwl_app_mode_play_cb, NULL);
+    if (!err) {
+        play_voice_prompt = 1;
+    }
+    os_mutex_post(&g_mode_mutex);
+}
 
 //*----------------------------------------------------------------------------*/
 /**@brief    模式退出检查
@@ -120,6 +144,9 @@ u8 lwl_app_mode_exitting()//
     if (app_next_mode && !mode_exitting) {
         /* app_curr_mode = app_next_mode; */
         /* app_next_mode = 0; */
+        while (play_voice_prompt) {
+            msleep(10);
+        }
         mode_exitting = 1;
         return 1;
     }
@@ -153,6 +180,7 @@ void lwl_app_init()
         log_i("have sn, go to power on mode");
         app_curr_mode = APP_POWER_ON_MODE;
     }
+    play_voice_prompt = 0;
 }
 
 void lwl_app_mode_loop()

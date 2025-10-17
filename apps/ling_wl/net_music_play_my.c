@@ -306,6 +306,16 @@ static int __stream_music_dec_file(music_player *player)
     int err;
     union audio_req req = {0};
 
+    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
+        // 停止解码
+        player->dec_ops->dec_stop(player);
+        // 执行回调
+        if (player->dec_with_cb && player->dec_end_cb != NULL) {
+            player->dec_end_cb(player->dec_end_cb_priv);
+            player->dec_end_cb = NULL;
+        }
+    }
+
     RingQueue *queue = &player->queue;
 
     req.dec.dec_type = "mp3";
@@ -364,16 +374,6 @@ static int __stream_music_dec_file(music_player *player)
 static int stream_music_dec_file(music_player *player)
 {
     log_i("app_stream_music_dec_file\n");
-
-    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
-        // 停止解码
-        player->dec_ops->dec_stop(player);
-        // 执行回调
-        if (player->dec_with_cb && player->dec_end_cb != NULL) {
-            player->dec_end_cb(player->dec_end_cb_priv);
-            player->dec_end_cb = NULL;
-        }
-    }
 
     /*
      * 异步等待网络下载ready，防止网络阻塞导致app卡住
