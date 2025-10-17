@@ -22,6 +22,7 @@
 #include "../../SC7A20/sc7a20.h"
 
 #define log_i log_mqtt
+static void set_led_on_touch(void)     { uart_send_set_led_color(COLOR_PURPLE); }
 
 #define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
@@ -71,6 +72,7 @@ static int g_touch_key_exit = false;
 static void wss_application_touch_key()
 {
     g_touch_key_exit = true;
+    set_led_on_touch();
     wss_application_vailed();
 }
 
@@ -78,6 +80,9 @@ static void wss_application_touch_key()
 bool wss_application_check_touch_key()
 {
     bool rst = g_touch_key_exit;
+    if (g_touch_key_exit) {
+        set_led_on_touch();
+    }
     g_touch_key_exit = false;
     return rst;
 }
