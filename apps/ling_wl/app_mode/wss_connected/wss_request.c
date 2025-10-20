@@ -87,6 +87,7 @@ void turn_on_Pi(const char *pdev_sn) {
     log_i("bdo_turn_on %s\n", pdev_sn);
     memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
     send_message = ORMET_SWITCH_SUCCESS;
+    edev_working();
     return;
 #endif
     turn_off_Pi();
