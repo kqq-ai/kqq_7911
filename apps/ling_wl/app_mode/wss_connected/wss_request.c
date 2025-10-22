@@ -227,6 +227,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 last_message_received = OR_AUDIO_STATUS;
                 last_event = 5 + OASE_START;
             }
+            if (pkg->audio_status.event == OASE_END) {
+                last_message_received = OR_AUDIO_STATUS;
+                last_event = 5 + OASE_END;
+            }
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START\n");
@@ -363,6 +367,11 @@ bool wss_request_loop()
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
             wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
             wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            last_message_received = 0;
+            last_event = 0;
+        } else if (last_message_received == OR_AUDIO_STATUS && (last_event == 5+OASE_END || last_event == 5+OASE_ABNORMAL)) {
+            wss_request_print_state(g_mode_state, "receive AUDIO OASE_END ASR");
+            wss_mic_stop(0); // 停止录音
             last_message_received = 0;
             last_event = 0;
         }

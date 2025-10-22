@@ -283,8 +283,10 @@ void wait_vad_task(void *priv)
     while (get_time_stamp() < vad_stop_time && is_mic_on()) {
         msleep(10);
         if (g_recording == true) {
-            threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
-            return;
+            start_audio_upload(NULL);
+            my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
+            wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
+            set_led_mic_on(); // 开启录音时灯光变橙色
         }
     }
     wss_app_recorder_data_upstream(NULL);
