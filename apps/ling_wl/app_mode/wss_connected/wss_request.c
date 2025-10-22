@@ -502,6 +502,9 @@ void wss_request_send_event(char *sn, int msg_event)
     if (sn != NULL && strlen(sn)!= SN_SIZE-1) {
         sn = NULL;
     }
+    if (sn != NULL) {
+        update_edev_time(sn);
+    }
     if (send_req_message(sn, is_audio_playing(), msg_event)) {
         return;
     }
