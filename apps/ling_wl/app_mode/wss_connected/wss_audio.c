@@ -286,6 +286,7 @@ void wait_vad_task(void *priv)
             return;
         }
     }
+    set_led_idle();
     wss_app_recorder_data_upstream(NULL);
     if (get_time_stamp() < vad_stop_time) {
         log_i("Stop VAD timeout at %d.", get_time_stamp());

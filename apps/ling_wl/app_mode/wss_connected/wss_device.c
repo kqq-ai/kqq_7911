@@ -33,6 +33,7 @@ static void set_led_device_call(void)    { uart_send_set_led_color(COLOR_GREEN);
 // #define log_d log_i // Debug log macro
 
 static lwl_app_context_t *g_app_ctx = NULL;
+static lwl_eend_dev_t *edev_last;
 
 typedef struct {
     char sn[SN_SIZE];
@@ -216,6 +217,7 @@ void wss_device_init()
     // 初始化集合和队列
     clear_edev_set();
     clear_target_sn_set();
+    edev_last = NULL;
 }
 
 void wss_device_uninit()
@@ -240,7 +242,9 @@ lwl_eend_dev_t *wss_device_loop()
     }
 
     lwl_eend_dev_t *pdev = get_edev();
+    if (pdev == edev_last) return NULL;
     if (pdev && pdev->distance_info.distance < 2.0f) {
+        edev_last = pdev;
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         set_led_device_call();
         last_dequeue_time = g_curr_time;
@@ -258,6 +262,7 @@ bool wss_device_call()
     lwl_eend_dev_t *pdev = get_edev();
 #endif
     if (pdev) {
+        edev_last = pdev;
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         set_led_device_call();
         last_dequeue_time = g_curr_time;
