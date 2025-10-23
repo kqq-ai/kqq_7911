@@ -369,11 +369,11 @@ bool wss_request_loop()
             set_led_tts_bind();
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
-            wss_mic_stop(0); // 停止录音
+            // wss_mic_stop(0); // 停止录音
             turn_on_Pi(g_edev_target_sn);
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
             wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
-            wss_mic_start(get_time_stamp() + 10000); // 开始录音
+            wss_mic_start(get_time_stamp() + 600000); // 开始录音
             last_message_received = 0;
             last_event = 0;
         } else if (last_message_received == OR_AUDIO_STATUS && (last_event == 5+OASE_END || last_event == 5+OASE_ABNORMAL)) {
@@ -493,7 +493,7 @@ bool wss_request_loop()
             turn_off_Pi();
             wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-            wss_mic_start(get_time_stamp() + 10000); // 开始录音
+            wss_mic_start(get_time_stamp() + 600000); // 开始录音
             last_message_received = 0;
             last_event = 0;
         }

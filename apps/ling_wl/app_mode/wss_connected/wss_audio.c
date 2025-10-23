@@ -64,7 +64,7 @@ static AsrData asr_data_frame;
 static MyBlockingQueue g_asr_data_queue; // MyBlockingQueue<AsrData>
 static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 
-#define MY_ASR_RING_BUFFER_CAPACITY 20
+#define MY_ASR_RING_BUFFER_CAPACITY 10
 static MyRingBuffer g_asr_ringbuffer;    // MyRingBuffer<AsrData>
 static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)];
 

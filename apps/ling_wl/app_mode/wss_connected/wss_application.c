@@ -176,6 +176,7 @@ void wss_application_init()
     wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
+    wss_mic_start(get_time_stamp() + 3600000); // 开始录音
 
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
