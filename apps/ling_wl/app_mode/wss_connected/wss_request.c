@@ -36,6 +36,7 @@ static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
 static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+static void set_led_tts_bind(void)      { uart_send_set_led_color(COLOR_ORANGE); }   //TTS_BIND时灯光变黄色
 
 /*=================================================================================================
  * Audio dec app context
@@ -76,7 +77,11 @@ void turn_off_Pi() {
     if (g_edev_connected_sn[0] != 0) {
         
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
-        bdo_turn_off(pdev, 500, NULL, NULL);
+        if (pdev) {
+            bdo_turn_off(pdev, 500, NULL, NULL);
+        } else {
+            log_i("turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
+        }
         g_edev_connected_sn[0] = 0;
     }
 }
@@ -287,6 +292,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
 
         log_i("Switch PortE %s OK\n", sn_string);
         send_message = ORMET_SWITCH_SUCCESS;
+        edev_working();
         break;
     case BDOCode_Connection_Timeout:
         log_i("Switch PortE BDOCode_Connection_Timeout\n");
@@ -360,13 +366,14 @@ bool wss_request_loop()
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
             g_mode_state = STATE_TTS_BIND;
+            set_led_tts_bind();
             wss_request_print_state(g_mode_state, "receive TTS_BIND");
             last_message_received = 0;
             wss_mic_stop(0); // 停止录音
             turn_on_Pi(g_edev_target_sn);
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
             wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
-            wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            wss_mic_start(get_time_stamp() + 10000); // 开始录音
             last_message_received = 0;
             last_event = 0;
         } else if (last_message_received == OR_AUDIO_STATUS && (last_event == 5+OASE_END || last_event == 5+OASE_ABNORMAL)) {
@@ -410,6 +417,7 @@ bool wss_request_loop()
             last_event = 0;
             send_message = 0; // 重置发送消息标志
             turn_off_Pi();
+            set_led_red_error();
         } else if (send_message == ORMET_SWITCH_FAILED) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "SWITCH_FAILED");
@@ -446,6 +454,7 @@ bool wss_request_loop()
             turn_off_Pi();
             last_message_received = 0;
             last_event = 0;
+            set_led_red_error();
         } else if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "WSS AUDIO TIMEOUT");
@@ -484,12 +493,11 @@ bool wss_request_loop()
             turn_off_Pi();
             wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-            wss_mic_start(get_time_stamp() + 600000); // 开始录音
+            wss_mic_start(get_time_stamp() + 10000); // 开始录音
             last_message_received = 0;
             last_event = 0;
-        } else {
-            wss_application_vailed();
         }
+        wss_application_vailed();
         break;
     }
     
@@ -502,6 +510,9 @@ void wss_request_send_event(char *sn, int msg_event)
     wss_request_print_event(msg_event, "wss_request_send_event");
     if (sn != NULL && strlen(sn)!= SN_SIZE-1) {
         sn = NULL;
+    }
+    if (sn != NULL) {
+        update_edev_time(sn);
     }
     if (send_req_message(sn, is_audio_playing(), msg_event)) {
         return;

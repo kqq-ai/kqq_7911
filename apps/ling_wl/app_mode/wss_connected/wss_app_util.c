@@ -261,7 +261,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    if (target_sn_count == 0 && send_id != NULL) {
+    if (send_id != NULL) {
         add_target_sn(send_id); // 至少包含自己
     }
 

@@ -27,8 +27,7 @@ static OS_MUTEX g_audio_mutex;
 
 static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
 static void set_led_asr_upload(void)    { uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
-static void set_led_tts_wait(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
-static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频播放时灯光变蓝色
+static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
 
 /*=================================================================================================
  * Vad timer
@@ -244,7 +243,7 @@ static void start_audio_upload(void *priv)
         if (g_recording == false || g_recording_upload == false) { /* VAD结束 */
             g_recording_upload = false;
             wss_app_recorder_data_upstream(NULL);
-            set_led_tts_wait();
+            set_led_idle();
             if (g_recording == false){
                 log_i("Stop VAD because VAD END.");
             } else {
@@ -289,6 +288,7 @@ void wait_vad_task(void *priv)
             set_led_mic_on(); // 开启录音时灯光变橙色
         }
     }
+    set_led_idle();
     wss_app_recorder_data_upstream(NULL);
     if (get_time_stamp() < vad_stop_time) {
         log_i("Stop VAD timeout at %d.", get_time_stamp());
@@ -326,8 +326,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         total_written = 0;
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
     }
-
-    set_led_tts_play();
     
     os_mutex_post(&g_audio_mutex);
     while (1) {
