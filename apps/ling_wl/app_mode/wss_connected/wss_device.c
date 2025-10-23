@@ -269,3 +269,9 @@ bool wss_device_call()
     }
     return true;
 }
+
+bool wss_device_is_calling()
+{
+    if (!edev_last) return false;
+    return edev_last->distance_info.distance < 2.0f;
+}

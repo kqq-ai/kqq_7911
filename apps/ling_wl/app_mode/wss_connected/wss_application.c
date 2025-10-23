@@ -37,6 +37,7 @@ static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
 
 static int g_audio_playing = false;
+static bool multi_play_mode = false;
 
 /* Task state */
 typedef enum {
@@ -77,6 +78,8 @@ static void wss_application_touch_key()
     g_touch_key_exit = true;
     set_led_on_touch();
     wss_application_vailed();
+    multi_play_mode = !multi_play_mode;
+    log_i("[wss_application]Touch key event, multi_play_mode: %d", multi_play_mode);
 }
 
 // 查询退出标志
@@ -177,6 +180,8 @@ void wss_application_init()
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
 
+    multi_play_mode = false;
+
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
         pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
@@ -219,8 +224,12 @@ bool wss_application_loop()
     }
 
     if (wss_request_loop()) {
-        if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-            wss_device_loop();
+        if (wss_device_is_calling() && !multi_play_mode) {
+            // 多次唤醒模式下，持续检测设备呼叫状态
+        } else {
+            if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
+                wss_device_loop();
+            }
         }
     }
 
@@ -238,9 +247,6 @@ bool wss_application_loop()
                 log_i("[wss_application]is_request_busy, wss_mic_stop.");
                 wss_mic_stop(0); // 停止录音
                 wss_request_stop();
-            } else {
-                log_i("[wss_application]wss_device_call.");
-                wss_device_call();
             }
             // multi_player_game();
             // wss_request_stop(); // 按键打断对话
@@ -253,6 +259,7 @@ bool wss_application_loop()
             g_device_state = DEVICE_IDLE;
             set_led_idle();
             wss_request_stop(); // 按键打断对话
+            wss_mic_start(get_time_stamp() + 3000); // 开始录音
             last_req_time = g_curr_time;
             wss_application_print_state(g_device_state, "touch key down");
         } else if (!is_audio_playing()) {
