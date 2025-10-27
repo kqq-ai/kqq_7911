@@ -114,6 +114,7 @@ void wss_mic_stop(bool need_upload) {
     wss_app_recorder_data_upstream(NULL);
     if (need_upload) {
         g_recording_upload = false; // 停止上传
+        wss_app_recorder_en(DISABLE);
     } else {
         wss_app_recorder_en(DISABLE);
     }

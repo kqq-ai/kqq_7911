@@ -508,5 +508,4 @@ void wss_request_send_event(char *sn, int msg_event)
     if (send_req_message(sn, is_audio_playing(), msg_event)) {
         return;
     }
-    g_curr_time = g_curr_time;
 }

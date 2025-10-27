@@ -181,7 +181,7 @@ static int http_request_with_body(const char* url, const char* context, http_bod
     }
 
     // 关闭连接
-    httpcli_close(ctx);
+    if (ret == 0) httpcli_close(ctx);
 
     if (ctx) {
         // ctx->url 指向外部字符串，不需要free
