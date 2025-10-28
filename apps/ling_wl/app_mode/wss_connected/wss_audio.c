@@ -54,7 +54,7 @@ static int g_recording_upload = false;
 /*=================================================================================================
  * Audio enc app context
  *=================================================================================================*/
-#define ASR_DATA_CHUNK_SIZE 48
+#define ASR_DATA_CHUNK_SIZE 144
 typedef struct {
     u8 data[ASR_DATA_CHUNK_SIZE];
 } AsrData;
@@ -280,6 +280,7 @@ void wait_vad_task(void *priv)
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
     set_led_mic_on(); // 开启录音时灯光变橙色
     xiaozhi_send_msg(SEND_START); // 通知服务器开始录音
+    wss_ble_audio_start();
     msleep(500);
     
     // while (get_time_stamp() < vad_stop_time && is_mic_on()) {

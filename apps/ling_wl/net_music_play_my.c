@@ -318,7 +318,7 @@ static int __stream_music_dec_file(music_player *player)
 
     RingQueue *queue = &player->queue;
 
-    req.dec.dec_type = "mp3";
+    req.dec.dec_type = "opus";
     req.dec.cmd = AUDIO_DEC_OPEN;
     req.dec.volume = player->volume;
     req.dec.output_buf = NULL;

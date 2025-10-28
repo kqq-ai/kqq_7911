@@ -218,7 +218,7 @@ bool xiaozhi_application_loop(){
     }
     
     if(g_curr_time>last_req_time) {
-        last_req_time = g_curr_time + 20000;
+        last_req_time = g_curr_time + 40000;
         wss_mic_start(last_req_time); 
     }
     msleep(10);

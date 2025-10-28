@@ -156,7 +156,7 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
     req.enc.channel = channel;
     req.enc.volume = recorder->gain;
     req.enc.sample_rate = sample_rate;
-    req.enc.format = "opus"; 
+    req.enc.format = "mp3"; 
     req.enc.sample_source = recorder->sample_source;
     req.enc.vfs_ops = &recorder_vfs_ops;
     req.enc.file = (FILE *)recorder;

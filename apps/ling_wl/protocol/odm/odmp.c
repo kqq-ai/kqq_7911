@@ -256,7 +256,7 @@ char *xiaozhi_send_start(){
     cJSON_AddStringToObject(nroot, "type", "listen");
     // cJSON_AddStringToObject(nroot, "state", "start");
     cJSON_AddStringToObject(nroot, "state", "detect");
-    cJSON_AddStringToObject(nroot, "text", "你好呀，小智！");
+    cJSON_AddStringToObject(nroot, "text", "你好呀，小智！讲一个5000字故事");
     cJSON_AddStringToObject(nroot, "mode", "manual");
 
     // 转为字符串
