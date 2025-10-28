@@ -421,7 +421,7 @@ void wss_audio_init()
     uart_send_open_le_audio(g_app_ctx->mac);
 #endif
 
-    wss_app_recorder_en(DISABLE);
+    wss_app_recorder_en(ENABLE);
     /* 设置VAD回调，触发音频上传 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
 

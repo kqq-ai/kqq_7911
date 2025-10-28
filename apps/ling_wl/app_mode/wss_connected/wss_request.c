@@ -473,6 +473,13 @@ bool wss_request_loop()
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "VAD state is not voice");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_END);
+        } else if (last_message_received == OR_TTS_BIND) {
+            g_mode_state = STATE_TTS_BIND;
+            set_led_tts_bind();
+            wss_request_print_state(g_mode_state, "receive TTS_BIND");
+            last_message_received = 0;
+            wss_mic_stop(0); // 停止录音
+            turn_on_Pi(g_edev_target_sn);
         }
         wss_application_vailed();
         break;

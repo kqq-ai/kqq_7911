@@ -13,8 +13,8 @@ void do_shutdown();
 
 // #define C_SPEAKLER//不用E播放，用C播放，即使没有设备也可以按键触发小智对话
 
-// #define SERVER_DOMAIN  "test.coolqq.com"
-#define SERVER_DOMAIN  "pre.coolqq.com"
+#define SERVER_DOMAIN  "test.coolqq.com"
+// #define SERVER_DOMAIN  "pre.coolqq.com"
 // #define SERVER_DOMAIN  "coolqq.com"
 
 #define PRINT_RSSI_LOG 0 // 是否打印RSSI日志
