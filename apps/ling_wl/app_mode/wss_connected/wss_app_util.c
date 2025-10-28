@@ -124,12 +124,15 @@ bool wss_connect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
-    wss_url = get_wss_connection_url();
-    if (wss_url == NULL) {
-        log_i("get_wss_connection_url failed wss_url=NULL");
-        os_mutex_post(&g_wss_mutex);
-        return false;
-    }
+    // wss_url = get_wss_connection_url();
+    // if (wss_url == NULL) {
+    //     log_i("get_wss_connection_url failed wss_url=NULL");
+    //     os_mutex_post(&g_wss_mutex);
+    //     return false;
+    // }
+    // wss_url= "wss://2662r3426b.vicp.fun/xiaozhi/v1/?device-id=4C%3A45%3AD3%3AED%3ADF%3AF9&client-id=7105db73-9429-48a1-b6b3-4fb03f5e85af";
+    wss_url="ws://192.168.50.108:4321";
+    
     context->websockets_info = wss_server_connect(wss_url);
     if (context->websockets_info == NULL) {
         log_i("wss_server_connect failed websockets_info=NULL");
@@ -202,20 +205,20 @@ int send_audio_status(int type, int event)
 
     char *send_data = odmp_audio_status(sn_c_id, type, event);
 
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("Error %s %d.", __FILE__, __LINE__);
+    // if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+    //     log_e("Error %s %d.", __FILE__, __LINE__);
 
-        free(send_data);
+    //     free(send_data);
         
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
-        wss_exception_exit();
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    log_i("wbs send msg : %s", send_data);
+    //     if (ctx->websockets_info != NULL) {
+    //         wss_server_disconnect(ctx->websockets_info);
+    //         ctx->websockets_info = NULL;
+    //     }
+    //     wss_exception_exit();
+    //     os_mutex_post(&g_wss_mutex);
+    //     return -1;
+    // }
+    // log_i("wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -233,20 +236,20 @@ int send_audio_format(int type)
 
     char *send_data = odmp_set_audio_format(sn_c_id, type);
 
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("Error %s %d.", __FILE__, __LINE__);
+    // if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+    //     log_e("Error %s %d.", __FILE__, __LINE__);
 
-        free(send_data);
+    //     free(send_data);
         
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
-        wss_exception_exit();
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    log_i("wbs send msg : %s", send_data);
+    //     if (ctx->websockets_info != NULL) {
+    //         wss_server_disconnect(ctx->websockets_info);
+    //         ctx->websockets_info = NULL;
+    //     }
+    //     wss_exception_exit();
+    //     os_mutex_post(&g_wss_mutex);
+    //     return -1;
+    // }
+    // log_i("wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -268,6 +271,34 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     char *send_data = odmp_req_message(target_sn_set, target_sn_count, sn_c_id, send_id, is_play, event_type);
     log_i("wbs send msg : %s", send_data);
 
+    // if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+    //     log_e("Error %s %d.", __FILE__, __LINE__);
+
+    //     free(send_data);
+
+    //     if (ctx->websockets_info != NULL) {
+    //         wss_server_disconnect(ctx->websockets_info);
+    //         ctx->websockets_info = NULL;
+    //     }
+    //     wss_exception_exit();
+    //     os_mutex_post(&g_wss_mutex);
+    //     return -1;
+    // }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+int xiaozhi_send_msg(int type){
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    char *send_data = xiaozhi_req_msg(type);
+    log_i("wbs send msg : %s", send_data);
+
     if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("Error %s %d.", __FILE__, __LINE__);
 
@@ -285,6 +316,14 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     os_mutex_post(&g_wss_mutex);
     return 0;
 }
+void log_hex(const char *tag, const uint8_t *data, size_t len) {
+        char hex_str[len * 3 + 1]; // "FF " 为3字符
+        for (size_t i = 0; i < len; i++) {
+            sprintf(&hex_str[i * 3], "%02X ", data[i]);
+        }
+        hex_str[len * 3] = '\0';
+        log_i("%s: [%d] %s", tag, len, hex_str);
+}
 
 int send_bin_data(uint8_t *data, uint32_t len)
 {
@@ -295,7 +334,9 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    
+    // 调用
+    log_hex("wbs send data", (uint8_t *)data, len);
     if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
         log_e("Error %s %d.", __FILE__, __LINE__);
         

@@ -76,6 +76,9 @@ inline const char *odmp_rmet_to_text(int req_message_event_type) {
     return odmp_rmet_str[req_message_event_type];
 }
 
+char *xiaozhi_session_id = NULL;
+
+
 /**
  * @name    generate_uuid
  * @brief   生成UUID字符串
@@ -170,6 +173,24 @@ char *odmp_req_message(const char **targets, int targets_num, const char *c_id, 
     }
     return json_str;
 }
+char *xiaozhi_req_msg(int type){
+    if(type==1){
+        log_i("xiaozhi_send_msg type=1");
+        return xiaozhi_send_hello();
+    }
+    else if(type==2){
+        log_i("xiaozhi_send_msg type=2");
+        return xiaozhi_send_start();
+        // return odmp_audio_status(sn_c_id, OAST_TTS, OASE_START);
+    }
+    else if(type==3){
+        log_i("xiaozhi_send_msg type=3");
+        return xiaozhi_send_stop();
+    }
+    else{
+        return xiaozhi_send_hello();
+    }
+}
 
 char *odmp_audio_status(const char *c_id, int type, int event)
 {
@@ -198,7 +219,7 @@ char *odmp_audio_status(const char *c_id, int type, int event)
 
     if (type == OAST_ASR) {
         cJSON *naudio_params = cJSON_CreateObject();
-        cJSON_AddStringToObject(naudio_params, "format", "mp3");
+        cJSON_AddStringToObject(naudio_params, "format", "opus");
         cJSON_AddNumberToObject(naudio_params, "sample_rate", 16000);
         cJSON_AddItemToObject(nroot_data, "audio_params", naudio_params);
     }
@@ -211,6 +232,115 @@ char *odmp_audio_status(const char *c_id, int type, int event)
 
     return json_str;
 }
+//服务器直接输出语音
+/*
+{"type":"listen","mode":"manual","state":"detect","text":"123"}
+ */
+char *xiaozhi_send_start(){
+    /*
+    {
+    "session_id": "<会话ID>",
+    "type": "listen",
+    "state": "start",
+    "mode": "manual"
+    }
+    */
+
+    cJSON *nroot = cJSON_CreateObject();
+    if (nroot == NULL) {
+        return NULL;
+    }
+
+    // 添加字段
+    cJSON_AddStringToObject(nroot, "session_id", xiaozhi_session_id);
+    cJSON_AddStringToObject(nroot, "type", "listen");
+    // cJSON_AddStringToObject(nroot, "state", "start");
+    cJSON_AddStringToObject(nroot, "state", "detect");
+    cJSON_AddStringToObject(nroot, "text", "你好呀，小智！");
+    cJSON_AddStringToObject(nroot, "mode", "manual");
+
+    // 转为字符串
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    cJSON_Delete(nroot);
+    return json_str;
+    }
+char *xiaozhi_send_stop(){
+    /*
+    {
+    "session_id": "<会话ID>",
+    "type": "listen",
+    "state": "stop"
+    }
+    */
+
+    cJSON *nroot = cJSON_CreateObject();
+    if (nroot == NULL) {
+        return NULL;
+    }
+
+    // 添加字段
+    cJSON_AddStringToObject(nroot, "session_id", xiaozhi_session_id);
+    cJSON_AddStringToObject(nroot, "type", "listen");
+    cJSON_AddStringToObject(nroot, "state", "stop");
+    // cJSON_AddStringToObject(nroot, "mode", "manual");
+
+    // 转为字符串
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    cJSON_Delete(nroot);
+    return json_str;
+}
+char *xiaozhi_send_hello()
+{
+    /*
+    {
+        "type": "hello",
+        "version": 1,
+        "transport": "websocket",
+        "features": {
+            "mcp": true
+        },
+        "audio_params": {
+            "format": "opus",
+            "sample_rate": 16000,
+            "channels": 1,
+            "frame_duration": 60
+        }
+    }
+    */
+
+    cJSON *nroot = cJSON_CreateObject();
+    if (nroot == NULL) {
+        return NULL;
+    }
+
+    cJSON_AddStringToObject(nroot, "type", "hello");
+    cJSON_AddNumberToObject(nroot, "version", 1);
+    cJSON_AddStringToObject(nroot, "transport", "websocket");
+
+    cJSON *nfeatures = cJSON_CreateObject();
+    if (nfeatures == NULL) {
+        cJSON_Delete(nroot);
+        return NULL;
+    }
+    cJSON_AddBoolToObject(nfeatures, "mcp", false);
+    cJSON_AddItemToObject(nroot, "features", nfeatures);
+
+    cJSON *naudio_params = cJSON_CreateObject();
+    if (naudio_params == NULL) {
+        cJSON_Delete(nroot);
+        return NULL;
+    }
+    cJSON_AddStringToObject(naudio_params, "format", "opus");
+    cJSON_AddNumberToObject(naudio_params, "sample_rate", 16000);
+    cJSON_AddNumberToObject(naudio_params, "channels", 1);
+    cJSON_AddNumberToObject(naudio_params, "frame_duration", 60);
+    cJSON_AddItemToObject(nroot, "audio_params", naudio_params);
+
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    cJSON_Delete(nroot);
+    return json_str;
+}
+
 char *odmp_set_audio_format(const char *c_id, int type)
 {
     /*
@@ -567,6 +697,38 @@ error_ret:
     }
     return;
 }
+
+void xiaozhi_rsp_handler(u8 *buf, u32 len)
+{
+    odmp_package_t pkg;
+    memset(&pkg, 0, sizeof(odmp_package_t));
+
+    const cJSON *nroot = cjson_parse(buf);
+    if (nroot == NULL) {
+        goto error_ret;
+    }
+    if(cjson_get_string_value(nroot, "errno")) {
+         *xiaozhi_session_id = cjson_get_string_value(nroot, "session_id");
+         log_i("odmp_rsp_handler:session_id=%s", xiaozhi_session_id ? xiaozhi_session_id : "NULL");
+    }
+
+    
+   
+    
+    // pkg.debug  = cjson_get_string_value(nroot, "debug");
+    if (pkg.event == NULL) {
+        goto error_ret;
+    }
+    
+
+error_ret:
+    if (nroot != NULL) {
+        cJSON_Delete(nroot);
+        nroot = NULL;
+    }
+    return;
+}
+
 
 void odmp_audio_data_handler(u8 *buf, u32 len) 
 {

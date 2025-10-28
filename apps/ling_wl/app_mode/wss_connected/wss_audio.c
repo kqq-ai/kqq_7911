@@ -54,7 +54,7 @@ static int g_recording_upload = false;
 /*=================================================================================================
  * Audio enc app context
  *=================================================================================================*/
-#define ASR_DATA_CHUNK_SIZE 144
+#define ASR_DATA_CHUNK_SIZE 48
 typedef struct {
     u8 data[ASR_DATA_CHUNK_SIZE];
 } AsrData;
@@ -195,6 +195,7 @@ static void recorder_data_to_data_queue(void *priv, void *data, u32 size)
 
 static void recorder_data_to_ringbuffer(void *priv, void *data, u32 size)
 {
+    // log_i("recorder_data_to_ringbuffer size=%d", size);
     ASSERT(size == ASR_DATA_CHUNK_SIZE);
 
     AsrData *asr_data = (AsrData *)data;
@@ -243,6 +244,7 @@ static void start_audio_upload(void *priv)
         if (g_recording == false || g_recording_upload == false) { /* VAD结束 */
             g_recording_upload = false;
             wss_app_recorder_data_upstream(NULL);
+            xiaozhi_send_msg(SEND_STOP); 
             set_led_idle();
             if (g_recording == false){
                 log_i("Stop VAD because VAD END.");
@@ -277,17 +279,21 @@ void wait_vad_task(void *priv)
     my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
     set_led_mic_on(); // 开启录音时灯光变橙色
+    xiaozhi_send_msg(SEND_START); // 通知服务器开始录音
     msleep(500);
-
-    while (get_time_stamp() < vad_stop_time && is_mic_on()) {
-        msleep(10);
-        if (g_recording == true) {
-            threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
-            return;
-        }
-    }
+    
+    // while (get_time_stamp() < vad_stop_time && is_mic_on()) {
+    //     msleep(10);
+    //     if (g_recording == true) {
+    //         // return; 
+    //         threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
+    //         return;
+    //     }
+    // }
+    
     set_led_idle();
     wss_app_recorder_data_upstream(NULL);
+    // xiaozhi_send_msg(SEND_STOP); // 通知服务器停止录音
     if (get_time_stamp() < vad_stop_time) {
         log_i("Stop VAD timeout at %d.", get_time_stamp());
     } else {

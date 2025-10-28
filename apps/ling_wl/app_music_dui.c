@@ -559,7 +559,7 @@ static int local_music_dec_play_pause(u8 notify)
 #ifdef CONFIG_DEC_ANALOG_VOLUME_ENABLE
     r.dec.attr = AUDIO_ATTR_FADE_INOUT;
 #endif
-    r.dec.cmd = AUDIO_DEC_PP;
+    r.cmd = AUDIO_DEC_PP;
     server_request(__this->dec_server, AUDIO_REQ_DEC, &r);
 
     return 0;

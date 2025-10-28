@@ -233,7 +233,7 @@ static int open_audio_dec(void)
     req.dec.priority        = 1;
     req.dec.vfs_ops         = &payment_audio_vfs_ops;
     req.dec.file            = (FILE *)&hdl;
-    req.dec.dec_type		= "mp3";
+    req.dec.dec_type		= "opus";
 #if defined CONFIG_AUDIO_DEC_PLAY_SOURCE
     req.dec.sample_source   = CONFIG_AUDIO_DEC_PLAY_SOURCE;
 #else

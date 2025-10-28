@@ -57,10 +57,10 @@ static int wss_connected_unint(void)
 void app_wss_connected_mode(void)
 {
     wss_connected_init();//application init 和blk RSSI测距 
-    
+    wss_ble_audio_start();
     while (1) {
         // 应用代码
-        if (wss_application_loop()) {
+        if (xiaozhi_application_loop()) {
             set_led_connect_error();// WSS ERROR
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);

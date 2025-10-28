@@ -152,7 +152,10 @@ const char *odmp_rmet_to_text(int req_message_event_type);
 
 char *odmp_req_message(const char **targets, int targets_num, const char *c_id, const char *send_id, bool is_play, int ormet);
 char *odmp_audio_status(const char *c_id, int oast, int oase);
-
+char *xiaozhi_send_hello();
+char *xiaozhi_send_start();
+char *xiaozhi_send_stop();
+char *xiaozhi_req_msg(int type);
 char *odmp_set_audio_format(const char *c_id, int type);
 
 char *odmp_req_message_initial_setup(const char **targets, int targets_num, const char *c_id, const char *send_id);
@@ -183,6 +186,7 @@ void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);
 void odmp_register_disconnect_cbk(g_odmp_disconnect_cbk_t odmp_disconnect_cbk);
 
 void odmp_rsp_handler(u8 *buf, u32 len);
+void xiaozhi_rsp_handler(u8 *buf, u32 len);
 void odmp_audio_data_handler(u8 *buf, u32 len);
 void odmp_disconnect_handler(void);
 

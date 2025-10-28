@@ -25,8 +25,8 @@ struct logbuf {
 #endif
 
 #ifdef CONFIG_RELEASE_ENABLE
-#undef __LOG_LEVEL
-#define __LOG_LEVEL 0xff
+// #undef __LOG_LEVEL
+// #define __LOG_LEVEL 0xff
 #endif
 
 #if __LOG_LEVEL > __LOG_VERB
