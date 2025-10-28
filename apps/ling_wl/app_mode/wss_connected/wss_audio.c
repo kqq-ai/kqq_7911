@@ -64,7 +64,7 @@ static AsrData asr_data_frame;
 static MyBlockingQueue g_asr_data_queue; // MyBlockingQueue<AsrData>
 static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 
-#define MY_ASR_RING_BUFFER_CAPACITY 20
+#define MY_ASR_RING_BUFFER_CAPACITY 10
 static MyRingBuffer g_asr_ringbuffer;    // MyRingBuffer<AsrData>
 static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)];
 
@@ -283,8 +283,10 @@ void wait_vad_task(void *priv)
     while (get_time_stamp() < vad_stop_time && is_mic_on()) {
         msleep(10);
         if (g_recording == true) {
-            threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
-            return;
+            start_audio_upload(NULL);
+            my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
+            wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
+            set_led_mic_on(); // 开启录音时灯光变橙色
         }
     }
     set_led_idle();
@@ -419,7 +421,7 @@ void wss_audio_init()
     uart_send_open_le_audio(g_app_ctx->mac);
 #endif
 
-    wss_app_recorder_en(ENABLE);
+    wss_app_recorder_en(DISABLE);
     /* 设置VAD回调，触发音频上传 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
 
