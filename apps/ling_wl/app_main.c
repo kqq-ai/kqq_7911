@@ -198,9 +198,5 @@ void app_main()
     it.action = ACTION_LING_WL_MAIN;
     start_app(&it);
 
-#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
-    extern void bt_ble_module_init(void);
-    bt_ble_module_init();
-#endif
 }
 

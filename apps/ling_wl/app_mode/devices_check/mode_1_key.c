@@ -7,7 +7,7 @@ static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
 static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
 
 // 模式1 触摸按键检测相关变量
-static u8 g_mode1_touch_enabled = 0;    // 模式1 触摸检测是否已启用
+static u8 g_mode1_touch_enabled = 1;    // 模式1 触摸检测是否已启用
 static u32 g_mode1_touch_start_time = 0; // 触摸开始时间（保留兼容性）
 static u8 g_mode1_touch_active = 0;     // 触摸是否正在激活 (0=绿灯, 1=红灯)
 static u8 t_key_playing = 0;            // 模式1：t_key.mp3 播放标志
