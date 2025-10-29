@@ -27,13 +27,15 @@ static OS_MUTEX g_audio_mutex;
 
 static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
 static void set_led_asr_upload(void)    { uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
-static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
+static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
 
 /*=================================================================================================
  * Vad timer
  *=================================================================================================*/
 u32 vad_start_time = 0;
 u32 vad_stop_time = 0;
+uint32_t total_written = 0;
+u32 audio_req_time = 0;
 
 u32 get_time_stamp() {
     return timer_get_ms();
@@ -115,9 +117,7 @@ bool is_mic_on() {
 void wss_mic_stop(bool need_upload) {
     os_mutex_pend(&g_audio_mutex, 0);
     wss_app_recorder_data_upstream(NULL);
-    if (need_upload) {
-        g_recording_upload = false; // 停止上传
-    }
+    g_recording_upload = false; // 停止上传
     wss_app_recorder_en(DISABLE);
     os_mutex_post(&g_audio_mutex);
 }
@@ -143,7 +143,7 @@ void set_Pi_volume(int volume) {
 // 获取当前音频播放状态
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    bool playing = g_audio_playing || g_audio_play_ongoing;
+    bool playing = g_audio_playing || (g_audio_play_ongoing && total_written + 1000 > get_time_stamp()-audio_req_time);
     os_mutex_post(&g_audio_mutex);
     return playing;
 }
@@ -231,9 +231,6 @@ static void wss_asr_data_to_server(AsrData *asr_data)
 static void start_audio_upload(void *priv)
 {
     log_i("[AUDIO]Start audio upload.");
-    if (send_audio_status(OAST_ASR, OASE_START) == -1) {
-        return;
-    }
     set_led_asr_upload(); /* 音频上传时灯光变绿色 */
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
@@ -288,6 +285,9 @@ void wait_vad_task(void *priv)
     while (get_time_stamp() < vad_stop_time && is_mic_on()) {
         msleep(10);
         if (g_recording == true) {
+            if (send_audio_status(OAST_ASR, OASE_START) == -1) {
+                break;
+            }
             start_audio_upload(NULL);
             my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
             wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
@@ -314,7 +314,6 @@ void wait_vad_task(void *priv)
  * @param len  音频数据长度
  * @return 总是返回0（可根据需要返回写入状态）
  */
-    uint32_t total_written = 0;
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
@@ -330,6 +329,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");
         total_written = 0;
+        audio_req_time = get_time_stamp();
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
     }
     

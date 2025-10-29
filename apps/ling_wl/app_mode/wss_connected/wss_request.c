@@ -28,7 +28,7 @@
 
 static u32 g_curr_time = 0;
 static u32 g_turnon_timer = 0;
-#define WSS_TIMEOUT 5000
+#define WSS_TIMEOUT 10000
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
@@ -319,10 +319,13 @@ void wss_request_stop()
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
         turn_off_Pi();
+        wss_ble_audio_stop();
         g_mode_state = STATE_IDLE;
         wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
     } else if (g_mode_state == STATE_TTS_BIND) {
         send_message = ORMET_SWITCH_FAILED;
+    } else {
+        wss_mic_stop(0);
     }
     g_edev_target_sn[0] = 0; // 清除目标设备
 
@@ -455,6 +458,7 @@ bool wss_request_loop()
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "receive AUDIO ABNORMAL");
             turn_off_Pi();
+            wss_ble_audio_stop();
             last_message_received = 0;
             last_event = 0;
             set_led_red_error();
@@ -501,6 +505,7 @@ bool wss_request_loop()
                 g_mode_state = STATE_IDLE;
                 wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
                 turn_off_Pi();
+                wss_ble_audio_stop();
                 wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
                 wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
                 wss_mic_start(get_time_stamp() + 600000); // 开始录音
