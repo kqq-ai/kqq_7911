@@ -70,7 +70,7 @@ void edev_working(){
 }
 
 void turn_off_Pi() {
-    wss_ble_audio_stop();
+    // wss_ble_audio_stop();
 #ifdef C_SPEAKLER
     return;
 #endif
@@ -441,6 +441,9 @@ bool wss_request_loop()
 
     case STATE_DOWNLOAD:
         // 下载结束，继续播放
+        if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_SENTENCE_START){
+            edev_working();
+        }
         if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_END){
             g_mode_state = STATE_PLAYING;
             wss_request_print_state(g_mode_state, "receive AUDIO END");
@@ -492,17 +495,18 @@ bool wss_request_loop()
             turn_off_Pi();
             last_message_received = 0;
             last_event = 0;
-        }
+        } else if (g_curr_time - g_turnon_timer > 1000) {
         // 播放结束，打开麦克风
-        if (!is_audio_playing()) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
-            turn_off_Pi();
-            wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
-            wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-            wss_mic_start(get_time_stamp() + 600000); // 开始录音
-            last_message_received = 0;
-            last_event = 0;
+            if (!is_audio_playing()) {
+                g_mode_state = STATE_IDLE;
+                wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
+                turn_off_Pi();
+                wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
+                wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
+                wss_mic_start(get_time_stamp() + 600000); // 开始录音
+                last_message_received = 0;
+                last_event = 0;
+            }
         }
         wss_application_vailed();
         break;

@@ -160,11 +160,10 @@ void update_edev_time(char* sn)
 //=================================================================================================
 static void device_event_handler_cb(lwl_event_t *e)
 {
-    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-    assert(p_eend_dev != NULL);
-
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE:
+        lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+        assert(p_eend_dev != NULL);
         if (p_eend_dev->distance_info.rssi_sample_count == 0) break;
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
@@ -245,12 +244,12 @@ lwl_eend_dev_t *wss_device_call()
 {
     g_curr_time = timer_get_ms();
 #ifdef C_SPEAKLER
-    char* pdev = "KPCNC5J26AEEGJ8";//小智
+    char* pdev = "KPCNC5J26SEEGF0";//小智
 #else
     lwl_eend_dev_t *pdev = get_edev();
 #endif
     if (pdev) {
-        edev_last = pdev;
+        // edev_last = pdev;
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         set_led_device_call();
         last_dequeue_time = g_curr_time;

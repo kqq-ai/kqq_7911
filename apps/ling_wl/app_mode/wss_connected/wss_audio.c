@@ -143,7 +143,7 @@ void set_Pi_volume(int volume) {
 // 获取当前音频播放状态
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
-    bool playing = g_audio_playing;
+    bool playing = g_audio_playing || g_audio_play_ongoing;
     os_mutex_post(&g_audio_mutex);
     return playing;
 }
