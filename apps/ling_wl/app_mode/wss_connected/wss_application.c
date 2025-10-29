@@ -99,16 +99,16 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("[wss_application]APPLICATION SHORT_CLICK");
         wss_application_touch_key();
-        multi_play_mode = !multi_play_mode;
-        log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
+        // multi_play_mode = !multi_play_mode;
+        // log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
-            set_led_on_touch();
+            // set_led_on_touch();
         } else {
             log_i("[wss_application]Touch key released");
-            set_led_idle();
+            // set_led_idle();
         }
         // wss_application_touch_key();
         break;
