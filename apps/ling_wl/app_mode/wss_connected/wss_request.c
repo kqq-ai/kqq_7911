@@ -508,7 +508,7 @@ bool wss_request_loop()
                 wss_ble_audio_stop();
                 wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
                 wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-                wss_mic_start(get_time_stamp() + 600000); // 开始录音
+                // wss_mic_start(get_time_stamp() + 600000); // 开始录音
                 last_message_received = 0;
                 last_event = 0;
             }

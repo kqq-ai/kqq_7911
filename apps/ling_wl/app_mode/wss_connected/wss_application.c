@@ -99,8 +99,8 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("[wss_application]APPLICATION SHORT_CLICK");
         wss_application_touch_key();
-        // multi_play_mode = !multi_play_mode;
-        // log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
+        multi_play_mode = !multi_play_mode;
+        log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
@@ -223,13 +223,13 @@ bool wss_application_loop()
     }
 
     if (wss_request_loop()) {
-        if (wss_device_is_calling() && !multi_play_mode) {
-            // 多次唤醒模式下，持续检测设备呼叫状态
-        } else {
-            if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-                wss_device_loop();
-            }
-        }
+        // if (wss_device_is_calling() && !multi_play_mode) {
+        //     // 多次唤醒模式下，持续检测设备呼叫状态
+        // } else {
+        //     if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
+        //         wss_device_loop();
+        //     }
+        // }
     }
 
     // 状态机处理
@@ -261,7 +261,7 @@ bool wss_application_loop()
             g_device_state = DEVICE_IDLE;
             set_led_idle();
             wss_request_stop(); // 按键打断对话
-            wss_mic_start(get_time_stamp() + 60000); // 开始录音
+            // wss_mic_start(get_time_stamp() + 60000); // 开始录音
             last_req_time = g_curr_time;
             wss_application_print_state(g_device_state, "touch key down");
         } else if (!is_audio_playing()) {

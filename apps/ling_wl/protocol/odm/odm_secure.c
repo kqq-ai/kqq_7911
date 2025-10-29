@@ -410,7 +410,7 @@ char *get_wss_connection_url()
     if (!get_SN(sn_c_id)) return NULL;
     char * url_api = (char *)malloc(BUF_SIZE);
 #if TEST_LOCOL_MODE
-    char* ip_port = https_get_test_ip_port(TEST_IP_GET);
+    char* ip_port = "192.168.50.71:8867";
     snprintf(server_url, BUF_SIZE, TEST_SERVER_API, "http", ip_port);
     char * Token = prepare_signature(server_url);
     if (Token) snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port, sn_c_id,  Token);

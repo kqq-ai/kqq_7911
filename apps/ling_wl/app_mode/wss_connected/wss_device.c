@@ -250,7 +250,7 @@ lwl_eend_dev_t *wss_device_call()
 #endif
     if (pdev) {
         // edev_last = pdev;
-        wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
+        wss_request_send_event(pdev, ORMET_BUTTON_PRESS);
         set_led_device_call();
         last_dequeue_time = g_curr_time;
         return pdev;
