@@ -382,8 +382,8 @@ bool wss_request_loop()
             last_message_received = 0;
             last_event = 0;
         }
-        // VAD信号响应，进入上传
-        if (is_voice_availble()) {
+        // 音频上传开始
+        if (is_recording_uploading()) {
             g_mode_state = STATE_UPLOAD;
             wss_request_print_state(g_mode_state, "Vioce On");
         }
@@ -468,8 +468,8 @@ bool wss_request_loop()
         break;
 
     case STATE_UPLOAD:
-        // VAD信号结束，回到TTS_BIND
-        if (!is_voice_availble()) {
+        // 音频上传结束，回到TTS_BIND
+        if (!is_recording_uploading()) {
             g_mode_state = STATE_IDLE;
             wss_request_print_state(g_mode_state, "VAD state is not voice");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_END);

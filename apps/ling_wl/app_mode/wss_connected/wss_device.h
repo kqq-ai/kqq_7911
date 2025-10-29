@@ -7,6 +7,6 @@
 void wss_device_init();
 void wss_device_uninit();
 lwl_eend_dev_t * wss_device_loop();
-bool wss_device_call();
+lwl_eend_dev_t * wss_device_call();
 
 #endif

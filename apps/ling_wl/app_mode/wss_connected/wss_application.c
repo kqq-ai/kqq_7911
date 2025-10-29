@@ -37,6 +37,7 @@ static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
 
 static int g_audio_playing = false;
+static bool multi_play_mode = false;
 
 /* Task state */
 typedef enum {
@@ -75,7 +76,6 @@ static int g_touch_key_exit = false;
 static void wss_application_touch_key()
 {
     g_touch_key_exit = true;
-    set_led_on_touch();
     wss_application_vailed();
 }
 
@@ -83,9 +83,6 @@ static void wss_application_touch_key()
 bool wss_application_check_touch_key()
 {
     bool rst = g_touch_key_exit;
-    if (g_touch_key_exit) {
-        set_led_on_touch();
-    }
     g_touch_key_exit = false;
     return rst;
 }
@@ -102,12 +99,16 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("[wss_application]APPLICATION SHORT_CLICK");
         wss_application_touch_key();
+        multi_play_mode = !multi_play_mode;
+        log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
+            set_led_on_touch();
         } else {
             log_i("[wss_application]Touch key released");
+            set_led_idle();
         }
         // wss_application_touch_key();
         break;
@@ -178,6 +179,8 @@ void wss_application_init()
     wss_device_init();//设备初始化，包含设备队列等
     wss_mic_stop(0); // 停止录音
 
+    multi_play_mode = false;
+
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
         pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
@@ -220,8 +223,12 @@ bool wss_application_loop()
     }
 
     if (wss_request_loop()) {
-        if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-            wss_device_loop();
+        if (wss_device_is_calling() && !multi_play_mode) {
+            // 多次唤醒模式下，持续检测设备呼叫状态
+        } else {
+            if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
+                wss_device_loop();
+            }
         }
     }
 
@@ -254,6 +261,7 @@ bool wss_application_loop()
             g_device_state = DEVICE_IDLE;
             set_led_idle();
             wss_request_stop(); // 按键打断对话
+            wss_mic_start(get_time_stamp() + 60000); // 开始录音
             last_req_time = g_curr_time;
             wss_application_print_state(g_device_state, "touch key down");
         } else if (!is_audio_playing()) {

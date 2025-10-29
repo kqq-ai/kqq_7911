@@ -156,40 +156,24 @@ void update_edev_time(char* sn)
 }
 
 //=================================================================================================
-// LWL event callback
+// 处理回调中的E端设备距离事件，把距离在0和1的加入到集合中，距离在2和3的从集合中删除
 //=================================================================================================
 static void device_event_handler_cb(lwl_event_t *e)
 {
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+    assert(p_eend_dev != NULL);
 
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE:
-        log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE");
-        break;
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE:
-        char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-        p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
-        log_i("[MEASDIST] LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE %s: %d\r\n", sn_string, p_eend_dev->distance_info.distance_type);
-        if (!p_eend_dev || p_eend_dev->distance_info.rssi_sample_count == 0) break;
+        if (p_eend_dev->distance_info.rssi_sample_count == 0) break;
         switch (p_eend_dev->distance_info.distance_type) {
         case DISTANCE_0:
-            log_d("[MEASDIST] distance < 2m : do things1 here --- %s\r\n", sn_string);
-            add_edev(p_eend_dev);
-            add_target_sn(p_eend_dev->sn);
-            break;
         case DISTANCE_1:
-            log_d("[MEASDIST] distance > 2m  < 5m do things2 here ---%s\r\n", sn_string);
-            // remove_from_edev_set(p_eend_dev);
             add_edev(p_eend_dev);
             add_target_sn(p_eend_dev->sn);
             break;
         case DISTANCE_2:
-            log_d("[MEASDIST] distance > 5m do things3 here ---%s\r\n", sn_string);
-            remove_edev(p_eend_dev);
-            remove_target_sn(p_eend_dev->sn);
-            break;
         case DISTANCE_3:
-            log_d("[MEASDIST] not found ---%s\r\n", sn_string);
             remove_edev(p_eend_dev);
             remove_target_sn(p_eend_dev->sn);
             break;
@@ -197,12 +181,11 @@ static void device_event_handler_cb(lwl_event_t *e)
             break;
         }
         break;
-    case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
-        log_i("ORMET_NEW_DEVICE_IN");
-        break;
     }
 }
 
+// 初始化WSS设备模块
+// 包括注册事件回调，初始化集合和队列等，开始检测蓝牙设备
 void wss_device_init()
 {
     log_i("Init WSS device\n");
@@ -220,6 +203,8 @@ void wss_device_init()
     edev_last = NULL;
 }
 
+// 反初始化WSS设备模块
+// 包括取消注册事件回调，释放集合和队列等资源，停止检测蓝牙设备
 void wss_device_uninit()
 {
     log_i("Uninit WSS device\n");
@@ -232,6 +217,8 @@ void wss_device_uninit()
     os_mutex_del(&edev_manager_mutex, 1);
 }
 
+// 设备循环处理函数
+// 检测E端设备集合中距离最近的设备，如果距离小于2米，则发送请求事件并返回该设备指针
 lwl_eend_dev_t *wss_device_loop()
 {
     g_curr_time = timer_get_ms();
@@ -253,7 +240,8 @@ lwl_eend_dev_t *wss_device_loop()
     return NULL;
 }
 
-bool wss_device_call()
+// 主动请求最近设备通话
+lwl_eend_dev_t *wss_device_call()
 {
     g_curr_time = timer_get_ms();
 #ifdef C_SPEAKLER
@@ -266,6 +254,14 @@ bool wss_device_call()
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         set_led_device_call();
         last_dequeue_time = g_curr_time;
+        return pdev;
     }
-    return true;
+    return NULL;
+}
+
+// 判断最近唤起的设备是否还在2m内
+bool wss_device_is_calling()
+{
+    if (!edev_last) return false;
+    return edev_last->distance_info.distance < 2.0f;
 }
