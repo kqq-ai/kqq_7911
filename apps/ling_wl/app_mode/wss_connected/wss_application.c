@@ -26,9 +26,9 @@ static void set_led_on_touch(void)     { uart_send_set_led_color(COLOR_PURPLE); 
 static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频播放时灯光变蓝色
 static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }   //空闲时灯光变白色
 
-#define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
-#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
-#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
+#define NO_REQ_TIMEOUT_MS      (8 * 60 * 60 * 1000) // 5分钟
+#define NO_E_TIMEOUT_MS      (8 * 60 * 60 * 1000) // 5分钟
+#define NO_MOVE_TIMEOUT_MS   (8 * 60 * 60 * 1000) // 5分钟
 #define DEV_CALL_TIMEOUT_MS   (1 * 1000) // 1s
 
 static u32 g_curr_time = 0;
@@ -217,65 +217,12 @@ void wss_application_uninit()
 
 bool wss_application_loop()
 {
-    g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
         return true;
     }
 
-    if (wss_request_loop()) {
-        if (wss_device_is_calling() && !multi_play_mode) {
-            // 多次唤醒模式下，持续检测设备呼叫状态
-        } else {
-            if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-                wss_device_loop();
-            }
-        }
-    }
-
-    // 状态机处理
-    switch (g_device_state) {
-    case DEVICE_IDLE:
-        // 在IDLE状态下，检测是否有进入AUDIO的条件（可根据实际业务补充）
-        // 这里只做示例，假设有某事件触发进入AUDIO
-        if (is_audio_playing()) {
-            g_device_state = DEVICE_AUDIO;
-            log_i("[wss_application]STATE: DEVICE_IDLE -> DEVICE_AUDIO");
-            wss_application_print_state(g_device_state, "STEP_TO");
-        } else if (wss_application_check_touch_key()) {
-            if (is_mic_on() || is_request_busy()) {
-                log_i("[wss_application]is_request_busy, wss_mic_stop.");
-                wss_mic_stop(0); // 停止录音
-                wss_request_stop();
-            } else {
-                log_i("[wss_application]wss_device_call.");
-                wss_device_call();
-            }
-            // multi_player_game();
-            // wss_request_stop(); // 按键打断对话
-        }
-        break;
-
-    case DEVICE_AUDIO:
-        // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (wss_application_check_touch_key()) {
-            g_device_state = DEVICE_IDLE;
-            set_led_idle();
-            wss_request_stop(); // 按键打断对话
-            wss_mic_start(get_time_stamp() + 60000); // 开始录音
-            last_req_time = g_curr_time;
-            wss_application_print_state(g_device_state, "touch key down");
-        } else if (!is_audio_playing()) {
-            g_device_state = DEVICE_IDLE;
-            set_led_idle();
-            log_i("[wss_application]STATE: DEVICE_AUDIO -> DEVICE_IDLE");
-            wss_application_print_state(g_device_state, "STEP_TO");
-        } else {
-            set_led_tts_play();
-        }
-        break;
-    }
-
-    msleep(10);
+    msleep(1000);
+    g_curr_time = timer_get_ms();
 
     if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
         dump_all_eend_info();
