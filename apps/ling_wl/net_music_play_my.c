@@ -315,10 +315,8 @@ static int __stream_music_dec_file(music_player *player)
             player->dec_end_cb = NULL;
         }
     }
-
     RingQueue *queue = &player->queue;
-
-    req.dec.dec_type = "opus";
+    req.dec.dec_type = "mp3";
     req.dec.cmd = AUDIO_DEC_OPEN;
     req.dec.volume = player->volume;
     req.dec.output_buf = NULL;
@@ -329,6 +327,18 @@ static int __stream_music_dec_file(music_player *player)
     req.dec.priority = 1;
     req.dec.vfs_ops = &cbuf_audio_dec_vfs_ops; // 使用文件系统的vfs_ops
     req.dec.sample_source = "dac";
+
+    // req.dec.cmd             = AUDIO_DEC_OPEN;
+    // req.dec.volume          = __this->volume;
+    // req.dec.output_buf_len  = 4 * 1024;
+    // req.dec.channel         = 2;
+    // req.dec.sample_rate     = sample_rate;
+    // req.dec.vfs_ops         = &recorder_vfs_ops;
+    // req.dec.dec_type            = format;
+    // req.dec.sample_source   = CONFIG_AUDIO_DEC_PLAY_SOURCE;
+    // req.dec.file            = (FILE *)&__this->save_cbuf;
+
+
 
 #if TCFG_EQ_ENABLE
 #if defined EQ_CORE_V1

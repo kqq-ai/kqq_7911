@@ -283,18 +283,18 @@ void wait_vad_task(void *priv)
     wss_ble_audio_start();
     msleep(500);
     
-    // while (get_time_stamp() < vad_stop_time && is_mic_on()) {
-    //     msleep(10);
-    //     if (g_recording == true) {
-    //         // return; 
-    //         threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
-    //         return;
-    //     }
-    // }
+    while (get_time_stamp() < vad_stop_time && is_mic_on()) {
+        msleep(10);
+        if (g_recording == true) {
+            // return; 
+            threadpool_add_task(g_app_ctx->threadpool, start_audio_upload, NULL);
+            return;
+        }
+    }
     
     set_led_idle();
     wss_app_recorder_data_upstream(NULL);
-    // xiaozhi_send_msg(SEND_STOP); // 通知服务器停止录音
+    xiaozhi_send_msg(SEND_STOP); // 通知服务器停止录音
     if (get_time_stamp() < vad_stop_time) {
         log_i("Stop VAD timeout at %d.", get_time_stamp());
     } else {

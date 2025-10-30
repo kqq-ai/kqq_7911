@@ -150,13 +150,13 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
     } else {
         req.enc.channel_bit_map = BIT(CONFIG_AUDIO_ADC_CHANNEL_L);
     }
-    req.enc.frame_size = 144; //sample_rate / 100 * 4 * channel;	//收集够多少字节PCM数据就回调一次fwrite
+    req.enc.frame_size = 960; //sample_rate / 100 * 4 * channel;	//收集够多少字节PCM数据就回调一次fwrite
     req.enc.output_buf_len = req.enc.frame_size * 3; //底层缓冲buf至少设成3倍frame_size
     req.enc.cmd = AUDIO_ENC_OPEN;
     req.enc.channel = channel;
     req.enc.volume = recorder->gain;
     req.enc.sample_rate = sample_rate;
-    req.enc.format = "mp3"; 
+    req.enc.format = "opus"; 
     req.enc.sample_source = recorder->sample_source;
     req.enc.vfs_ops = &recorder_vfs_ops;
     req.enc.file = (FILE *)recorder;

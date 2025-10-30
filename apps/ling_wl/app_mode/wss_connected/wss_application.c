@@ -21,6 +21,8 @@
 
 #include "../../SC7A20/sc7a20.h"
 
+#include "wss_app_util.h"
+
 #define log_i log_mqtt
 static void set_led_on_touch(void)     { uart_send_set_led_color(COLOR_PURPLE); }    //触摸按键时灯光变紫色
 static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频播放时灯光变蓝色
@@ -34,7 +36,7 @@ static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }   
 static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 1000
 static u32 g_heat_timer = 0;
-static u32 last_req_time = 10000;
+u32 last_req_time = 10000;
 
 static int g_audio_playing = false;
 
@@ -211,15 +213,17 @@ void wss_application_uninit()
     lwl_event_handler_remove(input_event_handler_cb);
 }
 
-bool xiaozhi_application_loop(){
+bool xiaozhi_application_loop(){ 
     g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
         return true;
     }
     
     if(g_curr_time>last_req_time) {
-        last_req_time = g_curr_time + 40000;
-        wss_mic_start(last_req_time); 
+        last_req_time = g_curr_time + 20000000;
+        xiaozhi_send_msg(SEND_START); // 通知服务器开始录音
+        // wss_ble_audio_start();
+        // wss_mic_start(last_req_time); 
     }
     msleep(10);
     

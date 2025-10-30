@@ -5,7 +5,8 @@
 #include "cJSON_common/cJSON.h"
 #include "util/cjson_util.h"
 #include "sys_time.h"
-
+// #include "../../app_mode/wss_connected/wss_application.h"
+extern u32 last_req_time ;
 enum ParseErrorCode {
     PARSE_Success,
     PARSE_Error,
@@ -256,7 +257,7 @@ char *xiaozhi_send_start(){
     cJSON_AddStringToObject(nroot, "type", "listen");
     // cJSON_AddStringToObject(nroot, "state", "start");
     cJSON_AddStringToObject(nroot, "state", "detect");
-    cJSON_AddStringToObject(nroot, "text", "你好呀，小智！讲一个5000字故事");
+    cJSON_AddStringToObject(nroot, "text", "你好呀，小智!");
     cJSON_AddStringToObject(nroot, "mode", "manual");
 
     // 转为字符串
@@ -707,13 +708,23 @@ void xiaozhi_rsp_handler(u8 *buf, u32 len)
     if (nroot == NULL) {
         goto error_ret;
     }
-    if(cjson_get_string_value(nroot, "errno")) {
-         *xiaozhi_session_id = cjson_get_string_value(nroot, "session_id");
-         log_i("odmp_rsp_handler:session_id=%s", xiaozhi_session_id ? xiaozhi_session_id : "NULL");
-    }
-
+    // if(cjson_get_string_value(nroot, "session_id")){
+    //     *xiaozhi_session_id = cjson_get_string_value(nroot, "session_id");
+    //     log_i("odmp_rsp_handler:session_id=%s", xiaozhi_session_id ? xiaozhi_session_id : "NULL");
+    // }
     
-   
+
+
+    // last_req_time
+   if(cjson_get_string_value(nroot, "state")) {
+        char *state = cjson_get_string_value(nroot, "state");
+        log_i("odmp_rsp_handler:state=%s", state ? state : "NULL");
+        if(strcmp(state, "stop") == 0){
+            log_i("set last_req_time to 0");
+            last_req_time= timer_get_ms()+10000;
+        }
+        
+    }
     
     // pkg.debug  = cjson_get_string_value(nroot, "debug");
     if (pkg.event == NULL) {

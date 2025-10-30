@@ -16,7 +16,7 @@
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
-#define LOCAL_VERSION_CODE "v0.0.54" 
+#define LOCAL_VERSION_CODE "v1.0.54" 
 
 
 struct download_hdl {
