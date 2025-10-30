@@ -57,7 +57,7 @@ static int wss_connected_unint(void)
 void app_wss_connected_mode(void)
 {
     wss_connected_init();//application init 和blk RSSI测距 
-    
+    wss_ble_audio_start();
     while (1) {
         // 应用代码
         if (xiaozhi_application_loop()) {
