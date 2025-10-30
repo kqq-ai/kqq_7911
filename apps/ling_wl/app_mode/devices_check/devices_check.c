@@ -203,7 +203,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
-        break;
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
             log_i("Event timestamp: %d ms", timer_get_ms());
