@@ -14,8 +14,10 @@ void wss_ble_audio_stop();
 
 bool is_recording_uploading();
 bool is_mic_on();
-void wss_mic_start(uint timestamp);
-void wss_mic_stop(bool need_upload);
+void wss_mic_start();
+void wss_mic_stop();
+void wss_vad_start(uint timestamp);
+void wss_vad_stop();
 
 void set_Pi_volume(int volume);
 

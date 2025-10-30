@@ -347,6 +347,7 @@ int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void
     if (dev->op_state & BDO_STATE_TURNNING_OFF)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_OFF;
+    dev->set_ctrl(dev, 0, 0);
 
     ble_dev_op_t op;
     op.op_type = BDPDOT_TURNOFF;
