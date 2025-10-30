@@ -4,19 +4,11 @@
 
 // 使用系统预定义的颜色常量
 static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
-static void set_led_cyan(void)       { uart_send_set_led_color(COLOR_CYAN); }
-static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }
-static void set_led_black(void)      { uart_send_set_led_color(COLOR_BLACK); }
-static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
-static void set_led_pink(void)       { uart_send_set_led_color(COLOR_PINK); }
-static void set_led_purple(void)     { uart_send_set_led_color(COLOR_PURPLE); }
-static void set_led_dark_yellow(void){ uart_send_set_led_color(COLOR_DARK_YELLOW); }
-static void set_led_dark_blue(void)  { uart_send_set_led_color(COLOR_DARK_BLUE); }
-static void set_led_maroon(void)     { uart_send_set_led_color(COLOR_MAROON); }
-static void set_led_brown(void)      { uart_send_set_led_color(COLOR_BROWN); }
-static void set_led_gray(void)       { uart_send_set_led_color(COLOR_GRAY); }
+static void set_led_green(void)      { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_blue(void)       { uart_send_set_led_color(COLOR_GREEN); }
+static void set_led_white(void)      { uart_send_set_led_color(COLOR_BLACK); }
+static void set_led_orange(void)     { uart_send_set_led_color(COLOR_WHITE); }
+static void set_led_purple(void)     { uart_send_set_led_color(COLOR_ORANGE); }
 
 
 static u32 g_mode_timer = 0;

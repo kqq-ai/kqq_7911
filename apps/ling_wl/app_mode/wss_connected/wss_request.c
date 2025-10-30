@@ -35,8 +35,8 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
-static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
-static void set_led_tts_bind(void)      { uart_send_set_led_color(COLOR_ORANGE); }   //TTS_BIND时灯光变黄色
+static void set_led_red_error(void)        {}// uart_send_set_led_color(COLOR_RED); } //red~ low power
+static void set_led_tts_bind(void)      {}// uart_send_set_led_color(COLOR_ORANGE); }   //TTS_BIND时灯光变黄色
 
 /*=================================================================================================
  * Audio dec app context

@@ -22,9 +22,10 @@
 #include "../../SC7A20/sc7a20.h"
 
 #define log_i log_mqtt
-static void set_led_on_touch(void)     { uart_send_set_led_color(COLOR_PURPLE); }    //触摸按键时灯光变紫色
-static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频播放时灯光变蓝色
-static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }   //空闲时灯光变白色
+static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_WHITE); }    //触摸按键时灯光变黄色
+static void set_led_on_normal_key(void) { uart_send_set_led_color(COLOR_GREEN); }    //触摸按键时灯光变蓝色
+static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_GREEN); }    //音频播放时灯光变蓝色
+static void set_led_idle(void)          { uart_send_set_led_color(COLOR_BLACK); }   //空闲时灯光变白色
 
 #define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
@@ -98,17 +99,18 @@ static void input_event_handler_cb(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         log_i("[wss_application]APPLICATION SHORT_CLICK");
-        wss_application_touch_key();
+        set_led_on_normal_key();
         // multi_play_mode = !multi_play_mode;
         // log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
-            // set_led_on_touch();
+            wss_application_touch_key();
+            set_led_on_touch();
         } else {
             log_i("[wss_application]Touch key released");
-            // set_led_idle();
+            set_led_idle();
         }
         // wss_application_touch_key();
         break;
@@ -259,7 +261,6 @@ bool wss_application_loop()
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
         if (wss_application_check_touch_key()) {
             g_device_state = DEVICE_IDLE;
-            set_led_idle();
             wss_request_stop(); // 按键打断对话
             wss_mic_start(get_time_stamp() + 60000); // 开始录音
             last_req_time = g_curr_time;

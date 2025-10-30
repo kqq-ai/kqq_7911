@@ -28,7 +28,7 @@
 static u32 g_curr_time = 0;
 static u32 last_dequeue_time = 0;
 #define TTS_BIND_TIMEOUT_MS   (1 * 1000) // 1s
-static void set_led_device_call(void)    { uart_send_set_led_color(COLOR_GREEN); }   //请求音频灯光变绿色
+static void set_led_device_call(void)    {}// uart_send_set_led_color(COLOR_GREEN); }   //请求音频灯光变绿色
 
 // #define log_d log_i // Debug log macro
 
