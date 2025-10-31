@@ -156,7 +156,7 @@ void wss_vad_start(uint timestamp) {
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
     g_recording_upload = true;
-    vad_stop_time = timestamp; // 设置VAD超时时间
+    vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
     if (vad_start_time == 0) {
         vad_start_time = get_time_stamp();
         threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
@@ -184,9 +184,11 @@ bool is_audio_playing(){
 // 停止蓝牙音频播放，并发送异常状态给服务器
 void wss_ble_audio_stop() {
     os_mutex_pend(&g_audio_mutex, 0);
+    g_audio_off = true;
+    odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
+        log_i("[AUDIO]wss_ble_audio_stop: send AUDIO ABNORMAL");
         send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
-        g_audio_off = true;
         g_audio_play_ongoing = false; // 停止音频播放
         app_music_play_stop(g_app_ctx->music_player);
     }
@@ -197,6 +199,7 @@ void wss_ble_audio_stop() {
 void wss_ble_audio_start() {
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
+    odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -438,9 +441,8 @@ void wss_audio_init()
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);
 #endif
-    odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
+    wss_mic_start(); // 开启录音
 
-    wss_app_recorder_en(ENABLE);
     /* 设置VAD回调，触发音频上传 */
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
 
@@ -456,7 +458,6 @@ void wss_audio_uninit()
     wss_ble_audio_stop(); // 停止音频播放
     wss_mic_stop(); // 停止录音
     
-    odmp_register_audio_data_cbk(NULL); 
     
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker
@@ -465,7 +466,6 @@ void wss_audio_uninit()
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);
 
-    wss_app_recorder_en(DISABLE);
     /* 取消VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
     /* 取消录音上传回调 */

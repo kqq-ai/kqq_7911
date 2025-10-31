@@ -9,6 +9,7 @@ void wss_request_send_event(char *sn, int msg_event);
 void wss_request_init();
 void wss_request_uninit();
 bool wss_request_loop();
+void wss_request_stop();
 
 bool is_request_busy();
 

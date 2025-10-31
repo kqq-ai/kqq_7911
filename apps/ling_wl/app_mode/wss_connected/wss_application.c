@@ -222,11 +222,10 @@ void wss_application_init()
     odmp_register_disconnect_cbk(wss_disconnect_cbk);
     
     monitor_start();
-    wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    wss_mic_stop(); // 停止录音
     g_mic_on = true;
+    // wss_mic_stop(); // 停止录音
 
     multi_play_mode = false;
 
@@ -254,7 +253,6 @@ void wss_application_uninit()
         monitor_thread = NULL;
     }
 
-    wss_audio_uninit();
     wss_request_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
@@ -292,14 +290,13 @@ bool wss_application_loop()
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
             if (is_request_busy()) {
-                log_i("[wss_application]is_request_busy, wss_mic_stop.");
+                log_i("[wss_application]is_request_busy, wss_request_stop.");
                 wss_request_stop();
             } else {
                 log_i("[wss_application]wss_device_call.");
                 wss_device_call();
             }
             // multi_player_game();
-            // wss_request_stop(); // 按键打断对话
         }
         break;
 
@@ -309,7 +306,7 @@ bool wss_application_loop()
             g_device_state = DEVICE_IDLE;
             set_led_idle();
             wss_request_stop(); // 按键打断对话
-            wss_vad_start(get_time_stamp() + 60000); // 开始录音
+            wss_vad_start(60000); // 开始录音
             last_req_time = g_curr_time;
             wss_application_print_state(g_device_state, "touch key down");
         } else if (!is_player_busy()) {
