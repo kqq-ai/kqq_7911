@@ -63,7 +63,7 @@ void notify_e_disconncted()
 const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void bdo_disable()
 {
-    log_i("[BDO]Active start");
+    log_i("[BDO]bdo_disable");
     uart_send_switch_audio_bc(empty_broadcast_code, 0x00);
     uart_send_set_ctrl(0);
 }

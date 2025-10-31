@@ -168,8 +168,8 @@ void wss_vad_start(uint timestamp) {
 // 设置播放器音量(1~70)
 void set_Pi_volume(int volume) {
     if (volume < 1) volume = 1;
-    if (volume > G_MAX_VOLUME) volume = G_MAX_VOLUME;
-    set_dec_volume(g_app_ctx->music_player, volume); // 恢复默认音量
+    if (volume > G_MAX_VOLUME) volume = G_MAX_VOLUME; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME = 70
+    set_dec_volume(g_app_ctx->music_player, volume);
 }
 
 // 获取当前音频播放状态
@@ -435,7 +435,6 @@ void wss_audio_init()
 #ifndef C_SPEAKLER
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
-    set_dec_volume(g_app_ctx->music_player, 50); // 保护E的电池，需要设置最高默认音量为50
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);
 #endif
