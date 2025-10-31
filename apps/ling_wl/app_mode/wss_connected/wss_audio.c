@@ -32,7 +32,6 @@ static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); 
 /*=================================================================================================
  * Vad timer
  *=================================================================================================*/
-u32 vad_start_time = 0;
 u32 vad_stop_time = 0;
 uint32_t total_written = 0;
 u32 audio_req_time = 0;
@@ -67,7 +66,7 @@ static AsrData asr_data_frame;
 static MyBlockingQueue g_asr_data_queue; // MyBlockingQueue<AsrData>
 static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 
-#define MY_ASR_RING_BUFFER_CAPACITY 10
+#define MY_ASR_RING_BUFFER_CAPACITY 20
 static MyRingBuffer g_asr_ringbuffer;    // MyRingBuffer<AsrData>
 static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)];
 
@@ -156,19 +155,16 @@ void wss_vad_start(uint timestamp) {
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
     g_recording_upload = true;
-    vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
-    if (vad_start_time == 0) {
-        vad_start_time = get_time_stamp();
+    if (vad_stop_time == 0) {
+        vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
         threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
     }
     os_mutex_post(&g_audio_mutex);
 }
 
-#define G_MAX_VOLUME 70
-// 设置播放器音量(1~70)
 void set_Pi_volume(int volume) {
-    if (volume < 1) volume = 1;
-    if (volume > G_MAX_VOLUME) volume = G_MAX_VOLUME; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME = 70
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, volume);
 }
 
@@ -289,9 +285,10 @@ static void start_audio_upload()
  */
 void wait_vad_task(void *priv)
 {
+    while (is_mic_on() == false && g_recording_upload) {
+        msleep(30);
+    }
     log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
-    vad_start_time = get_time_stamp();
-    
     my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
     set_led_mic_on(); // 开启录音时灯光变橙色
@@ -312,11 +309,11 @@ void wait_vad_task(void *priv)
     set_led_idle();
     wss_app_recorder_data_upstream(NULL);
     if (get_time_stamp() < vad_stop_time) {
-        log_i("[AUDIO]Stop VAD timeout at %d.", get_time_stamp());
+        log_i("[AUDIO]Stop VAD because wss_vad_stop.");
     } else {
-        log_i("[AUDIO]Stop VAD because mic_off.");
+        log_i("[AUDIO]Stop VAD timeout at %d.", get_time_stamp());
     }
-    vad_start_time = 0;
+    vad_stop_time = 0;
 }
 
 //=================================================================================================

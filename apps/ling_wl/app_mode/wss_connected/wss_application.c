@@ -104,21 +104,20 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
         g_mic_on = !g_mic_on;
-        if (g_mic_on && !is_request_busy() && play_voice_prompt == 0) {
-            wss_mic_start();
-        }
+        log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
+        set_mic(g_mic_on);
         if (!g_mic_on) {
-            wss_mic_stop();
+            multi_play_mode = true;
+        } else {
+            multi_play_mode = false;
         }
-        // multi_play_mode = !multi_play_mode;
-        // log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
-            wss_application_touch_key();
+            // wss_application_touch_key();
+            // play_prompt_sound("t_key.mp3");
             // set_led_on_touch();
         } else {
             log_i("[wss_application]Touch key released");
@@ -140,13 +139,9 @@ static void wss_app_mode_play_cb(void *priv)
     os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
 #ifndef C_SPEAKLER
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-    gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
-    set_dec_volume(player, 50); // 保护E的电池，需要设置最高默认音量为50
+    resume_le_audio();
 #endif
-    if (g_mic_on && !is_request_busy()) {
-        wss_mic_start();
-    }
+    resume_mic();
     os_mutex_post(&g_wss_mutex);
 }
 
@@ -155,6 +150,7 @@ void wss_app_mode_play(const char *fname)
     os_mutex_pend(&g_wss_mutex, 0);
     log_i("wss_app_mode_play: %s", fname);
     wss_mic_stop();
+    wss_request_stop();
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     
@@ -224,9 +220,9 @@ void wss_application_init()
     monitor_start();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    g_mic_on = true;
     // wss_mic_stop(); // 停止录音
 
+    g_mic_on = true;
     multi_play_mode = false;
 
    // 检查线程是否已经在运行
@@ -289,13 +285,13 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
-            if (is_request_busy()) {
-                log_i("[wss_application]is_request_busy, wss_request_stop.");
-                wss_request_stop();
-            } else {
-                log_i("[wss_application]wss_device_call.");
-                wss_device_call();
-            }
+            // if (is_request_busy()) {
+            //     log_i("[wss_application]is_request_busy, wss_request_stop.");
+            //     wss_request_stop();
+            // } else {
+            //     log_i("[wss_application]wss_device_call.");
+            wss_device_call();
+            // }
             // multi_player_game();
         }
         break;
@@ -304,17 +300,17 @@ bool wss_application_loop()
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
         if (wss_application_check_touch_key()) {
             g_device_state = DEVICE_IDLE;
-            set_led_idle();
-            wss_request_stop(); // 按键打断对话
-            wss_vad_start(60000); // 开始录音
-            last_req_time = g_curr_time;
             wss_application_print_state(g_device_state, "touch key down");
-        } else if (!is_player_busy()) {
-            g_device_state = DEVICE_IDLE;
             set_led_idle();
-            play_prompt_sound("VadStart.mp3");
+            // wss_request_stop(); // 按键打断对话
+            // wss_vad_start(60000); // 开始录音
+            last_req_time = g_curr_time;
+        } else if (!is_player_busy()) {
             log_i("[wss_application]STATE: DEVICE_AUDIO -> DEVICE_IDLE");
+            g_device_state = DEVICE_IDLE;
             wss_application_print_state(g_device_state, "STEP_TO");
+            set_led_idle();
+            // play_prompt_sound("VadStart.mp3");
         } else {
             set_led_tts_play();
         }

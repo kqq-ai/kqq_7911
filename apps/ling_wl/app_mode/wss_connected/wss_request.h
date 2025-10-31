@@ -13,4 +13,7 @@ void wss_request_stop();
 
 bool is_request_busy();
 
+void resume_le_audio();
+void resume_mic();
+
 #endif
