@@ -4,7 +4,6 @@
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
-#include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
 #include "device.h"
@@ -117,26 +116,6 @@ static bool timeout_timer_is_timeout()
     return g_timeout_timer_is_timeout;
 }
 
-
-
-//=================================================================================================
-// Async task callback
-//=================================================================================================
-static void audio_play_end_callback(int state, void *priv)
-{
-    switch (state) {
-    case CODE_PLAY_AUDIO_STATE_BEFORE_DEC_START:
-        log_i("Audio play begin\n");
-        break;
-    case CODE_PLAY_AUDIO_STATE_AFTER_DEC_END:
-        log_i("Audio play over\n");
-        break;
-    case CODE_PLAY_AUDIO_STATE_CANCEL:
-        log_i("Audio play cancel\n");
-        break;
-    }
-}
-
 static void play_audio_task(void *priv);
 static void music_play_cb(void *priv)
 {
@@ -163,9 +142,7 @@ static void net_active_task(void *priv)
 static void switch_end_callback(int code, void *priv)
 {
     switch (code) {
-    case CODE_EDEV_CMD_SUCCESS:
-    case CODE_EDEV_CMD_TIMEOUT:
-    case CODE_EDEV_CMD_UNEXPECTED_ERROR:
+    case BKACODE_Success:
         log_i("Switch PortE OK %d\n", code);
         g_ble_edev_switch_ok = true;
         break;
@@ -285,7 +262,7 @@ static void wss_application_normal_loop()
             if (timeout_timer_is_timeout()) {
 
                 g_ble_edev_switch_ok = false;
-                my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+                // my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
 
                 log_i("[AUTO_TEST_RUNNING] HANDSHAKE -> TUENON");
                 g_auto_test_running_state = STATE_AUTO_TEST_TURNON;
@@ -336,7 +313,7 @@ static void wss_application_normal_loop()
             if (timeout_timer_is_timeout()) {
 
                 g_ble_edev_switch_ok = false;
-                my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
+                // my_task_turn_on_edev(AUTO_TEST_SN, 0, switch_end_callback, NULL);
                 
                 log_i("[AUTO_TEST_RUNNING] WAIT -> TUENON");
                 g_auto_test_running_state = STATE_AUTO_TEST_TURNON;

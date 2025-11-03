@@ -1,12 +1,14 @@
 #include "wss_application.h"
-#include "wss_audio.h"
+#include "wss_request.h"
 #include "cpu.h"
-
 #include "../lwl_app_framework.h"
+#include "net_music_play_my.h"
+#include "app_cookie.h"
+
+#include "wss/wss_client.h"
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
-#include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "device.h"
 #include "util/threadpool_tasks.h"
@@ -20,6 +22,10 @@
 #include "log/log_mqtt.h"
 
 #include "../../SC7A20/sc7a20.h"
+
+static OS_MUTEX g_wss_mutex;
+int play_voice_prompt=0;
+music_player *player;
 
 #define log_i log_mqtt
 static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_WHITE); }    //触摸按键时灯光变黄色
@@ -38,6 +44,7 @@ static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
 
 static int g_audio_playing = false;
+static bool g_mic_on = false;
 static bool multi_play_mode = false;
 
 /* Task state */
@@ -53,7 +60,7 @@ void wss_application_vailed()
     last_req_time = g_curr_time;
 }
 
-static int odmp_disconnect_cbk(void)
+void wss_disconnect_cbk(void)
 {
     log_i("[wss_application]odmp disconnect!!!");
     wss_exception_exit();
@@ -98,10 +105,14 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("[wss_application]APPLICATION SHORT_CLICK");
-        set_led_on_normal_key();
-        // multi_play_mode = !multi_play_mode;
-        // log_i("[wss_application]multi_play_mode: %d", multi_play_mode);
+        g_mic_on = !g_mic_on;
+        log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
+        set_mic(g_mic_on);
+        if (!g_mic_on) {
+            multi_play_mode = true;
+        } else {
+            multi_play_mode = false;
+        }
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
@@ -123,7 +134,31 @@ static void input_event_handler_cb(lwl_event_t *e)
     }
 }
 
+static void wss_app_mode_play_cb(void *priv)
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    play_voice_prompt = 0;
+#ifndef C_SPEAKLER
+    wss_request_resume_le_audio();
+#endif
+    wss_request_resume_mic();
+    os_mutex_post(&g_wss_mutex);
+}
 
+void wss_app_mode_play(const char *fname) 
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    log_i("wss_app_mode_play: %s", fname);
+    wss_request_stop();
+    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
+    set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
+    
+    int err = app_music_play_local_music_with_callback(player, fname, wss_app_mode_play_cb, NULL);
+    if (!err) {
+        play_voice_prompt = 1;
+    }
+    os_mutex_post(&g_wss_mutex);
+}
 
 static pthread_t monitor_thread = NULL;
 static bool monitor_thread_running = false;
@@ -172,15 +207,20 @@ void *wss_condition_monitor_thread(void *arg)
 void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
+    if (!os_mutex_valid(&g_wss_mutex)) {
+        os_mutex_create(&g_wss_mutex);
+    }
+    play_voice_prompt = 0;
+    player = lwl_app_core_context_get_instance()->music_player;
+
     lwl_event_handler_add(input_event_handler_cb);
-    odmp_register_disconnect_cbk(odmp_disconnect_cbk);
+    odmp_register_disconnect_cbk(wss_disconnect_cbk);
     
     monitor_start();
-    wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    wss_mic_stop(0); // 停止录音
 
+    g_mic_on = true;
     multi_play_mode = false;
 
    // 检查线程是否已经在运行
@@ -207,7 +247,6 @@ void wss_application_uninit()
         monitor_thread = NULL;
     }
 
-    wss_audio_uninit();
     wss_request_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
@@ -239,21 +278,19 @@ bool wss_application_loop()
     case DEVICE_IDLE:
         // 在IDLE状态下，检测是否有进入AUDIO的条件（可根据实际业务补充）
         // 这里只做示例，假设有某事件触发进入AUDIO
-        if (is_audio_playing()) {
+        if (is_player_busy()) {
             g_device_state = DEVICE_AUDIO;
             log_i("[wss_application]STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
-            if (is_mic_on() || is_request_busy()) {
-                log_i("[wss_application]is_request_busy, wss_mic_stop.");
-                wss_mic_stop(0); // 停止录音
-                wss_request_stop();
-            } else {
-                log_i("[wss_application]wss_device_call.");
-                wss_device_call();
-            }
+            // if (wss_request_is_busy()) {
+            //     log_i("[wss_application]wss_request_is_busy, wss_request_stop.");
+            //     wss_request_stop();
+            // } else {
+            //     log_i("[wss_application]wss_device_call.");
+            wss_device_call();
+            // }
             // multi_player_game();
-            // wss_request_stop(); // 按键打断对话
         }
         break;
 
@@ -265,11 +302,16 @@ bool wss_application_loop()
             wss_mic_start(get_time_stamp() + 60000); // 开始录音
             last_req_time = g_curr_time;
             wss_application_print_state(g_device_state, "touch key down");
-        } else if (!is_audio_playing()) {
-            g_device_state = DEVICE_IDLE;
             set_led_idle();
+            // wss_request_stop(); // 按键打断对话
+            // wss_vad_start(60000); // 开始录音
+            last_req_time = g_curr_time;
+        } else if (!is_player_busy()) {
             log_i("[wss_application]STATE: DEVICE_AUDIO -> DEVICE_IDLE");
+            g_device_state = DEVICE_IDLE;
             wss_application_print_state(g_device_state, "STEP_TO");
+            set_led_idle();
+            // play_prompt_sound("VadStart.mp3");
         } else {
             set_led_tts_play();
         }

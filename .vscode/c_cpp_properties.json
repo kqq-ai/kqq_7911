@@ -1627,7 +1627,7 @@
                 "${workspaceFolder}/apps/ling_wl/protocol"
             ],
             "intelliSenseMode": "clang-x86",
-            "name": "AC791N_LING_WL"
+            "name": "AC791N_cookie"
         },
         {
             "cStandard": "c99",

@@ -2,12 +2,12 @@
 #include "wss_audio.h"
 #include "wss_app_util.h"
 #include "cpu.h"
-#include "app_lingwl.h"
+#include "app_cookie.h"
+#include "wss_application.h"
 
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
-#include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "device.h"
 #include "util/threadpool_tasks.h"
@@ -61,8 +61,12 @@ typedef enum {
 
 AppRequestState g_mode_state = STATE_IDLE;
 
-bool is_request_busy(){
+bool wss_request_is_busy(){
     return (g_mode_state != STATE_IDLE);
+}
+
+bool is_player_busy(){
+    return (g_mode_state == STATE_DOWNLOAD || is_audio_playing());
 }
 
 void edev_working(){
@@ -70,7 +74,7 @@ void edev_working(){
 }
 
 void turn_off_Pi() {
-    // wss_ble_audio_stop();
+    wss_ble_audio_stop();
 #ifdef C_SPEAKLER
     return;
 #endif
@@ -88,6 +92,9 @@ void turn_off_Pi() {
 static void e_turn_on_cb(bdo_code_e code, void *priv);
 
 void turn_on_Pi(const char *pdev_sn) {
+    wss_vad_stop(); // 停止录音
+    // wss_mic_stop(); // 停止录音
+    set_led_tts_bind();
 #ifdef C_SPEAKLER
     log_i("bdo_turn_on %s\n", pdev_sn);
     memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
@@ -95,7 +102,10 @@ void turn_on_Pi(const char *pdev_sn) {
     edev_working();
     return;
 #endif
-    turn_off_Pi();
+// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
+    if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
+        turn_off_Pi();
+    }
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
         log_i("turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
@@ -107,22 +117,55 @@ void turn_on_Pi(const char *pdev_sn) {
     edev_working();
 }
 
-static void wss_request_print_state(AppRequestState mode_state, char* tag)
+static bool g_mic_on = true;
+void set_mic(bool on)
+{
+    g_mic_on = on;
+    if (!on) {
+        wss_mic_stop();
+    }
+}
+
+void wss_request_resume_mic()
+{
+    if (g_mic_on && !wss_request_is_busy()) {
+        wss_mic_start();
+    }
+}
+
+#define G_MAX_VOLUME 70
+int g_volume = G_MAX_VOLUME;
+// 设置播放器音量(1~70)
+void set_tts_volume(int volume) {
+    if (volume < 1) volume = 1;
+    if (volume > 100) volume = 100;
+    g_volume = volume * G_MAX_VOLUME / 100; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME
+}
+
+void wss_request_resume_le_audio()
+{
+    set_Pi_volume(g_volume);
+}
+
+static void wss_request_update_state(AppRequestState mode_state, char* tag)
 {
     switch (mode_state) {
     case STATE_IDLE:
-        log_i("[%s]STEP_TO STATE_IDLE", tag);
+        log_i("%d -> [%s]STEP_TO STATE_IDLE", g_mode_state, tag);
         break;
     case STATE_TTS_BIND:
-        log_i("[%s]STEP_TO STATE_TTS_BIND", tag);
+        log_i("%d -> [%s]STEP_TO STATE_TTS_BIND", g_mode_state, tag);
         break;
     case STATE_DOWNLOAD:
-        log_i("[%s]STEP_TO STATE_DOWNLOAD", tag);
+        log_i("%d -> [%s]STEP_TO STATE_DOWNLOAD", g_mode_state, tag);
         break;
     case STATE_UPLOAD:
-        log_i("[%s]STEP_TO STATE_UPLOAD", tag);
+        log_i("%d -> [%s]STEP_TO STATE_UPLOAD", g_mode_state, tag);
         break;
     }
+    g_mode_state = mode_state;
+    last_message_received = 0;
+    last_event = 0;
 }
 
 static void wss_request_print_event(int msg_event, char* tag)
@@ -206,9 +249,11 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
         log_i("volume: %d\n", pkg->tts_bind.volume);
         if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
-        set_Pi_volume(pkg->tts_bind.volume);
+        play_prompt_sound("TTSBind.mp3");
+        set_tts_volume(pkg->tts_bind.volume);
 
         last_message_received = OR_TTS_BIND;
+        send_message = 0; // 重置发送消息标志
         wait_time = pkg->tts_bind.wait_time;
         memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
     }   break;
@@ -249,7 +294,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 log_i("AUDIO_STATUS: OASE_ABNORMAL\n");
                 last_message_received = OR_AUDIO_STATUS;
                 last_event = OASE_ABNORMAL;
-                // STOP TTS !!!
             } else if (pkg->audio_status.event == OASE_SENTENCE_START) {
                 log_i("AUDIO_STATUS: OASE_SENTENCE_START\n");
             } else if (pkg->audio_status.event == OASE_SENTENCE_END) {
@@ -264,10 +308,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         //     log_i("TTS_TEXT %d %s\n", pkg->message_text.c_id, pkg->message_text.text);
         break;
     case OR_EXECUTION_TIME:
-        log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
+        // log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
         break;
     case OR_PONG:
-        log_i("LR_PONG\n");
+        // log_i("LR_PONG\n");
         break;
     }
 }
@@ -282,16 +326,16 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
-        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
-        if (strcmp(sn_string,g_edev_target_sn)!=0) {
-            turn_off_Pi();
-        }
     }
     switch(code) {
     case BDOCode_Success:
-
         log_i("Switch PortE %s OK\n", sn_string);
-        send_message = ORMET_SWITCH_SUCCESS;
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
+        if (strcmp(sn_string,g_edev_target_sn) == 0) {
+            send_message = ORMET_SWITCH_SUCCESS;
+        } else {
+            turn_off_Pi();
+        }
         edev_working();
         break;
     case BDOCode_Connection_Timeout:
@@ -307,7 +351,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         log_i("Switch PortE Error\n");
         break;
     }
-    if (code != BDOCode_Success) {
+    if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
         send_message = ORMET_SWITCH_FAILED;
     }
 }
@@ -316,18 +360,16 @@ void wss_request_stop()
 {
     log_i("Stop WSS request\n");
 
+    turn_off_Pi();
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
-        turn_off_Pi();
-        wss_ble_audio_stop();
-        g_mode_state = STATE_IDLE;
-        wss_request_print_state(g_mode_state, "Send AUDIO ABNORMAL(TTS)");
+        wss_request_update_state(STATE_IDLE, "wss_request_stop");
     } else if (g_mode_state == STATE_TTS_BIND) {
-        send_message = ORMET_SWITCH_FAILED;
+        wss_request_update_state(STATE_IDLE, "wss_request_stop");
+        wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
     } else {
-        wss_mic_stop(0);
+        wss_vad_stop();
     }
-    g_edev_target_sn[0] = 0; // 清除目标设备
 
     // 重置状态到IDLE
     g_mode_state = STATE_IDLE;
@@ -341,21 +383,23 @@ void wss_request_init()
     g_app_ctx = lwl_app_core_context_get_instance();
     /* 注册odmp事件回调 */
     odmp_register_rsp_cbk(wss_rsp_cbk);
+    wss_audio_init();
+    g_mic_on = true;
 
     g_mode_state = STATE_IDLE;
     wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
     send_audio_format(OAST_TTS);
+    // wss_mic_stop(); // 停止录音
 }
 
 void wss_request_uninit()
 {
     log_i("Uninit WSS request\n");
 
-    turn_off_Pi();
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
-    wss_mic_stop(0);
+    wss_audio_uninit();
     // msleep(500);
 }
 
@@ -368,27 +412,19 @@ bool wss_request_loop()
     case STATE_IDLE:
         // 等待 OR_TTS_BIND 事件
         if (last_message_received == OR_TTS_BIND) {
-            g_mode_state = STATE_TTS_BIND;
-            set_led_tts_bind();
-            wss_request_print_state(g_mode_state, "receive TTS_BIND");
-            last_message_received = 0;
-            wss_mic_stop(0); // 停止录音
+            wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND");
             turn_on_Pi(g_edev_target_sn);
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
-            wss_request_print_state(g_mode_state, "receive AUDIO START ASR");
-            wss_mic_start(get_time_stamp() + 600000); // 开始录音
-            last_message_received = 0;
-            last_event = 0;
+            wss_request_update_state(STATE_IDLE, "receive AUDIO START ASR");
+            wss_request_resume_mic();
+            wss_vad_start(600000); // 开始录音
         } else if (last_message_received == OR_AUDIO_STATUS && (last_event == 5+OASE_END || last_event == 5+OASE_ABNORMAL)) {
-            wss_request_print_state(g_mode_state, "receive AUDIO OASE_END ASR");
-            wss_mic_stop(0); // 停止录音
-            last_message_received = 0;
-            last_event = 0;
+            wss_request_update_state(STATE_IDLE, "receive AUDIO OASE_END ASR");
+            wss_vad_stop(); // 停止录音
         }
         // 音频上传开始
         if (is_recording_uploading()) {
-            g_mode_state = STATE_UPLOAD;
-            wss_request_print_state(g_mode_state, "Vioce On");
+            wss_request_update_state(STATE_UPLOAD, "Vioce On");
         }
 
         break;
@@ -398,45 +434,27 @@ bool wss_request_loop()
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("Switch success, starting audio playback");
             wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
-            last_message_received = 0;
-            last_event = 0;
             send_message = 0; // 重置发送消息标志
         } else if (last_message_received == OR_TTS_BIND) {
-            g_mode_state = STATE_TTS_BIND;
-            wss_request_print_state(g_mode_state, "receive TTS_BIND Again");
-            last_message_received = 0;
+            wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND Again");
             turn_on_Pi(g_edev_target_sn);
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_START) {
-            g_mode_state = STATE_DOWNLOAD;
-            wss_request_print_state(g_mode_state, "receive AUDIO START");
+            wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
             wss_ble_audio_start();
-            last_message_received = 0;
             last_event = 0;
         } else if (last_message_received == OR_AUDIO_STATUS && (last_event == OASE_END || last_event == OASE_ABNORMAL)) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "OR_AUDIO_STATUS ABNORMAL/END");
-            // wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
-            last_message_received = 0;
-            last_event = 0;
-            send_message = 0; // 重置发送消息标志
+            wss_request_update_state(STATE_IDLE, "OR_AUDIO_STATUS ABNORMAL/END");
             turn_off_Pi();
             set_led_red_error();
         } else if (send_message == ORMET_SWITCH_FAILED) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "SWITCH_FAILED");
+            wss_request_update_state(STATE_IDLE, "SWITCH_FAILED");
             wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
-            last_message_received = 0;
-            last_event = 0;
             send_message = 0; // 重置发送消息标志
             turn_off_Pi();
             set_led_red_error();
         } else if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "WSS AUDIO TIMEOUT");
+            wss_request_update_state(STATE_IDLE, "WSS AUDIO TIMEOUT");
             send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
-            last_message_received = 0;
-            last_event = 0;
-            send_message = 0; // 重置发送消息标志
             turn_off_Pi();
             set_led_red_error();
         }
@@ -448,27 +466,14 @@ bool wss_request_loop()
             edev_working();
         }
         if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_END){
-            g_mode_state = STATE_PLAYING;
-            wss_request_print_state(g_mode_state, "receive AUDIO END");
-            last_message_received = 0;
-            last_event = 0;
+            wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
         }
         // 音频异常，终止播放
         if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_ABNORMAL) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "receive AUDIO ABNORMAL");
-            turn_off_Pi();
-            wss_ble_audio_stop();
-            last_message_received = 0;
-            last_event = 0;
+            wss_request_stop();
             set_led_red_error();
         } else if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "WSS AUDIO TIMEOUT");
-            send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
-            turn_off_Pi();
-            last_message_received = 0;
-            last_event = 0;
+            wss_request_stop();
             set_led_red_error();
         }
         wss_application_vailed();
@@ -478,14 +483,10 @@ bool wss_request_loop()
         // 音频上传结束，回到TTS_BIND
         if (!is_recording_uploading()) {
             g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "VAD state is not voice");
+            wss_request_update_state(g_mode_state, "VAD state is not voice");
             wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_END);
         } else if (last_message_received == OR_TTS_BIND) {
-            g_mode_state = STATE_TTS_BIND;
-            set_led_tts_bind();
-            wss_request_print_state(g_mode_state, "receive TTS_BIND");
-            last_message_received = 0;
-            wss_mic_stop(0); // 停止录音
+            wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND");
             turn_on_Pi(g_edev_target_sn);
         }
         wss_application_vailed();
@@ -494,23 +495,17 @@ bool wss_request_loop()
     case STATE_PLAYING:
         // 音频异常，终止播放
         if (last_message_received == OR_AUDIO_STATUS && last_event == OASE_ABNORMAL) {
-            g_mode_state = STATE_IDLE;
-            wss_request_print_state(g_mode_state, "receive AUDIO ABNORMAL");
-            turn_off_Pi();
-            last_message_received = 0;
-            last_event = 0;
+            wss_request_stop();
+            set_led_red_error();
         } else if (g_curr_time - g_turnon_timer > 1000) {
         // 播放结束，打开麦克风
             if (!is_audio_playing()) {
-                g_mode_state = STATE_IDLE;
-                wss_request_print_state(g_mode_state, "[Decoder Play end cb]STEP_TO");
+                wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
                 turn_off_Pi();
-                wss_ble_audio_stop();
                 wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
                 wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-                wss_mic_start(get_time_stamp() + 600000); // 开始录音
-                last_message_received = 0;
-                last_event = 0;
+                wss_request_resume_mic();
+                wss_vad_start(600000); // 开始录音
             }
         }
         wss_application_vailed();
@@ -530,7 +525,5 @@ void wss_request_send_event(char *sn, int msg_event)
     if (sn != NULL) {
         update_edev_time(sn);
     }
-    if (send_req_message(sn, is_audio_playing(), msg_event)) {
-        return;
-    }
+    send_req_message(sn, is_audio_playing(), msg_event);
 }

@@ -99,9 +99,44 @@ static char edr_name[LOCAL_NAME_LEN];
 static char ble_name[LOCAL_NAME_LEN];
 static char pincode[5] = "0000";
 
+/**
+ * 将15位ASCII字符转换为32位数字，确保4个8位字节均非0x00
+ * 
+ * 参数:
+ *   s - 指向15位ASCII字符的指针（无需验证，假设输入合法! ）
+ * 
+ * 返回:
+ *   32位无符号整数，其4个8位字节均非0x00
+ */
+uint32_t ascii_to_32bit(const char *s) {
+    // 步骤1：多项式哈希混合15个ASCII码为32位初始值
+    uint32_t hash_val = 0;
+    for (int i = 0; i < 15; i++) {
+        // 取字符的ASCII值（转换为无符号确保0-255范围）
+        uint8_t ascii = (uint8_t)s[i];
+        // 哈希计算：(hash * 31 + ASCII值)，保留低32位
+        hash_val = (hash_val * 31 + ascii) & 0xFFFFFFFF;
+    }
+
+    // 步骤2：拆分32位值为4个8位字节（大端模式）
+    uint8_t b0 = (hash_val >> 24) & 0xFF;  // 最高8位
+    uint8_t b1 = (hash_val >> 16) & 0xFF;
+    uint8_t b2 = (hash_val >> 8) & 0xFF;
+    uint8_t b3 = hash_val & 0xFF;          // 最低8位
+
+    // 步骤3：确保字节非0（若为0则替换为1）
+    b0 = (b0 == 0) ? 1 : b0;
+    b1 = (b1 == 0) ? 1 : b1;
+    b2 = (b2 == 0) ? 1 : b2;
+    b3 = (b3 == 0) ? 1 : b3;
+
+    // 步骤4：重组为32位数字
+    return (uint32_t)(b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+}
+
 const u8 *bt_get_mac_addr(void)
 {
-    static u8 mac_addr[6];
+    static u8 mac_addr[6] = {0x68, 0x77, 0xFF, 0xFF, 0xFF, 0xFE};
     const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     extern u32 get_key_times_in_net_connecting();
     if( get_key_times_in_net_connecting() ) {
@@ -112,6 +147,24 @@ const u8 *bt_get_mac_addr(void)
         return mac_addr;
     }
 
+    char sn[25];
+    get_SN(sn);
+    if(sn[0] == 0){
+        mac_addr[2]  = rand32() & 0xFF;
+        mac_addr[3]  = rand32() & 0xFF;
+        return mac_addr;
+    }
+    uint32_t hash_val = ascii_to_32bit(sn);
+    // 步骤2：拆分32位值为4个8位字节（大端模式）
+    mac_addr[2] = (hash_val >> 24) & 0xFF;  // 最高8位
+    mac_addr[3] = (hash_val >> 16) & 0xFF;
+    mac_addr[4] = (hash_val >> 8) & 0xFF;
+    mac_addr[5] = hash_val & 0xFE;          // 最低8位,同时，最低bit为0
+    int ret = 0;
+    mac_addr[3]++;
+    ret = syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
+    mac_addr[3]--;
+    return mac_addr;
 #if defined CONFIG_WIFI_ENABLE && !defined CONFIG_RF_TEST_ENABLE
     wifi_get_mac(mac_addr);
     if (bytecmp(mac_addr, 0, 6)) {

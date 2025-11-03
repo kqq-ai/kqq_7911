@@ -11,7 +11,6 @@
 #include "cJSON_common/cJSON.h"
 #include "net/mbedtls_2_2_1/mbedtls/base64.h"
 #include "util/cqueue.h"
-#include "async_msg_loop.h"
 
 #include "bt_ble/client/ble_distance.h"
 

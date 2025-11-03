@@ -63,7 +63,7 @@ void notify_e_disconncted()
 const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void bdo_disable()
 {
-    log_i("[BDO]Active start");
+    log_i("[BDO]bdo_disable");
     uart_send_switch_audio_bc(empty_broadcast_code, 0x00);
     uart_send_set_ctrl(0);
 }
@@ -347,6 +347,7 @@ int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void
     if (dev->op_state & BDO_STATE_TURNNING_OFF)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_OFF;
+    dev->set_ctrl(dev, 0, 0);
 
     ble_dev_op_t op;
     op.op_type = BDPDOT_TURNOFF;

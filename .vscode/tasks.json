@@ -215,12 +215,12 @@
             "group": "build"
         }
         ,{
-            "label": "ac791n_ling_wl",
+            "label": "ac791n_cookie",
             "type": "shell",
             "windows": {
-                "command": ".vscode/winmk.bat ac791n_ling_wl"
+                "command": ".vscode/winmk.bat ac791n_cookie"
             },
-            "command": "make ac791n_ling_wl -j`nproc`",
+            "command": "make ac791n_cookie -j`nproc`",
             "problemMatcher": [],
             "group": "build"
         }
@@ -455,12 +455,12 @@
             "group": "build"
         }
         ,{
-            "label": "clean_ac791n_ling_wl",
+            "label": "clean_ac791n_cookie",
             "type": "shell",
             "windows": {
-                "command": ".vscode/winmk.bat clean_ac791n_ling_wl"
+                "command": ".vscode/winmk.bat clean_ac791n_cookie"
             },
-            "command": "make clean_ac791n_ling_wl -j`nproc`",
+            "command": "make clean_ac791n_cookie -j`nproc`",
             "problemMatcher": [],
             "group": "build"
         }

@@ -2,14 +2,17 @@
 #define __WSS_REQUEST_H__
 
 #include "cpu.h"
-#include "app_mode/lwl_app_core.h"
-
-void wss_request_send_event(char *sn, int msg_event);
 
 void wss_request_init();
 void wss_request_uninit();
 bool wss_request_loop();
+void wss_request_stop();
 
-bool is_request_busy();
+bool wss_request_is_busy();         //state != STATE_IDLE
+
+void wss_request_resume_le_audio(); // disable C speaker and set Pi_volume
+void wss_request_resume_mic();      // resume mic if g_mic_on == true && not busy
+
+void wss_request_send_event(char *sn, int msg_event);
 
 #endif

@@ -1,13 +1,12 @@
 #include "wss_device.h"
 #include "wss_request.h"
 #include "cpu.h"
-#include "app_lingwl.h"
+#include "app_cookie.h"
 
 #include "../lwl_app_framework.h"
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
-#include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "device.h"
 #include "util/threadpool_tasks.h"
@@ -112,6 +111,9 @@ static lwl_eend_dev_t* get_edev()
     for (int i = 0; i < edev_set_count; i++) {
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(edev_set[i].sn);
         if (!pdev || pdev->distance_info.distance >3.5f) {
+            if (edev_last = edev_set[i].edev) {
+                edev_last = NULL;
+            }
             edev_set[i] = edev_set[edev_set_count - 1];
             edev_set[edev_set_count - 1].edev = NULL;
             edev_set_count--;
@@ -149,6 +151,7 @@ void update_edev_time(char* sn)
     for (int i = 0; i < edev_set_count; ++i) {
         if (strncmp(edev_set[i].sn, sn, SN_SIZE) == 0) {
             edev_set[i].last_get_time = g_curr_time;
+            edev_last = edev_set[i].edev;
             break;
         }
     }
@@ -230,7 +233,6 @@ lwl_eend_dev_t *wss_device_loop()
     lwl_eend_dev_t *pdev = get_edev();
     if (pdev == edev_last) return NULL;
     if (pdev && pdev->distance_info.distance < 2.0f) {
-        edev_last = pdev;
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         set_led_device_call();
         last_dequeue_time = g_curr_time;
@@ -249,7 +251,6 @@ lwl_eend_dev_t *wss_device_call()
     lwl_eend_dev_t *pdev = get_edev();
 #endif
     if (pdev) {
-        // edev_last = pdev;
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
         set_led_device_call();
         last_dequeue_time = g_curr_time;
