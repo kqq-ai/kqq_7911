@@ -91,6 +91,7 @@ static int net_connecting_init(void)
     ble_connecting = false;
     ble_connected = false;
     key_press_time_ms = 0;
+    ble_simple_server_init();
 
     return 0;
 }
@@ -101,7 +102,7 @@ static int net_connecting_unint(void)
     if (wifi_manager_state) {
         wifi_manager_state = false;
     }
-    ble_simple_server_name_enable(0);
+    ble_simple_server_exit();
     return 0;
 }
 
@@ -164,7 +165,7 @@ void app_net_connecting_loop()
         printf("Network connection is failed!\n");
         set_led_connect_error();  // 设置连接错误LED状态
         
-        ble_simple_server_init();
+        ble_simple_server_name_enable(1);
         wifi_manager_state = true;
         
         play_system_music("NetCfgEnter.mp3");
