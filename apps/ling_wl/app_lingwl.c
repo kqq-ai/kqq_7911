@@ -208,6 +208,12 @@ static void app_cookie_main(void)
     // pthread_t monitor_thread;
     // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
     
+    // 初始化lfs
+    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
+    ASSERT(lfs_hdl);
+    context->lfs_hdl = lfs_hdl;
+    //app_lfs_cfgfile_init(context->lfs_hdl);
+    get_flash_app_cfg_data(context->lfs_hdl);
     /* 初始化数据通信串口 */
     uart0_hdl = app_uart_dev_init("uart0");
     context->uartdev = uart0_hdl;
@@ -223,6 +229,10 @@ static void app_cookie_main(void)
     gpio_direction_output(IO_PORTB_02, 1);  // 设置E出声
 #endif
 
+#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
+    extern void bt_ble_module_init(void);
+    bt_ble_module_init();
+#endif
     /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
@@ -243,12 +253,6 @@ static void app_cookie_main(void)
     /* 开始RSSI测距 */
     monitor_start();
 
-    // 初始化lfs
-    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
-    ASSERT(lfs_hdl);
-    context->lfs_hdl = lfs_hdl;
-    //app_lfs_cfgfile_init(context->lfs_hdl);
-    get_flash_app_cfg_data(context->lfs_hdl);
 
 
     /* 创建sc7a20 task 陀螺仪 */

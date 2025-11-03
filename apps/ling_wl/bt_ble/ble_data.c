@@ -670,7 +670,8 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
 
     set_wifi_connect_start_time_ms(timer_get_ms());
 
-    memcpy(return_errstr, "WIFI_CONNECT_CODE_SUCCESS", strlen("WIFI_CONNECT_CODE_SUCCESS"));
+    //memcpy(return_errstr, "WIFI_CONNECT_CODE_SUCCESS", strlen("WIFI_CONNECT_CODE_SUCCESS"));
+    memcpy(return_errstr, "WIFI_CONNECT_CMD_GOT", strlen("WIFI_CONNECT_CMD_GOT"));
 
     set_wifi_cmd_status(WIFI_CMD_CONNECTING);
 
