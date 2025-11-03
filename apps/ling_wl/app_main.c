@@ -191,11 +191,11 @@ void app_main()
 {
     struct intent it;
 
-    puts("------------- ling wl app main-------------\n");
+    puts("------------- cookie wl app main-------------\n");
 
     init_intent(&it);
-    it.name = "app_lingwl";
-    it.action = ACTION_LING_WL_MAIN;
+    it.name = "app_cookie";
+    it.action = ACTION_COOKIE_MAIN;
     start_app(&it);
 
 #if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1

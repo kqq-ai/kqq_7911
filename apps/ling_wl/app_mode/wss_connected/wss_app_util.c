@@ -6,7 +6,7 @@
 #include "wss/wss_client.h"
 
 #include "system/includes.h"
-#include "app_lingwl.h"
+#include "app_cookie.h"
 
 #include <string.h>
 #include <stdlib.h>

@@ -542,7 +542,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
     }
 
     if (pkg.errno == 0) {
-        /* LingOS Successful */
+        /*  Successful */
         if (entry->handler != NULL) {
             int ret = entry->handler(nroot, &pkg);
             if (ret == PARSE_Success && g_odmp_cbk != NULL) {
@@ -554,7 +554,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
             entry->release(&pkg);
         }
     } else {
-        /* LingOS Error */
+        /*  Error */
         if (g_odmp_cbk != NULL) {
             g_odmp_cbk(entry->type, &pkg);
         }

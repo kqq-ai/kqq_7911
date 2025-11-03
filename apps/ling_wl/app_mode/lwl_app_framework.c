@@ -8,7 +8,7 @@
 #include "app_core.h"
 #include "os/os_api.h"
 #include "gpio.h"
-#include "app_lingwl.h"
+#include "app_cookie.h"
 
 static u8 app_prev_mode = 0;
 static u8 app_curr_mode = 0;

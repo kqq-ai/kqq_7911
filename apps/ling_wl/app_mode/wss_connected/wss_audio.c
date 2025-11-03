@@ -1,12 +1,11 @@
 #include "wss_audio.h"
 #include "wss_app_util.h"
 #include "cpu.h"
-#include "app_lingwl.h"
+#include "app_cookie.h"
 
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
-#include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
 #include "device.h"

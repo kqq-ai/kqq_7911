@@ -2,7 +2,7 @@
 <CodeBlocks_project_file>
 <FileVersion major="1" minor="6" />
 <Project>
-<Option title="AC791N_ling_wl" />
+<Option title="AC791N_cookie" />
 <Option compiler="pi32v2_r3_lto_compiler" />
 <Build>
 <Target title="Release">

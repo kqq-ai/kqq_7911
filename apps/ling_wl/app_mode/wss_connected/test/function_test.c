@@ -3,7 +3,6 @@
 
 #include "util/cqueue.h"
 #include "bt_ble/client/ble_distance.h"
-#include "async_msg_loop.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"
 #include "device.h"

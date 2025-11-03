@@ -1,5 +1,5 @@
 #include "app_config.h"
-#include "app_lingwl.h"
+#include "app_cookie.h"
 
 #include "cpu.h"
 #include "app_core.h"
@@ -20,7 +20,6 @@
 #include "audio/recorder.h"
 #include "util/cqueue.h"
 #include "util/threadpool.h"
-#include "async_msg_loop.h"
 #include "wait.h"
 #include "app_mode/7911_uart_7016/app_uart_task.h"
 #include "SC7A20/app_sc7a20_task.h"
@@ -40,9 +39,9 @@ static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
-static struct app_lingwl_hdl g_lingwl_hdl;
+static struct app_cookie_hdl g_cookie_hdl;
 
-#define __this (&g_lingwl_hdl)
+#define __this (&g_cookie_hdl)
 
 music_player g_music_player;
 recorder_hdl g_recorder;
@@ -193,7 +192,7 @@ static void* led_breath_thread(void* arg)
 }
 
 
-static void app_lingwl_main(void)
+static void app_cookie_main(void)
 {
     log_i("Hello World2!\r\n");
     log_i("Version: 12\r\n");
@@ -311,28 +310,6 @@ static int app_music_key_click(struct key_event *key)
         // E端设备检查序列号是否与自己匹配，匹配则播放，不匹配则停止播放
         log_i("en = %d\n", en);
 
-        // en++;
-        // if (en == 3) {
-        //     en = 0;
-        // }
-
-        // if (en == 0) {
-        //     my_task_turn_on_edev(sn1, NULL, switch_completed);
-        // } else if (en == 1) {
-        //     my_task_turn_on_edev(sn2, NULL, switch_completed);
-        // } else if (en == 2) {
-        //     my_task_turn_on_edev(sn3, NULL, switch_completed);
-        // }
-
-
-        if (en) {
-            my_task_turn_on_edev(sn2, 200, NULL, switch_completed);
-            en = 0;
-        } else {
-            my_task_turn_on_edev(ns_null, 200, NULL, switch_completed);
-            en = 1;
-        }
-
         break;
     case KEY_4:
         log_i("KEY 4\n");
@@ -402,7 +379,7 @@ static int app_music_key_long(struct key_event *key)
     return false;
 }
 
-static int app_lingwl_key_event_handler(struct key_event *key)
+static int app_cookie_key_event_handler(struct key_event *key)
 {
     int ret = false;
     switch (key->action) {
@@ -427,7 +404,7 @@ static int app_lingwl_key_event_handler(struct key_event *key)
 /*
  *设备响应函数
  */
-static int app_lingwl_device_event_handler(struct sys_event *sys_eve)
+static int app_cookie_device_event_handler(struct sys_event *sys_eve)
 {
     struct device_event *device_eve = (struct device_event *)sys_eve->payload;
 
@@ -501,13 +478,13 @@ static int app_music_net_event_handler(struct net_event *event)
     return false;
 }
 
-static int app_lingwl_event_handler(struct application *app, struct sys_event *event)
+static int app_cookie_event_handler(struct application *app, struct sys_event *event)
 {
     switch (event->type) {
     case SYS_KEY_EVENT:
-        return app_lingwl_key_event_handler((struct key_event *)event->payload);
+        return app_cookie_key_event_handler((struct key_event *)event->payload);
     case SYS_DEVICE_EVENT:
-        return app_lingwl_device_event_handler(event);
+        return app_cookie_device_event_handler(event);
     case SYS_NET_EVENT:
         return app_music_net_event_handler((struct net_event *)event->payload);
     case SYS_BT_EVENT:
@@ -517,7 +494,7 @@ static int app_lingwl_event_handler(struct application *app, struct sys_event *e
     }
 }
 
-static int app_lingwl_state_machine(struct application *app, enum app_state state,
+static int app_cookie_state_machine(struct application *app, enum app_state state,
                                    struct intent *it)
 {
     switch (state) {
@@ -528,8 +505,8 @@ static int app_lingwl_state_machine(struct application *app, enum app_state stat
             break;
         }
         switch (it->action) {
-        case ACTION_LING_WL_MAIN:
-            app_lingwl_main();
+        case ACTION_COOKIE_MAIN:
+            app_cookie_main();
             break;
         }
         break;
@@ -546,13 +523,13 @@ static int app_lingwl_state_machine(struct application *app, enum app_state stat
     return 0;
 }
 
-static const struct application_operation app_lingwl_ops = {
-    .state_machine  = app_lingwl_state_machine,
-    .event_handler 	= app_lingwl_event_handler,
+static const struct application_operation app_cookie_ops = {
+    .state_machine  = app_cookie_state_machine,
+    .event_handler 	= app_cookie_event_handler,
 };
 
-REGISTER_APPLICATION(app_lingwl) = {
-    .name 	= "app_lingwl",
-    .ops 	= &app_lingwl_ops,
+REGISTER_APPLICATION(app_cookie) = {
+    .name 	= "app_cookie",
+    .ops 	= &app_cookie_ops,
     .state  = APP_STA_DESTROY,
 };

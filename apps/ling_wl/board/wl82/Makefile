@@ -266,9 +266,8 @@ c_SRC_FILES := \
 	../../../../apps/common/example/third_party/littlefs/lfs_util.c \
 	../../../../apps/common/example/third_party/littlefs/app_lfs.c \
 	../../../../apps/ling_wl/app_main.c \
-	../../../../apps/ling_wl/app_lingwl.c \
+	../../../../apps/ling_wl/app_cookie.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
-	../../../../apps/ling_wl/async_msg_loop.c \
 	../../../../apps/ling_wl/wss/wss_client.c \
 	../../../../apps/ling_wl/ota/http_ota.c \
 	../../../../apps/ling_wl/log/log_mqtt.c \

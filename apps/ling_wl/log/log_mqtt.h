@@ -3,7 +3,7 @@
  * @Date: 2025-07-11 12:50:23
  * @LastEditors: lipu123 3493235509@qq.com
  * @LastEditTime: 2025-07-11 16:43:36
- * @FilePath: \kqq_7911-0703m\apps\ling_wl\log\log_mqtt.h
+ * @FilePath: \kqq_7911-0703m\apps\cookie\log\log_mqtt.h
  * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
  */
 #ifndef LOG_MQTT_H
