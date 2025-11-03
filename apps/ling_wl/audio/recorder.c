@@ -105,13 +105,13 @@ static void enc_server_event_handler(void *priv, int argc, int *argv)
         recorder_close(recorder);
         break;
     case AUDIO_SERVER_EVENT_SPEAK_START:
-        log_i("[Recorder VAD]Speak start !\n");
+        // log_i("[Recorder VAD]Speak start !\n");
         if (recorder && recorder->vad_cb) {
             recorder->vad_cb(recorder->data_cb_priv, 1);
         }
         break;
     case AUDIO_SERVER_EVENT_SPEAK_STOP:
-        log_i("[Recorder VAD]Speak stop !\n");
+        // log_i("[Recorder VAD]Speak stop !\n");
         if (recorder && recorder->vad_cb) {
             recorder->vad_cb(recorder->data_cb_priv, 0);
         }

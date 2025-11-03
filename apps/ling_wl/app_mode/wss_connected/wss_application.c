@@ -123,17 +123,16 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         g_mic_on = !g_mic_on;
         log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
-        // set_mic(g_mic_on);
-        wss_application_touch_key(g_mic_on);
+        set_mic(g_mic_on);
+        // wss_application_touch_key(g_mic_on);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
-            // wss_application_touch_key(1);
-
+            wss_application_touch_key(1);
         } else {
             log_i("[wss_application]Touch key released");
-            // set_led_idle();
+            wss_application_touch_key(0);
         }
         // wss_application_touch_key();
         break;

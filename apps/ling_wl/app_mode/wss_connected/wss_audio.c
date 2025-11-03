@@ -389,6 +389,7 @@ void wait_asr_task(void *priv)
         send_audio_status(OAST_ASR, OASE_END);
         wss_app_recorder_data_upstream(NULL);
     }
+    wss_mic_stop();
     set_led_idle();
     os_mutex_post(&g_audio_mutex);
 }
