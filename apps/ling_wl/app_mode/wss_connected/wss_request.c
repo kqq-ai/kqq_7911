@@ -62,7 +62,7 @@ typedef enum {
 
 AppRequestState g_mode_state = STATE_IDLE;
 
-bool is_request_busy(){
+bool wss_request_is_busy(){
     return (g_mode_state != STATE_IDLE);
 }
 
@@ -94,6 +94,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv);
 
 void turn_on_Pi(const char *pdev_sn) {
     wss_vad_stop(); // 停止录音
+    // wss_mic_stop(); // 停止录音
     set_led_tts_bind();
 #ifdef C_SPEAKLER
     log_i("bdo_turn_on %s\n", pdev_sn);
@@ -123,19 +124,17 @@ void set_mic(bool on)
     g_mic_on = on;
     if (!on) {
         wss_mic_stop();
-    // } else {
-    //     resume_mic();
     }
 }
 
-void resume_mic()
+void wss_request_resume_mic()
 {
-    if (g_mic_on && !is_request_busy()) {
+    if (g_mic_on && !wss_request_is_busy()) {
         wss_mic_start();
     }
 }
 
-#define G_MAX_VOLUME 100
+#define G_MAX_VOLUME 70
 int g_volume = G_MAX_VOLUME;
 // 设置播放器音量(1~70)
 void set_tts_volume(int volume) {
@@ -144,7 +143,7 @@ void set_tts_volume(int volume) {
     g_volume = volume * G_MAX_VOLUME / 100; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME
 }
 
-void resume_le_audio()
+void wss_request_resume_le_audio()
 {
     set_Pi_volume(g_volume);
 }
@@ -366,7 +365,6 @@ void wss_request_stop()
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
         wss_request_update_state(STATE_IDLE, "wss_request_stop");
-        // wss_ble_audio_stop();
     } else if (g_mode_state == STATE_TTS_BIND) {
         wss_request_update_state(STATE_IDLE, "wss_request_stop");
         wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
@@ -392,6 +390,7 @@ void wss_request_init()
     g_mode_state = STATE_IDLE;
     wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
     send_audio_format(OAST_TTS);
+    // wss_mic_stop(); // 停止录音
 }
 
 void wss_request_uninit()
@@ -418,7 +417,7 @@ bool wss_request_loop()
             turn_on_Pi(g_edev_target_sn);
         } else if (last_message_received == OR_AUDIO_STATUS && last_event == 5 + OASE_START) {
             wss_request_update_state(STATE_IDLE, "receive AUDIO START ASR");
-            resume_mic();
+            wss_request_resume_mic();
             wss_vad_start(600000); // 开始录音
         } else if (last_message_received == OR_AUDIO_STATUS && (last_event == 5+OASE_END || last_event == 5+OASE_ABNORMAL)) {
             wss_request_update_state(STATE_IDLE, "receive AUDIO OASE_END ASR");
@@ -504,10 +503,9 @@ bool wss_request_loop()
             if (!is_audio_playing()) {
                 wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
                 turn_off_Pi();
-                // wss_ble_audio_stop();
                 wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
                 wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
-                resume_mic();
+                wss_request_resume_mic();
                 wss_vad_start(600000); // 开始录音
             }
         }

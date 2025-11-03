@@ -1,10 +1,11 @@
 #include "wss_application.h"
-#include "wss_audio.h"
+#include "wss_request.h"
 #include "cpu.h"
 #include "../lwl_app_framework.h"
 #include "net_music_play_my.h"
 #include "app_lingwl.h"
 
+#include "wss/wss_client.h"
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
@@ -139,9 +140,9 @@ static void wss_app_mode_play_cb(void *priv)
     os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
 #ifndef C_SPEAKLER
-    resume_le_audio();
+    wss_request_resume_le_audio();
 #endif
-    resume_mic();
+    wss_request_resume_mic();
     os_mutex_post(&g_wss_mutex);
 }
 
@@ -149,7 +150,6 @@ void wss_app_mode_play(const char *fname)
 {
     os_mutex_pend(&g_wss_mutex, 0);
     log_i("wss_app_mode_play: %s", fname);
-    wss_mic_stop();
     wss_request_stop();
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
@@ -220,7 +220,6 @@ void wss_application_init()
     monitor_start();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    // wss_mic_stop(); // 停止录音
 
     g_mic_on = true;
     multi_play_mode = false;
@@ -285,8 +284,8 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
-            // if (is_request_busy()) {
-            //     log_i("[wss_application]is_request_busy, wss_request_stop.");
+            // if (wss_request_is_busy()) {
+            //     log_i("[wss_application]wss_request_is_busy, wss_request_stop.");
             //     wss_request_stop();
             // } else {
             //     log_i("[wss_application]wss_device_call.");
