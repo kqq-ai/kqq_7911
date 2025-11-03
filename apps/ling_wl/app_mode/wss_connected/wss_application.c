@@ -1,5 +1,6 @@
 #include "wss_application.h"
 #include "wss_request.h"
+#include "wss_audio.h"
 #include "cpu.h"
 #include "../lwl_app_framework.h"
 #include "net_music_play_my.h"
@@ -28,10 +29,10 @@ int play_voice_prompt=0;
 music_player *player;
 
 #define log_i log_mqtt
-static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_WHITE); }    //触摸按键时灯光变黄色
+static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_ORANGE); }    //触摸按键时灯光变黄色
 static void set_led_on_normal_key(void) { uart_send_set_led_color(COLOR_GREEN); }    //触摸按键时灯光变蓝色
-static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_GREEN); }    //音频播放时灯光变蓝色
-static void set_led_idle(void)          { uart_send_set_led_color(COLOR_BLACK); }   //空闲时灯光变白色
+static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频播放时灯光变蓝色
+static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }   //空闲时灯光变白色
 
 #define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
 #define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
@@ -42,10 +43,12 @@ static u32 g_curr_time = 0;
 #define HEAT_TIMEOUT 1000
 static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
+static u32 touch_press_last = 0;
 
 static int g_audio_playing = false;
 static bool g_mic_on = false;
 static bool multi_play_mode = false;
+static bool is_tts_speaking = false;
 
 /* Task state */
 typedef enum {
@@ -81,9 +84,22 @@ static void wss_application_print_state(int mode_state, char* tag)
 static int g_touch_key_exit = false;
 
 // 设置退出标志
-static void wss_application_touch_key()
+static void wss_application_touch_key(bool press_down)
 {
-    g_touch_key_exit = true;
+    if (press_down) {
+        touch_press_last = timer_get_ms();
+        wss_request_stop(); // 停止当前对话
+        wss_asr_start();
+        set_led_on_touch();
+        is_tts_speaking = (g_device_state == DEVICE_AUDIO);
+    } else {
+        if (!is_recording_uploading()) { //未上传音频
+            // 短按触摸键，打断/切换对话状态
+            g_touch_key_exit = true;
+        }
+        wss_asr_stop();
+        set_led_idle();
+    }
     wss_application_vailed();
 }
 
@@ -107,21 +123,17 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
         g_mic_on = !g_mic_on;
         log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
-        set_mic(g_mic_on);
-        if (!g_mic_on) {
-            multi_play_mode = true;
-        } else {
-            multi_play_mode = false;
-        }
+        // set_mic(g_mic_on);
+        wss_application_touch_key(g_mic_on);
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
-            wss_application_touch_key();
-            set_led_on_touch();
+            // wss_application_touch_key(1);
+
         } else {
             log_i("[wss_application]Touch key released");
-            set_led_idle();
+            // set_led_idle();
         }
         // wss_application_touch_key();
         break;
@@ -149,7 +161,7 @@ void wss_app_mode_play(const char *fname)
 {
     os_mutex_pend(&g_wss_mutex, 0);
     log_i("wss_app_mode_play: %s", fname);
-    wss_request_stop();
+    wss_mic_stop();
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     
@@ -220,7 +232,7 @@ void wss_application_init()
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
 
-    g_mic_on = true;
+    g_mic_on = false;
     multi_play_mode = false;
 
    // 检查线程是否已经在运行
@@ -283,30 +295,19 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: DEVICE_IDLE -> DEVICE_AUDIO");
             wss_application_print_state(g_device_state, "STEP_TO");
         } else if (wss_application_check_touch_key()) {
-            // if (wss_request_is_busy()) {
-            //     log_i("[wss_application]wss_request_is_busy, wss_request_stop.");
-            //     wss_request_stop();
-            // } else {
-            //     log_i("[wss_application]wss_device_call.");
-            wss_device_call();
-            // }
-            // multi_player_game();
+            if (is_tts_speaking) {
+                is_tts_speaking = false;
+                log_i("[wss_application]Touch key exit TTS speaking.");
+                wss_vad_start(60000); // 开始录音
+            } else {
+                wss_device_call();
+            }
         }
         break;
 
     case DEVICE_AUDIO:
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (wss_application_check_touch_key()) {
-            g_device_state = DEVICE_IDLE;
-            wss_request_stop(); // 按键打断对话
-            wss_mic_start(get_time_stamp() + 60000); // 开始录音
-            last_req_time = g_curr_time;
-            wss_application_print_state(g_device_state, "touch key down");
-            set_led_idle();
-            // wss_request_stop(); // 按键打断对话
-            // wss_vad_start(60000); // 开始录音
-            last_req_time = g_curr_time;
-        } else if (!is_player_busy()) {
+        if (!is_player_busy()) {
             log_i("[wss_application]STATE: DEVICE_AUDIO -> DEVICE_IDLE");
             g_device_state = DEVICE_IDLE;
             wss_application_print_state(g_device_state, "STEP_TO");

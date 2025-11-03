@@ -35,8 +35,8 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
-static void set_led_red_error(void)        {}// uart_send_set_led_color(COLOR_RED); } //red~ low power
-static void set_led_tts_bind(void)      {}// uart_send_set_led_color(COLOR_ORANGE); }   //TTS_BIND时灯光变黄色
+static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+// static void set_led_tts_bind(void)      { uart_send_set_led_color(COLOR_ORANGE); }   //TTS_BIND时灯光变黄色
 
 /*=================================================================================================
  * Audio dec app context
@@ -92,9 +92,8 @@ void turn_off_Pi() {
 static void e_turn_on_cb(bdo_code_e code, void *priv);
 
 void turn_on_Pi(const char *pdev_sn) {
-    wss_vad_stop(); // 停止录音
-    // wss_mic_stop(); // 停止录音
-    set_led_tts_bind();
+    wss_mic_stop(); // 停止录音
+    // set_led_tts_bind();
 #ifdef C_SPEAKLER
     log_i("bdo_turn_on %s\n", pdev_sn);
     memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
@@ -368,7 +367,7 @@ void wss_request_stop()
         wss_request_update_state(STATE_IDLE, "wss_request_stop");
         wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
     } else {
-        wss_vad_stop();
+        wss_vad_abort();
     }
 
     // 重置状态到IDLE
@@ -420,7 +419,7 @@ bool wss_request_loop()
             wss_vad_start(600000); // 开始录音
         } else if (last_message_received == OR_AUDIO_STATUS && (last_event == 5+OASE_END || last_event == 5+OASE_ABNORMAL)) {
             wss_request_update_state(STATE_IDLE, "receive AUDIO OASE_END ASR");
-            wss_vad_stop(); // 停止录音
+            wss_vad_abort(); // 停止录音
         }
         // 音频上传开始
         if (is_recording_uploading()) {

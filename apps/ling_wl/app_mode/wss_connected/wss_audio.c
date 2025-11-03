@@ -21,19 +21,23 @@
 
 #include "os/os_api.h"
 
+#define TOUCH_KEY_HEAT_TIMEOUT_MS 500
+#define VAD_START_HEAT_TIMEOUT_MS 100
+
 static lwl_app_context_t *g_app_ctx = NULL;
 static OS_MUTEX g_audio_mutex;
 
-static void set_led_mic_on(void)        {}// uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
-static void set_led_asr_upload(void)    {}// uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
-static void set_led_idle(void)          {}// uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
+static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
+static void set_led_asr_upload(void)    { uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
+static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
 
 /*=================================================================================================
  * Vad timer
  *=================================================================================================*/
+u32 vad_start_time = 0;
 u32 vad_stop_time = 0;
-uint32_t total_written = 0;
 u32 audio_req_time = 0;
+uint32_t total_written = 0;
 
 u32 get_time_stamp() {
     return timer_get_ms();
@@ -48,6 +52,7 @@ static int g_audio_playing = false; // 音频播放中标志（播放器状态�
 /*=================================================================================================
  * Record app context
  *=================================================================================================*/
+static int g_recording = false;             // ASR强制上传标志忽略VAD，优先级更高
 static int g_recording_vad = false;         // VAD状态标志（根据麦克风数据判断）
 static int g_recording_upload = false;      // VAD开关录音上传状态标志（WSS 状态）
 static int g_recording_uploading = false;   // 录音上传状态标志（WSS 状态）
@@ -72,6 +77,7 @@ static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)]
 
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 void wait_vad_task(void *priv);
+void wait_asr_task(void *priv);
 
 /**
  * @name wss_app_recorder_en
@@ -138,12 +144,13 @@ void wss_mic_start() {
     log_i("[AUDIO]wss_mic_start");
     os_mutex_pend(&g_audio_mutex, 0);
     wss_app_recorder_en(ENABLE);
+    vad_start_time = get_time_stamp();
     os_mutex_post(&g_audio_mutex);
 }
 
 // 停止麦克风录音，可选择是否上传剩余音频数据
-void wss_vad_stop() {
-    log_i("[AUDIO]wss_vad_stop");
+void wss_vad_abort() {
+    log_i("[AUDIO]wss_vad_abort");
     os_mutex_pend(&g_audio_mutex, 0);
     g_recording_upload = false; // 停止上传
     os_mutex_post(&g_audio_mutex);
@@ -154,10 +161,29 @@ void wss_vad_start(uint timestamp) {
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
     g_recording_upload = true;
-    if (vad_stop_time == 0) {
+    if (vad_stop_time == 0 && !g_recording) {
         vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
         threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
     }
+    os_mutex_post(&g_audio_mutex);
+}
+
+// 开始麦克风录音，准备上传ASR
+void wss_asr_start() {
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (!g_recording) {
+        wss_mic_start();
+        g_recording_upload = false;
+        g_recording = true;
+        threadpool_add_task(g_app_ctx->threadpool, wait_asr_task, NULL);
+    }
+    os_mutex_post(&g_audio_mutex);
+}
+
+// 取消上传ASR
+void wss_asr_stop() {
+    os_mutex_pend(&g_audio_mutex, 0);
+    g_recording = false;
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -244,11 +270,14 @@ static void wss_asr_data_to_server(AsrData *asr_data)
  */
 static void start_audio_upload()
 {
+    os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]Start audio upload.");
     set_led_asr_upload(); /* 音频上传时灯光变绿色 */
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     g_recording_uploading = true;
+    os_mutex_post(&g_audio_mutex);
+
     while (is_mic_on() && g_recording_vad && g_recording_upload) {
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
         if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
@@ -258,6 +287,8 @@ static void start_audio_upload()
         }
         msleep(10);
     }
+
+    os_mutex_pend(&g_audio_mutex, 0);
     g_recording_uploading = false;
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
     if (g_recording_vad == false){/* VAD结束 */
@@ -265,11 +296,12 @@ static void start_audio_upload()
         send_audio_status(OAST_ASR, OASE_END);
     } else if (g_recording_upload == false) {
         log_i("[AUDIO]Stop VAD because wss_vad_stop.");
-        send_audio_status(OAST_ASR, OASE_END);
+        send_audio_status(OAST_ASR, OASE_ABNORMAL);
     } else {
         log_i("[AUDIO]Stop VAD because wss_mic_stop.");
-        send_audio_status(OAST_ASR, OASE_ABNORMAL);
+        send_audio_status(OAST_ASR, OASE_END);
     }
+    os_mutex_post(&g_audio_mutex);
 }
 
 /**
@@ -285,10 +317,12 @@ void wait_vad_task(void *priv)
     }
     if (g_recording_upload) {
         log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
-        my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
+        // my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
         wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
         set_led_mic_on(); // 开启录音时灯光变橙色
-        msleep(500);
+        while (vad_start_time + VAD_START_THRESHOLD + VAD_START_HEAT_TIMEOUT_MS > get_time_stamp() && g_recording_upload) {
+            msleep(20);
+        }
 
         while (get_time_stamp() < vad_stop_time && g_recording_upload) {
             msleep(10);
@@ -309,6 +343,54 @@ void wait_vad_task(void *priv)
         }
     }
     vad_stop_time = 0;
+}
+
+/**
+ * @brief 等待按键触发ASR上传的独立线程
+ * @details
+ *   1. 延时500ms，未收到结束请求，则上传音频ASR
+ *   2. 
+ */
+void wait_asr_task(void *priv)
+{
+    my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
+    wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
+    my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
+    set_led_mic_on(); // 开启录音时灯光变橙色
+    u32 asr_start_time = get_time_stamp();
+    log_i("[AUDIO]start ASR task %d\n", asr_start_time);
+    while (asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > get_time_stamp() && g_recording) {
+        msleep(20);
+    }
+
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (g_recording) {
+        log_i("[AUDIO]ASR upload started\n");
+        send_audio_status(OAST_ASR, OASE_START);
+        set_led_asr_upload(); /* 音频上传时灯光变绿色 */
+        wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
+        g_recording_uploading = true;
+    }
+    os_mutex_post(&g_audio_mutex);
+
+    while (is_mic_on() && g_recording) {
+        /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
+        if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
+            wss_asr_data_to_server(&asr_data_frame);
+        } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
+            wss_asr_data_to_server(&asr_data_frame);
+        }
+        msleep(10);
+    }
+
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (g_recording_uploading) {
+        g_recording_uploading = false;
+        send_audio_status(OAST_ASR, OASE_END);
+        wss_app_recorder_data_upstream(NULL);
+    }
+    set_led_idle();
+    os_mutex_post(&g_audio_mutex);
 }
 
 //=================================================================================================
@@ -439,6 +521,7 @@ void wss_audio_init()
     recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
 
     g_recording_upload = false;
+    g_recording = false;
 
     /* 清除录音数据写入回调，默认不上传 */
     wss_app_recorder_data_upstream(NULL);
@@ -447,7 +530,14 @@ void wss_audio_init()
 void wss_audio_uninit()
 {
     log_i("[AUDIO]Uninit WSS audio\n");
+    
+    /* 取消录音上传回调 */
+    wss_app_recorder_data_upstream(NULL);
+    /* 取消VAD回调 */
+    recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
+
     wss_ble_audio_stop(); // 停止音频播放
+    wss_vad_abort(); // 停止VAD录音
     wss_mic_stop(); // 停止录音
     
     
@@ -458,10 +548,5 @@ void wss_audio_uninit()
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);
 
-    /* 取消VAD回调 */
-    recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
-    /* 取消录音上传回调 */
-    wss_app_recorder_data_upstream(NULL);
-    /* 开启录音 */
     os_mutex_del(&g_audio_mutex, 1);
 }

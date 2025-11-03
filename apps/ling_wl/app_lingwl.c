@@ -229,10 +229,6 @@ static void app_cookie_main(void)
     gpio_direction_output(IO_PORTB_02, 1);  // 设置E出声
 #endif
 
-#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
-    extern void bt_ble_module_init(void);
-    bt_ble_module_init();
-#endif
     /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);
     context->music_player = &g_music_player;
