@@ -160,6 +160,10 @@ const u8 *bt_get_mac_addr(void)
     mac_addr[3] = (hash_val >> 16) & 0xFF;
     mac_addr[4] = (hash_val >> 8) & 0xFF;
     mac_addr[5] = hash_val & 0xFE;          // 最低8位,同时，最低bit为0
+    int ret = 0;
+    mac_addr[3]++;
+    ret = syscfg_write(CFG_BT_MAC_ADDR, mac_addr, 6);
+    mac_addr[3]--;
     return mac_addr;
 #if defined CONFIG_WIFI_ENABLE && !defined CONFIG_RF_TEST_ENABLE
     wifi_get_mac(mac_addr);
