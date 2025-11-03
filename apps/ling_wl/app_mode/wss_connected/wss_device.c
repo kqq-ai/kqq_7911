@@ -27,7 +27,6 @@
 static u32 g_curr_time = 0;
 static u32 last_dequeue_time = 0;
 #define TTS_BIND_TIMEOUT_MS   (1 * 1000) // 1s
-static void set_led_device_call(void)    { uart_send_set_led_color(COLOR_GREEN); }   //请求音频灯光变绿色
 
 // #define log_d log_i // Debug log macro
 
@@ -234,7 +233,6 @@ lwl_eend_dev_t *wss_device_loop()
     if (pdev == edev_last) return NULL;
     if (pdev && pdev->distance_info.distance < 2.0f) {
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
-        set_led_device_call();
         last_dequeue_time = g_curr_time;
         return pdev;
     }
@@ -252,7 +250,6 @@ lwl_eend_dev_t *wss_device_call()
 #endif
     if (pdev) {
         wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
-        set_led_device_call();
         last_dequeue_time = g_curr_time;
         return pdev;
     }

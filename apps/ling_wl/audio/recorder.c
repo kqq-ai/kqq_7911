@@ -105,13 +105,13 @@ static void enc_server_event_handler(void *priv, int argc, int *argv)
         recorder_close(recorder);
         break;
     case AUDIO_SERVER_EVENT_SPEAK_START:
-        log_i("[Recorder VAD]Speak start !\n");
+        // log_i("[Recorder VAD]Speak start !\n");
         if (recorder && recorder->vad_cb) {
             recorder->vad_cb(recorder->data_cb_priv, 1);
         }
         break;
     case AUDIO_SERVER_EVENT_SPEAK_STOP:
-        log_i("[Recorder VAD]Speak stop !\n");
+        // log_i("[Recorder VAD]Speak stop !\n");
         if (recorder && recorder->vad_cb) {
             recorder->vad_cb(recorder->data_cb_priv, 0);
         }
@@ -166,8 +166,8 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
         req.enc.vad_auto_refresh = 1; //VAD自动刷新
     }
     if (req.enc.use_vad == 1) {
-        req.enc.vad_start_threshold = 100;    //ms
-        req.enc.vad_stop_threshold  = 120;    //ms
+        req.enc.vad_start_threshold = VAD_START_THRESHOLD;    //ms
+        req.enc.vad_stop_threshold  = VAD_STOP_THRESHOLD;    //ms
     }
     if (req.enc.dns_enable == 1) //降噪的配置
     {

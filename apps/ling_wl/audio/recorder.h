@@ -5,6 +5,9 @@
 #include "generic/circular_buf.h"
 #include "server/server_core.h"
 
+#define VAD_START_THRESHOLD 100    //ms
+#define VAD_STOP_THRESHOLD  120    //ms
+
 /**
  * @brief Callback for receiving recorded audio data
  * @param priv Private data passed when callback was registered

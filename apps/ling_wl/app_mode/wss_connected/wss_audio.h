@@ -18,7 +18,10 @@ void wss_mic_start();       // APP 控制 MIC 录音状态
 void wss_mic_stop();        // APP 控制 MIC 录音状态
 
 void wss_vad_start(uint timestamp); // request 控制 VAD 及音频上传状态
-void wss_vad_stop();                // request 控制 VAD 及音频上传状态
+void wss_vad_abort();                // request 控制 VAD 及音频上传状态
+
+void wss_asr_start();
+void wss_asr_stop();
 
 void set_Pi_volume(int volume);
 
