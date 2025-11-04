@@ -538,8 +538,6 @@ void wss_audio_uninit()
     wss_ble_audio_stop(); // 停止音频播放
     wss_vad_abort(); // 停止VAD录音
     wss_mic_stop(); // 停止录音
-    
-    set_dec_volume(g_app_ctx->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);

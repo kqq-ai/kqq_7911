@@ -35,8 +35,9 @@ void lwl_app_mode_play(const char *fname)
     }
     os_mutex_pend(&g_mode_mutex, 0);
     log_i("play: %s", fname);
-    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
+    set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
     int err = app_music_play_local_music_with_callback(context->music_player, fname, lwl_app_mode_play_cb, NULL);
     if (!err) {
         play_voice_prompt = 1;
