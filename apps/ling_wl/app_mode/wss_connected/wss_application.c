@@ -40,10 +40,7 @@ static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); 
 #define DEV_CALL_TIMEOUT_MS   (1 * 1000) // 1s
 
 static u32 g_curr_time = 0;
-#define HEAT_TIMEOUT 1000
-static u32 g_heat_timer = 0;
 static u32 last_req_time = 0;
-static u32 touch_press_last = 0;
 
 static int g_audio_playing = false;
 static bool g_mic_on = false;
@@ -82,6 +79,17 @@ static void wss_application_print_state(int mode_state, char* tag)
 }
 
 static int g_touch_key_exit = false;
+static int g_power_key_retry = false;
+
+// 查询退出标志
+bool wss_application_check_power_key()
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    bool rst = g_power_key_retry;
+    g_power_key_retry = false;
+    os_mutex_post(&g_wss_mutex);
+    return rst;
+}
 
 // 设置退出标志
 static void wss_application_touch_key(bool press_down)
@@ -90,8 +98,8 @@ static void wss_application_touch_key(bool press_down)
     return;
 #endif
 
+    os_mutex_pend(&g_wss_mutex, 0);
     if (press_down) {
-        touch_press_last = timer_get_ms();
         wss_request_stop(); // 停止当前对话
         wss_asr_start();
         set_led_on_touch();
@@ -105,13 +113,16 @@ static void wss_application_touch_key(bool press_down)
         set_led_idle();
     }
     wss_application_vailed();
+    os_mutex_post(&g_wss_mutex);
 }
 
 // 查询退出标志
 bool wss_application_check_touch_key()
 {
+    os_mutex_pend(&g_wss_mutex, 0);
     bool rst = g_touch_key_exit;
     g_touch_key_exit = false;
+    os_mutex_post(&g_wss_mutex);
     return rst;
 }
 
@@ -120,6 +131,7 @@ bool wss_application_check_touch_key()
 //=================================================================================================
 static void input_event_handler_cb(lwl_event_t *e)
 {
+    os_mutex_pend(&g_wss_mutex, 0);
     static int en = 1;
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
 
@@ -128,7 +140,9 @@ static void input_event_handler_cb(lwl_event_t *e)
         g_mic_on = !g_mic_on;
         log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
         set_mic(g_mic_on);
-        // wss_application_touch_key(g_mic_on);
+        if (wss_check_exit()) {
+            g_power_key_retry = true;
+        }
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
@@ -147,6 +161,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         log_i("[wss_application]MOVE_MORE_THAN_ONE_METER");
         break;
     }
+    os_mutex_post(&g_wss_mutex);
 }
 
 static void wss_app_mode_play_cb(void *priv)
@@ -237,6 +252,7 @@ void wss_application_init()
 
     g_mic_on = true;
     multi_play_mode = false;
+    g_touch_key_exit = false;
 
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
@@ -278,6 +294,7 @@ bool wss_application_loop()
         return true;
     }
 
+    os_mutex_pend(&g_wss_mutex, 0);
     if (wss_request_loop()) {
         if (wss_device_is_calling() && !multi_play_mode) {
             // 多次唤醒模式下，持续检测设备呼叫状态
@@ -322,12 +339,6 @@ bool wss_application_loop()
         break;
     }
 
-    msleep(10);
-
-    if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT) {
-        dump_all_eend_info();
-        g_heat_timer = g_curr_time;
-    }
-
+    os_mutex_post(&g_wss_mutex);
     return false;
 }

@@ -423,6 +423,10 @@ bool wss_request_loop()
         }
         // 音频上传开始
         if (is_recording_uploading()) {
+            if (send_message == 0) {
+                send_message = ORMET_VAD_SPEAKER_START;
+                wss_request_send_event(g_edev_target_sn, send_message);
+            }
             wss_request_update_state(STATE_UPLOAD, "Vioce On");
         }
 
@@ -432,7 +436,7 @@ bool wss_request_loop()
         // TTS下载流程
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("Switch success, starting audio playback");
-            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_SUCCESS);
+            wss_request_send_event(g_edev_target_sn, send_message);
             send_message = 0; // 重置发送消息标志
         } else if (last_message_received == OR_TTS_BIND) {
             wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND Again");
@@ -447,7 +451,7 @@ bool wss_request_loop()
             set_led_red_error();
         } else if (send_message == ORMET_SWITCH_FAILED) {
             wss_request_update_state(STATE_IDLE, "SWITCH_FAILED");
-            wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
+            wss_request_send_event(g_edev_target_sn, send_message);
             send_message = 0; // 重置发送消息标志
             turn_off_Pi();
             set_led_red_error();
@@ -502,7 +506,6 @@ bool wss_request_loop()
                 wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
                 turn_off_Pi();
                 wss_request_send_event(g_edev_target_sn, ORMET_PLAY_END);
-                wss_request_send_event(g_edev_target_sn, ORMET_VAD_SPEAKER_START);
                 wss_request_resume_mic();
                 wss_vad_start(600000); // 开始录音
             }

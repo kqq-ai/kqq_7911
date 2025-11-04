@@ -65,6 +65,19 @@ static int net_connected_init(void)
     lwl_event_handler_add(net_connected_event_handler_cb);
     set_led_connected();
     context->websockets_info = NULL;
+    // OTA check version
+    if (check_ota_info()==1) {
+        lwl_app_mode_switch_to(APP_UPDATE_MODE);
+        return 1;
+    }
+    int ret = log_mqtt_start();
+    if (wss_connect()) {
+        lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+    } else {
+        log_i("websockets init failed\n");
+        set_led_connect_error();// WSS ERROR
+    }
+    play_system_music("NetCfgSucc.mp3");
     return 0;
 }
 
@@ -108,14 +121,7 @@ void app_net_connected_loop()
         play_system_music("NetCfgFail.mp3");
         return;
     }
-    // OTA check version
-    if (check_ota_info()==1) {
-        play_system_music("OtaInUpdate.mp3");
-        lwl_app_mode_switch_to(APP_UPDATE_MODE);
-        return;
-    }
     if (wss_connect()) {
-        int ret = log_mqtt_start();
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     } else {
         log_i("websockets init failed\n");
@@ -127,7 +133,6 @@ void app_net_connected_loop()
         //     lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
         // }
     }
-    // TODO 尝试重连WSS
 }
 
 void app_net_connected_mode(void)
@@ -135,12 +140,12 @@ void app_net_connected_mode(void)
     net_connected_init();
 
     while (1) {
-        app_net_connected_loop();
-        // 应用代码
-        mdelay(10);
         if (lwl_app_mode_exitting()) {
             net_connected_unint();
             return;
         }
+        // 应用代码
+        app_net_connected_loop();
+        mdelay(10);
     }
 }

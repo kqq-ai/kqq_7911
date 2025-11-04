@@ -85,11 +85,11 @@ void app_default_mode(void)
     default_init();
     //mdelay(2000);
     while (1) {
-        app_default_loop();
-        mdelay(100);
         if (lwl_app_mode_exitting()) {
             default_unint();
             return;
         }
+        app_default_loop();
+        mdelay(100);
     }
 }

@@ -64,11 +64,16 @@ static void power_on_input_event_handler_cb(lwl_event_t *e)
 static int power_on_init(void)
 {
     init_time = timer_get_ms();
-    play_system_music("poweron.mp3");
     set_led_power_on();
-    lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+    play_system_music("poweron.mp3");
     char sn[25];
-    get_SN(sn);
+    if (get_SN(sn)) {
+        log_i("have sn, go to power on mode");
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+    } else {
+        log_i("no sn, go to device check mode");
+        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+    }
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(power_on_input_event_handler_cb);
     return 0;
@@ -84,11 +89,11 @@ void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
-        // 应用代码
-        mdelay(10);
         if (lwl_app_mode_exitting()) {
             power_on_unint();
             return;
         }
+        // 应用代码
+        mdelay(10);
     }
 }

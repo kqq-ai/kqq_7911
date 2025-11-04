@@ -53,12 +53,24 @@ static int wss_connected_unint(void)
     return 0;
 }
 
+#define HEAT_TIMEOUT 1000
 
 void app_wss_connected_mode(void)
 {
     wss_connected_init();//application init 和blk RSSI测距 
+    u32 g_heat_timer = 0;
     
     while (1) {
+        if (lwl_app_mode_exitting()) {
+            wss_connected_unint();
+            return;
+        }
+        mdelay(10);
+        if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
+            dump_all_eend_info();
+            g_heat_timer = timer_get_ms();
+        }
+        if (lwl_app_mode_playing()) continue;
         // 应用代码
         if (wss_application_loop()) {
             set_led_connect_error();// WSS ERROR
@@ -77,13 +89,6 @@ void app_wss_connected_mode(void)
                 play_prompt_flag = 0;
                 play_system_music("NetDisc.mp3");
             }
-        }
-
-        mdelay(10);
-
-        if (lwl_app_mode_exitting()) {
-            wss_connected_unint();
-            return;
         }
 
 

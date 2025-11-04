@@ -30,6 +30,9 @@ static void lwl_app_mode_play_cb(void *priv)
 
 void lwl_app_mode_play(const char *fname) 
 {
+    while (play_voice_prompt) {
+        msleep(10);
+    }
     os_mutex_pend(&g_mode_mutex, 0);
     log_i("play: %s", fname);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
@@ -40,6 +43,15 @@ void lwl_app_mode_play(const char *fname)
     }
     os_mutex_post(&g_mode_mutex);
 }
+
+bool lwl_app_mode_playing()
+{
+    bool rst;
+    os_mutex_pend(&g_mode_mutex, 0);
+    rst = play_voice_prompt;
+    os_mutex_post(&g_mode_mutex);
+    return rst;
+} 
 
 //*----------------------------------------------------------------------------*/
 /**@brief    模式退出检查
@@ -147,9 +159,6 @@ u8 lwl_app_mode_exitting()//
     if (app_next_mode && !mode_exitting) {
         /* app_curr_mode = app_next_mode; */
         /* app_next_mode = 0; */
-        while (play_voice_prompt) {
-            msleep(10);
-        }
         mode_exitting = 1;
         return 1;
     }
@@ -174,15 +183,7 @@ void lwl_app_init()
 {
     os_mutex_create(&g_mode_mutex);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    char sn[25];
-    get_SN(sn);
-    if (sn[0] == 0) {
-        log_i("no sn, go to device check mode");
-        app_curr_mode = APP_DEVICE_CHECK_MODE;
-    } else {
-        log_i("have sn, go to power on mode");
-        app_curr_mode = APP_POWER_ON_MODE;
-    }
+    app_curr_mode = APP_POWER_ON_MODE;
     play_voice_prompt = 0;
 }
 

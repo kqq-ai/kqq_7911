@@ -70,11 +70,12 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         }
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        play_system_music("t_key.mp3");
-        // on_user_key_confirm();
-        // 确认连接小程序
-        log_i("PRESS NORMAL KEY in net_connecting mode");
-        key_press_time_ms = timer_get_ms();
+        if (wifi_manager_state) {
+            // 确认连接小程序
+            log_i("PRESS NORMAL KEY in net_connecting mode");
+            key_press_time_ms = timer_get_ms();
+            play_system_music("t_key.mp3");
+        }
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
@@ -144,13 +145,10 @@ void app_net_connecting_loop()
     /* 网络连接成功处理 */
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
         printf("Network connection is successful!\n");
-        set_led_connected();  // 设置连接成功LED状态
-        
-        play_system_music("NetCfgSucc.mp3");
-            
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
     }
+    if (lwl_app_mode_playing()) return;
 
     /* 网络连接失败处理 */
     bool is_connection_failed = (
@@ -185,12 +183,12 @@ void app_net_connecting_mode(void)
     net_connecting_init();
 
     while (1) {
-        app_net_connecting_loop();
-        // 应用代码
         if (lwl_app_mode_exitting()) {
             net_connecting_unint();
             return;
         }
+        // 应用代码
+        app_net_connecting_loop();
         mdelay(10);
     }
 }

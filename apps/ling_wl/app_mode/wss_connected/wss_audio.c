@@ -511,8 +511,6 @@ void wss_audio_init()
     g_app_ctx = lwl_app_core_context_get_instance();
 
 #ifndef C_SPEAKLER
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-    gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);
 #endif
@@ -541,9 +539,6 @@ void wss_audio_uninit()
     wss_vad_abort(); // 停止VAD录音
     wss_mic_stop(); // 停止录音
     
-    
-    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
-    gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker
     set_dec_volume(g_app_ctx->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);

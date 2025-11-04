@@ -44,6 +44,11 @@ static int update_init(void)
     init_time = timer_get_ms();
     lwl_event_handler_add(update_event_handler_cb);
     set_led_OTA_on();
+    play_system_music("OtaInUpdate.mp3");
+    
+    while (lwl_app_mode_playing()) {
+        msleep(10);
+    }
     do_OTA();
     return 0;
 }
@@ -81,12 +86,12 @@ void app_update_mode(void)
     update_init();
 
     while (1) {
-        // 应用代码
-        update_loop();
-        mdelay(10);
         if (lwl_app_mode_exitting()) {
             update_unint();
             return;
         }
+        // 应用代码
+        update_loop();
+        mdelay(10);
     }
 }
