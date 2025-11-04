@@ -248,6 +248,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
         log_i("volume: %d\n", pkg->tts_bind.volume);
         if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
+        wss_ble_audio_stop();
         play_prompt_sound("TTSBind.mp3");
         set_tts_volume(pkg->tts_bind.volume);
 
