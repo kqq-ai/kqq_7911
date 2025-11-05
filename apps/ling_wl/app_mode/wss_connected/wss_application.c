@@ -101,6 +101,7 @@ static void wss_application_touch_key(bool press_down)
     os_mutex_pend(&g_wss_mutex, 0);
     if (press_down) {
         wss_request_stop(); // 停止当前对话
+        play_prompt_sound("t_key.mp3");
         wss_asr_start();
         set_led_on_touch();
         is_tts_speaking = (g_device_state == DEVICE_AUDIO);
@@ -140,11 +141,12 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        g_mic_on = !g_mic_on;
         log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
-        set_mic(g_mic_on);
         if (wss_check_exit()) {
             g_power_key_retry = true;
+        } else {
+            g_mic_on = !g_mic_on;
+            set_mic(g_mic_on);
         }
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
@@ -335,7 +337,6 @@ bool wss_application_loop()
             g_device_state = DEVICE_IDLE;
             wss_application_print_state(g_device_state, "STEP_TO");
             set_led_idle();
-            // play_prompt_sound("VadStart.mp3");
         } else {
             set_led_tts_play();
         }

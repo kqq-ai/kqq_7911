@@ -188,9 +188,11 @@ void wss_asr_stop() {
 }
 
 void set_Pi_volume(int volume) {
+    os_mutex_pend(&g_audio_mutex, 0);
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, volume);
+    os_mutex_post(&g_audio_mutex);
 }
 
 // 获取当前音频播放状态

@@ -143,6 +143,7 @@ void set_tts_volume(int volume) {
 
 void wss_request_resume_le_audio()
 {
+    log_i("wss_request_resume_le_audio: volume=%d", g_volume);
     set_Pi_volume(g_volume);
 }
 
@@ -366,6 +367,7 @@ void wss_request_stop()
     // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
         wss_request_update_state(STATE_IDLE, "wss_request_stop");
+        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
     } else if (g_mode_state == STATE_TTS_BIND) {
         wss_request_update_state(STATE_IDLE, "wss_request_stop");
         wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
