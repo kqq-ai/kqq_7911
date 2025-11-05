@@ -275,6 +275,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/lwl_app_core.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
+	../../../../apps/ling_wl/app_mode/xiaozhi/xiaozhi.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
 	../../../../apps/ling_wl/app_mode/devices_check/devices_check.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_1_key.c \

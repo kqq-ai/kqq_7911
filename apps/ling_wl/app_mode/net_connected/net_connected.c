@@ -30,7 +30,7 @@
 #include "protocol/cp/c_uart_p.h"
 
 #include "protocol/odm/odm_secure.h"
-
+#include "app_lingwl.h"
 #define MODE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 
@@ -114,9 +114,16 @@ void app_net_connected_loop()
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return;
     }
+
+    lwl_app_mode_switch_to(APP_XIAOZHI_MODE);
+
     if (wss_connect()) {
+#ifdef XIAOZHI_MODE_ENABLE
+        lwl_app_mode_switch_to(APP_XIAOZHI_MODE);
+#else
         int ret = log_mqtt_start();
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+#endif
     } else {
         log_i("websockets init failed\n");
         set_led_connect_error();// WSS ERROR

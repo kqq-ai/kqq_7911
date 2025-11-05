@@ -124,15 +124,18 @@ bool wss_connect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
-    // wss_url = get_wss_connection_url();
-    // if (wss_url == NULL) {
-    //     log_i("get_wss_connection_url failed wss_url=NULL");
-    //     os_mutex_post(&g_wss_mutex);
-    //     return false;
-    // }
+    wss_url = get_wss_connection_url();
+    if (wss_url == NULL) {
+        log_i("get_wss_connection_url failed wss_url=NULL");
+        os_mutex_post(&g_wss_mutex);
+        return false;
+    }
     // wss_url= "wss://2662r3426b.vicp.fun/xiaozhi/v1/?device-id=4C%3A45%3AD3%3AED%3ADF%3AF9&client-id=7105db73-9429-48a1-b6b3-4fb03f5e85af";
-    wss_url="ws://192.168.50.108:4321";
     
+#ifdef XIAOZHI_MODE_ENABLE
+    wss_url=XIAOZHI_URL;
+#endif
+
     context->websockets_info = wss_server_connect(wss_url);
     if (context->websockets_info == NULL) {
         log_i("wss_server_connect failed websockets_info=NULL");
@@ -316,14 +319,6 @@ int xiaozhi_send_msg(int type){
     os_mutex_post(&g_wss_mutex);
     return 0;
 }
-void log_hex(const char *tag, const uint8_t *data, size_t len) {
-        char hex_str[len * 3 + 1]; // "FF " 为3字符
-        for (size_t i = 0; i < len; i++) {
-            sprintf(&hex_str[i * 3], "%02X ", data[i]);
-        }
-        hex_str[len * 3] = '\0';
-        log_i("%s: [%d] %s", tag, len, hex_str);
-}
 
 int send_bin_data(uint8_t *data, uint32_t len)
 {
@@ -336,7 +331,6 @@ int send_bin_data(uint8_t *data, uint32_t len)
     }
     
     // 调用
-    log_hex("wbs send data", (uint8_t *)data, len);
     if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
         log_e("Error %s %d.", __FILE__, __LINE__);
         
@@ -348,7 +342,7 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    // log_i("wbs send msg : %d", len);
+    log_i("wbs send msg : %d", len);
     os_mutex_post(&g_wss_mutex);
     return 0;
 }

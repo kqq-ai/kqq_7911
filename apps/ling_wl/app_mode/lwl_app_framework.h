@@ -18,6 +18,7 @@ enum {
     APP_UPDATE_MODE             = 5, /**< Firmware update mode */
     APP_WSS_CONNECTED_MODE      = 6, /**< WebSocket successfully connected */
     APP_DEVICE_CHECK_MODE       = 7, /**< Check device and write SN */
+    APP_XIAOZHI_MODE            = 8, /**< XiaoZhi mode */
 };
 
 #define MAX_LE_AUDIO_VOLUME 12

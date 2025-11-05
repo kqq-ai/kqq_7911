@@ -186,7 +186,7 @@ static void wss_app_recorder_data_upstream(recorder_data_cb_t cb)
 static void recorder_data_to_data_queue(void *priv, void *data, u32 size)
 {
     ASSERT(size == ASR_DATA_CHUNK_SIZE);
-
+    // log_i("recorder_data_to_data_queue size=%d", size);
     AsrData *asr_data = (AsrData *)data;
     if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&g_asr_data_queue, asr_data)) {
         log_i("[WSSAPP]asr data qeue full, failed to enquque asr data.");
@@ -244,17 +244,19 @@ static void start_audio_upload(void *priv)
         if (g_recording == false || g_recording_upload == false) { /* VAD结束 */
             g_recording_upload = false;
             wss_app_recorder_data_upstream(NULL);
-            xiaozhi_send_msg(SEND_STOP); 
+            msleep(5);
             set_led_idle();
             if (g_recording == false){
                 log_i("Stop VAD because VAD END.");
             } else {
                 log_i("Stop VAD because Short Key.");
             }
+            // xiaozhi_send_msg(SEND_STOP); 
             if (send_audio_status(OAST_ASR, OASE_END) == -1) {
                 return;
             }
             return;
+            
         }
         msleep(10);
     }
@@ -294,12 +296,15 @@ void wait_vad_task(void *priv)
     
     set_led_idle();
     wss_app_recorder_data_upstream(NULL);
-    xiaozhi_send_msg(SEND_STOP); // 通知服务器停止录音
+    msleep(10);
+    xiaozhi_send_msg(SEND_STOP); // 通知服务器停止录音s
+    msleep(10);
     if (get_time_stamp() < vad_stop_time) {
         log_i("Stop VAD timeout at %d.", get_time_stamp());
     } else {
         log_i("Stop VAD because mic_off.");
     }
+    
 }
 
 /**

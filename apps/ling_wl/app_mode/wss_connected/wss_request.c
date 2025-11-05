@@ -337,7 +337,7 @@ void wss_request_init()
 
     g_mode_state = STATE_IDLE;
     // wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
-    xiaozhi_send_msg(HELLO);
+    // xiaozhi_send_msg(HELLO);
     // send_audio_format(OAST_TTS);
 }
 

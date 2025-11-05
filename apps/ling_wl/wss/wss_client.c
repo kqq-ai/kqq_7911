@@ -17,7 +17,7 @@
 
 #include "bt_ble/client/ble_simple_client.h"
 #include "log.h"
-
+#include "app_lingwl.h"
 static OS_MUTEX wss_mutex_bin;             //
 
 #define WS_TXT_FRAME 0x81
@@ -28,8 +28,13 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     switch (type) {
     case WS_TXT_FRAME: // text frame
         log_i("wbs recv msg : %s\n", buf);
-        // odmp_rsp_handler(buf, len);
+        
+#ifdef XIAOZHI_MODE_ENABLE
         xiaozhi_rsp_handler(buf, len);
+#else
+        odmp_rsp_handler(buf, len);
+#endif
+
         break;
     case WS_BIN_FRAME: // binary frame
         log_i("wbs recv data : %d\n", len);

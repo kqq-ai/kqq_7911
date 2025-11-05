@@ -9,7 +9,7 @@
 #include "os/os_api.h"
 #include "gpio.h"
 #include "app_lingwl.h"
-
+#include "app_mode/xiaozhi/xiaozhi.h"
 static u8 app_prev_mode = 0;
 static u8 app_curr_mode = 0;
 static u8 app_next_mode = 0;
@@ -221,6 +221,11 @@ void lwl_app_mode_loop()
     case APP_DEVICE_CHECK_MODE:
         log_i("APP_DEVICE_CHECK_MODE\n");
         app_devices_check_mode();
+        lwl_app_mode_exit_ok();
+        break;
+    case APP_XIAOZHI_MODE:
+        log_i("APP_XIAOZHI_MODE\n");
+        app_xiaozhi_mode();
         lwl_app_mode_exit_ok();
         break;
     }

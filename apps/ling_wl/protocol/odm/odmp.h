@@ -154,6 +154,7 @@ char *odmp_req_message(const char **targets, int targets_num, const char *c_id, 
 char *odmp_audio_status(const char *c_id, int oast, int oase);
 char *xiaozhi_send_hello();
 char *xiaozhi_send_start();
+char *xiaozhi_send_text(char *text);
 char *xiaozhi_send_stop();
 char *xiaozhi_req_msg(int type);
 char *odmp_set_audio_format(const char *c_id, int type);

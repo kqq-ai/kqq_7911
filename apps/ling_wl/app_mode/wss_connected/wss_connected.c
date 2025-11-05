@@ -36,7 +36,7 @@ static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHIT
 static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接中 红色 */
 bool play_prompt_flag = 0;
 
-static int wss_connected_init(void)
+int wss_connected_init(void)
 {
     /* 开始RSSI测距 */
     wss_application_init();
@@ -57,10 +57,10 @@ static int wss_connected_unint(void)
 void app_wss_connected_mode(void)
 {
     wss_connected_init();//application init 和blk RSSI测距 
-    wss_ble_audio_start();
+    // wss_ble_audio_start();
     while (1) {
         // 应用代码
-        if (xiaozhi_application_loop()) {
+        if (wss_application_loop()) {
             set_led_connect_error();// WSS ERROR
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);

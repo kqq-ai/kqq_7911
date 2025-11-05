@@ -6,6 +6,7 @@ enum xiaozhi_send_type_e{
     HELLO                   = 1,
     SEND_START              = 2,
     SEND_STOP               = 3,
+    SEND_TEXT               = 4,
 };
 // SN集合相关操作
 void add_target_sn(const char* sn);

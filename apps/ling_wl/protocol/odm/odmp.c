@@ -5,12 +5,16 @@
 #include "cJSON_common/cJSON.h"
 #include "util/cjson_util.h"
 #include "sys_time.h"
+#include "app_lingwl.h"
 // #include "../../app_mode/wss_connected/wss_application.h"
 extern u32 last_req_time ;
 enum ParseErrorCode {
     PARSE_Success,
     PARSE_Error,
 };
+#ifdef XIAOZHI_MODE_ENABLE
+extern char *xiaozhi_session_id;
+#endif
 
 #define LING_UUID_BUFSIZE 37
 
@@ -76,8 +80,6 @@ inline const char *odmp_ase_to_text(int audio_status_event) {
 inline const char *odmp_rmet_to_text(int req_message_event_type) {
     return odmp_rmet_str[req_message_event_type];
 }
-
-char *xiaozhi_session_id = NULL;
 
 
 /**
@@ -188,6 +190,10 @@ char *xiaozhi_req_msg(int type){
         log_i("xiaozhi_send_msg type=3");
         return xiaozhi_send_stop();
     }
+    else if(type==4){
+        log_i("xiaozhi_send_msg type=4");
+        return xiaozhi_send_text("你好呀，小智!");
+    }
     else{
         return xiaozhi_send_hello();
     }
@@ -255,9 +261,37 @@ char *xiaozhi_send_start(){
     // 添加字段
     cJSON_AddStringToObject(nroot, "session_id", xiaozhi_session_id);
     cJSON_AddStringToObject(nroot, "type", "listen");
+    cJSON_AddStringToObject(nroot, "state", "start");
+    // cJSON_AddStringToObject(nroot, "state", "detect");
+    // cJSON_AddStringToObject(nroot, "text", "你好呀，小智!");
+    cJSON_AddStringToObject(nroot, "mode", "manual");
+
+    // 转为字符串
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    cJSON_Delete(nroot);
+    return json_str;
+    }
+char *xiaozhi_send_text(char *text){
+    /*
+    {
+    "session_id": "<会话ID>",
+    "type": "listen",
+    "state": "start",
+    "mode": "manual"
+    }
+    */
+
+    cJSON *nroot = cJSON_CreateObject();
+    if (nroot == NULL) {
+        return NULL;
+    }
+
+    // 添加字段
+    // cJSON_AddStringToObject(nroot, "session_id", xiaozhi_session_id);
+    cJSON_AddStringToObject(nroot, "type", "listen");
     // cJSON_AddStringToObject(nroot, "state", "start");
     cJSON_AddStringToObject(nroot, "state", "detect");
-    cJSON_AddStringToObject(nroot, "text", "你好呀，小智!");
+    cJSON_AddStringToObject(nroot, "text", text);
     cJSON_AddStringToObject(nroot, "mode", "manual");
 
     // 转为字符串
@@ -708,10 +742,18 @@ void xiaozhi_rsp_handler(u8 *buf, u32 len)
     if (nroot == NULL) {
         goto error_ret;
     }
-    // if(cjson_get_string_value(nroot, "session_id")){
-    //     *xiaozhi_session_id = cjson_get_string_value(nroot, "session_id");
-    //     log_i("odmp_rsp_handler:session_id=%s", xiaozhi_session_id ? xiaozhi_session_id : "NULL");
-    // }
+    char *type=cjson_get_string_value(nroot, "type");
+    // log_i("xiaozhi_rsp_handler:type=%s", type ? type : "");
+    if(cjson_get_string_value(nroot, "session_id")&&strcmp(type, "hello") == 0&&!xiaozhi_init_status()){
+        static char *session;
+
+        set_xiaozhi_init_status(true);
+        session = cjson_get_string_value(nroot, "session_id");
+        log_i("odmp_rsp_handler:session_id=%s", session ? session : "");
+        xiaozhi_session_id=session;
+        // xiaozhi_send_msg(4); 
+        last_req_time= timer_get_ms()+1000;
+    }
     
 
 
@@ -720,8 +762,8 @@ void xiaozhi_rsp_handler(u8 *buf, u32 len)
         char *state = cjson_get_string_value(nroot, "state");
         log_i("odmp_rsp_handler:state=%s", state ? state : "NULL");
         if(strcmp(state, "stop") == 0){
-            log_i("set last_req_time to 0");
             last_req_time= timer_get_ms()+10000;
+            log_i("set last_req_time to %d", last_req_time);
         }
         
     }
