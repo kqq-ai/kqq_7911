@@ -121,6 +121,9 @@ bool wss_application_check_touch_key()
 {
     os_mutex_pend(&g_wss_mutex, 0);
     bool rst = g_touch_key_exit;
+    if (g_touch_key_exit) {
+        log_i("[wss_application]Touch key exit detected.");
+    }
     g_touch_key_exit = false;
     os_mutex_post(&g_wss_mutex);
     return rst;

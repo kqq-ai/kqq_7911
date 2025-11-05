@@ -78,7 +78,7 @@ void app_wss_connected_mode(void)
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
                 printf("Network connection is WIFI_STA_DISCONNECT!\n");
                 play_system_music("NetCfgFail.mp3");
-            } else if (wss_application_check_touch_key()) {
+            } else if (wss_application_check_power_key()) {
                 if (!wss_reconnect()) {
                     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
                 } else {

@@ -316,13 +316,13 @@ void wait_vad_task(void *priv)
         msleep(30);
     }
     if (g_recording_upload) {
-        log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
         // my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
         wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
         set_led_mic_on(); // 开启录音时灯光变橙色
         while (vad_start_time + VAD_START_THRESHOLD + VAD_START_HEAT_TIMEOUT_MS > get_time_stamp() && g_recording_upload) {
             msleep(20);
         }
+        log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
 
         while (get_time_stamp() < vad_stop_time && g_recording_upload) {
             msleep(10);
@@ -388,9 +388,9 @@ void wait_asr_task(void *priv)
         g_recording_uploading = false;
         send_audio_status(OAST_ASR, OASE_END);
         wss_app_recorder_data_upstream(NULL);
+        wss_mic_stop();
+        set_led_idle();
     }
-    wss_mic_stop();
-    set_led_idle();
     os_mutex_post(&g_audio_mutex);
 }
 
