@@ -79,7 +79,9 @@ lwl_app_context_t* lwl_app_core_context_get_instance()
 
 void lwl_app_core_init()
 {
-    os_mutex_create(&g_mutex);
+    if (!os_mutex_valid(&g_mutex)) {
+        os_mutex_create(&g_mutex);
+    }
 }
 
 void lwl_app_context_free(lwl_app_context_t *ctx)
@@ -103,7 +105,6 @@ void lwl_app_core_destroy()
         lwl_app_context_free(s_app_context);
         s_app_context = NULL;
     }
-    os_mutex_del(&g_mutex, 1);
 }
 
 /**

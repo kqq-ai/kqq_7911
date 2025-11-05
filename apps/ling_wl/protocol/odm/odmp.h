@@ -67,17 +67,6 @@ enum ORX_EVENT_TYPE {
     OR_PONG,
 };
 
-static const int ORX_EVENT_CLASS[]= {
-    -1,
-    1,
-    1,
-    0,
-    0,
-    0,
-    0,
-    0,
-};
-
 typedef struct {
     bool setup_complete;
 } odmp_pkg_initial_setup_response_t;

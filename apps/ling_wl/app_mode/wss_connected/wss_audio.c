@@ -122,11 +122,9 @@ bool is_recording_uploading() {
 }
 
 // 获取当前麦克风状态
-bool is_mic_on() {
-    os_mutex_pend(&g_audio_mutex, 0);
+static bool is_mic_on() {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     bool recording = (recorder_get_play_pause_state(context->recorder) == 1);
-    os_mutex_post(&g_audio_mutex);
     return recording;
 }
 
@@ -424,11 +422,10 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     const uint32_t MAX_CHUNK_SIZE = 16000;
     uint32_t idx = 0;
 
-    os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_off) {
-        os_mutex_post(&g_audio_mutex);
         return 0;
     }
+    os_mutex_pend(&g_audio_mutex, 0);
 
     if (g_audio_play_ongoing == false) {
         g_audio_play_ongoing = true;
@@ -440,7 +437,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     
     os_mutex_post(&g_audio_mutex);
     while (1) {
-        os_mutex_pend(&g_audio_mutex, 0);
         uint32_t chunk_size = (len - idx > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len - idx;
         uint32_t written = app_music_play_stream_write(
             g_app_ctx->music_player, 
@@ -458,7 +454,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         log_d("Written chunk: %u bytes (total: %u / %u)", written, len, total_written);
         if (idx == len || g_audio_off)  break;
         
-        os_mutex_post(&g_audio_mutex);
         msleep(10);
     }
     if (g_audio_playing == false) {
@@ -469,7 +464,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             log_i("[AUDIO] not playing yet...");
         }
     }
-    os_mutex_post(&g_audio_mutex);
     log_i("[AUDIO] Total stream write: %u / %u bytes -> %u", idx, len, total_written);
     return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
 }
@@ -508,6 +502,7 @@ void wss_audio_init()
     if (!os_mutex_valid(&g_audio_mutex)) {
         os_mutex_create(&g_audio_mutex);
     }
+    os_mutex_pend(&g_audio_mutex, 0);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
 
@@ -527,11 +522,13 @@ void wss_audio_init()
 
     /* 清除录音数据写入回调，默认不上传 */
     wss_app_recorder_data_upstream(NULL);
+    os_mutex_post(&g_audio_mutex);
 }
 
 void wss_audio_uninit()
 {
     log_i("[AUDIO]Uninit WSS audio\n");
+    os_mutex_pend(&g_audio_mutex, 0);
     
     /* 取消录音上传回调 */
     wss_app_recorder_data_upstream(NULL);
@@ -544,6 +541,5 @@ void wss_audio_uninit()
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);
-
-    os_mutex_del(&g_audio_mutex, 1);
+    os_mutex_post(&g_audio_mutex);
 }

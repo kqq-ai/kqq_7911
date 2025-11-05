@@ -299,7 +299,6 @@ bool wss_application_loop()
         return true;
     }
 
-    os_mutex_pend(&g_wss_mutex, 0);
     if (wss_request_loop()) {
         if (wss_device_is_calling() && !multi_play_mode) {
             // 多次唤醒模式下，持续检测设备呼叫状态
@@ -343,6 +342,5 @@ bool wss_application_loop()
         break;
     }
 
-    os_mutex_post(&g_wss_mutex);
     return false;
 }
