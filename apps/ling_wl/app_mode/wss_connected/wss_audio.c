@@ -221,6 +221,7 @@ void wss_ble_audio_stop() {
 // 开始蓝牙音频播放
 void wss_ble_audio_start() {
     os_mutex_pend(&g_audio_mutex, 0);
+    log_i("[AUDIO]wss_ble_audio_start");
     g_audio_off = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
