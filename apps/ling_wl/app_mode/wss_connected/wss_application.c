@@ -99,10 +99,10 @@ static void wss_application_touch_key(bool press_down)
 #endif
     os_mutex_pend(&g_wss_mutex, 0);
     if (press_down) {
+        is_tts_speaking = (g_device_state == APP_AUDIO);
         wss_request_touch_key_down();
         play_prompt_sound("t_key.mp3");
         set_led_on_touch();
-        is_tts_speaking = (g_device_state == APP_AUDIO);
     } else {
         g_touch_key_exit = wss_request_touch_key_up();
         set_led_idle();
@@ -181,6 +181,10 @@ void wss_app_mode_play()
     os_mutex_pend(&g_wss_mutex, 0);
     if (music_file[0] == 0) {
         return;
+    }
+    if (play_voice_prompt == 1) {
+        play_voice_prompt = 0;
+        app_music_play_stop(player);
     }
     log_i("wss_app_mode_play: %s", music_file);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
@@ -306,11 +310,11 @@ bool wss_application_loop()
     if (wss_check_exit()) {
         return true;
     }
-    if (music_file[0] != 0 && play_voice_prompt == 0) {
+    if (music_file[0] != 0) {
         wss_app_mode_play();
     }
 
-    if (wss_request_loop() && !g_on_touch_key) {
+    if (wss_request_loop() && !g_on_touch_key && !play_voice_prompt) {
         if (wss_device_is_calling() && !multi_play_mode) {
             // 多次唤醒模式下，持续检测设备呼叫状态
         } else {
