@@ -3,10 +3,10 @@
 
 #include "cpu.h"
 
-#define play_prompt_sound(x) wss_app_mode_play(CONFIG_CP_VOICE_FILE_PATH x);
+#define play_prompt_sound(x) play_prompt(CONFIG_CP_VOICE_FILE_PATH x);
 
 void wss_application_vailed();
-void wss_app_mode_play(const char *fname);
+void play_prompt(const char *fname);
 
 void wss_application_init();
 void wss_application_uninit();

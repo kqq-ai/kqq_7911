@@ -122,7 +122,9 @@ void set_mic(bool on)
 {
     os_mutex_pend(&g_request_mutex, 0);
     g_mic_on = on;
-    if (!on) {
+    if (on) {
+        wss_request_resume_mic();
+    } else {
         wss_mic_stop();
     }
     os_mutex_post(&g_request_mutex);
@@ -257,10 +259,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
         wss_ble_audio_stop();
         send_message = 0; // 重置发送消息标志
-        play_prompt_sound("TTSBind.mp3");
         set_tts_volume(pkg->tts_bind.volume);
         memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
         turn_on_Pi(g_edev_target_sn);
+        play_prompt_sound("TTSBind.mp3");
 
         wait_time = pkg->tts_bind.wait_time;
         wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND");
@@ -326,6 +328,29 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     os_mutex_post(&g_request_mutex);
 }
 
+void wss_request_touch_key_down()
+{
+    os_mutex_pend(&g_request_mutex, 0);
+    odmp_register_rsp_cbk(NULL);
+    wss_request_stop(); // 停止当前对话
+    wss_asr_start();
+    os_mutex_post(&g_request_mutex);
+}
+
+bool wss_request_touch_key_up()
+{
+    os_mutex_pend(&g_request_mutex, 0);
+    bool rst = false;
+    if (!is_recording_uploading()) { //未上传音频
+        // 短按触摸键，打断/切换对话状态
+        rst = true;
+    }
+    wss_asr_stop();
+    odmp_register_rsp_cbk(wss_rsp_cbk);
+    os_mutex_post(&g_request_mutex);
+    return rst;
+}
+
 //=================================================================================================
 // pDev response callback
 //=================================================================================================
@@ -382,6 +407,7 @@ void wss_request_stop()
         wss_request_update_state(STATE_IDLE, "wss_request_stop");
         wss_request_send_event(g_edev_target_sn, ORMET_SWITCH_FAILED);
     } else {
+        wss_request_update_state(STATE_IDLE, "wss_vad_abort");
         wss_vad_abort();
     }
 

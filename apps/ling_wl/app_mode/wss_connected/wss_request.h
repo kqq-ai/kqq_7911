@@ -15,6 +15,9 @@ void set_mic(bool on);
 void wss_request_resume_le_audio(); // disable C speaker and set Pi_volume
 void wss_request_resume_mic();      // resume mic if g_mic_on == true && not busy
 
+void wss_request_touch_key_down();
+bool wss_request_touch_key_up();
+
 void wss_request_send_event(char *sn, int msg_event);
 
 #endif

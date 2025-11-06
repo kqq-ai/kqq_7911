@@ -29,7 +29,8 @@ static OS_MUTEX g_audio_mutex;
 
 static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
 static void set_led_asr_upload(void)    { uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
-static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
+static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频下载时灯光变蓝色
+static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }   //闲置时灯光变白色
 
 /*=================================================================================================
  * Vad timer
@@ -293,13 +294,13 @@ static void start_audio_upload()
     g_recording_uploading = false;
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
     if (g_recording_vad == false){/* VAD结束 */
-        log_i("[AUDIO]Stop VAD because VAD END.");
+        log_i("[AUDIO]Stop audio_upload because VAD END.");
         send_audio_status(OAST_ASR, OASE_END);
     } else if (g_recording_upload == false) {
-        log_i("[AUDIO]Stop VAD because wss_vad_stop.");
+        log_i("[AUDIO]Stop audio_upload because wss_vad_stop.");
         send_audio_status(OAST_ASR, OASE_ABNORMAL);
     } else {
-        log_i("[AUDIO]Stop VAD because wss_mic_stop.");
+        log_i("[AUDIO]Stop audio_upload because wss_mic_stop.");
         send_audio_status(OAST_ASR, OASE_END);
     }
     os_mutex_post(&g_audio_mutex);
@@ -403,6 +404,7 @@ void app_music_play_end_cb(void *priv)
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
+    set_led_idle(); /* 音频播放结束时灯光变白色 */
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -430,6 +432,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     if (g_audio_play_ongoing == false) {
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");
+        set_led_tts_play(); /* 音频下载时灯光变蓝色 */
         total_written = 0;
         audio_req_time = get_time_stamp();
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
