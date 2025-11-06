@@ -12,8 +12,8 @@ static lfs_app_config_t g_lfs_app_config = {
     .app_config_key = "lingxi_ai",
     .app_config_version = "1.0.0",
     .app_wifi_config = {
-        .ssid = "AIOT",
-        .pwd = "quickquick",
+        .ssid = "AIOThukj",
+        .pwd = "quickquickhvik",
         .retry_connect_count = 0,
     },
     .role_openings = {

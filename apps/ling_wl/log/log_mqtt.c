@@ -355,8 +355,12 @@ void log_mqtt_battery(const char* sn_param,int battery) {
     // 发送到MQTT
     if (json_str != NULL) {
         int result = log_mqtt_send_message("h-status", json_str);
+        ///////////int result = log_mqtt_send_message("reset-KCCNC5L05BEEEH1", json_str);
         if (result != 0) {
             log_i("MQTT battery log sending failed, error code: %d\n", result);
+        }
+        else{
+            ///////////log_i("MQTT battery log GOOD. or  RESET   RESET   RESET   RESET   RESET   \n" );
         }
     }
 
@@ -428,8 +432,8 @@ void mqtt_reset_callback(MessageData* data)
     
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     
-    app_del_stored_wifi_ssid();
-    printf("delete all wifi info\r\n");
+    app_del_stored_wifi_ssid();/////////////
+    printf("delete all   delete all   delete all  wifi info\r\n");
     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     os_mutex_post(&g_log_mqtt_mutex);
     return ;
