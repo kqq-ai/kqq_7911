@@ -87,9 +87,6 @@ static int lwl_app_mode_switch_check(u8 app_mode)
 {
     int ret = false;
     switch (app_mode) {
-    case APP_DEVICE_CHECK_MODE:
-        ret = false;
-        break;
     default:
         ret = TRUE;
         break;
