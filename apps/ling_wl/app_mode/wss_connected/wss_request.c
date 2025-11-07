@@ -256,11 +256,9 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
         log_i("send_id: %s\n", pkg->tts_bind.send_id);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
-        log_i("volume: %d\n", pkg->tts_bind.volume);
         if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
         wss_ble_audio_stop();
         send_message = 0; // 重置发送消息标志
-        set_tts_volume(pkg->tts_bind.volume);
         memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
         turn_on_Pi(g_edev_target_sn);
         play_prompt_sound("TTSBind.mp3");
@@ -292,10 +290,14 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             }
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
-                log_i("AUDIO_STATUS: OASE_START\n");
+                log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
                 wss_ble_audio_start();
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
+                set_tts_volume(pkg->audio_status.volume);
+#ifndef C_SPEAKLER
+                wss_request_resume_le_audio();
+#endif
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
                 last_message_type = OAST_TTS;

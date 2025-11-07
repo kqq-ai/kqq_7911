@@ -79,7 +79,6 @@ typedef struct {
 typedef struct {
     char *c_id;
     char *send_id;
-    int volume;
     int wait_time;
 } odmp_pkg_tts_bind_t;
 
@@ -93,6 +92,7 @@ typedef struct {
     int type;
     int event;
     int has_audio_param;
+    int volume;
     odmp_audio_param_t audio_param;
 } odmp_pkg_audio_status_t;
 

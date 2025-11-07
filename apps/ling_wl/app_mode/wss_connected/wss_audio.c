@@ -198,7 +198,7 @@ void set_Pi_volume(int volume) {
 bool is_audio_playing(){
     os_mutex_pend(&g_audio_mutex, 0);
     bool playing = g_audio_playing || (g_audio_play_ongoing && 
-        total_written + 1000 > get_time_stamp()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
+        (total_written >> 2) + 1000 > get_time_stamp()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
     os_mutex_post(&g_audio_mutex);
     return playing;
 }

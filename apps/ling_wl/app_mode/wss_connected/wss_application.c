@@ -172,9 +172,6 @@ static void wss_app_mode_play_cb(void *priv)
 {
     os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
-#ifndef C_SPEAKLER
-    wss_request_resume_le_audio();
-#endif
     wss_request_resume_mic();
     os_mutex_post(&g_wss_mutex);
 }

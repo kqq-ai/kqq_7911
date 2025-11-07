@@ -382,9 +382,6 @@ static int tts_bind_event_handler(const cJSON *nroot, odmp_package_t *pkg)
     if (cjson_get_integer_value(ndata, "wait_time", &pkg->tts_bind.wait_time)) {
         return PARSE_Error;
     }
-    if (cjson_get_integer_value(ndata, "volume", &pkg->tts_bind.volume)) {
-        return PARSE_Error;
-    }
     return PARSE_Success;
 }
 
@@ -420,6 +417,10 @@ static int audio_status_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 
         if (cjson_get_integer_value(naudio_params, "sample_rate", &pkg->audio_status.audio_param.sample_rate)) {
             return PARSE_Error;
+        }
+
+        if (cjson_get_integer_value(naudio_params, "volume", &pkg->audio_status.volume)) {
+            pkg->audio_status.volume = 70;
         }
     }
     return PARSE_Success;
