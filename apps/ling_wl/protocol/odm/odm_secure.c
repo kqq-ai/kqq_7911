@@ -374,6 +374,7 @@ static char* prepare_signature(const char server_url[])
 }
 
 
+#ifdef TEST_LOCOL_SERVER
 // 获取本地无SSL的测试IP和端口
 // 返回格式为 "ip:port"
 char* https_get_test_ip_port(char* url)
@@ -389,9 +390,10 @@ char* https_get_test_ip_port(char* url)
     } else {
         if (http_body_buf.recv_len > 0) {
             cJSON *nroot = cjson_parse(http_body_buf.p);
-            const char* url_tmp = cjson_get_string_value(nroot, "url");
+            const char* url_tmp = cjson_get_string_value(nroot, TEST_LOCOL_SERVER);
             if (url_tmp) {
                 ip_port = strdup(url_tmp); // 复制一份，防止悬垂指针
+                log_i("PARSE_url=%s", ip_port);
             } else {
                 log_i("PARSE_url Error!!\n\n");
             }
@@ -401,6 +403,7 @@ char* https_get_test_ip_port(char* url)
     if (http_body_buf.p) free(http_body_buf.p);
     return ip_port;
 }
+#endif
 
 // 获取带Token的会话url
 char *get_wss_connection_url()
@@ -409,9 +412,10 @@ char *get_wss_connection_url()
     char sn_c_id[SN_SIZE+1];
     if (!get_SN(sn_c_id)) return NULL;
     char * url_api = (char *)malloc(BUF_SIZE);
-#if TEST_LOCOL_MODE
+#ifdef TEST_LOCOL_SERVER
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);
     snprintf(server_url, BUF_SIZE, TEST_SERVER_API, "http", ip_port);
+    log_i("test server_url=%s", server_url);
     char * Token = prepare_signature(server_url);
     if (Token) snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port, sn_c_id,  Token);
 #else

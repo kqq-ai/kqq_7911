@@ -140,6 +140,11 @@ static void input_event_handler_cb(lwl_event_t *e)
             g_power_key_retry = true;
         } else {
             g_mic_on = !g_mic_on;
+            if (!g_mic_on) {
+                multi_play_mode = true; // 关闭麦克风进入多设备播放模式
+            } else {
+                multi_play_mode = false;
+            }
             set_mic(g_mic_on);
         }
         break;
@@ -308,6 +313,7 @@ bool wss_application_loop()
 {
     g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
+        wss_request_stop();
         return true;
     }
     if (music_file[0] != 0) {

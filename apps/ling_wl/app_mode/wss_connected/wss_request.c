@@ -135,6 +135,7 @@ void wss_request_resume_mic()
     os_mutex_pend(&g_request_mutex, 0);
     if (g_mic_on && !wss_request_is_busy()) {
         wss_mic_start();
+        if (g_edev_target_sn[0]) wss_vad_start(60000); // 开始录音
     }
     os_mutex_post(&g_request_mutex);
 }
@@ -430,6 +431,7 @@ void wss_request_init()
     odmp_register_rsp_cbk(wss_rsp_cbk);
     wss_audio_init();
     g_mic_on = true;
+    g_edev_target_sn[0] = 0;
 
     g_mode_state = STATE_IDLE;
     wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
@@ -495,6 +497,7 @@ bool wss_request_loop()
         } else if (send_message == ORMET_SWITCH_FAILED) {
             wss_request_update_state(STATE_IDLE, "SWITCH_FAILED");
             wss_request_send_event(g_edev_target_sn, send_message);
+            g_edev_target_sn[0] = 0;
             send_message = 0; // 重置发送消息标志
             turn_off_Pi();
             set_led_red_error();
@@ -518,9 +521,12 @@ bool wss_request_loop()
         if (last_message_type == OAST_TTS && last_event == OASE_ABNORMAL) {
             wss_request_stop();
             set_led_red_error();
-        } else if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
-            wss_request_stop();
-            set_led_red_error();
+        } else if (!is_audio_playing()) {
+            log_i("!is_audio_playing timeout %d > %d\n", g_curr_time - g_turnon_timer, WSS_TIMEOUT);
+            if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
+                wss_request_stop();
+                set_led_red_error();
+            }
         }
         wss_application_vailed();
         break;
