@@ -64,7 +64,7 @@ static void add_edev(lwl_eend_dev_t *pdev)
         log_i("Edev set full, cannot add more.");
     } else {
         strncpy(edev_set[edev_set_count].sn, pdev->sn, SN_SIZE);
-        edev_set[edev_set_count].last_get_time = g_curr_time;
+        edev_set[edev_set_count].last_get_time = 0;
         edev_set[edev_set_count].edev = pdev;
         edev_set_count++;
     }

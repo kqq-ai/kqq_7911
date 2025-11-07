@@ -350,15 +350,20 @@ bool wss_request_touch_key_up()
         wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_PRESS);
         log_i("wss_request_touch_key_up: ORMET_BUTTON_PRESS");
         rst = true;
-    } else {
-        // 长按触摸键，结束当前对话
-        wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_END);
-        log_i("wss_request_touch_key_up: ORMET_BUTTON_END");
     }
     wss_asr_stop();
     odmp_register_rsp_cbk(wss_rsp_cbk);
     os_mutex_post(&g_request_mutex);
     return rst;
+}
+
+void wss_request_asr_stop_cb()
+{
+    log_i("wss_request_touch_key_up: ORMET_BUTTON_END");
+    os_mutex_pend(&g_request_mutex, 0);
+    // 长按触摸键，结束当前对话
+    wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_END);
+    os_mutex_post(&g_request_mutex);
 }
 
 //=================================================================================================

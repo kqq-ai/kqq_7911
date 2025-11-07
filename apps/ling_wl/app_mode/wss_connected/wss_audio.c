@@ -365,7 +365,6 @@ void wait_asr_task(void *priv)
         msleep(20);
     }
 
-    os_mutex_pend(&g_audio_mutex, 0);
     if (g_recording) {
         log_i("[AUDIO]ASR upload started\n");
         send_audio_status(OAST_ASR, OASE_START);
@@ -373,7 +372,6 @@ void wait_asr_task(void *priv)
         wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
         g_recording_uploading = true;
     }
-    os_mutex_post(&g_audio_mutex);
 
     while (is_mic_on() && g_recording) {
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
@@ -385,15 +383,14 @@ void wait_asr_task(void *priv)
         msleep(10);
     }
 
-    os_mutex_pend(&g_audio_mutex, 0);
     if (g_recording_uploading) {
         g_recording_uploading = false;
         send_audio_status(OAST_ASR, OASE_END);
         wss_app_recorder_data_upstream(NULL);
         wss_mic_stop();
+        wss_request_asr_stop_cb();
         set_led_idle();
     }
-    os_mutex_post(&g_audio_mutex);
 }
 
 //=================================================================================================

@@ -18,6 +18,8 @@ void wss_request_resume_mic();      // resume mic if g_mic_on == true && not bus
 void wss_request_touch_key_down();
 bool wss_request_touch_key_up();
 
+void wss_request_asr_stop_cb();
+
 void wss_request_send_event(char *sn, int msg_event);
 
 #endif

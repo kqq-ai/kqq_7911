@@ -312,7 +312,7 @@ bool wss_application_loop()
 {
     g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
-        wss_request_stop();
+        if (wss_request_is_busy()) wss_request_stop();
         return true;
     }
     if (music_file[0] != 0) {
