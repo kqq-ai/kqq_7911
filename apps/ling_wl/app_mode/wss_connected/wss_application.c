@@ -186,7 +186,9 @@ void wss_app_mode_play()
     }
     if (play_voice_prompt == 1) {
         play_voice_prompt = 0;
+        log_i("wss_app_mode_play stop previous prompt");
         app_music_play_stop(player);
+        log_i("wss_app_mode_play stop previous prompt END");
     }
     log_i("wss_app_mode_play: %s", music_file);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker

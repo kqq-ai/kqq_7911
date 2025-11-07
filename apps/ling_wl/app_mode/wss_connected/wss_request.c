@@ -336,6 +336,7 @@ void wss_request_touch_key_down()
     os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
     wss_request_stop(); // 停止当前对话
+    wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_START);
     wss_asr_start();
     os_mutex_post(&g_request_mutex);
 }
@@ -346,7 +347,13 @@ bool wss_request_touch_key_up()
     bool rst = false;
     if (!is_recording_uploading()) { //未上传音频
         // 短按触摸键，打断/切换对话状态
+        wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_PRESS);
+        log_i("wss_request_touch_key_up: ORMET_BUTTON_PRESS");
         rst = true;
+    } else {
+        // 长按触摸键，结束当前对话
+        wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_END);
+        log_i("wss_request_touch_key_up: ORMET_BUTTON_END");
     }
     wss_asr_stop();
     odmp_register_rsp_cbk(wss_rsp_cbk);
