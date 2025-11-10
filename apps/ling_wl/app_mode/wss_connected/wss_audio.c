@@ -214,7 +214,6 @@ void wss_ble_audio_stop() {
     odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
         log_i("[AUDIO]wss_ble_audio_stop: send AUDIO ABNORMAL");
-        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
         g_audio_play_ongoing = false; // 停止音频播放
         app_music_play_stop(g_app_ctx->music_player);
     }
