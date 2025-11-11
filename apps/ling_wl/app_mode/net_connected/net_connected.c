@@ -19,6 +19,7 @@
  * WSS_CONNECTED 后端服务器连接成功模式
  *     可以进行应用逻辑处理
  */
+#include "app_cookie.h"
 #include "net_connected.h"
 #include "../lwl_app_framework.h"
 #include "../lwl_app_core.h"
@@ -66,10 +67,13 @@ static int net_connected_init(void)
     set_led_connected();
     context->websockets_info = NULL;
     // OTA check version
+
+#ifndef TEST_LOCOL_SERVER
     if (check_ota_info()==1) {
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 1;
     }
+#endif
     int ret = log_mqtt_start();
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
@@ -84,31 +88,7 @@ static int net_connected_init(void)
 
 static int net_connected_unint(void)
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_remove(net_connected_event_handler_cb);
-    if (context->websockets_info != NULL) {
-        //TODO 同步设备状态 IoT Cload
-        //不能关 websocket !!!
-        //APP_WSS_CONNECTED_MODE 模式退出时关闭
-#if 0
-        if (!get_ble_app_disconnect_flag()) {
-            lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-            /* 通知 APP(小程序) 我已经与wss握手成功 */
-            if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_mqtt_succ, NULL)) {
-                printf("Failed to add the notify_app_wifi_mqtt_succ task !\r\n");
-            }
-        }
-        /* 等待ble与小程序断开 再进入小程序 */
-        while(1) {
-            if (get_ble_app_disconnect_flag()) {
-                wss_application_init();
-                break;
-            }
-        }
-        printf("wss_connected_init exit ! \r\n");
-#endif
-
-    }
     return 0;
 }
 

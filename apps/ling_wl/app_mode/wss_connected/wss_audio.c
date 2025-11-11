@@ -36,7 +36,7 @@ static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); 
  * Vad timer
  *=================================================================================================*/
 u32 vad_start_time = 0;
-u32 vad_stop_time = 0;
+u32 vad_stop_time = 0;  // 0表示未设置，超时停止VAD
 u32 audio_req_time = 0;
 uint32_t total_written = 0;
 
@@ -54,8 +54,8 @@ static int g_audio_playing = false; // 音频播放中标志（播放器状态�
  * Record app context
  *=================================================================================================*/
 static int g_recording = false;             // ASR强制上传标志忽略VAD，优先级更高
-static int g_recording_vad = false;         // VAD状态标志（根据麦克风数据判断）
-static int g_recording_upload = false;      // VAD开关录音上传状态标志（WSS 状态）
+static int g_recording_vad = false;         // VAD状态标志（根据麦克风数据判断），发送ASR结束（1，2）
+static int g_recording_upload = false;      // VAD开关录音上传状态标志（WSS 状态），发送ASR异常（1，3）
 static int g_recording_uploading = false;   // 录音上传状态标志（WSS 状态）
 
 /*=================================================================================================
@@ -163,6 +163,10 @@ void wss_vad_start(uint timestamp) {
     if (vad_stop_time == 0 && !g_recording) {
         vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
         threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
+    } else {
+        if (get_time_stamp() + timestamp > vad_stop_time) {
+            vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
+        }
     }
     os_mutex_post(&g_audio_mutex);
 }
@@ -210,7 +214,6 @@ void wss_ble_audio_stop() {
     odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
         log_i("[AUDIO]wss_ble_audio_stop: send AUDIO ABNORMAL");
-        send_audio_status(OAST_TTS, OASE_ABNORMAL); // 通知TTS异常
         g_audio_play_ongoing = false; // 停止音频播放
         app_music_play_stop(g_app_ctx->music_player);
     }
@@ -297,7 +300,7 @@ static void start_audio_upload()
         log_i("[AUDIO]Stop audio_upload because VAD END.");
         send_audio_status(OAST_ASR, OASE_END);
     } else if (g_recording_upload == false) {
-        log_i("[AUDIO]Stop audio_upload because wss_vad_stop.");
+        log_i("[AUDIO]Stop audio_upload because wss_vad_abort.");
         send_audio_status(OAST_ASR, OASE_ABNORMAL);
     } else {
         log_i("[AUDIO]Stop audio_upload because wss_mic_stop.");
@@ -326,9 +329,9 @@ void wait_vad_task(void *priv)
         }
         log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
 
-        while (get_time_stamp() < vad_stop_time && g_recording_upload) {
+        while (get_time_stamp() < vad_stop_time && g_recording_upload && is_mic_on()) {
             msleep(10);
-            if (g_recording_vad == true && is_mic_on()) {
+            if (g_recording_vad == true) {
                 if (send_audio_status(OAST_ASR, OASE_START) == -1) {
                     break;
                 }
@@ -339,9 +342,12 @@ void wait_vad_task(void *priv)
         set_led_idle();
         wss_app_recorder_data_upstream(NULL);
         if (get_time_stamp() < vad_stop_time) {
-            log_i("[AUDIO]Stop VAD because wss_vad_stop.");
+            log_i("[AUDIO]Stop VAD because wss_vad_abort.");
+        } else if (!is_mic_on()) {
+            log_i("[AUDIO]Stop VAD because wss_mic_stop.");
         } else {
-            log_i("[AUDIO]Stop VAD timeout at %d.", get_time_stamp());
+            log_i("[AUDIO]Stop VAD timeout at %d > %d.", get_time_stamp(), vad_stop_time);
+
         }
     }
     vad_stop_time = 0;

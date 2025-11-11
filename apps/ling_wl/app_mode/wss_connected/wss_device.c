@@ -110,7 +110,7 @@ static lwl_eend_dev_t* get_edev()
     for (int i = 0; i < edev_set_count; i++) {
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(edev_set[i].sn);
         if (!pdev || pdev->distance_info.distance >3.5f) {
-            if (edev_last = edev_set[i].edev) {
+            if (edev_last == edev_set[i].edev) {
                 edev_last = NULL;
             }
             edev_set[i] = edev_set[edev_set_count - 1];
