@@ -127,7 +127,7 @@ void set_mic(bool on)
 void wss_request_resume_mic()
 {
     os_mutex_pend(&g_request_mutex, 0);
-    if (g_mic_on && !wss_request_is_busy()) {
+    if (g_mic_on) {
         wss_mic_start();
         if (g_edev_target_sn[0]) wss_vad_start(60000); // 开始录音
     } else {

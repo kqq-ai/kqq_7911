@@ -461,6 +461,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     if (g_audio_play_ongoing == false) {
         stop_prompt();
         set_speaker();
+        wss_mic_stop(); // 停止录音
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");
         set_led_tts_play(); /* 音频下载时灯光变蓝色 */
