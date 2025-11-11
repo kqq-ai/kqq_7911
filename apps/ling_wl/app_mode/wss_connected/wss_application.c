@@ -172,24 +172,17 @@ char music_file[128];
 
 void stop_prompt()
 {
-    os_mutex_pend(&g_wss_mutex, 0);
+    log_i("stop_prompt %d", play_voice_prompt);
     music_file[0] = 0;
-    if (play_voice_prompt == 1) {
-        play_voice_prompt = 0;
-        music_play_stop_in_thread();
-        wss_request_resume_mic();
-        msleep(100); // 等待播放器准备
-    }
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-    os_mutex_post(&g_wss_mutex);
+    play_voice_prompt = 0;
 }
 
 static void wss_app_mode_play_cb(void *priv)
 {
+    log_i("wss_app_mode_play_cb turnoff cookie speaker");
     os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
     wss_request_resume_mic();
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     os_mutex_post(&g_wss_mutex);
 }
 

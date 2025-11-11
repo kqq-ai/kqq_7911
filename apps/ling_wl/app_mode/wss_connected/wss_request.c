@@ -127,10 +127,10 @@ void set_mic(bool on)
 void wss_request_resume_mic()
 {
     os_mutex_pend(&g_request_mutex, 0);
-    if (g_mic_on) {
+    if (g_mic_on && g_mode_state == STATE_IDLE) {
         wss_mic_start();
         if (g_edev_target_sn[0]) wss_vad_start(60000); // 开始录音
-    } else {
+    } else if (g_mode_state != STATE_UPLOAD) {
         wss_mic_stop();
     }
     os_mutex_post(&g_request_mutex);

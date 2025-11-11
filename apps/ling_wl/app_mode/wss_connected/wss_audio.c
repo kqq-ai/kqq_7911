@@ -122,7 +122,10 @@ void music_play_stop(void *priv)
 // 用一个新线程停止音频播放，避免阻塞主线程
 void music_play_stop_in_thread()
 {
-    threadpool_add_task(g_app_ctx->threadpool, music_play_stop, NULL);
+    if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+        log_i("[AUDIO]music_play_stop_in_thread");
+        threadpool_add_task(g_app_ctx->threadpool, music_play_stop, NULL);
+    }
 }
 
 // 获取当前音频上传状态
@@ -459,8 +462,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     os_mutex_pend(&g_audio_mutex, 0);
 
     if (g_audio_play_ongoing == false) {
+        music_play_stop_in_thread();
         stop_prompt();
-        set_speaker();
         wss_mic_stop(); // 停止录音
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");
@@ -468,6 +471,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         total_written = 0;
         audio_req_time = get_time_stamp();
         app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+        set_speaker();
     }
     
     os_mutex_post(&g_audio_mutex);
