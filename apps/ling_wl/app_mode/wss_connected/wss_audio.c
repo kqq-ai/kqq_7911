@@ -114,6 +114,17 @@ static void wss_app_recorder_data_upstream(recorder_data_cb_t cb)
     }
 }
 
+void music_play_stop(void *priv)
+{
+    app_music_play_stop(g_app_ctx->music_player);
+}
+
+// 用一个新线程停止音频播放，避免阻塞主线程
+void music_play_stop_in_thread()
+{
+    threadpool_add_task(g_app_ctx->threadpool, music_play_stop, NULL);
+}
+
 // 获取当前音频上传状态
 bool is_recording_uploading() {
     os_mutex_pend(&g_audio_mutex, 0);
@@ -164,9 +175,7 @@ void wss_vad_start(uint timestamp) {
         vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
         threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
     } else {
-        if (get_time_stamp() + timestamp > vad_stop_time) {
-            vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
-        }
+        vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
     }
     os_mutex_post(&g_audio_mutex);
 }
@@ -236,7 +245,7 @@ void wss_ble_audio_stop() {
     if (g_audio_play_ongoing) {
         g_audio_play_ongoing = false; // 停止音频播放
         g_audio_playing = false;
-        app_music_play_stop(g_app_ctx->music_player);
+        music_play_stop_in_thread();
     }
     os_mutex_post(&g_audio_mutex);
 }
@@ -333,6 +342,7 @@ static void start_audio_upload()
  */
 void wait_vad_task(void *priv)
 {
+    log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
     while (is_mic_on() == false && g_recording_upload) {
         msleep(30);
     }
@@ -343,7 +353,6 @@ void wait_vad_task(void *priv)
         while (vad_start_time + VAD_START_THRESHOLD + VAD_START_HEAT_TIMEOUT_MS > get_time_stamp() && g_recording_upload) {
             msleep(20);
         }
-        log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
 
         while (get_time_stamp() < vad_stop_time && g_recording_upload && is_mic_on()) {
             msleep(10);

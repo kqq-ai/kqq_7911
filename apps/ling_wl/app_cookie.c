@@ -231,7 +231,7 @@ static void app_cookie_main(void)
     bdo_disable();
 
     /* 创建线程池 */
-    pool = threadpool_create(4, 10);
+    pool = threadpool_create(4, 16);
     context->threadpool = pool;
 
     /*wifi manager 所需要的一些初始化*/

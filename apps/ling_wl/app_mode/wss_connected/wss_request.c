@@ -130,6 +130,8 @@ void wss_request_resume_mic()
     if (g_mic_on && !wss_request_is_busy()) {
         wss_mic_start();
         if (g_edev_target_sn[0]) wss_vad_start(60000); // 开始录音
+    } else {
+        wss_mic_stop();
     }
     os_mutex_post(&g_request_mutex);
 }
