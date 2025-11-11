@@ -7,6 +7,7 @@
 
 void wss_application_vailed();
 void play_prompt(const char *fname);
+void stop_prompt();
 
 void wss_application_init();
 void wss_application_uninit();

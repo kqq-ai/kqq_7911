@@ -157,8 +157,8 @@ void wss_vad_abort() {
 
 // 开始麦克风录音，设置VAD超时时间
 void wss_vad_start(uint timestamp) {
-    os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
+    os_mutex_pend(&g_audio_mutex, 0);
     g_recording_upload = true;
     if (vad_stop_time == 0 && !g_recording) {
         vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
@@ -173,6 +173,7 @@ void wss_vad_start(uint timestamp) {
 
 // 开始麦克风录音，准备上传ASR
 void wss_asr_start() {
+    log_i("[AUDIO]wss_asr_start");
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_recording) {
         wss_mic_start();
@@ -192,6 +193,7 @@ void wss_asr_stop() {
 bool c_speaker_on = false;
 // 设置C音箱开关
 void set_C_volume(bool on) {
+    log_i("[AUDIO]set_C_volume: %d", on);
     os_mutex_pend(&g_audio_mutex, 0);
     c_speaker_on = on;
     gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
@@ -199,6 +201,7 @@ void set_C_volume(bool on) {
 }
 
 void set_Pi_volume(int volume) {
+    log_i("[AUDIO]set_Pi_volume: %d", volume);
     os_mutex_pend(&g_audio_mutex, 0);
     gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
@@ -217,11 +220,11 @@ bool is_audio_playing(){
 
 // 停止蓝牙音频播放，并发送异常状态给服务器
 void wss_ble_audio_stop() {
+    log_i("[AUDIO]wss_ble_audio_stop");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = true;
     odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
-        log_i("[AUDIO]wss_ble_audio_stop");
         g_audio_play_ongoing = false; // 停止音频播放
         app_music_play_stop(g_app_ctx->music_player);
     }
@@ -230,8 +233,11 @@ void wss_ble_audio_stop() {
 
 // 开始蓝牙音频播放
 void wss_ble_audio_start() {
-    os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]wss_ble_audio_start");
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+        app_music_play_stop(g_app_ctx->music_player);
+    }
     g_audio_off = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
@@ -247,7 +253,7 @@ static void recorder_data_to_data_queue(void *priv, void *data, u32 size)
 
     AsrData *asr_data = (AsrData *)data;
     if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&g_asr_data_queue, asr_data)) {
-        log_i("[AUDIO]asr data qeue full, failed to enquque asr data.");
+        log_i("[AUDIO]asr data queue full, failed to enquque asr data.");
     }
 }
 
@@ -283,13 +289,11 @@ static void wss_asr_data_to_server(AsrData *asr_data)
  */
 static void start_audio_upload()
 {
-    os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]Start audio upload.");
     set_led_asr_upload(); /* 音频上传时灯光变绿色 */
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     g_recording_uploading = true;
-    os_mutex_post(&g_audio_mutex);
 
     while (is_mic_on() && g_recording_vad && g_recording_upload) {
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
@@ -300,8 +304,6 @@ static void start_audio_upload()
         }
         msleep(10);
     }
-
-    os_mutex_pend(&g_audio_mutex, 0);
     g_recording_uploading = false;
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
     if (g_recording_vad == false){/* VAD结束 */
@@ -314,7 +316,6 @@ static void start_audio_upload()
         log_i("[AUDIO]Stop audio_upload because wss_mic_stop.");
         send_audio_status(OAST_ASR, OASE_END);
     }
-    os_mutex_post(&g_audio_mutex);
 }
 
 /**
@@ -438,6 +439,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     if (g_audio_off) {
         return 0;
     }
+    log_i("[AUDIO]odmp_audio_data_cbk len=%u", len);
     os_mutex_pend(&g_audio_mutex, 0);
 
     if (g_audio_play_ongoing == false) {

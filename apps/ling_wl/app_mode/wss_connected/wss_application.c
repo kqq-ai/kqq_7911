@@ -168,6 +168,8 @@ static void input_event_handler_cb(lwl_event_t *e)
     os_mutex_post(&g_wss_mutex);
 }
 
+char music_file[128];
+
 static void wss_app_mode_play_cb(void *priv)
 {
     os_mutex_pend(&g_wss_mutex, 0);
@@ -177,7 +179,18 @@ static void wss_app_mode_play_cb(void *priv)
     os_mutex_post(&g_wss_mutex);
 }
 
-char music_file[128];
+void stop_prompt()
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    music_file[0] = 0;
+    if (play_voice_prompt == 1) {
+        play_voice_prompt = 0;
+        app_music_play_stop(player);
+        wss_request_resume_mic();
+    }
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    os_mutex_post(&g_wss_mutex);
+}
 
 void wss_app_mode_play() 
 {
@@ -186,10 +199,11 @@ void wss_app_mode_play()
         return;
     }
     if (play_voice_prompt == 1) {
-        play_voice_prompt = 0;
-        log_i("wss_app_mode_play stop previous prompt");
+        log_i("wss_app_mode_play: already playing");
+        return;
+    }
+    if (g_device_state == APP_AUDIO) {
         app_music_play_stop(player);
-        log_i("wss_app_mode_play stop previous prompt END");
     }
     log_i("wss_app_mode_play: %s", music_file);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker

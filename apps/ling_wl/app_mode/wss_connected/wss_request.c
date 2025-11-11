@@ -296,6 +296,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
+                stop_prompt();
                 wss_ble_audio_start();
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
