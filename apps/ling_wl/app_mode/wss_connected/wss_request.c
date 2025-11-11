@@ -75,9 +75,6 @@ void edev_working(){
 }
 
 void turn_off_Pi() {
-#ifdef C_SPEAKLER
-    return;
-#endif
     if (g_edev_connected_sn[0] != 0) {
         
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
@@ -93,14 +90,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv);
 
 void turn_on_Pi(const char *pdev_sn) {
     wss_mic_stop(); // 停止录音
-    // set_led_tts_bind();
-#ifdef C_SPEAKLER
-    log_i("bdo_turn_on %s\n", pdev_sn);
-    memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
-    send_message = ORMET_SWITCH_SUCCESS;
-    edev_working();
-    return;
-#endif
 // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
     if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
         turn_off_Pi();
@@ -108,6 +97,12 @@ void turn_on_Pi(const char *pdev_sn) {
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
         log_i("turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
+#ifdef C_SPEAKLER
+        memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
+        send_message = ORMET_SWITCH_SUCCESS;
+        edev_working();
+        set_C_volume(true);
+#endif
         return;
     }
     //上传E的电量
@@ -305,9 +300,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
-#ifndef C_SPEAKLER
                 wss_request_resume_le_audio();
-#endif
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
                 last_message_type = OAST_TTS;
@@ -316,12 +309,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 log_i("AUDIO_STATUS: OASE_ABNORMAL\n");
                 last_message_type = OAST_TTS;
                 last_event = OASE_ABNORMAL;
-            } else if (pkg->audio_status.event == OASE_SENTENCE_START) {
-                edev_working();
-                log_i("AUDIO_STATUS: OASE_SENTENCE_START\n");
-            } else if (pkg->audio_status.event == OASE_SENTENCE_END) {
-                edev_working();
-                log_i("AUDIO_STATUS: OASE_SENTENCE_END\n");
             }
         }
         break;
@@ -394,6 +381,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
         if (strcmp(sn_string,g_edev_target_sn) == 0) {
             send_message = ORMET_SWITCH_SUCCESS;
+            set_C_volume(false);
         } else {
             turn_off_Pi();
         }
@@ -414,6 +402,13 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     }
     if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
         send_message = ORMET_SWITCH_FAILED;
+#ifdef C_SPEAKLER
+        log_i("bdo_turn_on %s ORMET_SWITCH_FAILED but use C speaker\n", sn_string);
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
+        send_message = ORMET_SWITCH_SUCCESS;
+        edev_working();
+        set_C_volume(true);
+#endif
     }
     os_mutex_post(&g_request_mutex);
 }

@@ -68,12 +68,10 @@ static int net_connected_init(void)
     context->websockets_info = NULL;
     // OTA check version
 
-#ifndef TEST_LOCOL_SERVER
     if (check_ota_info()==1) {
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 1;
     }
-#endif
     int ret = log_mqtt_start();
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);

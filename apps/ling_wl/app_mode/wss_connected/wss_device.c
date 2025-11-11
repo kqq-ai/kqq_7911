@@ -243,13 +243,14 @@ lwl_eend_dev_t *wss_device_loop()
 lwl_eend_dev_t *wss_device_call()
 {
     g_curr_time = timer_get_ms();
-#ifdef C_SPEAKLER
-    char* pdev = "KPCNC5J26SEEGF0";//小智
-#else
     lwl_eend_dev_t *pdev = get_edev();
+    char* sn = NULL;
+    if (pdev) sn = pdev->sn;
+#ifdef C_SPEAKLER
+    else sn = "KPCNC5J26SEEGF0";//小智
 #endif
-    if (pdev) {
-        wss_request_send_event(pdev, ORMET_NEAR_TRIGGER);
+    if (sn) {
+        wss_request_send_event(sn, ORMET_NEAR_TRIGGER);
         last_dequeue_time = g_curr_time;
         return pdev;
     }

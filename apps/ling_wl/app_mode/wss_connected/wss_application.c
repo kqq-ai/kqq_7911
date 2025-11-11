@@ -173,6 +173,7 @@ static void wss_app_mode_play_cb(void *priv)
     os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
     wss_request_resume_mic();
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     os_mutex_post(&g_wss_mutex);
 }
 
@@ -195,6 +196,7 @@ void wss_app_mode_play()
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     
     int err = app_music_play_local_music_with_callback(player, music_file, wss_app_mode_play_cb, NULL);
+    // int err = app_music_play_mix_file(music_file);
     if (!err) {
         play_voice_prompt = 1;
     }
@@ -315,7 +317,7 @@ bool wss_application_loop()
         if (wss_request_is_busy()) wss_request_stop();
         return true;
     }
-    if (music_file[0] != 0) {
+    if (music_file[0] != 0 && play_voice_prompt == 0) {
         wss_app_mode_play();
     }
 

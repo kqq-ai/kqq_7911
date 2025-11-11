@@ -22,9 +22,7 @@ static void lwl_app_mode_play_cb(void *priv)
 {
     os_mutex_pend(&g_mode_mutex, 0);
     play_voice_prompt = 0;
-#ifndef C_SPEAKLER
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-#endif
     os_mutex_post(&g_mode_mutex);
 }
 

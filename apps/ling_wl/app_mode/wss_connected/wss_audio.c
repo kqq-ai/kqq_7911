@@ -189,10 +189,18 @@ void wss_asr_stop() {
     g_recording = false;
     os_mutex_post(&g_audio_mutex);
 }
+bool c_speaker_on = false;
+// 设置C音箱开关
+void set_C_volume(bool on) {
+    os_mutex_pend(&g_audio_mutex, 0);
+    c_speaker_on = on;
+    gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
+    os_mutex_post(&g_audio_mutex);
+}
 
 void set_Pi_volume(int volume) {
     os_mutex_pend(&g_audio_mutex, 0);
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, volume);
     os_mutex_post(&g_audio_mutex);
@@ -213,7 +221,7 @@ void wss_ble_audio_stop() {
     g_audio_off = true;
     odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
-        log_i("[AUDIO]wss_ble_audio_stop: send AUDIO ABNORMAL");
+        log_i("[AUDIO]wss_ble_audio_stop");
         g_audio_play_ongoing = false; // 停止音频播放
         app_music_play_stop(g_app_ctx->music_player);
     }
@@ -514,10 +522,8 @@ void wss_audio_init()
 
     g_app_ctx = lwl_app_core_context_get_instance();
 
-#ifndef C_SPEAKLER
     /* UART指令开启C端le audio，并指定监听的 mac 地址*/
     uart_send_open_le_audio(g_app_ctx->mac);
-#endif
     wss_mic_start(); // 开启录音
 
     /* 设置VAD回调，触发音频上传 */
