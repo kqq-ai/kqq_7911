@@ -67,6 +67,12 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
             log_i("Touch key pressed down");
         } else {
             log_i("Touch key released");
+            if (wifi_manager_state) {
+                // 确认连接小程序
+                log_i("PRESS NORMAL KEY in net_connecting mode");
+                key_press_time_ms = timer_get_ms();
+                play_system_music("t_key.mp3");
+            }
         }
         break;
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
@@ -163,7 +169,7 @@ void app_net_connecting_loop()
         printf("Network connection is failed!\n");
         set_led_connect_error();  // 设置连接错误LED状态
         
-        ble_simple_server_name_enable(1);
+        ble_simple_server_name_enable(0);
         wifi_manager_state = true;
         
         play_system_music("NetCfgEnter.mp3");

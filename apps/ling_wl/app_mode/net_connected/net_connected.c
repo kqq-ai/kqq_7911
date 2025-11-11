@@ -68,6 +68,7 @@ static int net_connected_init(void)
     context->websockets_info = NULL;
     // OTA check version
 
+    msleep(200);
     if (check_ota_info()==1) {
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 1;

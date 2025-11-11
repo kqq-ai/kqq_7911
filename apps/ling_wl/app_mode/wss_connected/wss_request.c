@@ -523,7 +523,7 @@ bool wss_request_loop()
             wss_request_stop();
             set_led_red_error();
         } else if (!is_audio_playing()) {
-            log_i("!is_audio_playing timeout %d > %d\n", g_curr_time - g_turnon_timer, WSS_TIMEOUT);
+            if ((g_curr_time & 7) == 0) log_i("!is_audio_playing timeout %d > %d\n", g_curr_time - g_turnon_timer, WSS_TIMEOUT);
             if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
                 wss_request_stop();
                 wss_request_resume_mic();
