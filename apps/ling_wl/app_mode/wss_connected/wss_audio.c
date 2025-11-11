@@ -190,22 +190,31 @@ void wss_asr_stop() {
     g_recording = false;
     os_mutex_post(&g_audio_mutex);
 }
+
+#define G_MAX_VOLUME 70
+int g_volume = G_MAX_VOLUME;
+// 设置播放器音量(1~70)
+void set_tts_volume(int volume) {
+    if (volume < 1) volume = 1;
+    if (volume > 100) volume = 100;
+    g_volume = volume * G_MAX_VOLUME / 100; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME
+}
+
 bool c_speaker_on = false;
 // 设置C音箱开关
-void set_C_volume(bool on) {
-    log_i("[AUDIO]set_C_volume: %d", on);
+void set_C_speaker_on(bool on) {
+    log_i("[AUDIO]set_C_speaker_on: %d", on);
     os_mutex_pend(&g_audio_mutex, 0);
     c_speaker_on = on;
-    gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
     os_mutex_post(&g_audio_mutex);
 }
 
-void set_Pi_volume(int volume) {
-    log_i("[AUDIO]set_Pi_volume: %d", volume);
+void set_speaker() {
+    log_i("[AUDIO]set_speaker Pi: %d Cookie: %d", g_volume, c_speaker_on);
     os_mutex_pend(&g_audio_mutex, 0);
     gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
-    set_dec_volume(g_app_ctx->music_player, volume);
+    set_dec_volume(g_app_ctx->music_player, g_volume);
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -218,7 +227,7 @@ bool is_audio_playing(){
     return playing;
 }
 
-// 停止蓝牙音频播放，并发送异常状态给服务器
+// 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
 void wss_ble_audio_stop() {
     log_i("[AUDIO]wss_ble_audio_stop");
     os_mutex_pend(&g_audio_mutex, 0);
@@ -226,18 +235,16 @@ void wss_ble_audio_stop() {
     odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
         g_audio_play_ongoing = false; // 停止音频播放
+        g_audio_playing = false;
         app_music_play_stop(g_app_ctx->music_player);
     }
     os_mutex_post(&g_audio_mutex);
 }
 
-// 开始蓝牙音频播放
+// 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器
 void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
     os_mutex_pend(&g_audio_mutex, 0);
-    if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
-        app_music_play_stop(g_app_ctx->music_player);
-    }
     g_audio_off = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
@@ -443,6 +450,8 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     os_mutex_pend(&g_audio_mutex, 0);
 
     if (g_audio_play_ongoing == false) {
+        stop_prompt();
+        set_speaker();
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");
         set_led_tts_play(); /* 音频下载时灯光变蓝色 */
@@ -459,7 +468,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             data + idx, 
             chunk_size
         );
-        edev_working();
         
         if (written == 0) {
             log_e("Failed to write audio data chunk,odmp_audio_data_cbk");

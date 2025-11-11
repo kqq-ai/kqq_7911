@@ -12,7 +12,6 @@ bool wss_request_is_busy();         //state != STATE_IDLE
 bool is_player_busy();              //state == STATE_DOWNLOAD || is_audio_playing()
 
 void set_mic(bool on);
-void wss_request_resume_le_audio(); // disable C speaker and set Pi_volume
 void wss_request_resume_mic();      // resume mic if g_mic_on == true && not busy
 
 void wss_request_touch_key_down();

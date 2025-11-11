@@ -101,7 +101,7 @@ void turn_on_Pi(const char *pdev_sn) {
         memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
         send_message = ORMET_SWITCH_SUCCESS;
         edev_working();
-        set_C_volume(true);
+        set_C_speaker_on(true);
 #endif
         return;
     }
@@ -131,23 +131,6 @@ void wss_request_resume_mic()
         wss_mic_start();
         if (g_edev_target_sn[0]) wss_vad_start(60000); // 开始录音
     }
-    os_mutex_post(&g_request_mutex);
-}
-
-#define G_MAX_VOLUME 70
-int g_volume = G_MAX_VOLUME;
-// 设置播放器音量(1~70)
-void set_tts_volume(int volume) {
-    if (volume < 1) volume = 1;
-    if (volume > 100) volume = 100;
-    g_volume = volume * G_MAX_VOLUME / 100; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME
-}
-
-void wss_request_resume_le_audio()
-{
-    os_mutex_pend(&g_request_mutex, 0);
-    log_i("wss_request_resume_le_audio: volume=%d", g_volume);
-    set_Pi_volume(g_volume);
     os_mutex_post(&g_request_mutex);
 }
 
@@ -296,12 +279,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
-                stop_prompt();
                 wss_ble_audio_start();
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
-                wss_request_resume_le_audio();
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
                 last_message_type = OAST_TTS;
@@ -382,7 +363,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
         if (strcmp(sn_string,g_edev_target_sn) == 0) {
             send_message = ORMET_SWITCH_SUCCESS;
-            set_C_volume(false);
+            set_C_speaker_on(false);
         } else {
             turn_off_Pi();
         }
@@ -408,7 +389,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
         send_message = ORMET_SWITCH_SUCCESS;
         edev_working();
-        set_C_volume(true);
+        set_C_speaker_on(true);
 #endif
     }
     os_mutex_post(&g_request_mutex);
@@ -545,8 +526,12 @@ bool wss_request_loop()
             log_i("!is_audio_playing timeout %d > %d\n", g_curr_time - g_turnon_timer, WSS_TIMEOUT);
             if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
                 wss_request_stop();
+                wss_request_resume_mic();
+                wss_vad_start(600000); // 开始录音
                 set_led_red_error();
             }
+        } else {
+            edev_working();
         }
         wss_application_vailed();
         break;
@@ -567,6 +552,8 @@ bool wss_request_loop()
         // 音频异常，终止播放
         if (last_message_type == OAST_TTS && last_event == OASE_ABNORMAL) {
             wss_request_stop();
+            wss_request_resume_mic();
+            wss_vad_start(600000); // 开始录音
             set_led_red_error();
         } else if (g_curr_time - g_turnon_timer > 1000) {
         // 播放结束，打开麦克风

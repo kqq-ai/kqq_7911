@@ -6,10 +6,8 @@
 void wss_audio_init();
 void wss_audio_uninit();
 
-u32 get_time_stamp();
-
-bool is_audio_playing();
-bool is_recording_uploading();
+bool is_audio_playing();    // 网络音频流的播放器是否启动或准备启动（有超时机制）
+bool is_recording_uploading();// 录音上传状态
 
 void wss_ble_audio_start(); // request 控制 允许WSS音频数据写入播放器，允许播放
 void wss_ble_audio_stop();  // request 控制 停止数据写入，暂停播放器
@@ -23,6 +21,7 @@ void wss_vad_abort();                // request 控制 VAD 及音频上传状态
 void wss_asr_start();
 void wss_asr_stop();
 
-void set_Pi_volume(int volume);
+void set_tts_volume(int volume);
+void set_C_speaker_on(bool on);
 
 #endif
