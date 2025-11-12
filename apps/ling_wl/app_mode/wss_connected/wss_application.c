@@ -152,9 +152,11 @@ static void input_event_handler_cb(lwl_event_t *e)
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
             g_on_touch_key = true;
+            wss_application_vailed();
         } else {
             log_i("[wss_application]Touch key released");
             g_on_touch_key = false;
+            wss_application_vailed();
         }
         wss_application_touch_key(g_on_touch_key);
         break;

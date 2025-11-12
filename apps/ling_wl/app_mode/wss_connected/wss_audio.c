@@ -173,11 +173,11 @@ void wss_vad_abort() {
 void wss_vad_start(uint timestamp) {
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
     os_mutex_pend(&g_audio_mutex, 0);
-    g_recording_upload = true;
     if (vad_stop_time == 0 && !g_recording) {
+        g_recording_upload = true;
         vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
         threadpool_add_task(g_app_ctx->threadpool, wait_vad_task, NULL);
-    } else {
+    } else if (vad_stop_time != 0) {
         vad_stop_time = get_time_stamp() + timestamp; // 设置VAD超时时间
     }
     os_mutex_post(&g_audio_mutex);
