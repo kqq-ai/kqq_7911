@@ -150,6 +150,9 @@ void app_net_connecting_loop()
 
     /* 网络连接成功处理 */
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
+        ///if( wifi_manager_state )         /// 等待配网的BLE通讯完成
+        ///if( !NET_NTP_GET_TIME_SUCC )     /// 等待获取时间，才能https通讯，NET_NTP_GET_TIME_SUCC
+            mdelay(200);
         printf("Network connection is successful!\n");
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
