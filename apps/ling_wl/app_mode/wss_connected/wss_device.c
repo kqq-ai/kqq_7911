@@ -126,13 +126,13 @@ static lwl_eend_dev_t* get_edev()
         }
     }
     // 找到2m内最早更新的设备
-    for (int i = 0; i < edev_set_count; i++) {
-        if (edev_set[i].edev->distance_info.distance < 2.0f) {
-            if (edev_set[min_index].last_get_time  > edev_set[i].last_get_time) {
-                min_index = i;
-            }
-        }
-    }
+    // for (int i = 0; i < edev_set_count; i++) {
+    //     if (edev_set[i].edev->distance_info.distance < 2.0f) {
+    //         if (edev_set[min_index].last_get_time  > edev_set[i].last_get_time) {
+    //             min_index = i;
+    //         }
+    //     }
+    // }
     lwl_eend_dev_t *pdev = NULL;
     if (edev_set_count > 0) {
         pdev = edev_set[min_index].edev;
