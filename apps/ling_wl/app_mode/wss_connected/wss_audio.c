@@ -401,7 +401,7 @@ void wait_asr_task(void *priv)
 
     if (g_recording) {
         log_i("[AUDIO]ASR upload started\n");
-        send_audio_status(OAST_ASR, OASE_START);
+        send_audio_status(OAST_STREAM_AUDIO, OASE_START);
         set_led_asr_upload(); /* 音频上传时灯光变绿色 */
         wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
         g_recording_uploading = true;
@@ -419,7 +419,7 @@ void wait_asr_task(void *priv)
 
     if (g_recording_uploading) {
         g_recording_uploading = false;
-        send_audio_status(OAST_ASR, OASE_END);
+        send_audio_status(OAST_STREAM_AUDIO, OASE_END);
         wss_app_recorder_data_upstream(NULL);
         wss_mic_stop();
         wss_request_asr_stop_cb();

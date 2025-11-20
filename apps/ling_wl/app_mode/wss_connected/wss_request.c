@@ -317,7 +317,7 @@ void wss_request_touch_key_down()
     os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
     wss_request_stop(); // 停止当前对话
-    wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_START);
+    // wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_START); 
     wss_asr_start();
     os_mutex_post(&g_request_mutex);
 }
@@ -343,7 +343,7 @@ void wss_request_asr_stop_cb()
     log_i("wss_request_touch_key_up: ORMET_BUTTON_END");
     os_mutex_pend(&g_request_mutex, 0);
     // 长按触摸键，结束当前对话
-    wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_END);
+    // wss_request_send_event(g_edev_target_sn, ORMET_BUTTON_END);
     os_mutex_post(&g_request_mutex);
 }
 
@@ -474,10 +474,10 @@ bool wss_request_loop()
         }
         // 音频上传开始
         if (is_recording_uploading()) {
-            if (send_message == 0) {
-                send_message = ORMET_VAD_SPEAKER_START;
-                wss_request_send_event(g_edev_target_sn, send_message);
-            }
+            // if (send_message == 0) {
+            //     send_message = ORMET_VAD_SPEAKER_START;
+            //     // wss_request_send_event(g_edev_target_sn, send_message);
+            // }
             wss_request_update_state(STATE_UPLOAD, "Vioce On");
         }
 
