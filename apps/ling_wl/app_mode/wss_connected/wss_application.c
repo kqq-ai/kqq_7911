@@ -101,26 +101,34 @@ static void wss_application_touch_key(bool press_down)
 #endif
     os_mutex_pend(&g_wss_mutex, 0);
     if (press_down) {
-        is_user_speaking = (g_device_state == APP_VAD);
-        wss_request_touch_key_down();
-        log_i("[wss_application]STATE: Touch key -> APP_IDLE");
-        g_device_state = APP_IDLE;
+        wss_request_pause();
+        wss_mic_stop();
+        wss_asr_start();
         play_prompt_sound("t_key.mp3");
         set_led_on_touch();
     } else {
+        bool is_short_press = !is_recording_uploading(); //未上传音频，是短按
+        wss_request_resume();
         wss_mic_stop();
-        if (wss_request_touch_key_up()) {   // 是短按
-            if (!is_user_speaking) {        // 按键前未在说话
-                g_mic_on = true;
-            } else {                        // 按键前在说话，按键触发
-                log_i("[wss_application]STATE: Touch key -> APP_WAIT");
-                wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
+        wss_asr_stop();
+        if (is_short_press) {
+            // 短按触摸键，打断/切换对话状态
+            if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
+                log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
                 g_device_state = APP_WAIT;
+                wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
                 wss_application_vailed();
+            } else {             // 按键前未在说话
+                log_i("[wss_application]STATE: Touch key -> APP_IDLE");
+                g_device_state = APP_IDLE;
+                g_mic_on = true;                  
             }
-        } else {                            // 是长按
-            multi_play_mode = true;         // 长按默认进剧本和多角色模式
-            g_mic_on = !multi_play_mode;    // 自由模式关闭麦克风
+        } else {
+            // 长按默认进剧本和多角色模式
+            log_i("[wss_application]STATE: long press -> APP_WAIT");
+            g_device_state = APP_WAIT;
+            multi_play_mode = true;
+            g_mic_on = !multi_play_mode;
             wss_request_resume_mic();
             last_req_time = g_curr_time + 10000;
         }
@@ -328,13 +336,9 @@ bool wss_application_loop()
         wss_app_mode_play();
     }
 
-    // if (play_voice_prompt || g_on_touch_key) {
-    //     return false;
-    // }
-    if (wss_request_loop() && !g_on_touch_key && play_voice_prompt == 0) {
-        if ((!wss_device_is_calling() || multi_play_mode) && g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-            wss_device_loop();
-        }
+    wss_request_loop();
+    if (play_voice_prompt || g_on_touch_key) {
+        return false;
     }
 
     // 状态机处理
@@ -348,8 +352,12 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
             g_device_state = APP_VAD;
             wss_vad_start(600000); // 开始录音
-        // } else if (!wss_device_is_calling() || multi_play_mode) {
-        //     wss_device_loop();
+        } else if (!wss_device_is_calling() || multi_play_mode) {
+            if (wss_device_loop()) {
+                log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
+                g_device_state = APP_WAIT;
+                wss_application_vailed();
+            }
         }
         break;
 

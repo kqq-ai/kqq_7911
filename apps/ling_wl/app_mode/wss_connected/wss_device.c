@@ -261,5 +261,5 @@ lwl_eend_dev_t *wss_device_call()
 bool wss_device_is_calling()
 {
     if (!edev_last) return false;
-    return edev_last->distance_info.distance < 2.0f;
+    return edev_last->distance_info.distance < 2.5f;
 }

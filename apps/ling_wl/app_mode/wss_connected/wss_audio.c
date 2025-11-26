@@ -191,7 +191,6 @@ void wss_asr_start() {
     log_i("[AUDIO]wss_asr_start");
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_recording) {
-        // wss_mic_start();
         wss_vad_abort();
         g_recording = true;
         threadpool_add_task(g_app_ctx->threadpool, wait_asr_task, NULL);

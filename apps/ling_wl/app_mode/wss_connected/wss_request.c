@@ -210,28 +210,19 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     os_mutex_post(&g_request_mutex);
 }
 
-void wss_request_touch_key_down()
+void wss_request_pause()
 {
     os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
     wss_request_stop(); // 停止当前对话
-    wss_asr_start();
     os_mutex_post(&g_request_mutex);
 }
 
-bool wss_request_touch_key_up()
+void wss_request_resume()
 {
     os_mutex_pend(&g_request_mutex, 0);
-    bool rst = false;
-    if (!is_recording_uploading()) { //未上传音频
-        // 短按触摸键，打断/切换对话状态
-        log_i("[wss_request]wss_request_touch_key_up: ORMET_BUTTON_PRESS");
-        rst = true;
-    }
-    wss_asr_stop();
     odmp_register_rsp_cbk(wss_rsp_cbk);
     os_mutex_post(&g_request_mutex);
-    return rst;
 }
 
 //=================================================================================================
