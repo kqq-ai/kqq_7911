@@ -296,6 +296,10 @@ static double https_get_timestamp(char* url)
 // 准备签名
 static char* prepare_signature(const char server_url[])
 {
+    if (server_url[0] == '\0') {
+        log_i("prepare_signature server_url is NULL\n");
+        return NULL;
+    }
 
     const size_t iv_len = 12;
     static const unsigned char iv[12] = {
@@ -408,14 +412,16 @@ char* https_get_test_ip_port(char* url)
 // 获取带Token的会话url
 char *get_wss_connection_url()
 {
-    char server_url[BUF_SIZE];
+    char server_url[BUF_SIZE] = "";
     char sn_c_id[SN_SIZE+1];
     if (!get_SN(sn_c_id)) return NULL;
     char * url_api = (char *)malloc(BUF_SIZE);
 #ifdef TEST_LOCOL_SERVER
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);
-    snprintf(server_url, BUF_SIZE, TEST_SERVER_API, "http", ip_port);
-    log_i("test server_url=%s", server_url);
+    if (ip_port) {
+        snprintf(server_url, BUF_SIZE, TEST_SERVER_API, "http", ip_port);
+        log_i("test server_url=%s", server_url);
+    }
     char * Token = prepare_signature(server_url);
     if (Token) snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port, sn_c_id,  Token);
 #else
