@@ -116,7 +116,10 @@ static void wss_app_recorder_data_upstream(recorder_data_cb_t cb)
 
 void music_play_stop(void *priv)
 {
-    app_music_play_stop(g_app_ctx->music_player);
+    if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+        log_i("[AUDIO]music_play_stop");
+        app_music_play_stop(g_app_ctx->music_player);
+    }
 }
 
 // 用一个新线程停止音频播放，避免阻塞主线程
@@ -188,8 +191,8 @@ void wss_asr_start() {
     log_i("[AUDIO]wss_asr_start");
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_recording) {
-        wss_mic_start();
-        g_recording_upload = false;
+        // wss_mic_start();
+        wss_vad_abort();
         g_recording = true;
         threadpool_add_task(g_app_ctx->threadpool, wait_asr_task, NULL);
     }
@@ -327,14 +330,12 @@ static void start_audio_upload()
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer);
     if (g_recording_vad == false){/* VAD结束 */
         log_i("[AUDIO]Stop audio_upload because VAD END.");
-        send_audio_status(OAST_ASR, OASE_END);
     } else if (g_recording_upload == false) {
         log_i("[AUDIO]Stop audio_upload because wss_vad_abort.");
-        send_audio_status(OAST_ASR, OASE_ABNORMAL);
     } else {
         log_i("[AUDIO]Stop audio_upload because wss_mic_stop.");
-        send_audio_status(OAST_ASR, OASE_END);
     }
+    send_audio_status(OAST_ASR, OASE_END);
 }
 
 /**
@@ -395,13 +396,13 @@ void wait_asr_task(void *priv)
     set_led_mic_on(); // 开启录音时灯光变橙色
     u32 asr_start_time = get_time_stamp();
     log_i("[AUDIO]start ASR task %d\n", asr_start_time);
-    while (asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > get_time_stamp() && g_recording) {
+    while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > get_time_stamp() || is_mic_on() == false) && g_recording) {
         msleep(20);
     }
 
     if (g_recording) {
         log_i("[AUDIO]ASR upload started\n");
-        send_audio_status(OAST_ASR, OASE_START);
+        send_audio_status(OAST_STREAM_AUDIO, OASE_START);
         set_led_asr_upload(); /* 音频上传时灯光变绿色 */
         wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
         g_recording_uploading = true;
@@ -419,10 +420,9 @@ void wait_asr_task(void *priv)
 
     if (g_recording_uploading) {
         g_recording_uploading = false;
-        send_audio_status(OAST_ASR, OASE_END);
+        send_audio_status(OAST_STREAM_AUDIO, OASE_END);
         wss_app_recorder_data_upstream(NULL);
         wss_mic_stop();
-        wss_request_asr_stop_cb();
         set_led_idle();
     }
 }

@@ -25,7 +25,7 @@
 #include "../../SC7A20/sc7a20.h"
 
 static OS_MUTEX g_wss_mutex;
-int play_voice_prompt=0;
+int play_voice_prompt = 0;
 music_player *player;
 
 #define log_i log_mqtt
@@ -33,10 +33,10 @@ static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_ORANGE);
 static void set_led_on_normal_key(void) { uart_send_set_led_color(COLOR_BLUE); }        //触摸按键时灯光变蓝色
 static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }       //空闲时灯光变白色
 
-#define NO_REQ_TIMEOUT_MS      (10 * 60 * 1000) // 5分钟
-#define NO_E_TIMEOUT_MS      (5 * 60 * 1000) // 5分钟
-#define NO_MOVE_TIMEOUT_MS   (5 * 60 * 1000) // 5分钟
-#define DEV_CALL_TIMEOUT_MS   (1 * 1000) // 1s
+#define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 10分钟
+#define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 5分钟
+#define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 5分钟
+#define DEV_CALL_TIMEOUT_MS     (3 * 1000)       // 3s
 
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
@@ -44,12 +44,17 @@ static u32 last_req_time = 0;
 static int g_audio_playing = false;
 static bool g_mic_on = false;
 static bool multi_play_mode = false;
-static bool is_tts_speaking = false;
+static bool is_user_speaking = false;
+
+static bool g_on_touch_key = false;
+static bool g_power_key_retry = false;
 
 /* Task state */
 typedef enum {
     APP_IDLE,
     APP_AUDIO,
+    APP_VAD,
+    APP_WAIT,
 } AppTaskStepState;
 
 AppTaskStepState g_device_state = APP_IDLE;
@@ -65,21 +70,18 @@ void wss_disconnect_cbk(void)
     wss_exception_exit();
 }
 
-static void wss_application_print_state(int mode_state, char* tag)
+void wss_request_resume_mic()
 {
-    switch (mode_state) {
-    case APP_IDLE:
-        log_i("[wss_application][%s]APP_IDLE", tag);
-        break;
-    case APP_AUDIO:
-        log_i("[wss_application][%s]APP_AUDIO", tag);
-        break;
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_on_touch_key) {
+        wss_mic_start();
+    }else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
+        wss_mic_start();
+    } else if (!g_mic_on || g_device_state == APP_AUDIO) {
+        wss_mic_stop();
     }
+    os_mutex_post(&g_wss_mutex);
 }
-
-static int g_on_touch_key = false;
-static int g_touch_key_exit = false;
-static int g_power_key_retry = false;
 
 // 查询退出标志
 bool wss_application_check_power_key()
@@ -99,29 +101,32 @@ static void wss_application_touch_key(bool press_down)
 #endif
     os_mutex_pend(&g_wss_mutex, 0);
     if (press_down) {
-        is_tts_speaking = (g_device_state == APP_AUDIO);
+        is_user_speaking = (g_device_state == APP_VAD);
         wss_request_touch_key_down();
+        log_i("[wss_application]STATE: Touch key -> APP_IDLE");
+        g_device_state = APP_IDLE;
         play_prompt_sound("t_key.mp3");
         set_led_on_touch();
     } else {
-        g_touch_key_exit = wss_request_touch_key_up();
+        wss_mic_stop();
+        if (wss_request_touch_key_up()) {   // 是短按
+            if (!is_user_speaking) {        // 按键前未在说话
+                g_mic_on = true;
+            } else {                        // 按键前在说话，按键触发
+                log_i("[wss_application]STATE: Touch key -> APP_WAIT");
+                wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
+                g_device_state = APP_WAIT;
+                wss_application_vailed();
+            }
+        } else {                            // 是长按
+            multi_play_mode = true;         // 长按默认进剧本和多角色模式
+            g_mic_on = !multi_play_mode;    // 自由模式关闭麦克风
+            wss_request_resume_mic();
+            last_req_time = g_curr_time + 10000;
+        }
         set_led_idle();
     }
-    wss_application_vailed();
     os_mutex_post(&g_wss_mutex);
-}
-
-// 查询退出标志
-bool wss_application_check_touch_key()
-{
-    os_mutex_pend(&g_wss_mutex, 0);
-    bool rst = g_touch_key_exit;
-    if (g_touch_key_exit) {
-        log_i("[wss_application]Touch key exit detected.");
-    }
-    g_touch_key_exit = false;
-    os_mutex_post(&g_wss_mutex);
-    return rst;
 }
 
 //=================================================================================================
@@ -135,29 +140,24 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
-        log_i("[wss_application]APPLICATION SHORT_CLICK %d", g_mic_on);
+        log_i("[wss_application]APPLICATION SHORT_CLICK %d", multi_play_mode);
         if (wss_check_exit()) {
             g_power_key_retry = true;
         } else {
-            g_mic_on = !g_mic_on;
-            if (!g_mic_on) {
-                multi_play_mode = true; // 关闭麦克风进入多设备播放模式
-            } else {
-                multi_play_mode = false;
-            }
-            set_mic(g_mic_on);
+            multi_play_mode = !multi_play_mode;
+            g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
+            wss_request_resume_mic();
         }
         break;
     case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
             g_on_touch_key = true;
-            wss_application_vailed();
         } else {
             log_i("[wss_application]Touch key released");
             g_on_touch_key = false;
-            wss_application_vailed();
         }
+        wss_application_vailed();
         wss_application_touch_key(g_on_touch_key);
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
@@ -181,7 +181,7 @@ void stop_prompt()
 
 static void wss_app_mode_play_cb(void *priv)
 {
-    log_i("wss_app_mode_play_cb turnoff cookie speaker");
+    log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
     os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
     wss_request_resume_mic();
@@ -196,10 +196,9 @@ void wss_app_mode_play()
     }
     if (play_voice_prompt == 1 || g_device_state == APP_AUDIO) {
         play_voice_prompt = 0;
-        music_play_stop_in_thread();
-        msleep(100); // 等待播放器准备
+        music_play_stop();
     }
-    log_i("wss_app_mode_play: %s", music_file);
+    log_i("[wss_application]wss_app_mode_play: %s", music_file);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     
@@ -279,10 +278,10 @@ void wss_application_init()
     monitor_start();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
+    wss_mic_stop(); // 停止录音
 
     g_mic_on = true;
     multi_play_mode = false;
-    g_touch_key_exit = false;
     music_file[0] = 0;
 
    // 检查线程是否已经在运行
@@ -329,42 +328,73 @@ bool wss_application_loop()
         wss_app_mode_play();
     }
 
-    if (wss_request_loop() && !g_on_touch_key && !play_voice_prompt) {
-        if (wss_device_is_calling() && !multi_play_mode) {
-            // 多次唤醒模式下，持续检测设备呼叫状态
-        } else {
-            if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-                wss_device_loop();
-            }
+    // if (play_voice_prompt || g_on_touch_key) {
+    //     return false;
+    // }
+    if (wss_request_loop() && !g_on_touch_key && play_voice_prompt == 0) {
+        if ((!wss_device_is_calling() || multi_play_mode) && g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
+            wss_device_loop();
         }
     }
 
     // 状态机处理
     switch (g_device_state) {
     case APP_IDLE:
-        // 在IDLE状态下，检测是否有进入AUDIO的条件（可根据实际业务补充）
-        // 这里只做示例，假设有某事件触发进入AUDIO
-        if (is_player_busy()) {
-            g_device_state = APP_AUDIO;
+        if (wss_request_is_busy()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
-            wss_application_print_state(g_device_state, "STEP_TO");
-        } else if (wss_application_check_touch_key()) {
-            if (is_tts_speaking) {
-                is_tts_speaking = false;
-                log_i("[wss_application]Touch key exit TTS speaking.");
-                wss_vad_start(60000); // 开始录音
-            } else {
-                wss_device_call();
-            }
+            g_device_state = APP_AUDIO;
+            wss_mic_stop(); // 停止录音
+        } else if (g_mic_on && wss_device_is_calling()) {
+            log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
+            g_device_state = APP_VAD;
+            wss_vad_start(600000); // 开始录音
+        // } else if (!wss_device_is_calling() || multi_play_mode) {
+        //     wss_device_loop();
         }
         break;
 
     case APP_AUDIO:
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (!is_player_busy()) {
-            log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+        if (!wss_request_is_busy()) {
+            if (multi_play_mode) {
+                log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
+                wss_request_send_event_target(ORMET_PLAY_NEXT);
+                g_device_state = APP_WAIT;
+            } else {
+                log_i("[wss_application]STATE: APP_AUDIO -> APP_VAD");
+                wss_request_send_event_target(ORMET_PLAY_END);
+                g_device_state = APP_VAD;
+                wss_request_resume_mic();
+                wss_vad_start(600000); // 开始录音
+            }
+        }
+        wss_application_vailed();
+        break;
+
+    case APP_VAD: // until audio upload end
+        // 音频上传结束，回到IDLE状态
+        if (wss_request_is_busy()) {
+            log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
+            g_device_state = APP_AUDIO;
+            g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
+            wss_mic_stop(); // 停止录音
+        }
+        if (!wss_device_is_calling()) {
+            log_i("[wss_application]STATE: APP_VAD -> APP_IDLE");
             g_device_state = APP_IDLE;
-            wss_application_print_state(g_device_state, "STEP_TO");
+        }
+        break;
+
+    case APP_WAIT: // until TTS_bind
+        // 等待下个角色说话
+        if (wss_request_is_busy()) {
+            log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
+            g_device_state = APP_AUDIO;
+            wss_mic_stop(); // 停止录音
+        }
+        if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
+            log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");
+            g_device_state = APP_IDLE;
         }
         break;
     }

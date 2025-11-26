@@ -11,42 +11,25 @@ enum odmp_req_msg_event_type_e{
     ORMET_INITIAL_SETUP         = 1,
     // 蓝牙测距
     ORMET_NEAR_TRIGGER          = 21,
-    ORMET_NEW_DEVICE_IN         = 22,
-    ORMET_DEVICE_LEAVE          = 23,
     ORMET_SWITCH_SUCCESS        = 24,
     ORMET_SWITCH_FAILED         = 25,
     // 按键触发
-    ORMET_BUTTON_TRIGGER        = 3,
-    ORMET_BUTTON_PRESS          = 31,
-    ORMET_BUTTON_DOUBLE_PRESS   = 32,
-    ORMET_BUTTON_START          = 33,
-    ORMET_BUTTON_END            = 34,
-    // 加速度
-    ORMET_MOVE_PATROL           = 41,
-    ORMET_MOVE_STOP             = 42,
-    ORMET_MOVE_SHAKE            = 43,
-    // VAD:语音上传
-    ORMET_VAD_SPEAKER_START     = 51,
-    ORMET_VAD_SPEAKER_END       = 52,
-    // 状态
-    ORMET_LOWER_POWER           = 61,
-    ORMET_LOWER_BATTERY         = 62,
-    ORMET_PLAY_START            = 53,
-    ORMET_PLAY_NEAR_END         = 54,
+    ORMET_BUTTON_TRIGGER        = 31,
+    // 播放状态
+    ORMET_PLAY_STOP             = 50,
     ORMET_PLAY_END              = 55,
+    ORMET_PLAY_NEXT             = 56,
 };
 
 enum odmp_audio_status_type_e{
     OAST_ASR                    = 1,
     OAST_TTS                    = 2,
+    OAST_STREAM_AUDIO           = 3,
 };
 
 enum odmp_audio_status_event_e{
     OASE_START                  = 1,
     OASE_END                    = 2,
-    OASE_ABNORMAL               = 3,
-    OASE_SENTENCE_START         = 4,
-    OASE_SENTENCE_END           = 5,
 };
 
 enum odmp_event_type_e {
@@ -143,29 +126,6 @@ char *odmp_req_message(const char **targets, int targets_num, const char *c_id, 
 char *odmp_audio_status(const char *c_id, int oast, int oase);
 
 char *odmp_set_audio_format(const char *c_id, int type);
-
-char *odmp_req_message_initial_setup(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_near_trigger(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_new_device_in(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_device_leave(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_switch_success(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_switch_failed(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_button_trigger(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_button_press(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_button_double_press(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_button_start(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_button_end(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_move_patrol(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_move_stop(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_move_shake(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_vad_speaker_start(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_vad_speaker_end(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_lower_power(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_lower_battery(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_play_start(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_play_near_end(const char **targets, int targets_num, const char *c_id, const char *send_id);
-char *odmp_req_message_play_end(const char **targets, int targets_num, const char *c_id, const char *send_id);
-
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk);
 void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);

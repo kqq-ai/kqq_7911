@@ -5,7 +5,6 @@
 
 #define play_prompt_sound(x) play_prompt(CONFIG_CP_VOICE_FILE_PATH x);
 
-void wss_application_vailed();
 void play_prompt(const char *fname);
 void stop_prompt();
 

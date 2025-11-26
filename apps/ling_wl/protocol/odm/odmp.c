@@ -31,33 +31,16 @@ static const char *odmp_ast_str[] = {
 static const char *odmp_ase_str[] = {
     [OASE_START]                = "start",
     [OASE_END]                  = "end",
-    [OASE_ABNORMAL]             = "abnormal",
-    [OASE_SENTENCE_START]       = "sentence_start",
-    [OASE_SENTENCE_END]         = "sentence_end",
 };
 
 static const char *odmp_rmet_str[] = {
     [ORMET_INITIAL_SETUP]       = "initial_setup",
     [ORMET_NEAR_TRIGGER]        = "near_trigger",
-    [ORMET_NEW_DEVICE_IN]       = "new_device_in",
-    [ORMET_DEVICE_LEAVE]        = "device_leave",
     [ORMET_SWITCH_SUCCESS]      = "switch_success",
-    [ORMET_SWITCH_FAILED]       = "switch_failed",
     [ORMET_BUTTON_TRIGGER]      = "button_trigger",
-    [ORMET_BUTTON_PRESS]        = "button_press",
-    [ORMET_BUTTON_DOUBLE_PRESS] = "button_double_press",
-    [ORMET_BUTTON_START]        = "button_start",
-    [ORMET_BUTTON_END]          = "button_end",
-    [ORMET_MOVE_PATROL]         = "move_patrol",
-    [ORMET_MOVE_STOP]           = "move_stop",
-    [ORMET_MOVE_SHAKE]          = "move_shake",
-    [ORMET_VAD_SPEAKER_START]   = "vad_speaker_start",
-    [ORMET_VAD_SPEAKER_END]     = "vad_speaker_end",
-    [ORMET_LOWER_POWER]         = "lower_power",
-    [ORMET_LOWER_BATTERY]       = "lower_battery",
-    [ORMET_PLAY_START]          = "play_start",
-    [ORMET_PLAY_NEAR_END]       = "play_near_end",
+    [ORMET_PLAY_STOP]           = "play_stop",
     [ORMET_PLAY_END]            = "play_end",
+    [ORMET_PLAY_NEXT]       = "play_next",
 };
 
 inline const char *odmp_et_to_text(int event_type) {
@@ -246,90 +229,6 @@ char *odmp_set_audio_format(const char *c_id, int type)
     }
 
     return json_str;
-}
-
-inline char *odmp_req_message_initial_setup(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_INITIAL_SETUP);
-}
-
-inline char *odmp_req_message_near_trigger(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_NEAR_TRIGGER);
-}
-
-inline char *odmp_req_message_new_device_in(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_NEW_DEVICE_IN);
-}
-
-inline char *odmp_req_message_device_leave(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_DEVICE_LEAVE);
-}
-
-inline char *odmp_req_message_switch_success(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_SWITCH_SUCCESS);
-}
-
-inline char *odmp_req_message_switch_failed(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_SWITCH_FAILED);
-}
-
-inline char *odmp_req_message_button_trigger(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_BUTTON_TRIGGER);
-}
-
-inline char *odmp_req_message_button_press(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_BUTTON_PRESS);
-}
-
-inline char *odmp_req_message_button_double_press(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_BUTTON_DOUBLE_PRESS);
-}
-
-inline char *odmp_req_message_button_start(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_BUTTON_START);
-}
-
-inline char *odmp_req_message_button_end(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_BUTTON_END);
-}
-
-inline char *odmp_req_message_move_patrol(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_MOVE_PATROL);
-}
-
-inline char *odmp_req_message_move_stop(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_MOVE_STOP);
-}
-
-inline char *odmp_req_message_move_shake(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_MOVE_SHAKE);
-}
-
-inline char *odmp_req_message_vad_speaker_start(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_VAD_SPEAKER_START);
-}
-
-inline char *odmp_req_message_vad_speaker_end(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_VAD_SPEAKER_END);
-}
-
-inline char *odmp_req_message_lower_power(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_LOWER_POWER);
-}
-
-inline char *odmp_req_message_lower_battery(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_LOWER_BATTERY);
-}
-
-inline char *odmp_req_message_play_start(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_PLAY_START);
-}
-
-inline char *odmp_req_message_play_near_end(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_PLAY_NEAR_END);
-}
-
-inline char *odmp_req_message_play_end(const char **targets, int targets_num, const char *c_id, const char *send_id) {
-    return odmp_req_message(targets, targets_num, c_id, send_id, false, ORMET_PLAY_END);
 }
 
 static int initial_setup_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
