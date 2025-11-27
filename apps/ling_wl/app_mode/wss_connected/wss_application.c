@@ -99,7 +99,6 @@ static void wss_application_touch_key(bool press_down)
 #if TOUCH_KEY_AVAILABLE == 0
     return;
 #endif
-    os_mutex_pend(&g_wss_mutex, 0);
     if (press_down) {
         wss_request_pause();
         wss_mic_stop();
@@ -119,9 +118,10 @@ static void wss_application_touch_key(bool press_down)
                 wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
                 wss_application_vailed();
             } else {             // 按键前未在说话
-                log_i("[wss_application]STATE: Touch key -> APP_IDLE");
-                g_device_state = APP_IDLE;
-                g_mic_on = true;                  
+                log_i("[wss_application]STATE: Touch key -> APP_VAD");
+                g_device_state = APP_VAD;
+                g_mic_on = true;           
+                wss_vad_start(600000); // 开始录音       
             }
         } else {
             // 长按默认进剧本和多角色模式
@@ -134,7 +134,6 @@ static void wss_application_touch_key(bool press_down)
         }
         set_led_idle();
     }
-    os_mutex_post(&g_wss_mutex);
 }
 
 //=================================================================================================

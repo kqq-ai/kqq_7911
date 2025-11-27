@@ -99,7 +99,7 @@ void turn_on_Pi(const char *pdev_sn) {
     }
     //上传E的电量
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-    bdo_turn_on(pdev, 1000, 1000, e_turn_on_cb, pdev);
+    bdo_turn_on(pdev, 500, 500, e_turn_on_cb, pdev);
     edev_working();
 }
 static void wss_request_update_state(AppRequestState mode_state, char* tag)
@@ -378,7 +378,7 @@ bool wss_request_loop()
 
     case STATE_PLAYING: // until player end
         // 播放结束，回到IDLE状态
-        if (g_curr_time - g_turnon_timer > 1000) {
+        if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
             if (!is_audio_playing()) {
                 wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
                 wss_ble_audio_stop();

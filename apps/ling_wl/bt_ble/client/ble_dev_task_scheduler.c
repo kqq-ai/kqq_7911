@@ -155,8 +155,9 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Null_Pointer);
         return;
     }
-    if (dev->adv_state == BDPAS_CONNECTED || dev->distance_info.rssi_sample_count < 1) {
-        log_i("[BDO]Error dev busy!");
+    // if (dev->adv_state == BDPAS_CONNECTED || dev->distance_info.rssi_sample_count < 1) {
+    if (dev->distance_info.rssi_sample_count < 1) {
+        log_i("[BDO]Error dev lost!");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Dev_Busy);
         return;
