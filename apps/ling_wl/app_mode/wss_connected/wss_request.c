@@ -89,6 +89,7 @@ void turn_on_Pi(const char *pdev_sn) {
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
         log_i("[wss_request]turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
+        send_message = ORMET_SWITCH_FAILED;
 #ifdef C_SPEAKLER
         memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
         send_message = ORMET_SWITCH_SUCCESS;

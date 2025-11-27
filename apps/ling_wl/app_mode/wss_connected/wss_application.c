@@ -372,17 +372,21 @@ bool wss_application_loop()
 
     case APP_AUDIO:
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (!wss_request_is_busy()) {
+        if (!wss_request_is_busy()) { //也可能是超时退出
             if (multi_play_mode) {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
                 wss_request_send_event_target(ORMET_PLAY_NEXT);
                 g_device_state = APP_WAIT;
-            } else {
+            } else if (wss_device_is_calling()) {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_VAD");
                 wss_request_send_event_target(ORMET_PLAY_END);
                 g_device_state = APP_VAD;
                 wss_request_resume_mic();
                 wss_vad_start(600000); // 开始录音
+            } else {
+                log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+                g_device_state = APP_IDLE;
+                wss_request_resume_mic();
             }
         }
         wss_application_vailed();
