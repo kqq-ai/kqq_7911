@@ -164,14 +164,6 @@ void wss_mic_start() {
     os_mutex_post(&g_audio_mutex);
 }
 
-// 停止麦克风录音，可选择是否上传剩余音频数据
-void wss_vad_abort() {
-    log_i("[AUDIO]wss_vad_abort");
-    os_mutex_pend(&g_audio_mutex, 0);
-    g_recording_upload = false; // 停止上传
-    os_mutex_post(&g_audio_mutex);
-}
-
 // 开始麦克风录音，设置VAD超时时间
 void wss_vad_start(uint timestamp) {
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
@@ -191,7 +183,7 @@ void wss_asr_start() {
     log_i("[AUDIO]wss_asr_start");
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_recording) {
-        wss_vad_abort();
+        g_recording_upload = false; // 停止VAD上传
         g_recording = true;
         threadpool_add_task(g_app_ctx->threadpool, wait_asr_task, NULL);
     }
@@ -234,10 +226,8 @@ void set_speaker() {
 
 // 获取当前音频播放状态
 bool is_audio_playing(){
-    os_mutex_pend(&g_audio_mutex, 0);
     bool playing = g_audio_playing || (g_audio_play_ongoing && 
         (total_written >> 2) + 1000 > get_time_stamp()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
-    os_mutex_post(&g_audio_mutex);
     return playing;
 }
 
@@ -330,7 +320,7 @@ static void start_audio_upload()
     if (g_recording_vad == false){/* VAD结束 */
         log_i("[AUDIO]Stop audio_upload because VAD END.");
     } else if (g_recording_upload == false) {
-        log_i("[AUDIO]Stop audio_upload because wss_vad_abort.");
+        log_i("[AUDIO]Stop audio_upload because ASR start.");
     } else {
         log_i("[AUDIO]Stop audio_upload because wss_mic_stop.");
     }
@@ -369,13 +359,12 @@ void wait_vad_task(void *priv)
         }
         set_led_idle();
         wss_app_recorder_data_upstream(NULL);
-        if (get_time_stamp() < vad_stop_time) {
-            log_i("[AUDIO]Stop VAD because wss_vad_abort.");
-        } else if (!is_mic_on()) {
+        if (!is_mic_on()) {
             log_i("[AUDIO]Stop VAD because wss_mic_stop.");
+        } else if (!g_recording_upload) {
+            log_i("[AUDIO]Stop VAD because ASR start.");
         } else {
             log_i("[AUDIO]Stop VAD timeout at %d > %d.", get_time_stamp(), vad_stop_time);
-
         }
     }
     vad_stop_time = 0;
@@ -421,7 +410,6 @@ void wait_asr_task(void *priv)
         g_recording_uploading = false;
         send_audio_status(OAST_STREAM_AUDIO, OASE_END);
         wss_app_recorder_data_upstream(NULL);
-        wss_mic_stop();
         set_led_idle();
     }
 }
@@ -463,7 +451,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     if (g_audio_play_ongoing == false) {
         music_play_stop_in_thread();
         stop_prompt();
-        wss_mic_stop(); // 停止录音
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");
         set_led_tts_play(); /* 音频下载时灯光变蓝色 */
@@ -571,8 +558,6 @@ void wss_audio_uninit()
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
 
     wss_ble_audio_stop(); // 停止音频播放
-    wss_vad_abort(); // 停止VAD录音
-    wss_mic_stop(); // 停止录音
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);

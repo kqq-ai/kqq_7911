@@ -198,7 +198,6 @@ static void wss_app_mode_play_cb(void *priv)
 
 void wss_app_mode_play() 
 {
-    os_mutex_pend(&g_wss_mutex, 0);
     if (music_file[0] == 0) {
         return;
     }
@@ -220,15 +219,12 @@ void wss_app_mode_play()
         play_voice_prompt = 1;
     }
     music_file[0] = 0;
-    os_mutex_post(&g_wss_mutex);
 }
 
 void play_prompt(const char *fname) 
 {
-    os_mutex_pend(&g_wss_mutex, 0);
     log_i("play_prompt: %s", fname);
     memcpy(music_file, fname, strlen(fname)+1);
-    os_mutex_post(&g_wss_mutex);
 }
 
 static pthread_t monitor_thread = NULL;
@@ -281,6 +277,7 @@ void wss_application_init()
     if (!os_mutex_valid(&g_wss_mutex)) {
         os_mutex_create(&g_wss_mutex);
     }
+    os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
     player = lwl_app_core_context_get_instance()->music_player;
 
@@ -288,6 +285,7 @@ void wss_application_init()
     odmp_register_disconnect_cbk(wss_disconnect_cbk);
     
     monitor_start();
+    wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
     wss_mic_stop(); // 停止录音
@@ -308,12 +306,14 @@ void wss_application_init()
     g_audio_playing = false;
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
+    os_mutex_post(&g_wss_mutex);
 }
 
 void wss_application_uninit()
 {
     log_i("[wss_application]Uninit WSS application\n");
 
+    os_mutex_pend(&g_wss_mutex, 0);
     monitor_thread_running = false;
     if (!monitor_thread) {
         pthread_join(monitor_thread, NULL);  // 等待线程退出
@@ -321,12 +321,15 @@ void wss_application_uninit()
     }
 
     wss_request_uninit();
+    wss_audio_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
     bdo_disable();
+    wss_mic_stop(); // 停止录音
 
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);
+    os_mutex_post(&g_wss_mutex);
 }
 
 bool wss_application_loop()
@@ -336,9 +339,11 @@ bool wss_application_loop()
         if (wss_request_is_busy()) wss_request_stop();
         return true;
     }
+    os_mutex_pend(&g_wss_mutex, 0);
     if (music_file[0] != 0 && play_voice_prompt == 0) {
         wss_app_mode_play();
     }
+    os_mutex_post(&g_wss_mutex);
 
     wss_request_loop();
     if (play_voice_prompt || g_on_touch_key) {

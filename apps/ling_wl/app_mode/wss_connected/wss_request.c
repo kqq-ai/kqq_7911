@@ -304,7 +304,6 @@ void wss_request_init()
     g_app_ctx = lwl_app_core_context_get_instance();
     /* 注册odmp事件回调 */
     odmp_register_rsp_cbk(wss_rsp_cbk);
-    wss_audio_init();
     g_edev_target_sn[0] = 0;
 
     g_mode_state = STATE_IDLE;
@@ -321,7 +320,6 @@ void wss_request_uninit()
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
-    wss_audio_uninit();
     os_mutex_post(&g_request_mutex);
 }
 
@@ -378,7 +376,7 @@ bool wss_request_loop()
 
     case STATE_PLAYING: // until player end
         // 播放结束，回到IDLE状态
-        if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
+        if (g_curr_time - g_turnon_timer > 1000) {
             if (!is_audio_playing()) {
                 wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
                 wss_ble_audio_stop();
@@ -395,7 +393,6 @@ bool wss_request_loop()
 
 void wss_request_send_event(char *sn, int msg_event)
 {
-    os_mutex_pend(&g_request_mutex, 0);
     if (sn != NULL && strlen(sn)!= SN_SIZE-1) {
         sn = NULL;
     }
@@ -403,7 +400,6 @@ void wss_request_send_event(char *sn, int msg_event)
         update_edev_time(sn);
     }
     send_req_message(sn, is_audio_playing(), msg_event);
-    os_mutex_post(&g_request_mutex);
 }
 
 void wss_request_send_event_target(int msg_event)

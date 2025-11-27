@@ -6,7 +6,6 @@
 void wss_audio_init();
 void wss_audio_uninit();
 
-bool is_audio_playing();    // 网络音频流的播放器是否启动或准备启动（有超时机制）
 bool is_recording_uploading();// 录音上传状态
 
 void music_play_stop_in_thread(); // 用线程停止音频播放，避免阻塞主线程
