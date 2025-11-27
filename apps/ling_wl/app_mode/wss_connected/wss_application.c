@@ -161,12 +161,13 @@ static void input_event_handler_cb(lwl_event_t *e)
         if (e->uart_cmd_touch.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
             g_on_touch_key = true;
+            wss_application_touch_key(true);
         } else {
             log_i("[wss_application]Touch key released");
+            wss_application_touch_key(false);
             g_on_touch_key = false;
         }
         wss_application_vailed();
-        wss_application_touch_key(g_on_touch_key);
         break;
     case LWL_EVENT_TYPE_UART_SYNC:
         uart_response_synch_status(timer_get_ms() - last_req_time < NO_REQ_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 0是idle 1是busy，必须回复
@@ -202,13 +203,17 @@ void wss_app_mode_play()
     if (music_file[0] == 0) {
         return;
     }
-    if (play_voice_prompt == 1 || g_device_state == APP_AUDIO) {
+    if (play_voice_prompt == 1) {
         play_voice_prompt = 0;
         music_play_stop();
+    } else if (g_device_state == APP_AUDIO) {
+        wss_ble_audio_stop();
+        turn_off_Pi();
     }
     log_i("[wss_application]wss_app_mode_play: %s", music_file);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
+    wss_mic_stop(); // 停止录音
     
     int err = app_music_play_local_music_with_callback(player, music_file, wss_app_mode_play_cb, NULL);
     // int err = app_music_play_mix_file(music_file);
