@@ -526,7 +526,6 @@ void wss_audio_init()
     if (!os_mutex_valid(&g_audio_mutex)) {
         os_mutex_create(&g_audio_mutex);
     }
-    os_mutex_pend(&g_audio_mutex, 0);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
 
@@ -544,20 +543,20 @@ void wss_audio_init()
 
     /* 清除录音数据写入回调，默认不上传 */
     wss_app_recorder_data_upstream(NULL);
-    os_mutex_post(&g_audio_mutex);
 }
 
 void wss_audio_uninit()
 {
     log_i("[AUDIO]Uninit WSS audio\n");
-    os_mutex_pend(&g_audio_mutex, 0);
     
     /* 取消录音上传回调 */
     wss_app_recorder_data_upstream(NULL);
     /* 取消VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
 
+    os_mutex_pend(&g_audio_mutex, 0);
     wss_ble_audio_stop(); // 停止音频播放
+    wss_mic_stop(); // 停止录音
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);

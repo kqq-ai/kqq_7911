@@ -162,6 +162,7 @@ void update_edev_time(char* sn)
 //=================================================================================================
 static void device_event_handler_cb(lwl_event_t *e)
 {
+    os_mutex_pend(&edev_manager_mutex, 0);
     switch (e->event_type) {
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE:
         lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
@@ -183,6 +184,7 @@ static void device_event_handler_cb(lwl_event_t *e)
         }
         break;
     }
+    os_mutex_post(&edev_manager_mutex);
 }
 
 // 初始化WSS设备模块
@@ -193,14 +195,16 @@ void wss_device_init()
     g_app_ctx = lwl_app_core_context_get_instance();
     ble_simple_client_module_enable(1);
 
-    os_mutex_create(&edev_manager_mutex);
+    if (!os_mutex_valid(&edev_manager_mutex)) {
+        os_mutex_create(&edev_manager_mutex);
+    }
+    // 初始化集合和队列
+    clear_edev_set();
+    clear_target_sn_set();
 
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(device_event_handler_cb);
 
-    // 初始化集合和队列
-    clear_edev_set();
-    clear_target_sn_set();
     edev_last = NULL;
 }
 
@@ -209,13 +213,13 @@ void wss_device_init()
 void wss_device_uninit()
 {
     log_i("Uninit WSS device\n");
+    /* 取消注册lwl事件处理回调 */
+    lwl_event_handler_remove(device_event_handler_cb);
+    
     ble_simple_client_module_enable(0);
 
     clear_target_sn_set();
-    /* 取消注册lwl事件处理回调 */
-    lwl_event_handler_remove(device_event_handler_cb);
     msleep(10);
-    os_mutex_del(&edev_manager_mutex, 1);
 }
 
 // 设备循环处理函数

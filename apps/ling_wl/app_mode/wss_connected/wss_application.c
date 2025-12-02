@@ -274,14 +274,9 @@ void *wss_condition_monitor_thread(void *arg)
 void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
-    if (!os_mutex_valid(&g_wss_mutex)) {
-        os_mutex_create(&g_wss_mutex);
-    }
-    os_mutex_pend(&g_wss_mutex, 0);
     play_voice_prompt = 0;
     player = lwl_app_core_context_get_instance()->music_player;
 
-    lwl_event_handler_add(input_event_handler_cb);
     odmp_register_disconnect_cbk(wss_disconnect_cbk);
     
     monitor_start();
@@ -306,12 +301,19 @@ void wss_application_init()
     g_audio_playing = false;
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
-    os_mutex_post(&g_wss_mutex);
+
+    if (!os_mutex_valid(&g_wss_mutex)) {
+        os_mutex_create(&g_wss_mutex);
+    }
+    lwl_event_handler_add(input_event_handler_cb);
 }
 
 void wss_application_uninit()
 {
     log_i("[wss_application]Uninit WSS application\n");
+
+    /* 取消注册lwl事件处理回调 */
+    lwl_event_handler_remove(input_event_handler_cb);
 
     os_mutex_pend(&g_wss_mutex, 0);
     monitor_thread_running = false;
@@ -325,10 +327,7 @@ void wss_application_uninit()
     wss_device_uninit();
     monitor_stop();//free all pdev
     bdo_disable();
-    wss_mic_stop(); // 停止录音
 
-    /* 取消注册lwl事件处理回调 */
-    lwl_event_handler_remove(input_event_handler_cb);
     os_mutex_post(&g_wss_mutex);
 }
 

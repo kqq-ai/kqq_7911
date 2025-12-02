@@ -213,17 +213,13 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 
 void wss_request_pause()
 {
-    os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
     wss_request_stop(); // 停止当前对话
-    os_mutex_post(&g_request_mutex);
 }
 
 void wss_request_resume()
 {
-    os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(wss_rsp_cbk);
-    os_mutex_post(&g_request_mutex);
 }
 
 //=================================================================================================
@@ -298,30 +294,25 @@ void wss_request_stop()
 void wss_request_init()
 {
     log_i("[wss_request]Init WSS request\n");
-    if (!os_mutex_valid(&g_request_mutex)) {
-        os_mutex_create(&g_request_mutex);
-    }
-    os_mutex_pend(&g_request_mutex, 0);
     g_app_ctx = lwl_app_core_context_get_instance();
     /* 注册odmp事件回调 */
-    odmp_register_rsp_cbk(wss_rsp_cbk);
     g_edev_target_sn[0] = 0;
 
     g_mode_state = STATE_IDLE;
     wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
     send_audio_format(OAST_TTS);
-    os_mutex_post(&g_request_mutex);
+    if (!os_mutex_valid(&g_request_mutex)) {
+        os_mutex_create(&g_request_mutex);
+    }
+    odmp_register_rsp_cbk(wss_rsp_cbk);
 }
 
 void wss_request_uninit()
 {
     log_i("[wss_request]Uninit WSS request\n");
-    os_mutex_pend(&g_request_mutex, 0);
-
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
     wss_request_stop();
-    os_mutex_post(&g_request_mutex);
 }
 
 bool wss_request_loop()
