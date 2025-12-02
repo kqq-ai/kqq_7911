@@ -154,6 +154,7 @@ void app_net_connecting_loop()
         ///if( !NET_NTP_GET_TIME_SUCC )     /// 等待获取时间，才能https通讯，NET_NTP_GET_TIME_SUCC
             mdelay(200);
         printf("Network connection is successful!\n");
+        switch_rf_coexistence_config_table(3);
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
     }

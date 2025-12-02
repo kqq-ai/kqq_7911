@@ -191,6 +191,29 @@ static void* led_breath_thread(void* arg)
     return NULL;
 }
 
+#define SEC_PER_DAY     (24 * 60 * 60U)
+#define MS_PER_DAY      (SEC_PER_DAY * 1000U)
+
+static void sync_log_time_to_beijing(void)
+{
+    u32 ntp_sec = lwl_rtc_timer_get_sec();
+    if (!ntp_sec) {
+        return;
+    }
+
+    u32 beijing_sec = (ntp_sec + 8 * 3600U) % SEC_PER_DAY;
+    u32 beijing_ms = beijing_sec * 1000U;
+    u32 uptime_ms = timer_get_ms() % MS_PER_DAY;
+    int offset = (int)beijing_ms - (int)uptime_ms;
+
+    log_set_time_offset(offset);
+
+    u32 hour = beijing_sec / 3600U;
+    u32 minute = (beijing_sec % 3600U) / 60U;
+    u32 second = beijing_sec % 60U;
+    log_i("[LogTime] synced to Beijing %02u:%02u:%02u", hour, minute, second);
+}
+
 
 static void app_cookie_main(void)
 {
@@ -470,6 +493,7 @@ static int app_music_net_event_handler(struct net_event *event)
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
             lwl_rtc_timer_update();
             log_i("NET_NTP_GET_TIME_SUCC %d\n", lwl_rtc_timer_get_sec());
+            sync_log_time_to_beijing();
             break;
         default:
             break;
