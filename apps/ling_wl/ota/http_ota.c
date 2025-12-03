@@ -148,7 +148,7 @@ int http_create_download_task(char *url)
     hdl->ctx.connection = "close";
 
     //创建下载线程
-    return thread_fork("download_task", 20,  2 * 1024, 0, NULL, download_task, hdl);
+    return thread_fork("download_task", 5,  2 * 1024, 0, NULL, download_task, hdl);
 }
 
 int request_ota_info(char **pota_info)

@@ -151,11 +151,11 @@ struct websocket_struct *wss_server_connect(char *url)
     }
 
     /* 4 . CreateThread */
-    thread_fork("websocket_client_heart", 19, 512, 0,
+    thread_fork("websocket_client_heart", 12, 512, 0,
                 &websockets_info->ping_thread_id,
                 websockets_info->_heart_thread,
                 websockets_info);
-    thread_fork("websocket_client_recv", 18, 512, 0,
+    thread_fork("websocket_client_recv", 10, 512, 0,
                 &websockets_info->recv_thread_id,
                 websockets_info->_recv_thread,
                 websockets_info);
