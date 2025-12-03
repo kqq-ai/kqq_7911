@@ -102,8 +102,8 @@ SD_PLATFORM_DATA_END()
 // HW_IIC0_PLATFORM_DATA_END()
 
 SW_IIC_PLATFORM_DATA_BEGIN(sw_iic0_data)
-    .clk_pin = IO_PORTC_01,
-    .dat_pin = IO_PORTC_00,
+    .clk_pin = IO_PORTC_00,
+    .dat_pin = IO_PORTC_01,
     .sw_iic_delay = 50,
 SW_IIC_PLATFORM_DATA_END()
 

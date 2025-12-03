@@ -270,11 +270,13 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/net_music_play_my.c \
 	../../../../apps/ling_wl/wss/wss_client.c \
 	../../../../apps/ling_wl/ota/http_ota.c \
+	../../../../apps/ling_wl/LED/LED.c \
 	../../../../apps/ling_wl/log/log_mqtt.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_core.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
+	../../../../apps/ling_wl/app_mode/peri_device/lwl_peri_dev.c \
 	../../../../apps/ling_wl/app_mode/devices_check/devices_check.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_1_key.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_2_LED.c \

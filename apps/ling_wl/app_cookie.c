@@ -254,6 +254,8 @@ static void app_cookie_main(void)
     /* 创建sc7a20 task 陀螺仪 */
     app_sc7a20_init();
 
+    lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
+
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
 
