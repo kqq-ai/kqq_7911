@@ -71,3 +71,5 @@ cpu/wl82/tools/sdk.lst
 cpu/wl82/tools/symbol_tbl.txt
 cpu/wl82/tools/update.ufw
 tools/
+
+.cache/

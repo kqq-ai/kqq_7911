@@ -32,6 +32,7 @@
 #include "bt_ble/client/ble_distance.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
 #include "log/log_mqtt.h"
+#include "system/sys_time.h"
 
 static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
@@ -153,7 +154,7 @@ void base_lwl_event_handler(lwl_event_t *e)
             log_mqtt_set_battery_level(NULL, lastbattery);
         }
         if(e->uart_cmd_sync.battery < 30 ) {
-            set_led_red_low_power();
+            // set_led_red_low_power();
         }
         if (e->uart_cmd_sync.charging == 1) {
             // log_mqtt_set_battery_level(NULL, lastbattery); // 上报充电状态
@@ -240,45 +241,42 @@ static void app_cookie_main(void)
     context->recorder = &g_recorder;
 
     // 取消静音
-#if 1
-    gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
-#else 
-    gpio_direction_output(IO_PORTB_02, 1);  // 设置E出声
-#endif
+    gpio_direction_output(IO_PORTA_00, 1);                  // 拉高 C 口功放使能脚，恢复扬声器输出
+    gpio_direction_output(IO_PORTB_02, 0);                  // 备用方案：拉高 E 口功放使能
 
     /* 创建网络&提示音解码播放器 */
-    music_player_init(&g_music_player);
-    context->music_player = &g_music_player;
+    music_player_init(&g_music_player);                     // 初始化音乐播放器，支持本地/网络音频
+    context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
 
-    ble_dev_task_scheduler_init();
-    bdo_disable();
+    ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
+    bdo_disable();                                          // 关闭 BDO，避免默认蓝牙广播干扰
 
     /* 创建线程池 */
-    pool = threadpool_create(4, 16);
-    context->threadpool = pool;
+    pool = threadpool_create(4, 16);                        // 创建 4 个线程、队列深度 16 的线程池
+    context->threadpool = pool;                             // 保存线程池实例供异步任务复用
 
     /*wifi manager 所需要的一些初始化*/
-    wifi_manage_init(NULL);
+    wifi_manage_init(NULL);                                 // 初始化 WiFi 管理器（STA/BLE 共存配置）
 
     /* 初始化RSSI测距 */
-    monitor_init();
+    monitor_init();                                      // 可选：初始化 RSSI 测距组件
 
     /* 开始RSSI测距 */
-    monitor_start();
+    monitor_start();                                     // 可选：启动测距任务
 
     // 初始化lfs
-    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");
-    ASSERT(lfs_hdl);
-    context->lfs_hdl = lfs_hdl;
+    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");   // 挂载 LittleFS，用于配置和资源读写
+    ASSERT(lfs_hdl);                                        // 确保文件系统初始化成功
+    context->lfs_hdl = lfs_hdl;                             // 保存文件系统句柄
     //app_lfs_cfgfile_init(context->lfs_hdl);
-    get_flash_app_cfg_data(context->lfs_hdl);
+    get_flash_app_cfg_data(context->lfs_hdl);               // 从配置区加载设备参数（SN、OTA 等）
 
 
     /* 创建sc7a20 task 陀螺仪 */
-    app_sc7a20_init();
+    app_sc7a20_init();                                      // 启动 SC7A20 加速度计任务，支持姿态/震动检测
 
     /* APP_MDOE 开始 */
-    thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);
+    thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
 
 }
 
@@ -454,7 +452,7 @@ static int app_music_net_event_handler(struct net_event *event)
             // TODO: 可能在配网时需要断开ble并连接指定wifi
             break;
         case NET_EVENT_CONNECTED: {
-            log_i("NET_EVENT_CONNECTED");
+            log_i("[NET] NET_EVENT_CONNECTED (arg=%s)", event->arg);
             //set_led_white();; /// Net Succ
             // 播放联网成功提示音
             // dhcp ready = true
@@ -468,7 +466,7 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("rf_coexistence_config_index %d -> %d\n", index_before, index_after);
         }   break;
         case NET_EVENT_DISCONNECTED:{
-            log_i("NET_EVENT_DISCONNECTED\n");
+            log_i("[NET] NET_EVENT_DISCONNECTED (arg=%s)\n", event->arg);
             // dhcp ready = false
             // TODO: 可能需要进入回连状态，或者重新进入配网状态
 
@@ -483,7 +481,7 @@ static int app_music_net_event_handler(struct net_event *event)
             log_i("NET_SMP_CFG_COMPLETED\n");
             break;
         case NET_EVENT_DISCONNECTED_AND_REQ_CONNECT:
-            log_i("NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
+            log_i("[NET] NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
             break;
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
             lwl_rtc_timer_update();
