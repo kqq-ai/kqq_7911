@@ -103,10 +103,6 @@ bool wss_check_exit()
         wss_exception_exit();
         log_i("websockets_info is NULL");
     } else {
-        if (websockets_info->ping_thread_id == 0) {
-            wss_exception_exit();
-            log_i("websockets_client_recv_thread have exited!!!");
-        }
         if (websockets_info->recv_thread_id == 0) {
             wss_exception_exit();
             log_i("websocket_client_heart have exited!!!");

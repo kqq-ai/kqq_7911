@@ -151,10 +151,6 @@ struct websocket_struct *wss_server_connect(char *url)
     }
 
     /* 4 . CreateThread */
-    thread_fork("websocket_client_heart", 12, 512, 0,
-                &websockets_info->ping_thread_id,
-                websockets_info->_heart_thread,
-                websockets_info);
     thread_fork("websocket_client_recv", 10, 512, 0,
                 &websockets_info->recv_thread_id,
                 websockets_info->_recv_thread,
@@ -165,7 +161,6 @@ struct websocket_struct *wss_server_connect(char *url)
 
 exit_ws:
     /* 6 . exit */
-    thread_kill(&websockets_info->ping_thread_id, KILL_REQ);
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
@@ -178,7 +173,6 @@ exit_ws:
 void wss_server_disconnect(struct websocket_struct *websockets_info)
 {
     os_mutex_pend(&wss_mutex_bin, 0);
-    thread_kill(&websockets_info->ping_thread_id, KILL_REQ);
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
