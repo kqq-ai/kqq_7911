@@ -20,9 +20,9 @@ UART0_PLATFORM_DATA_BEGIN(uart0_data)
     .port = PORT_REMAP,
     .output_channel = OUTPUT_CHANNEL1,
     .input_channel = INPUT_CHANNEL1,
-    .tx_pin = IO_PORTC_06,
-    .rx_pin = IO_PORTC_07,
-    /* .port = PORTA_5_6, */
+    .tx_pin = IO_PORTC_07,
+    .rx_pin = IO_PORTC_08,
+    /* .port = PORTA_5_6,     C_06, C_07*/
     /* .tx_pin = IO_PORTA_05, */
     /* .rx_pin = IO_PORTA_06, */
     // .port = PORTH_0_1,

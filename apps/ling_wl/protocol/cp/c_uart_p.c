@@ -26,19 +26,19 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
 {
     switch (cmd)
     {
-    case UART_CMD_NORMAL_KEY:{ // 普通按键控制
-        log_i("the UART_CMD_NORMAL_KEY !\r\n");
-        lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK;
-        lwl_event_notify(&e);
-    }   break;
-    case UART_CMD_TOUCH_KEY:{ // 触摸按键控制
-        log_i("the UART_CMD_TOUCH_KEY !\r\n");
-        lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
-        e.uart_cmd_touch.touch_key_event_type = payload[1];
-        lwl_event_notify(&e);
-    }   break;
+    // case UART_CMD_NORMAL_KEY:{ // 普通按键控制
+    //     log_i("the UART_CMD_NORMAL_KEY !\r\n");
+    //     lwl_event_t e;
+    //     e.event_type = LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK;
+    //     lwl_event_notify(&e);
+    // }   break;
+    // case UART_CMD_TOUCH_KEY:{ // 触摸按键控制
+    //     log_i("the UART_CMD_TOUCH_KEY !\r\n");
+    //     lwl_event_t e;
+    //     e.event_type = LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN;
+    //     e.uart_cmd_touch.touch_key_event_type = payload[1];
+    //     lwl_event_notify(&e);
+    // }   break;
     case UART_CMD_SYNCH_STATUS:{ // 同步状态
         log_d("the UART_CMD_SYNCH_STATUS !\r\n");
         lwl_event_t e;
