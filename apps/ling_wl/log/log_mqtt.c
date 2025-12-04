@@ -123,7 +123,7 @@ int log_mqtt_connect(void) {
     }
 
     // 获取token,也就是password
-    char* token = get_mqtt_token();
+    char* token = NULL; // get_mqtt_token();
 
     if (token == NULL) {
         log_i("获取MQTT token失败\n");

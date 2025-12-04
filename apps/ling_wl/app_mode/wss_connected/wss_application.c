@@ -1,41 +1,34 @@
 #include "wss_application.h"
 #include "wss_request.h"
 #include "wss_audio.h"
-#include "cpu.h"
+#include "wss_app_util.h"
 #include "../lwl_app_framework.h"
 #include "net_music_play_my.h"
 #include "app_cookie.h"
 
-#include "wss/wss_client.h"
-#include "util/cqueue.h"
-#include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
 #include "app_mode/lwl_app_core.h"
-#include "device.h"
-#include "util/threadpool_tasks.h"
-
-#include "ota/http_ota.h"
-#include "uart.h"
 #include "protocol/odm/odmp.h"
-
-#include "protocol/odm/odm_secure.h"
 #include "protocol/cp/c_uart_p.h"
 #include "log/log_mqtt.h"
-
 #include "../../SC7A20/sc7a20.h"
+#include <string.h>
+
+#include "lwip/stats.h" // 添加头文件
 
 static OS_MUTEX g_wss_mutex;
 int play_voice_prompt = 0;
 music_player *player;
 
+#undef log_i
 #define log_i log_mqtt
 static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_ORANGE); }      //触摸按键时灯光变黄色
 static void set_led_on_normal_key(void) { uart_send_set_led_color(COLOR_BLUE); }        //触摸按键时灯光变蓝色
 static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }       //空闲时灯光变白色
 
-#define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 10分钟
-#define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 5分钟
-#define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 5分钟
+#define NO_REQ_TIMEOUT_MS       (60 * 60 * 1000) // 1小时
+#define NO_E_TIMEOUT_MS         (60 * 60 * 1000)  // 1小时
+#define NO_MOVE_TIMEOUT_MS      (60 * 60 * 1000)  // 1小时
 #define DEV_CALL_TIMEOUT_MS     (3 * 1000)       // 3s
 
 static u32 g_curr_time = 0;
@@ -121,7 +114,7 @@ static void wss_application_touch_key(bool press_down)
                 log_i("[wss_application]STATE: Touch key -> APP_VAD");
                 g_device_state = APP_VAD;
                 g_mic_on = true;           
-                wss_vad_start(600000); // 开始录音       
+                wss_vad_start(60000000); // 开始录音       
             }
         } else {
             // 长按默认进剧本和多角色模式
@@ -236,6 +229,8 @@ void *wss_condition_monitor_thread(void *arg)
     u32 current_time = timer_get_ms();
     u32 last_E_found_time = current_time;
     u32 last_move_time = current_time;
+    u32 last_mem_stats_time = current_time; // 新增变量
+
     log_i("[wss_application]Starting WSS condition monitor thread...");
     while (monitor_thread_running) {
         current_time = timer_get_ms();
@@ -250,6 +245,43 @@ void *wss_condition_monitor_thread(void *arg)
             last_move_time = current_time;
         }
 
+        // 每60秒打印一次LwIP内存统计
+        if (current_time - last_mem_stats_time > 60000) {
+            last_mem_stats_time = current_time;
+            
+            log_i("=== LwIP Memory Stats Debug ===");
+            
+            // 1. 尝试打印 Heap (System Heap / LwIP Heap)
+            #if MEM_STATS
+            log_i("[HEAP] avail: %d, used: %d, max: %d, err: %d", 
+                  lwip_stats.mem.avail, lwip_stats.mem.used, 
+                  lwip_stats.mem.max, lwip_stats.mem.err);
+            #else
+            log_i("[HEAP] MEM_STATS not enabled");
+            #endif
+
+            // 2. 打印 PBUF_POOL (关键!)
+            #if MEMP_STATS
+            log_i("[PBUF] avail: %d, used: %d, max: %d, err: %d",
+                  lwip_stats.memp[MEMP_PBUF_POOL]->avail,
+                  lwip_stats.memp[MEMP_PBUF_POOL]->used,
+                  lwip_stats.memp[MEMP_PBUF_POOL]->max,
+                  lwip_stats.memp[MEMP_PBUF_POOL]->err);
+                  
+            // 3. 打印 TCP_SEG (防止发送积压)
+            log_i("[SEG ] avail: %d, used: %d, max: %d, err: %d",
+                  lwip_stats.memp[MEMP_TCP_SEG]->avail,
+                  lwip_stats.memp[MEMP_TCP_SEG]->used,
+                  lwip_stats.memp[MEMP_TCP_SEG]->max,
+                  lwip_stats.memp[MEMP_TCP_SEG]->err);
+            #endif
+            
+            log_i("===============================");
+        }
+
+        // 打印NO_E_TIMEOUT_MS
+        // log_i("[wss_application]NO_E_TIMEOUT_MS: %d", NO_E_TIMEOUT_MS);
+
         if (current_time - last_req_time > NO_REQ_TIMEOUT_MS) {
 
             // 检查超时条件
@@ -259,7 +291,10 @@ void *wss_condition_monitor_thread(void *arg)
 
             // 任一超时条件满足就切换模式
             if (e_timeout || move_timeout) {
-                log_i("[wss_application]No E found or device not moving for a long time, switching to default mode.");
+                log_i("[wss_application]No E or movement timeout (e_to=%u, move_to=%u, last_req_delta=%u), switching to default mode.",
+                      current_time - last_E_found_time,
+                      current_time - last_move_time,
+                      current_time - last_req_time);
                 lwl_app_mode_switch_to(APP_DEFAULT_MODE);
                 monitor_thread_running = false;
                 return NULL;
@@ -336,7 +371,12 @@ bool wss_application_loop()
 {
     g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
-        if (wss_request_is_busy()) wss_request_stop();
+        bool busy = wss_request_is_busy();
+        if (busy) {
+            log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
+                  wss_get_last_disconnect_reason());
+            wss_request_stop();
+        }
         return true;
     }
     os_mutex_pend(&g_wss_mutex, 0);
@@ -360,7 +400,7 @@ bool wss_application_loop()
         } else if (g_mic_on && wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
             g_device_state = APP_VAD;
-            wss_vad_start(600000); // 开始录音
+            wss_vad_start(60000000); // 开始录音
         } else if (!wss_device_is_calling() || multi_play_mode) {
             if (wss_device_loop()) {
                 log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
@@ -382,7 +422,7 @@ bool wss_application_loop()
                 wss_request_send_event_target(ORMET_PLAY_END);
                 g_device_state = APP_VAD;
                 wss_request_resume_mic();
-                wss_vad_start(600000); // 开始录音
+                wss_vad_start(60000000); // 开始录音
             } else {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
                 g_device_state = APP_IDLE;

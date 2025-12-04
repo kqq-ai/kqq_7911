@@ -67,7 +67,7 @@ typedef struct {
 } AsrData;
 static AsrData asr_data_frame;
 
-#define MY_ASR_DATA_QUEUE_CAPACITY 20
+#define MY_ASR_DATA_QUEUE_CAPACITY 80
 static MyBlockingQueue g_asr_data_queue; // MyBlockingQueue<AsrData>
 static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 
@@ -263,8 +263,27 @@ static void recorder_data_to_data_queue(void *priv, void *data, u32 size)
     ASSERT(size == ASR_DATA_CHUNK_SIZE);
 
     AsrData *asr_data = (AsrData *)data;
-    if (MYERROR_Is_Full == my_blocking_queue_try_enqueue(&g_asr_data_queue, asr_data)) {
-        log_i("[AUDIO]asr data queue full, failed to enquque asr data.");
+    int enqueue_ret = my_blocking_queue_try_enqueue(&g_asr_data_queue, asr_data);
+    if (enqueue_ret == MYERROR_Is_Full) {
+        AsrData dropped;
+        int drop_count = 0;
+        while (drop_count < 4 &&
+               MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &dropped)) {
+            drop_count++;
+        }
+        log_i("[AUDIO]asr queue overflow: dropped %d frames (%d/%d).",
+              drop_count,
+              my_blocking_queue_size(&g_asr_data_queue),
+              MY_ASR_DATA_QUEUE_CAPACITY);
+        enqueue_ret = my_blocking_queue_try_enqueue(&g_asr_data_queue, asr_data);
+        if (enqueue_ret == MYERROR_Is_Full) {
+            log_i("[AUDIO]asr data queue still full, discard incoming frame.");
+        }
+    } else if (enqueue_ret == MYERROR_Success) {
+        int curr = my_blocking_queue_size(&g_asr_data_queue);
+        if (curr >= (MY_ASR_DATA_QUEUE_CAPACITY * 3) / 4) {
+            log_i("[AUDIO]asr queue high water mark %d/%d.", curr, MY_ASR_DATA_QUEUE_CAPACITY);
+        }
     }
 }
 
@@ -278,11 +297,10 @@ static void recorder_data_to_ringbuffer(void *priv, void *data, u32 size)
 }
 
 // 将ASR数据发送到服务器
-static void wss_asr_data_to_server(AsrData *asr_data)
+static int wss_asr_data_to_server(AsrData *asr_data)
 {
     uint8_t *pdata = (uint8_t *)asr_data;
-    if (send_bin_data(pdata, ASR_DATA_CHUNK_SIZE)) {
-    }
+    return send_bin_data(pdata, ASR_DATA_CHUNK_SIZE); // 修改: 返回 send_bin_data 的结果 (0成功, -1失败)
 }
 
 /**
@@ -307,12 +325,21 @@ static void start_audio_upload()
     g_recording_uploading = true;
 
     while (is_mic_on() && g_recording_vad && g_recording_upload) {
+        int ret = 0;
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
         if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
-            wss_asr_data_to_server(&asr_data_frame);
+            ret = wss_asr_data_to_server(&asr_data_frame);
         } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
-            wss_asr_data_to_server(&asr_data_frame);
+            ret = wss_asr_data_to_server(&asr_data_frame);
         }
+        
+        // 修改: 如果发送失败(连接断开)，退出循环
+        if (ret != 0) {
+            log_i("[AUDIO]Upload failed (ret=%d), break loop.", ret);
+            g_recording_upload = false; // 停止上传标志
+            break;
+        }
+
         msleep(10);
     }
     g_recording_uploading = false;
@@ -397,11 +424,18 @@ void wait_asr_task(void *priv)
     }
 
     while (is_mic_on() && g_recording) {
+        int ret = 0;
         /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
         if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
-            wss_asr_data_to_server(&asr_data_frame);
+            ret = wss_asr_data_to_server(&asr_data_frame);
         } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
-            wss_asr_data_to_server(&asr_data_frame);
+            ret = wss_asr_data_to_server(&asr_data_frame);
+        }
+        
+        // 修改: 如果发送失败，退出循环
+        if (ret != 0) {
+            log_i("[AUDIO]ASR Upload failed, break loop.");
+            break;
         }
         msleep(10);
     }

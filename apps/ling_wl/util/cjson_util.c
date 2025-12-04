@@ -22,9 +22,9 @@ cJSON *cjson_get_object(cJSON *object, const char *string)
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
     if (nnode == NULL || !cJSON_IsObject(nnode)) {
         if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+            // log_i("INFO: the '%s' key was not found in the JSON object.", string);
         } else {
-            log_i("INFO: the '%s' key exists, but its value is not of object type.", string);
+            // log_i("INFO: the '%s' key exists, but its value is not of object type.", string);
         }
         return NULL;
     }
@@ -36,9 +36,9 @@ cJSON *cjson_get_array(cJSON *object, const char *string)
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
     if (nnode == NULL || !cJSON_IsArray(nnode)) {
         if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+            // log_i("INFO: the '%s' key was not found in the JSON object.", string);
         } else {
-            log_i("INFO: the '%s' key exists, but its value is not of array type.", string);
+            // log_i("INFO: the '%s' key exists, but its value is not of array type.", string);
         }
         return NULL;
     }
@@ -50,9 +50,9 @@ char *cjson_get_string_value(cJSON *object, const char *string)
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
     if (nnode == NULL || !cJSON_IsString(nnode)) {
         if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+            // log_i("INFO: the '%s' key was not found in the JSON object.", string);
         } else {
-            log_i("INFO: the '%s' key exists, but its value is not of string type.", string);
+            // log_i("INFO: the '%s' key exists, but its value is not of string type.", string);
         }
         return NULL;
     }
@@ -64,9 +64,9 @@ int cjson_get_integer_value(cJSON *object, const char *string, int *value)
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
     if (nnode == NULL || !cJSON_IsNumber(nnode)) {
         if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+            // log_i("INFO: the '%s' key was not found in the JSON object.", string);
         } else {
-            log_i("INFO: the '%s' key exists, but its value is not of number type.", string);
+            // log_i("INFO: the '%s' key exists, but its value is not of number type.", string);
         }
         return 1;
     }
@@ -79,9 +79,9 @@ int cjson_get_boolean_value(cJSON *object, const char *string, bool *value)
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
     if (nnode == NULL || !cJSON_IsBool(nnode)) {
         if (nnode == NULL) {
-            log_i("INFO: the '%s' key was not found in the JSON object.", string);
+            // log_i("INFO: the '%s' key was not found in the JSON object.", string);
         } else {
-            log_i("INFO: the '%s' key exists, but its value is not of boolean type.", string);
+            // log_i("INFO: the '%s' key exists, but its value is not of boolean type.", string);
         }
         return 1;
     }

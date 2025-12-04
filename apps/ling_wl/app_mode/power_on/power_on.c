@@ -67,13 +67,8 @@ static int power_on_init(void)
     set_led_power_on();
     play_system_music("poweron.mp3");
     char sn[25];
-    if (get_SN(sn)) {
-        log_i("have sn, go to power on mode");
-        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
-    } else {
-        log_i("no sn, go to device check mode");
-        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
-    }
+    log_i("have sn, go to power on mode");
+    lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(power_on_input_event_handler_cb);
     return 0;

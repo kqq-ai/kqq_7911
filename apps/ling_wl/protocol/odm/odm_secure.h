@@ -5,7 +5,6 @@
 
 #define TEST_IP_GET "https://kqq.tos-cn-beijing.volces.com/kqq_debug.json"
 
-char *get_mqtt_token();
 char *get_wss_connection_url();
 char *get_wss_test_url();
 bool get_SN(char* target);

@@ -38,6 +38,7 @@ bool play_prompt_flag = 0;
 
 static int wss_connected_init(void)
 {
+    log_i("[wss_connected]enter mode");
     /* 开始RSSI测距 */
     wss_application_init();
     play_prompt_flag = 1;
@@ -46,6 +47,7 @@ static int wss_connected_init(void)
 
 static int wss_connected_unint(void)
 {
+    log_i("[wss_connected]leave mode");
     wss_application_uninit();//clear all pdev
 
     /* 退出wss_connected模式时，关闭WSS连接，释放资源 */
@@ -62,12 +64,13 @@ void app_wss_connected_mode(void)
     
     while (1) {
         if (lwl_app_mode_exitting()) {
+            log_i("[wss_connected]mode exiting requested");
             wss_connected_unint();
             return;
         }
         mdelay(10);
         if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
-            dump_all_eend_info();
+            // dump_all_eend_info();
             g_heat_timer = timer_get_ms();
         }
         if (lwl_app_mode_playing()) continue;
@@ -75,17 +78,21 @@ void app_wss_connected_mode(void)
         if (wss_application_loop()) {
             set_led_connect_error();// WSS ERROR
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
+                log_i("[wss_connected]wifi disconnect detected while in WSS, switch to NET_CONNECTING");
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
                 printf("Network connection is WIFI_STA_DISCONNECT!\n");
                 play_system_music("NetCfgFail.mp3");
             } else if (wss_application_check_power_key()) {
+                log_i("[wss_connected]power key retry requested, try reconnect");
                 if (!wss_reconnect()) {
+                    log_i("[wss_connected]reconnect failed, fallback to NET_CONNECTED");
                     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
                 } else {
                     set_led_connected();
                     play_prompt_flag = 1;
                 }
             } else if (play_prompt_flag) {
+                log_i("[wss_connected]play disconnect prompt because application loop requested exit");
                 play_prompt_flag = 0;
                 play_system_music("NetDisc.mp3");
             }
