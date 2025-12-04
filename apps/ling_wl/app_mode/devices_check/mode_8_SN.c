@@ -20,6 +20,7 @@
 #include "../../../common/example/third_party/littlefs/lfs.h"  // LittleFS文件系统
 
 #include "../../protocol/cp/c_uart_p.h"
+#include "asm/sfc_norflash_api.h"
 
 static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
 static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
@@ -49,7 +50,7 @@ static u8 g_mode8_op_running = 0;
 static rwlock_t g_lfs_rwlock;
 
 // 模式8存储从服务器获取的SN和Key
-#define MODE7_SN_SIZE 32
+#define MODE7_SN_SIZE 16
 #define MODE7_KEY_SIZE 64
 static char g_mode8_obtained_sn[MODE7_SN_SIZE] = {0};   // 从服务器获取的SN
 static char g_mode8_obtained_key[MODE7_KEY_SIZE] = {0}; // 从服务器获取的Key
@@ -457,6 +458,24 @@ static int mode8_write_sn_key_to_storage(const char* sn, const char* key)
         rwlock_release_write(&g_lfs_rwlock);
         return -7;
     }
+    log_i("MODE 8: keyInVm Key: %s (%d bytes)", keyInVm, key_len);
+
+    uint8_t otp_in_flash_sn_key[ 15 + 32 ];
+    // 先复制SN数据
+    for (uint8_t i = 0; i < sn_len; i++) {
+        otp_in_flash_sn_key[i] = sn[i];
+    }
+    
+    // 然后复制KEY数据，从SN后面开始
+    for (uint8_t i = 0; i < key_len; i++) {
+        otp_in_flash_sn_key[sn_len + i] = keyInVm[i];
+    }
+    
+    norflash_eraser_otp();//擦除
+    norflash_write_otp(otp_in_flash_sn_key,  sn_len + key_len );//写，最大字节：768
+    ///norflash_read_otp(buf, 32);//读，最大字节：768
+    log_i("MODE 8: Written norflash_write_otp:  %s (%d bytes)", otp_in_flash_sn_key,  sn_len + key_len );
+
     
     // 关闭文件
     lfs_file_close(&g_lfs, &file);
@@ -465,7 +484,7 @@ static int mode8_write_sn_key_to_storage(const char* sn, const char* key)
     
     log_i("MODE 8: ========== SN/KEY WRITE SUCCESS ==========");
     log_i("MODE 8: Written SN:  %s (%d bytes)", sn, sn_len);
-    log_i("MODE 8: Written Key: %s (%d bytes)", key, key_len);
+    log_i("MODE 8: Written Key: %s (%d bytes x 2.0)", key, key_len);
     log_i("MODE 8: File: SN_KEY.bin");
     log_i("MODE 8: ==========================================");
     

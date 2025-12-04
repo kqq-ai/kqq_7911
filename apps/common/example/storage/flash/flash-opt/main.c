@@ -23,4 +23,4 @@ static int c_main(void)
     put_buf(buf, 32);
     return 0;
 }
-late_initcall(c_main);
+///late_initcall(c_main);

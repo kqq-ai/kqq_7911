@@ -10,6 +10,7 @@
 #include "syscfg_id.h"
 #include "lfs.h"
 #include "app_mode/lwl_app_framework.h"
+#include "asm/sfc_norflash_api.h"
 
 extern lfs_t g_lfs;
 
@@ -129,6 +130,11 @@ static void gen_SN()
         snInVm[SN_SIZE] = '\0';
         bytes_read = lfs_file_read(&g_lfs, &file, &keyInVm, KEY_SIZE);
         log_i(" read LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_read ); //读取成功，第二次启动
+
+        uint8_t otp_in_flash_read_sn_key[ SN_SIZE + KEY_SIZE ] ;
+        memset(otp_in_flash_read_sn_key, '+', SN_SIZE + KEY_SIZE );
+        norflash_read_otp(otp_in_flash_read_sn_key,  SN_SIZE + KEY_SIZE  );//读，最大字节：768
+        log_i(" read OTP snInVm = %s \n", otp_in_flash_read_sn_key  );
     }
     lfs_file_close(&g_lfs, &file);
 #endif
