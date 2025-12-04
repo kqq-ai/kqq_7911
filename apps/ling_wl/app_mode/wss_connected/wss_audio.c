@@ -197,7 +197,7 @@ void wss_asr_stop() {
     os_mutex_post(&g_audio_mutex);
 }
 
-#define G_MAX_VOLUME 70
+#define G_MAX_VOLUME 100
 int g_volume = G_MAX_VOLUME;
 // 设置播放器音量(1~70)
 void set_tts_volume(int volume) {
