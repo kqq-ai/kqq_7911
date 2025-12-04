@@ -27,8 +27,10 @@
 #include "log/log_mqtt.h"
 
 static u32 g_curr_time = 0;
-static u32 g_turnon_timer = 0;
+static u32 g_wss_last_time = 0;
+static u32 g_mode_last_time = 0;
 #define WSS_TIMEOUT 10000
+#define WSS_MUSIC_TIMEOUT 1000
 static OS_MUTEX g_request_mutex;
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -63,10 +65,6 @@ bool wss_request_is_busy(){
     return (g_mode_state != STATE_IDLE);
 }
 
-void edev_working(){
-    g_turnon_timer = g_curr_time;
-}
-
 void turn_off_Pi() {
     if (g_edev_connected_sn[0] != 0) {
         
@@ -93,7 +91,6 @@ void turn_on_Pi(const char *pdev_sn) {
 #ifdef C_SPEAKLER
         memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
         send_message = ORMET_SWITCH_SUCCESS;
-        edev_working();
         set_C_speaker_on(true);
 #endif
         return;
@@ -101,7 +98,6 @@ void turn_on_Pi(const char *pdev_sn) {
     //上传E的电量
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
     bdo_turn_on(pdev, 500, 500, e_turn_on_cb, pdev);
-    edev_working();
 }
 static void wss_request_update_state(AppRequestState mode_state, char* tag)
 {
@@ -120,6 +116,7 @@ static void wss_request_update_state(AppRequestState mode_state, char* tag)
         break;
     }
     g_mode_state = mode_state;
+    g_mode_last_time = g_curr_time;
     last_message_type = 0;
     last_event = 0;
 }
@@ -160,6 +157,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             turn_on_Pi(g_edev_target_sn);
             play_prompt_sound("TTSBind.mp3");
         }
+        g_wss_last_time = g_curr_time;
 
         wait_time = pkg->tts_bind.wait_time;
         wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND");
@@ -188,11 +186,12 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
-            } else if (pkg->audio_status.event == OASE_END) {
+            } else if (pkg->audio_status.event == OASE_END && g_curr_time - g_mode_last_time > 100) {
                 log_i("AUDIO_STATUS: OASE_END\n");
                 last_message_type = OAST_TTS;
                 last_event = OASE_END;
             }
+            g_wss_last_time = g_curr_time;
         }
         break;
     case OR_MESSAGE_TEXT:
@@ -244,7 +243,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         } else {
             turn_off_Pi();
         }
-        edev_working();
         break;
     case BDOCode_Connection_Timeout:
         log_i("[wss_request]Switch PortE BDOCode_Connection_Timeout\n");
@@ -265,7 +263,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         log_i("[wss_request]bdo_turn_on %s ORMET_PLAY_STOP but use C speaker\n", sn_string);
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
         send_message = ORMET_SWITCH_SUCCESS;
-        edev_working();
         set_C_speaker_on(true);
 #endif
     }
@@ -299,7 +296,9 @@ void wss_request_init()
     g_edev_target_sn[0] = 0;
 
     g_mode_state = STATE_IDLE;
-    wss_request_send_event(NULL, ORMET_INITIAL_SETUP);
+    g_curr_time = timer_get_ms();
+    g_mode_last_time = g_curr_time;
+    wss_request_send_event_target(ORMET_INITIAL_SETUP);
     send_audio_format(OAST_TTS);
     if (!os_mutex_valid(&g_request_mutex)) {
         os_mutex_create(&g_request_mutex);
@@ -323,7 +322,10 @@ bool wss_request_loop()
     g_curr_time = timer_get_ms();
     switch (g_mode_state) {
     case STATE_IDLE: // until receive TTS_BIND
-
+        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
+            send_ping();
+            g_wss_last_time = g_curr_time;
+        }
         break;
     case STATE_TTS_BIND: // until send_message == ORMET_SWITCH_SUCCESS or ORMET_SWITCH_FAILED
         // TTS下载流程
@@ -341,7 +343,7 @@ bool wss_request_loop()
             g_edev_target_sn[0] = 0;
             send_message = 0; // 重置发送消息标志
             set_led_red_error();
-        } else if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
+        } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
             wss_request_stop();
             set_led_red_error();
         }
@@ -356,19 +358,19 @@ bool wss_request_loop()
             wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
         }
         if (!is_audio_playing()) {
-            if ((g_curr_time & 7) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_turnon_timer, WSS_TIMEOUT);
-            if (g_curr_time - g_turnon_timer > WSS_TIMEOUT) {
+            if ((g_curr_time & 7) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
+            if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
                 wss_request_stop();
                 set_led_red_error();
             }
         } else {
-            edev_working();
+            g_wss_last_time = g_curr_time;
         }
         break;
 
     case STATE_PLAYING: // until player end
         // 播放结束，回到IDLE状态
-        if (g_curr_time - g_turnon_timer > 1000) {
+        if (g_curr_time - g_mode_last_time > WSS_MUSIC_TIMEOUT) {
             if (!is_audio_playing()) {
                 wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
                 wss_ble_audio_stop();
@@ -385,6 +387,7 @@ bool wss_request_loop()
 
 void wss_request_send_event(char *sn, int msg_event)
 {
+    g_wss_last_time = g_curr_time;
     if (sn != NULL && strlen(sn)!= SN_SIZE-1) {
         sn = NULL;
     }

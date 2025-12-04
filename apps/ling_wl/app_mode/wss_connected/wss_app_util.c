@@ -115,11 +115,11 @@ bool wss_check_exit()
     struct websocket_struct *websockets_info = context->websockets_info;
     if (!websockets_info) {
         wss_mark_exception("websocket info NULL");
-        log_i("websockets_info is NULL");
+        log_e("[wss_app_util]websockets_info is NULL");
     } else {
         if (websockets_info->recv_thread_id == 0) {
             wss_mark_exception("recv_thread_id=0");
-            log_i("websocket_client_heart have exited!!!");
+            log_e("[wss_app_util]websocket_client_heart have exited!!!");
         }
     }
     return g_exception_exit;
@@ -137,20 +137,20 @@ bool wss_connect() {
     log_i("[wss_app_util]wss_connect start");
     wss_url = get_wss_connection_url();
     if (wss_url == NULL) {
-        log_i("get_wss_connection_url failed wss_url=NULL");
+        log_e("[wss_app_util]get_wss_connection_url failed wss_url=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
     context->websockets_info = wss_server_connect(wss_url);
     if (context->websockets_info == NULL) {
-        log_i("wss_server_connect failed websockets_info=NULL");
+        log_e("[wss_app_util]wss_server_connect failed websockets_info=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
     g_exception_exit = false;
     strncpy(g_last_disconnect_reason, "connected", sizeof(g_last_disconnect_reason) - 1);
     g_last_disconnect_reason[sizeof(g_last_disconnect_reason) - 1] = '\0';
-    log_i("websockets init succ url=%s\n", wss_url);
+    log_i("[wss_app_util]websockets init succ url=%s\n", wss_url);
     get_SN(sn_c_id);
     os_mutex_post(&g_wss_mutex);
     return true;
@@ -160,7 +160,7 @@ void wss_disconnect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context->websockets_info != NULL) {
-        log_i("[wss_app_util]wss_disconnect closing active ws (last_reason=%s)", g_last_disconnect_reason);
+        log_e("[wss_app_util]wss_disconnect closing active ws (last_reason=%s)", g_last_disconnect_reason);
         wss_server_disconnect(context->websockets_info);
         context->websockets_info = NULL;
         free(wss_url);
@@ -178,7 +178,7 @@ bool wss_reconnect() {
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context->websockets_info != NULL) {
-        log_i("websockets disconnect by wss_reconnect");
+        log_e("[wss_app_util]websockets disconnect by wss_reconnect");
         wss_server_disconnect(context->websockets_info);
         context->websockets_info = NULL;
     }
@@ -187,7 +187,7 @@ bool wss_reconnect() {
     } else {
         msleep(100); // 断线后等待100ms再重连
     }
-    log_i("websockets reconnected %s",wss_url);
+    log_i("[wss_app_util]websockets reconnected %s",wss_url);
 
     if (wss_url == NULL) {
         os_mutex_post(&g_wss_mutex);
@@ -202,7 +202,7 @@ bool wss_reconnect() {
     g_exception_exit = false;
     strncpy(g_last_disconnect_reason, "reconnected", sizeof(g_last_disconnect_reason) - 1);
     g_last_disconnect_reason[sizeof(g_last_disconnect_reason) - 1] = '\0';
-    log_i("websockets reconnected succ");
+    log_i("[wss_app_util]websockets reconnected succ");
     os_mutex_post(&g_wss_mutex);
     return true;
 }
@@ -220,7 +220,7 @@ int send_audio_status(int type, int event)
     char *send_data = odmp_audio_status(sn_c_id, type, event);
 
     if (FALSE == wss_send_message(ctx->websockets_info, (u8 *)send_data, strlen(send_data))) {
-        log_e("Error %s %d. type=%d event=%d", __FILE__, __LINE__, type, event);
+        log_e("[wss_app_utils]Error %s %d. type=%d event=%d", __FILE__, __LINE__, type, event);
 
         free(send_data);
         
@@ -232,7 +232,7 @@ int send_audio_status(int type, int event)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    log_i("wbs send msg : %s", send_data);
+    log_i("[wss_app_util]wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -251,7 +251,7 @@ int send_audio_format(int type)
     char *send_data = odmp_set_audio_format(sn_c_id, type);
 
     if (FALSE == wss_send_message(ctx->websockets_info, (u8 *)send_data, strlen(send_data))) {
-        log_e("Error %s %d. type=%d", __FILE__, __LINE__, type);
+        log_e("[wss_app_utils]Error %s %d. type=%d", __FILE__, __LINE__, type);
 
         free(send_data);
         
@@ -263,7 +263,7 @@ int send_audio_format(int type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    log_i("wbs send msg : %s", send_data);
+    log_i("[wss_app_util]wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -283,10 +283,10 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     }
 
     char *send_data = odmp_req_message(target_sn_set, target_sn_count, sn_c_id, send_id, is_play, event_type);
-    log_i("wbs send msg : %s", send_data);
+    log_i("[wss_app_util]wbs send msg : %s", send_data);
 
     if (FALSE == wss_send_message(ctx->websockets_info, (u8 *)send_data, strlen(send_data))) {
-        log_e("Error %s %d. event_type=%d", __FILE__, __LINE__, event_type);
+        log_e("[wss_app_utils]Error %s %d. event_type=%d", __FILE__, __LINE__, event_type);
 
         free(send_data);
 
@@ -314,17 +314,49 @@ int send_bin_data(uint8_t *data, uint32_t len)
     }
 
     if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
-        log_e("Error %s %d. len=%u", __FILE__, __LINE__, len);
+        log_e("[wss_app_util]Error %s %d. len=%u", __FILE__, __LINE__, len);
         
         if (ctx->websockets_info != NULL) {
             wss_server_disconnect(ctx->websockets_info);
             ctx->websockets_info = NULL;
         }
-        wss_mark_exception("send_bin_data send failed");
+        // wss_mark_exception("send_bin_data send failed");
+        // os_mutex_post(&g_wss_mutex);
+        // return -1;
+    }
+    // log_i("[wss_app_util]wbs send msg : %d", len);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+
+int send_ping()
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        wss_mark_exception("send_ping ctx->websockets_info NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    // log_i("wbs send msg : %d", len);
+
+    char *send_data = odmp_send_ping();
+    log_i("[wss_app_util]wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, (u8 *)send_data, strlen(send_data))) {
+        log_e("[wss_app_utils]Error %s %d. event_type=ping", __FILE__, __LINE__);
+
+        free(send_data);
+
+        if (ctx->websockets_info != NULL) {
+            wss_server_disconnect(ctx->websockets_info);
+            ctx->websockets_info = NULL;
+        }
+        wss_mark_exception("send_ping send failed");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
 }

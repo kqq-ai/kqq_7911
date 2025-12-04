@@ -20,6 +20,7 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
     switch (type) {
     case WS_TXT_FRAME: // text frame
         // log_i("[wss_client] 接收到服务器 text frame len=%u payload=%s", len, buf);
+        log_i("wbs recv msg : %s\n", buf);
         odmp_rsp_handler(buf, len);
         break;
     case WS_BIN_FRAME: // binary frame

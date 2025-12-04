@@ -18,6 +18,7 @@ g_odmp_audio_data_cbk_t g_odmp_audio_data_cbk = NULL;
 g_odmp_disconnect_cbk_t g_odmp_disconnect_cbk = NULL;
 
 static const char *odmp_et_str[] = {
+    [OET_PING]                  = "ping",
     [OET_REQ_MESSAGE]           = "req_message",
     [OET_AUDIO_STATUS]          = "audio_status",
     [OET_SET_AUDIO_FORMAT]      = "set_audio_format",
@@ -110,6 +111,24 @@ cJSON *odmp_message_base(int type)
     return nroot;
 }
 
+char *odmp_send_ping()
+{
+    /*
+    {
+        "uuid": "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx",
+        "event": "ping"
+    }
+    */
+    cJSON *nroot = odmp_message_base(OET_PING);
+	char *json_str = cJSON_PrintUnformatted(nroot);
+
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+
+    return json_str;
+}
+
 char *odmp_req_message(const char **targets, int targets_num, const char *c_id, const char *send_id, bool is_play, int event_type)
 {
     /*
@@ -194,6 +213,7 @@ char *odmp_audio_status(const char *c_id, int type, int event)
 
     return json_str;
 }
+
 char *odmp_set_audio_format(const char *c_id, int type)
 {
     /*
