@@ -628,8 +628,8 @@ void lwl_IO_key_active()
 void lwl_peri_dev_init(void)
 {
     
-    port_wakeup_reg(EVENT_PA8, IO_PORTA_08, EDGE_NEGATIVE, lwl_IO_key_active);
-    port_wakeup_reg(EVENT_PH7, IO_PORTH_07, EDGE_NEGATIVE, lwl_IO_key_active);
+    //port_wakeup_reg(EVENT_PA8, IO_PORTA_08, EDGE_NEGATIVE, lwl_IO_key_active);
+    port_wakeup_reg(EVENT_PH7, IO_PORTH_07, EDGE_NEGATIVE, lwl_IO_key_active); // CHG_IN
     
 
     printf("lwl_peri_dev_init !\n");

@@ -7,6 +7,7 @@
 #include "uart.h"
 #include "log.h"
 #include "LED.h"
+#include "app_cookie.h"
 
 
 
@@ -93,31 +94,31 @@ static ___interrupt TSEC void timer_isr(void)//中断
         {
         case 0:
         case 1:
-            gpio_direction_output(IO_PORTA_10, 1);
-            gpio_direction_output(IO_PORTA_09, 1);
+            gpio_direction_output(LED_G_IO, 1);
+            gpio_direction_output(LED_B_IO, 1);
             if( g_red___LED > 50 ){ // 红色   <     >
-                gpio_direction_output(IO_PORTC_09, 0);
+                gpio_direction_output(LED_R_IO, 0);
             }else {
-                gpio_direction_output(IO_PORTC_09, 1);
+                gpio_direction_output(LED_R_IO, 1);
             }
             break;
         case 2:
-            gpio_direction_output(IO_PORTC_09, 1);
-            gpio_direction_output(IO_PORTA_09, 1);
+            gpio_direction_output(LED_R_IO, 1);
+            gpio_direction_output(LED_B_IO, 1);
             if( g_green_LED > 50 ){ // 绿色
-                gpio_direction_output(IO_PORTA_10, 0);
+                gpio_direction_output(LED_G_IO, 0);
             }else {
-                gpio_direction_output(IO_PORTA_10, 1);
+                gpio_direction_output(LED_G_IO, 1);
             }
             break;
         case 3:
         case 4:
-            gpio_direction_output(IO_PORTC_09, 1);
-            gpio_direction_output(IO_PORTA_10, 1);
+            gpio_direction_output(LED_R_IO, 1);
+            gpio_direction_output(LED_G_IO, 1);
             if( g_blue__LED > 50 ){ // 蓝色
-                gpio_direction_output(IO_PORTA_09, 0);
+                gpio_direction_output(LED_B_IO, 0);
             }else {
-                gpio_direction_output(IO_PORTA_09, 1);
+                gpio_direction_output(LED_B_IO, 1);
             }
             break;
         }

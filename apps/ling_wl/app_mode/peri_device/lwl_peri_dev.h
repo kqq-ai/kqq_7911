@@ -1,8 +1,8 @@
 #ifndef _LWL_PERI_DEV_H_ 
 #define _LWL_PERI_DEV_H_ 
 
-#define KEY_IO_PORT 	IO_PORTA_08
-#define GSENSOR_IO 		IO_PORTC_05
+#define KEY_IO_PORT 	IO_PORTC_09
+#define GSENSOR_IO 		IO_PORTC_00
 #define CHARGE_IN_IO 	IO_PORTH_07
 #define CHARGE_FULL_IO 	IO_PORTA_06
 #define TOUCH_IO 		IO_PORTC_06
