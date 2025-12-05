@@ -60,7 +60,9 @@ void wss_application_vailed()
 void wss_disconnect_cbk(void)
 {
     log_i("[wss_application]odmp disconnect!!!");
-    wss_exception_exit();
+    timer_set_ms(1000);
+    log_i("[wss_application]timer_set_ms 1000");
+    // wss_exception_exit();
 }
 
 void wss_request_resume_mic()

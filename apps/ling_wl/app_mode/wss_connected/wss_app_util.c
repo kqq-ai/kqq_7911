@@ -172,9 +172,9 @@ bool wss_connect() {
         os_mutex_create(&g_wss_mutex);
     }
     
-    if (tcp_monitor_pid == 0) {
-        thread_fork("tcp_monitor", 10, 1024, 0, &tcp_monitor_pid, tcp_monitor_thread, NULL);
-    }
+    // if (tcp_monitor_pid == 0) {
+        // thread_fork("tcp_monitor", 10, 1024, 0, &tcp_monitor_pid, tcp_monitor_thread, NULL);
+    // }
 
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
