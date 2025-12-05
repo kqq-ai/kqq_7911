@@ -384,6 +384,23 @@ int send_bin_data(uint8_t *data, uint32_t len)
 
     if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
         log_e("❌Error %s %d. len=%u", __FILE__, __LINE__, len);
+
+        // --- 新增：打印故障时的 TCP 详细状态 ---
+        extern struct tcp_pcb *tcp_active_pcbs;
+        struct tcp_pcb *pcb;
+        for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
+            if (pcb->local_port == ctx->websockets_info->port || pcb->remote_port == 8765) {
+                log_e("[DEBUG] PCB State: state=%d, QLen=%d, snd_buf=%u, snd_wnd=%u, cwnd=%u, rto=%d",
+                      pcb->state,
+                      pcb->snd_queuelen,
+                      pcb->snd_buf,    // 发送缓冲区剩余空间
+                      pcb->snd_wnd,    // 对端接收窗口
+                      pcb->cwnd,       // 拥塞窗口
+                      pcb->rto);       // 重传超时时间
+                break;
+            }
+        }
+        // -------------------------------------
         
         if (ctx->websockets_info != NULL) {
             wss_server_disconnect(ctx->websockets_info);
