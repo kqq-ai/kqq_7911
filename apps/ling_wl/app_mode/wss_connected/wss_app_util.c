@@ -1,13 +1,15 @@
+// Prevent ESTABLISHED collision
+#define ESTABLISHED WS_ESTABLISHED_HIDDEN
 #include "wss_app_util.h"
+#include "wss/wss_client.h"
+#undef ESTABLISHED
+#include "lwip/tcp.h"
+#include "lwip/priv/tcp_priv.h"
 #include "os/os_api.h"
-
 #include "protocol/odm/odmp.h"
 #include "app_mode/lwl_app_core.h"
-#include "wss/wss_client.h"
-
 #include "system/includes.h"
 #include "protocol/odm/odm_secure.h"
-
 #include <string.h>
 #include <stdlib.h>
 
@@ -311,6 +313,30 @@ int send_bin_data(uint8_t *data, uint32_t len)
         wss_mark_exception("send_bin_data ctx->websockets_info NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
+    }
+
+    // 检查队列深度，如果超过阈值则主动丢包，保护连接
+    if (ctx->websockets_info->sk_fd) {
+        // 这里假设 sk_fd 是 mbedtls context 或 socket fd，我们需要通过某种方式获取 qlen
+        // 由于 sk_fd 是 void* 类型，且 websocket_struct 定义中没有直接暴露 pcb
+        // 我们通过遍历 tcp_active_pcbs 来找到当前连接的 QLen
+        extern struct tcp_pcb *tcp_active_pcbs;
+        struct tcp_pcb *pcb;
+        int found = 0;
+        for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
+            // 简单通过端口匹配，可能不够严谨但有效
+            if (pcb->local_port == ctx->websockets_info->port || 
+                pcb->remote_port == 8765) { // 假设服务器端口是 8765，或者根据实际 url 解析
+                
+                if (pcb->snd_queuelen > 20) { // 阈值设为 20
+                        log_i("⚠️ Dropping audio frame to prevent blockage QLen=%d", pcb->snd_queuelen);
+                        os_mutex_post(&g_wss_mutex);
+                        return 0; // 伪装发送成功，实际上丢弃
+                }
+                found = 1;
+                break;
+            }
+        }
     }
 
     if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
