@@ -128,7 +128,8 @@ ip4_route2(src, dest)
 #define MEMP_NUM_UDP_PCB        16
 #define MEMP_NUM_TCP_PCB        20
 #define MEMP_NUM_TCP_PCB_LISTEN 16
-#define MEMP_NUM_TCP_SEG       TCP_SND_QUEUELEN //((4 * (TCP_SND_BUF) + (TCP_MSS - 1))/(TCP_MSS))
+// 修改：增加 TCP_SEG 数量，防止单连接占满导致全局阻塞
+#define MEMP_NUM_TCP_SEG       (TCP_SND_QUEUELEN * 4) // 建议至少翻倍，或者直接写 256
 #define MEMP_NUM_SYS_TIMEOUT    16
 
 /*---------- Internal Memory Pool Sizes ----------*/
