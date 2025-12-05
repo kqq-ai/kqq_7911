@@ -32,7 +32,7 @@ static void switch_to_mode(work_mode_e new_mode);
 
 // 全局变量
 work_mode_e g_current_mode = WORK_MODE_INIT;
-work_mode_e g_new_mode = WORK_MODE_6;
+work_mode_e g_new_mode = WORK_MODE_1;
 u8 g_audio_playing = 0;
 u8 g_mode_switching = 0;      // 模式切换锁定标志，防止重复切换导致问题
 
