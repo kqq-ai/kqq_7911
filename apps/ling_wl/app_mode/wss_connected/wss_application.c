@@ -156,8 +156,9 @@ static void input_event_handler_cb(lwl_event_t *e)
             wss_request_resume_mic();
         }
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+    case LWL_EVENT_TYPE_TOUCH_KEY:///LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
+            ///e->touch_key_cmd.touch_key_event_type
             log_i("[wss_application]Touch key pressed down");
             g_on_touch_key = true;
             wss_application_touch_key(true);

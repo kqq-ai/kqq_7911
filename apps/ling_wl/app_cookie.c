@@ -191,6 +191,16 @@ static void* led_breath_thread(void* arg)
     return NULL;
 }
 
+static void peri_events(void *priv)
+{
+    while (1) {
+        u32 peri_curr_time = timer_get_ms();
+        lwl_peri_dev_loop(peri_curr_time);
+        ///log_i("peri_events : " );           
+        msleep(10);
+    }
+}
+
 
 static void app_cookie_main(void)
 {
@@ -255,6 +265,7 @@ static void app_cookie_main(void)
     app_sc7a20_init();
 
     lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
+    thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL);

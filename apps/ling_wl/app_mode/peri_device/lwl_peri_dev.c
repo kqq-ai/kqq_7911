@@ -691,21 +691,3 @@ void lwl_peri_dev_loop(uint32_t curr_time)
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

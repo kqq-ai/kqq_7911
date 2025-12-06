@@ -321,7 +321,7 @@ void app_devices_check_mode(void)
         u32 g_curr_time = timer_get_ms();
 
         // C_V2_01 测试
-        lwl_peri_dev_loop(g_curr_time);
+        /// lwl_peri_dev_loop(g_curr_time);   peri_events
 
         // 定期输出设备信息（减少频率以避免日志过多）
         if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 3) { // 每3秒输出一次
