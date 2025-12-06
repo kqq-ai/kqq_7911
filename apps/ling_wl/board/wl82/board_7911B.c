@@ -587,10 +587,10 @@ static const struct port_wakeup port1 = {
 
 
 static const struct long_press lpres_port = {
-    .enable 	= FALSE,
+    .enable 	= TRUE,
     .use_sec4 	= TRUE,										//enable = TRUE , use_sec4: TRUE --> 4 sec , FALSE --> 8 sec
     .edge		= FALLING_EDGE,								//长按方式,可选：FALLING_EDGE /  RISING_EDGE --> 低电平/高电平
-    .iomap 		= PORT_WAKEUP_IO,							//长按复位IO和IO唤醒共用一个IO
+    .iomap 		= IO_PORTB_01,							//长按复位IO和IO唤醒共用一个IO
 };
 
 static const struct sub_wakeup sub_wkup = {
