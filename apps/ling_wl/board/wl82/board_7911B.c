@@ -578,6 +578,14 @@ static const struct port_wakeup port0 = {
     .low_power	= POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,   //低功耗IO唤醒,不需要写0
 };
 
+static const struct port_wakeup port1 = {
+    .edge       = FALLING_EDGE,                            //唤醒方式选择,可选：上升沿\下降沿
+    .attribute  = BLUETOOTH_RESUME,                        //保留参数
+    .iomap      = IO_PORTC_09,                          //唤醒口选择
+    .low_power	= POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,   //低功耗IO唤醒,不需要写0
+};
+
+
 static const struct long_press lpres_port = {
     .enable 	= FALSE,
     .use_sec4 	= TRUE,										//enable = TRUE , use_sec4: TRUE --> 4 sec , FALSE --> 8 sec
@@ -594,7 +602,8 @@ static const struct charge_wakeup charge_wkup = {
 };
 
 static const struct wakeup_param wk_param = {
-    .port[PORT_WAKEUP_NUM] = &port0,
+    .port[0] = &port0,
+    .port[PORT_WAKEUP_NUM] = &port1,
     .sub = &sub_wkup,
     .charge = &charge_wkup,
     .lpres = &lpres_port,
