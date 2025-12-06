@@ -62,8 +62,8 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
 
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+    case LWL_EVENT_TYPE_TOUCH_KEY:
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
         } else {
             log_i("Touch key released");
@@ -75,7 +75,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
             }
         }
         break;
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+    case LWL_EVENT_TYPE_KEY:
         if (wifi_manager_state) {
             // 确认连接小程序
             log_i("PRESS NORMAL KEY in net_connecting mode");
@@ -83,9 +83,8 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
             play_system_music("t_key.mp3");
         }
         break;
-    case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by net_connecting_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
-        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
+    case LWL_EVENT_TYPE_GSENSOR_IDLE:
+        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
         break;
     }
 }

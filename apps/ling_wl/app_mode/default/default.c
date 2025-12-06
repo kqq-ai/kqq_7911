@@ -40,15 +40,14 @@ static void default_input_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
 
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+    case LWL_EVENT_TYPE_TOUCH_KEY:
         // play 提示音
         break;
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+    case LWL_EVENT_TYPE_KEY:
         wait_for_button = false;
         break;
-    case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by default_input_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
-        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
+    case LWL_EVENT_TYPE_GSENSOR_IDLE:
+        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
         break;
     }
 }
@@ -57,9 +56,10 @@ static int default_init(void)
 {
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     /* 注册lwl事件处理回调 */
+    init_time = timer_get_ms();
+    g_sensor_reset_alive_timer();
     lwl_event_handler_add(default_input_event_handler_cb);
     set_led_idel(); // 设置LED为白色
-    init_time = timer_get_ms();
     wifi_and_network_off();
     wait_for_button = true;
     return 0;

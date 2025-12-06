@@ -55,6 +55,7 @@ AppTaskStepState g_device_state = APP_IDLE;
 void wss_application_vailed()
 {
     last_req_time = g_curr_time;
+    g_sensor_reset_alive_timer();
 }
 
 void wss_disconnect_cbk(void)
@@ -141,7 +142,7 @@ static void input_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
 
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+    case LWL_EVENT_TYPE_KEY:
         log_i("[wss_application]APPLICATION SHORT_CLICK %d", multi_play_mode);
         if (wss_check_exit()) {
             g_power_key_retry = true;
@@ -151,8 +152,8 @@ static void input_event_handler_cb(lwl_event_t *e)
             wss_request_resume_mic();
         }
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+    case LWL_EVENT_TYPE_TOUCH_KEY:
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("[wss_application]Touch key pressed down");
             g_on_touch_key = true;
             wss_application_touch_key(true);
@@ -163,11 +164,8 @@ static void input_event_handler_cb(lwl_event_t *e)
         }
         wss_application_vailed();
         break;
-    case LWL_EVENT_TYPE_UART_SYNC:
-        uart_response_synch_status(timer_get_ms() - last_req_time < NO_REQ_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 0是idle 1是busy，必须回复
-        break;
-    case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
-        log_i("[wss_application]MOVE_MORE_THAN_ONE_METER");
+    case LWL_EVENT_TYPE_GSENSOR_IDLE:
+        g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
         break;
     }
     os_mutex_post(&g_wss_mutex);

@@ -20,9 +20,9 @@ UART0_PLATFORM_DATA_BEGIN(uart0_data)
     .port = PORT_REMAP,
     .output_channel = OUTPUT_CHANNEL1,
     .input_channel = INPUT_CHANNEL1,
-    .tx_pin = IO_PORTC_06,
-    .rx_pin = IO_PORTC_07,
-    /* .port = PORTA_5_6, */
+    .tx_pin = IO_PORTC_07,
+    .rx_pin = IO_PORTC_08,
+    /* .port = PORTA_5_6,     C_06, C_07*/
     /* .tx_pin = IO_PORTA_05, */
     /* .rx_pin = IO_PORTA_06, */
     // .port = PORTH_0_1,
@@ -103,7 +103,7 @@ SD_PLATFORM_DATA_END()
 
 SW_IIC_PLATFORM_DATA_BEGIN(sw_iic0_data)
     .clk_pin = IO_PORTC_01,
-    .dat_pin = IO_PORTC_00,
+    .dat_pin = IO_PORTC_02,
     .sw_iic_delay = 50,
 SW_IIC_PLATFORM_DATA_END()
 
@@ -568,7 +568,7 @@ static const struct low_power_param power_param = {
 
 /************************** PWR config ****************************/
 //#define PORT_VCC33_CTRL_IO		IO_PORTA_03					//VCC33 DCDC控制引脚,该引脚控制DCDC器件输出的3.3V连接芯片HPVDD、VDDIO、VDD33
-#define PORT_WAKEUP_IO			IO_PORTC_05					//软关机和休眠唤醒引脚
+#define PORT_WAKEUP_IO			IO_PORTC_00					//软关机和休眠唤醒引脚
 #define PORT_WAKEUP_NUM			(PORT_WAKEUP_IO/IO_GROUP_NUM)//默认:0-7:GPIOA-GPIOH, 可以指定0-7组
 
 static const struct port_wakeup port0 = {

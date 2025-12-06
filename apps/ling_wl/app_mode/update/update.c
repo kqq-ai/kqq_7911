@@ -25,23 +25,23 @@ static void update_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
 
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+    case LWL_EVENT_TYPE_TOUCH_KEY:
         // play 提示音
         break;
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+    case LWL_EVENT_TYPE_KEY:
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         // TODO STOP THE OTA
         break;
-    case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response by update_event_handler_cb (%d, 12)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
-        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
+    case LWL_EVENT_TYPE_GSENSOR_IDLE:
+        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
         break;
     }
 }
 static int update_init(void)
 {
     init_time = timer_get_ms();
+    g_sensor_reset_alive_timer();
     lwl_event_handler_add(update_event_handler_cb);
     set_led_OTA_on();
     play_system_music("OtaInUpdate.mp3");

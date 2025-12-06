@@ -142,7 +142,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_EEND_DEV_NEW_IN:
         log_i("ORMET_NEW_DEVICE_IN");
         break;
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK: {
+    case LWL_EVENT_TYPE_KEY: {
         log_i("=== UART IO KEY SHORT CLICK DETECTED ===");
         log_i("Button pressed via UART interface");
         log_i("Event timestamp: %d ms", timer_get_ms());
@@ -196,34 +196,32 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         g_new_mode = WORK_MODE_INIT;
         os_mutex_post(&g_mode_mutex);
         break;
-    case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("SYNC response E.. v=3; timer_get_ms() - init_time:%d ;  battery: %d", timer_get_ms() - init_time, e->uart_cmd_sync.battery);
-        log_i("SYNC response by devices_check_lwl_event_handler_cb (%d, 3)", timer_get_ms() - init_time < MODE_TIMEOUT_MS);
-        uart_response_synch_status(timer_get_ms() - init_time < MODE_TIMEOUT_MS, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
+    case LWL_EVENT_TYPE_GSENSOR_IDLE:
+        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
+    case LWL_EVENT_TYPE_TOUCH_KEY:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
-        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
             log_i("Event timestamp: %d ms", timer_get_ms());
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             
-            log_i("Touch key event type: %d",e->uart_cmd_touch.touch_key_event_type);
+            log_i("Touch key event type: %d",e->touch_key_cmd.touch_key_event_type);
             
             // 特殊处理模式8的触摸按键检测
             if (g_current_mode == WORK_MODE_8) {
-                process_mode_8_touch_key(e->uart_cmd_touch.touch_key_event_type);
+                process_mode_8_touch_key(e->touch_key_cmd.touch_key_event_type);
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {
-                process_mode_1_touch_key(e->uart_cmd_touch.touch_key_event_type);
+                process_mode_1_touch_key(e->touch_key_cmd.touch_key_event_type);
             }
         } else {
             log_i("Touch key released");
             log_i("Event timestamp: %d ms", timer_get_ms());
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             
-            log_i("Touch key event type: %d", e->uart_cmd_touch.touch_key_event_type);
+            log_i("Touch key event type: %d", e->touch_key_cmd.touch_key_event_type);
             
             // 可以在这里添加触摸按键抬起的特殊处理逻辑
             if (g_current_mode == WORK_MODE_1) {
@@ -232,9 +230,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                 log_i("Touch key released in mode %s", mode_names[g_current_mode]);
             }
         }
-        break;
-    case LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER:
-        log_i("MOVE_MORE_THAN_ONE_METER");
         break;
     }
 }
@@ -300,6 +295,7 @@ void app_devices_check_mode(void)
 
     log_i("=== ENTERING MAIN LOOP ===");
     log_i("Multi-mode system active");
+    ///lwl_peri_dev_init();
 
     while (1) {
         // 主循环延时
@@ -316,8 +312,11 @@ void app_devices_check_mode(void)
         }
         
         // 检测按键状态（保留原有的GPIO按键检测功能）
-        check_key_status();
+        //check_key_status();
         u32 g_curr_time = timer_get_ms();
+
+        // C_V2_01 测试
+        /// lwl_peri_dev_loop(g_curr_time);   peri_events
 
         // 定期输出设备信息（减少频率以避免日志过多）
         if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 3) { // 每3秒输出一次

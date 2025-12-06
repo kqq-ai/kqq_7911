@@ -22,4 +22,14 @@ void do_shutdown();
 
 #define PRINT_RSSI_LOG 0 // 是否打印RSSI日志
 
+#define LED_R_IO			IO_PORTA_08					//LED 红
+#define LED_G_IO			IO_PORTA_10					//LED 绿
+#define LED_B_IO			IO_PORTA_09					//LED 蓝
+
+#define G_INT_IO		    IO_PORTC_00					//加速度传感器中断
+#define TOUCH_IO            IO_PORTC_06                 //触摸按键IO
+#define KEY_IO			    IO_PORTC_09					//按键
+
+
+
 #endif

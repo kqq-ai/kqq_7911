@@ -164,7 +164,7 @@ static void start_mic_record_test(void *priv)
 static void function_test_lwl_event_handler_cb(lwl_event_t *e)
 {
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+    case LWL_EVENT_TYPE_KEY:
         log_i("switch to test mode")
         /* 清空asr data queue */
         my_blocking_queue_clear(&g_asr_data_queue);
@@ -182,14 +182,14 @@ static void function_test_lwl_event_handler_cb(lwl_event_t *e)
         log_i("SYNC response by wss_app_lwl_event_handler_cb (1, 16)");
         uart_response_synch_status(1, 16);
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+    case LWL_EVENT_TYPE_TOUCH_KEY:
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
         } else {
             log_i("Touch key released");
         }
         break;
-    case LWL_EVENT_TYPE_UART_SHUTDOWN:
+    case LWL_EVENT_TYPE_SHUTDOWN:
         log_i("SHUTDOWN");
         power_set_soft_poweroff();
         break;

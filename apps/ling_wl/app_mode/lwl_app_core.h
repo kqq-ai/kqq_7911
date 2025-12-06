@@ -64,10 +64,10 @@ const char *adv_stat_to_text(bdp_dev_op_type_e type);
  */
 typedef enum {
     LWL_EVENT_TYPE_UART_SYNC,                  /**< UART synchronization event */
-    LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK,    /**< Short click on IO key */
-    LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN,        /**< Touch key pressed event */
-    LWL_EVENT_TYPE_UART_SHUTDOWN,              /**< System shutdown event */
-    LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER, /**< Movement detection event */
+    // LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK,    /**< Short click on IO key */
+    // LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN,        /**< Touch key pressed event */
+    // LWL_EVENT_TYPE_UART_SHUTDOWN,              /**< System shutdown event */
+    // LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER, /**< Movement detection event */
 
     LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE,   /**< EEND device distance change event */
     LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE,    /**< Closest EEND device change event */
@@ -77,7 +77,16 @@ typedef enum {
     LWL_EVENT_TYPE_BACKEND_DISCONNECTED,       /**< Backend service disconnected event */
 
     LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID,      /**< Clear stored WiFi SSID event */
-    LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF,   /**< Notify GSensor off event */
+    // LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF,   /**< Notify GSensor off event */
+    
+    /* C_V2_02 C_V2_01 */
+    LWL_EVENT_TYPE_TOUCH_KEY,                  /**< Touch key event */
+    LWL_EVENT_TYPE_KEY,                        /**< Key event */
+    LWL_EVENT_TYPE_GSENSOR_IDLE,                    /**< GSensor event */
+    LWL_EVENT_TYPE_CHARGE,                     /**< Charge event */
+    LWL_EVENT_TYPE_LOW_BATTERY,                /**< Low battery event */
+    LWL_EVENT_TYPE_SHUTDOWN,                   /**< System shutdown event */
+    LWL_EVENT_TYPE_SLEEP,                      /**< System shutdown event */
 } LWL_EVENT_TYPE;
 
 /**
@@ -100,11 +109,50 @@ typedef struct {
 } lwl_event_uart_cmd_sync_t;
 
 /**
+ * @brief touch_key command data structure
+ */
+typedef struct {
+    u8 touch_key_event_type;     /**< Current touch_key event type */   /* 0: touch_key_down, 1: touch_key_up*/
+} lwl_event_touch_key_cmd_t;
+
+/**
  * @brief UART touch_key command data structure
  */
 typedef struct {
     u8 touch_key_event_type;     /**< Current touch_key event type */   /* 0: touch_key_down, 1: touch_key_up*/
 } lwl_event_uart_cmd_touch_t;
+/**
+ * @brief key_event_type enum
+ */
+typedef enum {
+    KEY_EVENT_TYPE_SHORT_CLICK = 0, /* 短按 */
+    KEY_EVENT_TYPE_DOUBLE_CLICK,     /* 双击 */
+    KEY_EVENT_TYPE_TRIPLE_CLICK,     /* 三击 */
+    KEY_EVENT_TYPE_LONG_PRESS,      /* 长按 */
+} key_event_type_t;
+/**
+ * @brief _key command data structure
+ */
+typedef struct {
+    key_event_type_t key_event_type;     
+} lwl_event_key_cmd_t;
+
+/**
+ * @brief charge_event_type enum
+ */
+typedef enum {
+    CHARGE_EVENT_TYPE_CHARGE_IN = 0, /* 充电插入 */
+    CHARGE_EVENT_TYPE_CHARGE_OUT,    /* 充电拔出 */
+    CHARGE_EVENT_TYPE_CHARGE_FULL,   /* 充电完成 */
+} charge_event_type_t;
+
+/**
+ * @brief charge command data structure
+ */
+typedef struct {
+    charge_event_type_t charge_event_type;
+} lwl_event_charge_cmd_t;
+
 
 /**
  * @brief EEND device distance change event data structure
@@ -128,7 +176,10 @@ typedef struct {
     union {
         lwl_event_uart_cmd_sync_t uart_cmd_sync; /**< UART sync command data */
         lwl_event_uart_cmd_touch_t uart_cmd_touch; /**< UART touch_key command data */
+        lwl_event_touch_key_cmd_t touch_key_cmd; /**< touch_key command data */
+        lwl_event_key_cmd_t key_cmd;             /**< Key command data */
         lwl_event_eend_dev_distance_change_t distance_change;   /**< EEND device distance change data */
+        lwl_event_charge_cmd_t charge_cmd;
         lwl_event_eend_dev_new_in_t new_in;
     };
 } lwl_event_t;

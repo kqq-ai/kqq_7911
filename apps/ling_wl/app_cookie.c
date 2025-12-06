@@ -124,19 +124,28 @@ static void do_shutdown()
 void base_lwl_event_handler(lwl_event_t *e)
 {
     switch (e->event_type) {
-    case LWL_EVENT_TYPE_UART_SHUTDOWN:
-        log_i("base_lwl_event_handler LWL_EVENT_TYPE_UART_SHUTDOWN\r\n");
+    case LWL_EVENT_TYPE_SHUTDOWN:
+        log_i("base_lwl_event_handler LWL_EVENT_TYPE_SHUTDOWN\r\n");
+        log_i("NOTIFY_GSENSOR_OFF");
+        extern void * g_iic_hdl;
+        int ret = 0;
+        ret = sc7a20h_disable(g_iic_hdl);
+        if (0 == ret)
+        {
+            log_i("GSENSOR OFF");
+        }
+    case LWL_EVENT_TYPE_SLEEP:
         do_shutdown();
         break;
-    case LWL_EVENT_TYPE_UART_TOUCH_KEY_DOWN:
-        if (e->uart_cmd_touch.touch_key_event_type == 0) {
+    case LWL_EVENT_TYPE_TOUCH_KEY:
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
         } else {
             log_i("Touch key released");
         }
         // play 提示音
         break;
-    case LWL_EVENT_TYPE_UART_IO_KEY_SHORT_CLICK:
+    case LWL_EVENT_TYPE_KEY:
         log_i("PRESS NORMAL KEY");
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
@@ -147,29 +156,22 @@ void base_lwl_event_handler(lwl_event_t *e)
         // uart_send_apply_soft_poweroff(); // TODO restart
         system_reset(); //restart
         break;
+    //电量同步
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
-        if(lastbattery != e->uart_cmd_sync.battery) {
-            lastbattery = e->uart_cmd_sync.battery;
-            log_mqtt_set_battery_level(NULL, lastbattery);
-        }
-        if(e->uart_cmd_sync.battery < 30 ) {
-            // set_led_red_low_power();
-        }
-        if (e->uart_cmd_sync.charging == 1) {
-            // log_mqtt_set_battery_level(NULL, lastbattery); // 上报充电状态
-        }
+        log_i("7016 SYNC v=1; battery: %d", e->uart_cmd_sync.battery);
+        uart_response_synch_status(1, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
+        // log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
+        // if(lastbattery != e->uart_cmd_sync.battery) {
+        //     lastbattery = e->uart_cmd_sync.battery;
+        //     log_mqtt_set_battery_level(NULL, lastbattery);
+        // }
+        // if(e->uart_cmd_sync.battery < 30 ) {
+        //     // set_led_red_low_power();
+        // }
+        // if (e->uart_cmd_sync.charging == 1) {
+        //     // log_mqtt_set_battery_level(NULL, lastbattery); // 上报充电状态
+        // }
         break;
-    case LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF:
-        log_i("NOTIFY_GSENSOR_OFF");
-        extern void * g_iic_hdl;
-        int ret = 0;
-        ret = sc7a20h_disable(g_iic_hdl);
-        if (0 == ret)
-        {
-            uart_response_notify_gsensor_off();
-            log_i("GSENSOR OFF");
-        }
     }
 }
 
@@ -215,6 +217,15 @@ static void sync_log_time_to_beijing(void)
     log_i("[LogTime] synced to Beijing %02u:%02u:%02u", hour, minute, second);
 }
 
+static void peri_events(void *priv)
+{
+    while (1) {
+        u32 peri_curr_time = timer_get_ms();
+        lwl_peri_dev_loop(peri_curr_time);
+        ///log_i("peri_events : " );           
+        msleep(10);
+    }
+}
 
 static void app_cookie_main(void)
 {
@@ -243,7 +254,7 @@ static void app_cookie_main(void)
     // 取消静音
     gpio_direction_output(IO_PORTA_00, 1);                  // 拉高 C 口功放使能脚，恢复扬声器输出
     gpio_direction_output(IO_PORTB_02, 0);                  // 备用方案：拉高 E 口功放使能
-
+    uart_response_synch_status(1, MAX_LE_AUDIO_VOLUME);     // 同步初始音量状态给 7016
     /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);                     // 初始化音乐播放器，支持本地/网络音频
     context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
@@ -274,6 +285,9 @@ static void app_cookie_main(void)
 
     /* 创建sc7a20 task 陀螺仪 */
     app_sc7a20_init();                                      // 启动 SC7A20 加速度计任务，支持姿态/震动检测
+
+    lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
+    thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
