@@ -16,6 +16,7 @@ enum sys_reset_type {
     SYS_RST_LONG_PRESS = BIT(7),
     SYS_RST_VDDIO_PWR_ON = BIT(8),
     SYS_RST_VDDIO_LOW_PWR = BIT(9),
+    SYS_RST_LPTMR_WKUP = BIT(10),
 };
 
 #define SYS_ALM_WAKUP	"ALM_WAKUP"

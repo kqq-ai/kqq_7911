@@ -704,6 +704,67 @@ static void sleep_enter_callback(u8  step)
 	}
 }
 
+static void dump_system_reset_reason(void)
+{
+    int reset_reason = system_reset_reason_get();
+    
+    printf("\n========== System Reset Reason Dump ==========\n");
+    printf("Reset reason code: 0x%x\n", reset_reason);
+    
+    // 逐项检查复位原因并打印
+    if (reset_reason & SYS_RST_VDDIO_PWR_ON) {
+        printf("- Power On Reset (VDDIO Power On)\n");
+    }
+    
+    if (reset_reason & SYS_RST_12V) {
+        printf("- 1.2V Power Reset\n");
+    }
+    
+    if (reset_reason & SYS_RST_WDT) {
+        printf("- Watchdog Timer Reset\n");
+    }
+    
+    if (reset_reason & SYS_RST_VCM) {
+        printf("- VCM Reset\n");
+    }
+    
+    if (reset_reason & SYS_RST_SOFT) {
+        printf("- Software Reset\n");
+    }
+    
+    if (reset_reason & SYS_RST_ALM_WKUP) {
+        printf("- Alarm Wakeup Reset\n");
+    }
+    
+    if (reset_reason & SYS_RST_PORT_WKUP) {
+        int wakeup_port = system_wakeup_port_get();
+        printf("- Port Wakeup Reset");
+        if (wakeup_port >= 0) {
+            printf(" (IO Group: %d)", wakeup_port);
+        }
+        printf("\n");
+    }
+    
+    if (reset_reason & SYS_RST_LONG_PRESS) {
+        printf("- Long Press Reset\n");
+    }
+    
+    if (reset_reason & SYS_RST_VDDIO_LOW_PWR) {
+        printf("- Low Power Reset (VDDIO Low Power)\n");
+    }
+    
+    if (reset_reason & SYS_RST_LPTMR_WKUP) {
+        printf("- Low Power Timer Wakeup Reset\n");
+    }
+    
+    if (reset_reason == SYS_RST_NONE) {
+        printf("- No specific reset reason detected\n");
+    }
+    
+    printf("=============================================\n\n");
+}
+
+
 static void board_power_init(void)
 {
 #ifdef PORT_VCC33_CTRL_IO
@@ -738,6 +799,42 @@ static void board_power_init(void)
         }
     }
 #endif
+
+    /* 获取系统复位原因 */
+    dump_system_reset_reason();
+    int ret = 0;
+    ret = system_wakeup_reset();
+    ///if (ret == 1)
+    {
+        ret = system_wakeup_port_get();
+        ///if (ret >= 0)
+        {
+            printf("wakeup port:%d\n", ret);
+            /* 3. 拉IO将 7016音频设备打开 唤醒 */
+            gpio_set_direction(IO_PORTA_05, 0); // 输出模式
+            gpio_set_pull_down(IO_PORTA_05, 0);
+            gpio_set_pull_up(IO_PORTA_05, 0);
+            gpio_direction_output(IO_PORTA_05, 1);
+            gpio_direction_output(IO_PORTA_05, 0);
+            // ret = check_long_press_to_power_on();
+            // if (1 == ret)
+            // {
+            //     printf("power on !\n");
+            //     /* 拉IO将 7016音频设备打开 唤醒 */
+            //     gpio_set_direction(IO_PORTA_05, 0); // 输出模式
+            //     gpio_set_pull_down(IO_PORTA_05, 0);
+            //     gpio_set_pull_up(IO_PORTA_05, 0);
+            //     gpio_direction_output(IO_PORTA_05, 1);
+            //     gpio_direction_output(IO_PORTA_05, 0);
+            // }
+            // else
+            // {
+            //     // power_set_soft_poweroff(0);
+            // }
+        }
+    }
+
+
     extern void clean_wakeup_source_port(void);
     clean_wakeup_source_port();
 }
