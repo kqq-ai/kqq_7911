@@ -9,6 +9,7 @@
 #include "event/device_event.h"
 #include "event/net_event.h"
 #include "wifi/wifi_connect.h"
+#include "app_cookie.h"
 
 
 /*中断列表 */
@@ -194,9 +195,9 @@ void app_main()
     puts("------------- cookie wl app main-------------\n");
 
     init_intent(&it);
-    it.name = "app_cookie";
+    it.name = (char *)APP_COOKIE_NAME;
     it.action = ACTION_COOKIE_MAIN;
-    start_app(&it);
+    start_app(&it);  // See: app_cookie.c:548-553 
 
 #if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
     extern void bt_ble_module_init(void);

@@ -525,6 +525,7 @@ static int app_cookie_event_handler(struct application *app, struct sys_event *e
     }
 }
 
+// 状态机：管理APP的生命周期和状态转换
 static int app_cookie_state_machine(struct application *app, enum app_state state,
                                    struct intent *it)
 {
@@ -547,7 +548,7 @@ static int app_cookie_state_machine(struct application *app, enum app_state stat
         break;
     case APP_STA_STOP:
         break;
-    case APP_STA_DESTROY:
+    case APP_STA_DESTROY: // STA销毁
         break;
     }
 
@@ -560,7 +561,7 @@ static const struct application_operation app_cookie_ops = {
 };
 
 REGISTER_APPLICATION(app_cookie) = {
-    .name 	= "app_cookie",
+    .name 	= APP_COOKIE_NAME,
     .ops 	= &app_cookie_ops,
     .state  = APP_STA_DESTROY,
 };

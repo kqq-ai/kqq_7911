@@ -31,5 +31,6 @@ void do_shutdown();
 #define KEY_IO			    IO_PORTC_09					//按键
 
 
+#define APP_COOKIE_NAME "app_cookie"
 
 #endif
