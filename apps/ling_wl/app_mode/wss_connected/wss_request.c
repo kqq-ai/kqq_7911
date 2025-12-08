@@ -65,12 +65,20 @@ bool wss_request_is_busy(){
     return (g_mode_state != STATE_IDLE);
 }
 
+
+static void e_turn_off_cb(uint8_t code, void *priv)
+{
+    log_i("turn off result code: %d", code);
+    // lwl_peri_dev_7016_on(false);  // 关闭 7016
+    // log_i("[wss_request]lwl_peri_dev_7016_on false\n");
+}
+
 void turn_off_Pi() {
     if (g_edev_connected_sn[0] != 0) {
         
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
         if (pdev) {
-            bdo_turn_off(pdev, 500, NULL, NULL);
+            bdo_turn_off(pdev, 500, e_turn_off_cb, NULL);
         } else {
             log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
         }
@@ -145,6 +153,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             wss_ble_audio_stop();
             memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
             send_message = 0; // 重置发送消息标志
+            log_i("[wss_request][wss_request]lwl_peri_dev_7016_on on on on on\n");
             turn_on_Pi(g_edev_target_sn);
             play_prompt_sound("TTSBind.mp3");
         } else if (g_mode_state == STATE_TTS_BIND) {
@@ -328,6 +337,7 @@ bool wss_request_loop()
         }
         break;
     case STATE_TTS_BIND: // until send_message == ORMET_SWITCH_SUCCESS or ORMET_SWITCH_FAILED
+        lwl_peri_dev_7016_on(true);  // 开启 7016
         // TTS下载流程
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("[wss_request]Switch success, starting audio playback");

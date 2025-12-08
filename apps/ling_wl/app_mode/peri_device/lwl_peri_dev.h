@@ -42,4 +42,6 @@ uint32_t check_long_press_to_power_on(void);
 void g_sensor_set_alive_timeout(uint32_t timeout_ms);
 void g_sensor_reset_alive_timer(void);
 
+void lwl_peri_dev_7016_on(bool on);
+
 #endif

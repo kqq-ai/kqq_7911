@@ -810,12 +810,6 @@ static void board_power_init(void)
         ///if (ret >= 0)
         {
             printf("wakeup port:%d\n", ret);
-            /* 3. 拉IO将 7016音频设备打开 唤醒 */
-            gpio_set_direction(IO_PORTA_05, 0); // 输出模式
-            gpio_set_pull_down(IO_PORTA_05, 0);
-            gpio_set_pull_up(IO_PORTA_05, 0);
-            gpio_direction_output(IO_PORTA_05, 1);
-            gpio_direction_output(IO_PORTA_05, 0);
             // ret = check_long_press_to_power_on();
             // if (1 == ret)
             // {

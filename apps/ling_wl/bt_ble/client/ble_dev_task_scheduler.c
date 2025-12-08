@@ -64,8 +64,7 @@ const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void bdo_disable()
 {
     log_i("[BDO]bdo_disable");
-    uart_send_switch_audio_bc(empty_broadcast_code, 0x00);
-    uart_send_set_ctrl(0);
+    // lwl_peri_dev_7016_on(false);  // 关闭 7016
 }
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)

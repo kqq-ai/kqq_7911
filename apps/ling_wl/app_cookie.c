@@ -134,10 +134,10 @@ void base_lwl_event_handler(lwl_event_t *e)
         {
             log_i("GSENSOR OFF\n");
         }
-            /* 关闭 7016 */
-        uart_send_audio_dev_close();
-        log_i("7016 OFF\n");
     case LWL_EVENT_TYPE_SLEEP:
+            /* 关闭 7016 */
+        log_i("7016 OFF\n");
+        lwl_peri_dev_7016_on(false);
         do_shutdown();
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:

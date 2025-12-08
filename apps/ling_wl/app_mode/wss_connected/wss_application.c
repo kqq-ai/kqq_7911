@@ -216,7 +216,7 @@ void wss_app_mode_play()
 
 void play_prompt(const char *fname) 
 {
-    log_i("play_prompt: %s", fname);
+    log_i("[wss_application]prepare to play_prompt: %s", fname);
     memcpy(music_file, fname, strlen(fname)+1);
 }
 
@@ -378,11 +378,9 @@ bool wss_application_loop()
         }
         return true;
     }
-    os_mutex_pend(&g_wss_mutex, 0);
     if (music_file[0] != 0 && play_voice_prompt == 0) {
         wss_app_mode_play();
     }
-    os_mutex_post(&g_wss_mutex);
 
     wss_request_loop();
     if (play_voice_prompt || g_on_touch_key) {
