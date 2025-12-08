@@ -15,20 +15,25 @@ typedef enum {
 // CMD 命令
 typedef enum {
     UART_NONE,
-    UART_CMD_NORMAL_KEY          = 0xA0, // 普通按键
-    UART_CMD_TOUCH_KEY           = 0xA1, // 触摸按键
-    UART_CMD_SYNCH_STATUS        = 0xA2, // 同步状态 ： 电量 充电状态 告知给7911    7911需将工作状态返回给7016（相应包发送）
-    UART_CMD_POWER_OFF           = 0xA3, // 关机
-    UART_CMD_SET_BLESN           = 0xA4, // 设置蓝牙序列号
-    UART_CMD_MOVE_DETECT_EN      = 0xA5, // 使能移动检测
-    UART_CMD_MOVE_OVER_A_METER   = 0xA6, // 通知检测距离大于一米
-    UART_CMD_SET_LED_COLOR       = 0xA7, // 设置LED颜色
-    UART_CMD_OPEN_LE_AUDIO       = 0xA8, // 通知打开LE Audio
-    UART_CMD_CLEAR_WIFI_SSID     = 0xA9, // 通知7911 清除WIFI SSID
-    UART_CMD_APPLY_SOFT_POWEROFF = 0xAA, // 7911申请软关机
-    UART_CMD_NOTIFY_GSENSOR_OFF  = 0xAB, // 通知关闭加速度传感器
-    UART_CMD_SWITCH_AUDIO_BC     = 0xAC, // 7911重新打开7016 Audio广播
-    UART_CMD_SET_CTRL            = 0xAD, // 7911设置7016 Audio广播ctrl字段
+    UART_CMD_NORMAL_KEY          = 0x20, // 普通按键
+    UART_CMD_TOUCH_KEY           = 0x21, // 触摸按键
+    UART_CMD_MOVE_DETECT_EN      = 0x25, // 使能移动检测
+    UART_CMD_MOVE_OVER_A_METER   = 0x26, // 通知检测距离大于一米
+    UART_CMD_SET_LED_COLOR       = 0x27, // 设置LED颜色
+    UART_CMD_CLEAR_WIFI_SSID     = 0x29, // 通知7911 清除WIFI SSID
+    UART_CMD_APPLY_SOFT_POWEROFF = 0x2A, // 7911申请软关机
+    UART_CMD_NOTIFY_GSENSOR_OFF  = 0x2B, // 通知关闭加速度传感器
+
+    UART_CMD_SYNCH_STATUS        = 0xA0, // 同步状态 ： 电量 充电状态 告知给7911    7911需将工作状态返回给7016（相应包发送）
+    UART_CMD_POWER_OFF           = 0xA1, // 关机
+    UART_CMD_SET_BLESN           = 0xA2, // 设置蓝牙序列号
+    UART_CMD_OPEN_LE_AUDIO       = 0xA3, // 通知打开LE Audio
+    UART_CMD_SWITCH_AUDIO_BC     = 0xA4, // 7911重新打开7016 Audio广播
+    UART_CMD_SET_CTRL            = 0xA5, // 7911设置7016 Audio广播ctrl字段
+    UART_CMD_AUDIO_DEV_OPEN      = 0xA6, // 开启7016
+    UART_CMD_AUDIO_DEV_PLAY      = 0xA7, // 通知7016进入 播放模式
+    UART_CMD_AUDIO_DEV_OTA       = 0xA8, // 通知7016进入 OTA模式
+    UART_CMD_AUDIO_DEV_CLOSE     = 0xA9, // 关闭7016
 } uart_cmd_t;
 
 // 返回码表
@@ -121,4 +126,12 @@ int uart_send_switch_audio_bc(uint8_t *broadcast_code, uint8_t ctrl);
 /* 8. 指定广播配对码重新打开Audio广播 */
 int uart_send_set_ctrl(uint8_t ctrl);
 
+/* 6. 通知7016进入 播放模式 的发送函数 */
+int uart_send_audio_dev_play(void);
+
+/* 7. 通知7016进入 OTA模式 的发送函数 */
+int uart_send_audio_dev_ota(void);
+
+/* 8. 通知7016进入 关闭模式 的发送函数 */
+int uart_send_audio_dev_close(void);
 #endif

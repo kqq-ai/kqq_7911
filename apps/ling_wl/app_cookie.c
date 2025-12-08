@@ -126,30 +126,33 @@ void base_lwl_event_handler(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_SHUTDOWN:
         log_i("base_lwl_event_handler LWL_EVENT_TYPE_SHUTDOWN\r\n");
-        log_i("NOTIFY_GSENSOR_OFF");
+        log_i("NOTIFY_GSENSOR_OFF\n");
         extern void * g_iic_hdl;
         int ret = 0;
         ret = sc7a20h_disable(g_iic_hdl);
         if (0 == ret)
         {
-            log_i("GSENSOR OFF");
+            log_i("GSENSOR OFF\n");
         }
+            /* 关闭 7016 */
+        uart_send_audio_dev_close();
+        log_i("7016 OFF\n");
     case LWL_EVENT_TYPE_SLEEP:
         do_shutdown();
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
-            log_i("Touch key pressed down");
+            log_i("Touch key pressed down\n");
         } else {
-            log_i("Touch key released");
+            log_i("Touch key released\n");
         }
         // play 提示音
         break;
     case LWL_EVENT_TYPE_KEY:
-        log_i("PRESS NORMAL KEY");
+        log_i("PRESS NORMAL KEY\n");
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        log_i("PRESS RESET KEY");
+        log_i("PRESS RESET KEY\n");
         // Reset WiFi SSID
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         uart_response_clear_wifi_ssid();
@@ -158,7 +161,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         break;
     //电量同步
     case LWL_EVENT_TYPE_UART_SYNC:
-        log_i("7016 SYNC v=1; battery: %d", e->uart_cmd_sync.battery);
+        log_i("7016 SYNC v=1; battery: %d \n", e->uart_cmd_sync.battery);
         uart_response_synch_status(1, MAX_LE_AUDIO_VOLUME);/// 超时后，返回idle
         // log_i("7016 SYNC battery: %d", e->uart_cmd_sync.battery);
         // if(lastbattery != e->uart_cmd_sync.battery) {
@@ -181,7 +184,7 @@ static void moni_task(void *priv)
     while (1) {
         u32 vaild_len = 0;
         ble_op_multi_att_get_remain(client_con_handle, &vaild_len);
-        log_i("moni valid_len: %d", vaild_len);           
+        log_i("moni valid_len: %d\n", vaild_len);           
         msleep(1000);
     }
 }
@@ -214,7 +217,7 @@ static void sync_log_time_to_beijing(void)
     u32 hour = beijing_sec / 3600U;
     u32 minute = (beijing_sec % 3600U) / 60U;
     u32 second = beijing_sec % 60U;
-    log_i("[LogTime] synced to Beijing %02u:%02u:%02u", hour, minute, second);
+    log_i("[LogTime] synced to Beijing %02u:%02u:%02u \n", hour, minute, second);
 }
 
 static void peri_events(void *priv)
@@ -313,7 +316,7 @@ void test2_play_end_callback(void *priv)
 
 static void switch_completed(int code, void *priv)
 {
-    log_i("switch completed: %d", code);
+    log_i("switch completed: %d \n", code);
 }
 
 extern lfs_t g_lfs;

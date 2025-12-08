@@ -262,3 +262,30 @@ int uart_send_set_ctrl(uint8_t ctrl)
     busy_status_payload[1] = ctrl;
     return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
 }
+
+/* 6. 通知7016进入 播放模式 的发送函数 */
+int uart_send_audio_dev_play(void)
+{
+    uint8_t payload[2] = {0};
+    payload[0] = UART_CMD_AUDIO_DEV_PLAY;
+    payload[1] = 0x00;
+    return uart_send_inquiry(payload, sizeof(payload));
+}
+
+/* 7. 通知7016进入 OTA模式 的发送函数 */
+int uart_send_audio_dev_ota(void)
+{
+    uint8_t payload[2] = {0};
+    payload[0] = UART_CMD_AUDIO_DEV_OTA;
+    payload[1] = 0x00;
+    return uart_send_inquiry(payload, sizeof(payload));
+}
+
+/* 8. 通知7016进入 关闭模式 的发送函数 */
+int uart_send_audio_dev_close(void)
+{
+    uint8_t payload[2] = {0};
+    payload[0] = UART_CMD_AUDIO_DEV_CLOSE;
+    payload[1] = 0x00;
+    return uart_send_inquiry(payload, sizeof(payload));
+}
