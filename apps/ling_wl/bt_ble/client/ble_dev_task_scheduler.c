@@ -203,8 +203,8 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     } else {
         // mdelay(500);
     }
-    log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
+    // log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
+    // uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
     
     dev->set_ctrl(dev, 1, 1);
 

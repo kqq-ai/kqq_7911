@@ -228,7 +228,7 @@ void wss_request_resume()
 {
     odmp_register_rsp_cbk(wss_rsp_cbk);
 }
-
+uint8_t g_current_pi_broadcast_code[6];
 //=================================================================================================
 // pDev response callback
 //=================================================================================================
@@ -248,6 +248,9 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         if (strcmp(sn_string,g_edev_target_sn) == 0) {
             send_message = ORMET_SWITCH_SUCCESS;
             set_C_speaker_on(false);
+            log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
+            memcpy(g_current_pi_broadcast_code, &pdev->sn[10], sizeof(g_current_pi_broadcast_code));
+            uart_send_switch_audio_bc(g_current_pi_broadcast_code, 0x01);
         } else {
             turn_off_Pi();
         }
