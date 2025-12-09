@@ -89,6 +89,15 @@ bool wss_application_check_power_key()
     return rst;
 }
 
+// 打开麦克风并启动vad录音
+void wss_application_start_mic()
+{
+    g_mic_on = true;
+    log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+    g_device_state = APP_VAD;
+    wss_vad_start(600000); // 开始录音
+}
+
 // 设置退出标志
 static void wss_application_touch_key(bool press_down)
 {
@@ -116,7 +125,7 @@ static void wss_application_touch_key(bool press_down)
             } else {             // 按键前未在说话
                 log_i("[wss_application]STATE: Touch key -> APP_VAD");
                 g_device_state = APP_VAD;
-                g_mic_on = true;           
+                g_mic_on = true;
                 wss_vad_start(600000); // 开始录音
             }
         } else {
@@ -373,7 +382,7 @@ bool wss_application_loop()
         bool busy = wss_request_is_busy();
         if (busy) {
             log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
-                  wss_get_last_disconnect_reason());
+            wss_get_last_disconnect_reason());
             wss_request_stop();
         }
         return true;
@@ -390,7 +399,7 @@ bool wss_application_loop()
     // 状态机处理
     switch (g_device_state) {
     case APP_IDLE:
-        if (wss_request_is_busy()) {
+        if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
             g_device_state = APP_AUDIO;
             wss_mic_stop(); // 停止录音
@@ -409,7 +418,7 @@ bool wss_application_loop()
 
     case APP_AUDIO:
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (!wss_request_is_busy()) { //也可能是超时退出
+        if (!wss_request_is_playing()) { //也可能是超时退出
             if (multi_play_mode) {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
                 wss_request_send_event_target(ORMET_PLAY_NEXT);
@@ -431,7 +440,7 @@ bool wss_application_loop()
 
     case APP_VAD: // until audio upload end
         // 音频上传结束，回到IDLE状态
-        if (wss_request_is_busy()) {
+        if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
             g_device_state = APP_AUDIO;
             g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
@@ -445,12 +454,13 @@ bool wss_application_loop()
 
     case APP_WAIT: // until TTS_bind
         // 等待下个角色说话
-        if (wss_request_is_busy()) {
+        if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
             g_device_state = APP_AUDIO;
             wss_mic_stop(); // 停止录音
-        }
-        if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
+        } else if (wss_request_is_busy()) {
+            // 继续等待
+        } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");
             g_device_state = APP_IDLE;
         }

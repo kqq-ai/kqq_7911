@@ -147,11 +147,24 @@ void update_edev_time(char* sn)
     if (!sn) return;
     os_mutex_pend(&edev_manager_mutex, 0);
     log_i("get_edev found pdev=%s from %d", sn, edev_set_count);
+    edev_last = NULL;
     for (int i = 0; i < edev_set_count; ++i) {
+        lwl_eend_dev_t *pdev = find_eend_dev_by_sn(edev_set[i].sn);
+        if (!pdev || pdev->distance_info.distance >3.5f) {
+            if (edev_last == edev_set[i].edev) {
+                edev_last = NULL;
+            }
+            edev_set[i] = edev_set[edev_set_count - 1];
+            edev_set[edev_set_count - 1].edev = NULL;
+            edev_set_count--;
+            i--;
+            continue;
+        }
+        edev_set[i].edev = pdev;
+        edev_set[i].distance = pdev->distance_info.distance;
         if (strncmp(edev_set[i].sn, sn, SN_SIZE) == 0) {
             edev_set[i].last_get_time = g_curr_time;
             edev_last = edev_set[i].edev;
-            break;
         }
     }
     os_mutex_post(&edev_manager_mutex);

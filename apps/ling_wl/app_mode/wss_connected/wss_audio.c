@@ -114,7 +114,7 @@ static void wss_app_recorder_data_upstream(recorder_data_cb_t cb)
     }
 }
 
-void music_play_stop(void *priv)
+void music_play_stop()
 {
     if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
         log_i("[AUDIO]music_play_stop");
@@ -240,7 +240,7 @@ void wss_ble_audio_stop() {
     if (g_audio_play_ongoing) {
         g_audio_play_ongoing = false; // 停止音频播放
         g_audio_playing = false;
-        music_play_stop_in_thread();
+        music_play_stop();
     }
     os_mutex_post(&g_audio_mutex);
 }
@@ -483,7 +483,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     os_mutex_pend(&g_audio_mutex, 0);
 
     if (g_audio_play_ongoing == false) {
-        music_play_stop_in_thread();
+        music_play_stop();
         stop_prompt();
         g_audio_play_ongoing = true;
         log_i("[AUDIO]set up to play.");

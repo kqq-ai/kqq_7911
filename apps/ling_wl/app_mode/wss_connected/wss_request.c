@@ -38,6 +38,8 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
+static bool g_mode_script = 0;
+
 static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
 
 /*=================================================================================================
@@ -57,6 +59,7 @@ typedef enum {
 
     STATE_DOWNLOAD,
     STATE_PLAYING, // 播放状态
+    STATE_WAITING,
 } AppRequestState;
 
 AppRequestState g_mode_state = STATE_IDLE;
@@ -65,6 +68,9 @@ bool wss_request_is_busy(){
     return (g_mode_state != STATE_IDLE);
 }
 
+bool wss_request_is_playing(){
+    return (g_mode_state != STATE_IDLE && g_mode_state != STATE_WAITING);
+}
 
 static void e_turn_off_cb(uint8_t code, void *priv)
 {
@@ -89,6 +95,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv);
 
 void turn_on_Pi(const char *pdev_sn) {
 // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
+    log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
     if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
         turn_off_Pi();
     }
@@ -124,6 +131,7 @@ static void wss_request_update_state(AppRequestState mode_state, char* tag)
         break;
     }
     g_mode_state = mode_state;
+    if (STATE_IDLE == g_mode_state && g_mode_script) g_mode_state = STATE_WAITING;
     g_mode_last_time = g_curr_time;
     last_message_type = 0;
     last_event = 0;
@@ -145,7 +153,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
-        log_i("send_id: %s\n", pkg->tts_bind.send_id);
+        log_i("send_id: %s (%s)\n", pkg->tts_bind.send_id, g_edev_target_sn);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
         if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
         
@@ -154,16 +162,16 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
             send_message = 0; // 重置发送消息标志
             turn_on_Pi(g_edev_target_sn);
-            play_prompt_sound("TTSBind.mp3");
+            if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
         } else if (g_mode_state == STATE_TTS_BIND) {
             //continue
         } else if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
             wss_ble_audio_stop();
             send_message = ORMET_SWITCH_SUCCESS;
-        } else if (g_mode_state == STATE_IDLE) {
+        } else if (g_mode_state == STATE_IDLE || g_mode_state == STATE_WAITING) {
             send_message = 0; // 重置发送消息标志
             turn_on_Pi(g_edev_target_sn);
-            play_prompt_sound("TTSBind.mp3");
+            if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
         }
         g_wss_last_time = g_curr_time;
 
@@ -198,6 +206,22 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 log_i("AUDIO_STATUS: OASE_END\n");
                 last_message_type = OAST_TTS;
                 last_event = OASE_END;
+            }
+            g_wss_last_time = g_curr_time;
+        } else if (pkg->audio_status.type == OAST_SCRIPT) {
+            if (pkg->audio_status.event == OASE_START) {
+                log_i("AUDIO_STATUS: SCRIPT START\n");
+                g_mode_script = true;
+                play_prompt_sound("script_st.mp3");
+                wait_time = 0;
+                wss_request_update_state(STATE_WAITING, "receive SCRIPT START");
+            } else if (pkg->audio_status.event == OASE_END) {
+                log_i("AUDIO_STATUS: SCRIPT END\n");
+                g_mode_script = false;
+                play_prompt_sound("script_ed.mp3");
+                wss_request_update_state(STATE_IDLE, "receive SCRIPT END");
+                wss_application_start_mic();
+                // start vad
             }
             g_wss_last_time = g_curr_time;
         }
@@ -296,6 +320,7 @@ void wss_request_stop()
     wss_request_update_state(STATE_IDLE, "wss_request_stop");
     last_message_type = 0;
     last_event = 0;
+    g_mode_script = false;
     os_mutex_post(&g_request_mutex);
 }
 
@@ -309,6 +334,7 @@ void wss_request_init()
     g_mode_state = STATE_IDLE;
     g_curr_time = timer_get_ms();
     g_mode_last_time = g_curr_time;
+    g_mode_script = false;
     wss_request_send_event_target(ORMET_INITIAL_SETUP);
     send_audio_format(OAST_TTS);
     if (!os_mutex_valid(&g_request_mutex)) {
@@ -387,6 +413,12 @@ bool wss_request_loop()
                 wss_ble_audio_stop();
                 turn_off_Pi();
             }
+        }
+        break;
+
+    case STATE_WAITING: // until player end
+        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
+            wss_request_update_state(STATE_IDLE, "WSS_TIMEOUT");
         }
         break;
     }
