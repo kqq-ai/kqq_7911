@@ -38,6 +38,7 @@ static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); 
 u32 vad_start_time = 0;
 u32 vad_stop_time = 0;  // 0表示未设置，超时停止VAD
 u32 audio_req_time = 0;
+u32 audio_start_time = 0;
 uint32_t total_written = 0;
 
 u32 get_time_stamp() {
@@ -75,6 +76,12 @@ static u8 g_asr_data_queue_buffer[MY_ASR_DATA_QUEUE_CAPACITY * sizeof(AsrData)];
 static MyRingBuffer g_asr_ringbuffer;    // MyRingBuffer<AsrData>
 static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)];
 
+#define PREBUFFER_SIZE        (100 * 1024) /* 100KB */
+#define PREBUFFER_TIMEOUT_MS  1000         /* 最长等待时间，超时仍开始播放 */
+
+static uint8_t g_prebuffer[PREBUFFER_SIZE];
+static uint32_t g_prebuffer_pos = 0;
+static bool g_prebuffer_active = false;
 
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 void wait_vad_task(void *priv);
@@ -224,6 +231,10 @@ void set_speaker() {
     os_mutex_post(&g_audio_mutex);
 }
 
+void wss_audio_set_player(u32 delta) {
+    audio_start_time = get_time_stamp()+delta;
+}
+
 // 获取当前音频播放状态
 bool is_audio_playing(){
     bool playing = g_audio_playing || (g_audio_play_ongoing && 
@@ -250,6 +261,10 @@ void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
+    /* reset prebuffer */
+    total_written = 0;
+    g_prebuffer_pos = 0;
+    g_prebuffer_active = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -454,6 +469,7 @@ void wait_asr_task(void *priv)
 void app_music_play_end_cb(void *priv)
 {
     os_mutex_pend(&g_audio_mutex, 0);
+    log_i("[AUDIO]app_music_play_end_cb");
     g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
     set_led_idle(); /* 音频播放结束时灯光变白色 */
@@ -480,32 +496,93 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         return 0;
     }
     log_i("[AUDIO]odmp_audio_data_cbk len=%u", len);
-    os_mutex_pend(&g_audio_mutex, 0);
 
-    if (g_audio_play_ongoing == false) {
-        music_play_stop();
-        stop_prompt();
-        g_audio_play_ongoing = true;
-        log_i("[AUDIO]set up to play.");
-        set_led_tts_play(); /* 音频下载时灯光变蓝色 */
-        total_written = 0;
-        audio_req_time = get_time_stamp();
-        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
-        set_speaker();
+    /* 快速路径：如果已经进入播放并且正在写流，直接写入流（按原实现） */
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (g_audio_play_ongoing) {
+        os_mutex_post(&g_audio_mutex);
+        goto stream_write;
     }
-    
-    os_mutex_post(&g_audio_mutex);
-    while (1) {
-        uint32_t chunk_size = (len - idx > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len - idx;
-        uint32_t written = app_music_play_stream_write(
-            g_app_ctx->music_player, 
-            data + idx, 
-            chunk_size
-        );
-        
+
+    /* 未进入播放：使用预缓冲逻辑 */
+    if (g_prebuffer && g_prebuffer_pos < PREBUFFER_SIZE) {
+        /* 开始预缓冲计时（第一次写入） */
+        if (!g_prebuffer_active) {
+            g_prebuffer_active = true;
+            g_prebuffer_pos = 0;
+            log_i("[AUDIO]prebuffer start");
+        }
+
+        /* 把数据尽可能写入预缓冲（若超过则截断剩余写入流启动阶段） */
+        uint32_t copy_len = (len <= (PREBUFFER_SIZE - g_prebuffer_pos)) ? len : (PREBUFFER_SIZE - g_prebuffer_pos);
+        memcpy(g_prebuffer + g_prebuffer_pos, data, copy_len);
+        g_prebuffer_pos += copy_len;
+        total_written += copy_len; /* 统计缓存到的字节也计入 total_written */
+        log_d("[AUDIO]prebuffered %u/%u bytes", g_prebuffer_pos, PREBUFFER_SIZE);
+
+        /* 如果已达阈值，开始播放并把预缓冲数据刷入播放器 */
+        if (g_prebuffer_pos >= PREBUFFER_SIZE || (get_time_stamp() > audio_start_time)) {
+            log_i("[AUDIO]prebuffer ready (pos=%u), start playback", g_prebuffer_pos);
+            /* 准备播放：启动播放器 */
+            music_play_stop();
+            stop_prompt();
+            os_mutex_pend(&g_audio_mutex, 0);
+            g_audio_play_ongoing = true;
+            set_led_tts_play();
+            audio_req_time = get_time_stamp();
+            os_mutex_post(&g_audio_mutex);
+
+            app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+            set_speaker();
+
+            /* 把预缓冲的数据写入播放器流 */
+            uint32_t written_all = 0;
+            while (written_all < g_prebuffer_pos) {
+                uint32_t chunk = (g_prebuffer_pos - written_all > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : (g_prebuffer_pos - written_all);
+                uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, g_prebuffer + written_all, chunk);
+                if (written == 0) {
+                    log_e("[AUDIO]Failed to write prebuffer chunk");
+                    break;
+                }
+                written_all += written;
+                log_d("[AUDIO]Flushed prebuffer chunk %u/%u", written_all, g_prebuffer_pos);
+                /* small sleep to let player consume */
+                msleep(10);
+            }
+            /* reset prebuffer */
+            g_prebuffer_pos = 0;
+            g_prebuffer_active = false;
+        }
+
+        /* 如果当前收到的数据还有剩余没有写入预buffer（被截断），把剩余交由流写入 */
+        if (len > copy_len) {
+            /* 调整 data/len 到剩余部分并走到流写路径 */
+            data += copy_len;
+            len -= copy_len;
+            /* 继续到流写逻辑 */
+            goto stream_write;
+        } else {
+            os_mutex_post(&g_audio_mutex);
+            return 0;
+        }
+    } else {
+        /* 没有预缓冲或已满但还未开始播放，直接尝试启动播放（回退策略） */
+        if (!g_prebuffer) {
+            log_w("[AUDIO]no prebuffer allocated, starting streaming immediately");
+        } else {
+            log_w("[AUDIO]prebuffer full but not started, force start");
+        }
+        return -1;
+    }
+
+stream_write:
+    /* 这里 data/len 是需要直接写入播放器流的部分（被保护外部互斥） */
+    while (len > 0 && !g_audio_off) {
+        uint32_t chunk_size = (len > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len;
+        uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, data + idx, chunk_size);
         if (written == 0) {
             log_e("Failed to write audio data chunk,odmp_audio_data_cbk");
-            break; // 错误处理，可根据需求调整
+            break;
         }
         idx += written;
         total_written += written;
@@ -523,7 +600,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
         }
     }
     log_i("[AUDIO] Total stream write: %u / %u bytes -> %u", idx, len, total_written);
-    return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
+    return 0;
 }
 
 /**

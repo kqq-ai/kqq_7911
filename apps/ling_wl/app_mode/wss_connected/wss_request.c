@@ -275,6 +275,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
             memcpy(g_current_pi_broadcast_code, &pdev->sn[10], sizeof(g_current_pi_broadcast_code));
             uart_send_switch_audio_bc(g_current_pi_broadcast_code, 0x01);
+            wss_audio_set_player(1200);
         } else {
             turn_off_Pi();
         }

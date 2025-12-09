@@ -53,11 +53,13 @@ static inline void process_cb(ble_dev_op_t *op, u8 code) {
 void notify_e_conncted()
 {
     os_sem_post(&g_e_connected_sem);
+    // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
 
 void notify_e_disconncted()
 {
     os_sem_post(&g_e_disconnected_sem);
+    // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
 
 const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
