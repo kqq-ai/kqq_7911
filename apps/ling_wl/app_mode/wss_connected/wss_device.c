@@ -68,6 +68,7 @@ static void add_edev(lwl_eend_dev_t *pdev)
         edev_set[edev_set_count].edev = pdev;
         edev_set_count++;
     }
+    add_target_sn(pdev->sn);
     os_mutex_post(&edev_manager_mutex);
 }
 
@@ -85,6 +86,7 @@ static void remove_edev(lwl_eend_dev_t *pdev)
             break;
         }
     }
+    remove_target_sn(pdev->sn);
     os_mutex_post(&edev_manager_mutex);
 }
 
@@ -113,6 +115,7 @@ static lwl_eend_dev_t* get_edev()
             if (edev_last == edev_set[i].edev) {
                 edev_last = NULL;
             }
+            remove_target_sn(edev_set[i].sn);
             edev_set[i] = edev_set[edev_set_count - 1];
             edev_set[edev_set_count - 1].edev = NULL;
             edev_set_count--;
@@ -154,6 +157,7 @@ void update_edev_time(char* sn)
             if (edev_last == edev_set[i].edev) {
                 edev_last = NULL;
             }
+            remove_target_sn(edev_set[i].sn);
             edev_set[i] = edev_set[edev_set_count - 1];
             edev_set[edev_set_count - 1].edev = NULL;
             edev_set_count--;
@@ -185,12 +189,10 @@ static void device_event_handler_cb(lwl_event_t *e)
         case DISTANCE_0:
         case DISTANCE_1:
             add_edev(p_eend_dev);
-            add_target_sn(p_eend_dev->sn);
             break;
         case DISTANCE_2:
         case DISTANCE_3:
             remove_edev(p_eend_dev);
-            remove_target_sn(p_eend_dev->sn);
             break;
         default:
             break;
