@@ -168,6 +168,7 @@ INCLUDES := \
 	-I../../../../include_lib/utils/ui \
 	-I../../../../include_lib/driver/device/video \
 	-I../../../../include_lib/net \
+	-I../../../../include_lib/net/web_socket \
 	-I../../../../include_lib/net/mbedtls_2_2_1 \
 	-I../../../../include_lib/net/server \
 	-I../../../../include_lib/net/wifi_module \
@@ -269,6 +270,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_cookie.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
 	../../../../apps/ling_wl/wss/wss_client.c \
+	../../../../apps/ling_wl/wss/wss_client_custom.c \
 	../../../../apps/ling_wl/ota/http_ota.c \
 	../../../../apps/ling_wl/LED/LED.c \
 	../../../../apps/ling_wl/log/log_mqtt.c \

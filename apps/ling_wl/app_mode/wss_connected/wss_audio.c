@@ -50,6 +50,7 @@ u32 get_time_stamp() {
 static int g_audio_off = true; // 音频播放结束标志（外部请求状态）
 static int g_audio_play_ongoing = false; // 音频启动中标志（播放器状态）
 static int g_audio_playing = false; // 音频播放中标志（播放器状态）
+static int g_audio_receiving = false; // 正在接收音频数据标志
 /*=================================================================================================
  * Record app context
  *=================================================================================================*/
@@ -224,11 +225,11 @@ void set_speaker() {
     os_mutex_post(&g_audio_mutex);
 }
 
-// 获取当前音频播放状态
+// 获取当前音频播放状态（现在用于检查是否正在接收数据）
 bool is_audio_playing(){
-    bool playing = g_audio_playing || (g_audio_play_ongoing && 
-        (total_written >> 2) + 1000 > get_time_stamp()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
-    return playing;
+    // 如果正在接收数据，返回true，避免超时
+    return g_audio_receiving || g_audio_playing || (g_audio_play_ongoing && 
+        (total_written >> 2) + 1000 > get_time_stamp()-audio_req_time);
 }
 
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
@@ -236,6 +237,7 @@ void wss_ble_audio_stop() {
     log_i("[AUDIO]wss_ble_audio_stop");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = true;
+    g_audio_receiving = false; // 重置接收标志
     odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
         g_audio_play_ongoing = false; // 停止音频播放
@@ -250,6 +252,7 @@ void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
+    g_audio_receiving = false; // 重置接收标志
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -463,67 +466,29 @@ void app_music_play_end_cb(void *priv)
 /**
  * @brief 音频数据流回调（供ODM协议层注册）
  * @details
- *   当收到音频数据流（如TTS、ASR等）时，通过此回调将数据分片写入播放器进行流式播放。
+ *   当收到音频数据流（如TTS、ASR等）时，通过此回调打印数据长度。
  *   - data: 指向音频数据的指针
  *   - len:  音频数据长度（字节）
- *   内部会自动分片写入播放器，支持大数据分段处理。
+ *   不进行播放，仅打印数据长度信息。
  * @param data 音频数据指针
  * @param len  音频数据长度
- * @return 总是返回0（可根据需要返回写入状态）
+ * @return 总是返回0
  */
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 {
-    const uint32_t MAX_CHUNK_SIZE = 16000;
-    uint32_t idx = 0;
-
     if (g_audio_off) {
         return 0;
     }
-    log_i("[AUDIO]odmp_audio_data_cbk len=%u", len);
-    os_mutex_pend(&g_audio_mutex, 0);
-
-    if (g_audio_play_ongoing == false) {
-        music_play_stop_in_thread();
-        stop_prompt();
-        g_audio_play_ongoing = true;
-        log_i("[AUDIO]set up to play.");
-        set_led_tts_play(); /* 音频下载时灯光变蓝色 */
-        total_written = 0;
-        audio_req_time = get_time_stamp();
-        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
-        set_speaker();
-    }
     
-    os_mutex_post(&g_audio_mutex);
-    while (1) {
-        uint32_t chunk_size = (len - idx > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len - idx;
-        uint32_t written = app_music_play_stream_write(
-            g_app_ctx->music_player, 
-            data + idx, 
-            chunk_size
-        );
-        
-        if (written == 0) {
-            log_e("Failed to write audio data chunk,odmp_audio_data_cbk");
-            break; // 错误处理，可根据需求调整
-        }
-        idx += written;
-        total_written += written;
-        log_d("Written chunk: %u bytes (total: %u / %u)", written, len, total_written);
-        if (idx == len || g_audio_off)  break;
-        
-        msleep(10);
-    }
-    if (g_audio_playing == false) {
-        if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
-            log_i("[AUDIO] start to play...");
-            g_audio_playing = true;
-        } else {
-            log_i("[AUDIO] not playing yet...");
-        }
-    }
-    log_i("[AUDIO] Total stream write: %u / %u bytes -> %u", idx, len, total_written);
-    return 0;///(total_written == len) ? 0 : 1; // 返回，1表示部分失败, 0表示成功
+    // 设置正在接收数据标志
+    g_audio_receiving = true;
+    
+    // 只打印数据长度，不使用播放器
+    static uint32_t total_received = 0;
+    total_received += len;
+    log_i("[AUDIO]Received audio data: len=%u bytes, total_received=%u bytes", len, total_received);
+    
+    return 0;
 }
 
 /**
@@ -542,11 +507,15 @@ static void recorder_vad_cb(void* priv, int type)
     
     switch (type) {
     case 0: /* VAD speaker stop */
+        log_i("[AUDIO]VAD callback: speaker stop, g_recording_vad=%d, g_recording_upload=%d", 
+              g_recording_vad, g_recording_upload);
         if (g_recording_vad == true) {
             g_recording_vad = false;
         }
         break;
     case 1: /* VAD speaker start */
+        log_i("[AUDIO]VAD callback: speaker start, g_recording_vad=%d, g_recording_upload=%d", 
+              g_recording_vad, g_recording_upload);
         if (g_recording_vad == false) {
             g_recording_vad = true;
         }
@@ -577,6 +546,9 @@ void wss_audio_init()
 
     /* 清除录音数据写入回调，默认不上传 */
     wss_app_recorder_data_upstream(NULL);
+    
+    /* 启动VAD任务，使麦克风开启后自动监听并上传音频 */
+    wss_vad_start(86400000); // 修改为24小时或其他足够长的时间
 }
 
 void wss_audio_uninit()

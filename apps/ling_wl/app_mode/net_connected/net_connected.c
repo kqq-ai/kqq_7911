@@ -76,7 +76,7 @@ static int net_connected_init(void)
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
     } else {
-        log_i("websockets init failed\n");
+        log_i("❌ websockets init failed\n");
         set_led_connect_error();// WSS ERROR
     }
     play_system_music("NetCfgSucc.mp3");

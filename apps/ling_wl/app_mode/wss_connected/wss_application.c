@@ -69,13 +69,16 @@ void wss_disconnect_cbk(void)
 void wss_request_resume_mic()
 {
     os_mutex_pend(&g_wss_mutex, 0);
+    // 保持麦克风一直开启，不再根据状态关闭
     if (g_on_touch_key) {
         wss_mic_start();
-    }else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
+    } else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
         wss_mic_start();
-    } else if (!g_mic_on || g_device_state == APP_AUDIO) {
-        wss_mic_stop();
     }
+    // 删除 else if 分支，不再关闭麦克风
+    // else if (!g_mic_on || g_device_state == APP_AUDIO) {
+    //     wss_mic_stop();
+    // }
     os_mutex_post(&g_wss_mutex);
 }
 
@@ -97,14 +100,14 @@ static void wss_application_touch_key(bool press_down)
 #endif
     if (press_down) {
         wss_request_pause();
-        wss_mic_stop();
+        // wss_mic_stop(); // 已删除，保持麦克风一直开启
         wss_asr_start();
         play_prompt_sound("t_key.mp3");
         set_led_on_touch();
     } else {
         bool is_short_press = !is_recording_uploading(); //未上传音频，是短按
         wss_request_resume();
-        wss_mic_stop();
+        // wss_mic_stop(); // 已删除，保持麦克风一直开启
         wss_asr_stop();
         if (is_short_press) {
             // 短按触摸键，打断/切换对话状态
@@ -204,7 +207,7 @@ void wss_app_mode_play()
     log_i("[wss_application]wss_app_mode_play: %s", music_file);
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
-    wss_mic_stop(); // 停止录音
+    // wss_mic_stop(); // 停止录音 - 已删除，保持麦克风一直开启
     
     int err = app_music_play_local_music_with_callback(player, music_file, wss_app_mode_play_cb, NULL);
     // int err = app_music_play_mix_file(music_file);
@@ -290,15 +293,15 @@ void *wss_condition_monitor_thread(void *arg)
             bool move_timeout = ((current_time - last_move_time) > NO_MOVE_TIMEOUT_MS);
 
             // 任一超时条件满足就切换模式
-            if (e_timeout || move_timeout) {
-                log_i("[wss_application]No E or movement timeout (e_to=%u, move_to=%u, last_req_delta=%u), switching to default mode.",
-                      current_time - last_E_found_time,
-                      current_time - last_move_time,
-                      current_time - last_req_time);
-                lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-                monitor_thread_running = false;
-                return NULL;
-            }
+            // if (e_timeout || move_timeout) {
+            //     log_i("[wss_application]No E or movement timeout (e_to=%u, move_to=%u, last_req_delta=%u), switching to default mode.",
+            //           current_time - last_E_found_time,
+            //           current_time - last_move_time,
+            //           current_time - last_req_time);
+            //     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+            //     monitor_thread_running = false;
+            //     return NULL;
+            // }
         }
         os_time_dly(100);  // 100ms 延迟
     }
@@ -318,7 +321,7 @@ void wss_application_init()
     wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    wss_mic_stop(); // 停止录音
+    // wss_mic_stop(); // 停止录音 - 已删除，保持麦克风一直开启
 
     g_mic_on = true;
     multi_play_mode = false;
@@ -395,7 +398,7 @@ bool wss_application_loop()
         if (wss_request_is_busy()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
             g_device_state = APP_AUDIO;
-            wss_mic_stop(); // 停止录音
+            // wss_mic_stop(); // 停止录音 - 已删除，保持麦克风一直开启
         } else if (g_mic_on && wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
             g_device_state = APP_VAD;
@@ -437,7 +440,7 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
             g_device_state = APP_AUDIO;
             g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-            wss_mic_stop(); // 停止录音
+            // wss_mic_stop(); // 停止录音 - 已删除，保持麦克风一直开启
         }
         if (!wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_VAD -> APP_IDLE");
@@ -450,7 +453,7 @@ bool wss_application_loop()
         if (wss_request_is_busy()) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
             g_device_state = APP_AUDIO;
-            wss_mic_stop(); // 停止录音
+            // wss_mic_stop(); // 停止录音 - 已删除，保持麦克风一直开启
         }
         if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");

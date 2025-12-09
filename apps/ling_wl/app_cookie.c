@@ -259,8 +259,8 @@ static void app_cookie_main(void)
     music_player_init(&g_music_player);                     // 初始化音乐播放器，支持本地/网络音频
     context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
 
-    ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
-    bdo_disable();                                          // 关闭 BDO，避免默认蓝牙广播干扰
+    // ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
+    // bdo_disable();                                          // 关闭 BDO，避免默认蓝牙广播干扰
 
     /* 创建线程池 */
     pool = threadpool_create(4, 16);                        // 创建 4 个线程、队列深度 16 的线程池
@@ -270,10 +270,10 @@ static void app_cookie_main(void)
     wifi_manage_init(NULL);                                 // 初始化 WiFi 管理器（STA/BLE 共存配置）
 
     /* 初始化RSSI测距 */
-    monitor_init();                                      // 可选：初始化 RSSI 测距组件
+    // monitor_init();                                      // 可选：初始化 RSSI 测距组件
 
     /* 开始RSSI测距 */
-    monitor_start();                                     // 可选：启动测距任务
+    // monitor_start();                                     // 可选：启动测距任务
 
     // 初始化lfs
     lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");   // 挂载 LittleFS，用于配置和资源读写
@@ -287,7 +287,7 @@ static void app_cookie_main(void)
     app_sc7a20_init();                                      // 启动 SC7A20 加速度计任务，支持姿态/震动检测
 
     lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
-    thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
+    // thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
