@@ -64,7 +64,8 @@ const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void bdo_disable()
 {
     log_i("[BDO]bdo_disable");
-    // lwl_peri_dev_7016_on(false);  // 关闭 7016
+    uart_send_switch_audio_bc(empty_broadcast_code, 0x00);
+    uart_send_set_ctrl(0);
 }
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
@@ -154,13 +155,14 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Null_Pointer);
         return;
     }
-    // if (dev->adv_state == BDPAS_CONNECTED || dev->distance_info.rssi_sample_count < 1) {
     if (dev->distance_info.rssi_sample_count < 1) {
         log_i("[BDO]Error dev lost!");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
+    // lwl_peri_dev_7016_on(true);  // 开启 7016
+    // log_i("[BDO]ble_dev_op_handler_turn_on lwl_peri_dev_7016_on true");
     if (dev->adv_state == BDPAS_OFF) {
 
         /* - 建立连接 */
@@ -198,7 +200,10 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
             // return;
         }
         log_i("[BDO]ble disconnected");
+    } else {
+        // mdelay(500);
     }
+    log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
     uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
     
     dev->set_ctrl(dev, 1, 1);

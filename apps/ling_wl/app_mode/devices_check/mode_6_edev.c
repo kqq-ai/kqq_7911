@@ -221,7 +221,7 @@ void mode6_uninit()
     log_i("Cleaning up MODE 6 audio functionality");
     ble_simple_client_module_enable(0);
     bdo_disable();
-    lwl_peri_dev_7016_on(false);  // 开启 7016
+    lwl_peri_dev_7016_on(false);  // 关闭 7016
     g_audio_playing = 0;
     g_mode6_playing_prompt = 0;
     g_mode6_action_in_progress = 0;  // 重置模式6动作进行标志

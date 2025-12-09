@@ -153,7 +153,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             wss_ble_audio_stop();
             memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
             send_message = 0; // 重置发送消息标志
-            log_i("[wss_request][wss_request]lwl_peri_dev_7016_on on on on on\n");
             turn_on_Pi(g_edev_target_sn);
             play_prompt_sound("TTSBind.mp3");
         } else if (g_mode_state == STATE_TTS_BIND) {
@@ -337,7 +336,6 @@ bool wss_request_loop()
         }
         break;
     case STATE_TTS_BIND: // until send_message == ORMET_SWITCH_SUCCESS or ORMET_SWITCH_FAILED
-        lwl_peri_dev_7016_on(true);  // 开启 7016
         // TTS下载流程
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("[wss_request]Switch success, starting audio playback");

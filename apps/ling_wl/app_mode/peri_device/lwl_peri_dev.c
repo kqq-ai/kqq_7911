@@ -698,13 +698,15 @@ void lwl_peri_dev_7016_on(bool on)
     /* 1. 拉IO将 7016音频设备关闭 睡眠 */
     if (on == false) {
         uart_send_audio_dev_close();
-        return;
+        // msleep(1000);
     } else {
         /* 3. 拉IO将 7016音频设备打开 唤醒 */
         gpio_set_direction(IO_PORTA_05, 0); // 输出模式
         gpio_set_pull_down(IO_PORTA_05, 0);
         gpio_set_pull_up(IO_PORTA_05, 0);
         gpio_direction_output(IO_PORTA_05, 1);
+        mdelay(2);
         gpio_direction_output(IO_PORTA_05, 0);
+        // msleep(1000);
     }
 }
