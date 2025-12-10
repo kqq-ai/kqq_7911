@@ -379,6 +379,7 @@ static ChargeState detect_charge_state(int charge_in, int charge_full)
         return CHARGE_STATE_IDLE;
     }
 }
+
 static void charge_loop(uint32_t curr_time)
 {
    if (curr_time - charge_timer < GSENSOR_CHECK_INTERVAL) {

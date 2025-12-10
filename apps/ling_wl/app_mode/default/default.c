@@ -22,15 +22,31 @@
 #include "default.h"
 #include "../lwl_app_framework.h"
 #include "log.h"
+#include "app_cookie.h"
 #include "app_mode/lwl_app_core.h"
 #include "protocol/cp/c_uart_p.h"
+#include "gpio.h"
+#include "../peri_device/lwl_peri_dev.h"
 
 #include "./bt_ble/app_wifi_manage.h"
 #include "net_music_play_my.h"
-#define MODE_TIMEOUT_MS 1000 // 1s
+#define MODE_TIMEOUT_MS 5000 // 1s
 static u32 init_time = 0;
 bool wait_for_button = false;
-static void set_led_idel(void)      { uart_send_set_led_color(COLOR_WHITE); }   //音频下载时灯光变白色
+
+// 低电量显示红灯
+// 充电中显示黄灯（<80%），充电完成显示绿灯（>=80%）
+// 正常使用中显示白灯
+static void set_led_idel(void)
+{
+    uart_send_set_led_color(COLOR_WHITE); //空闲时灯光变白色
+}
+
+static void set_led_low_batt(void)  { uart_send_set_led_color(COLOR_RED); }      //低电量时灯光变红色 
+
+static void set_led_charging(void)  { uart_send_set_led_color(COLOR_YELLOW); }   //充电中时灯光变黄色
+static void set_led_charged(void)   { uart_send_set_led_color(COLOR_GREEN); }    //充电完成时灯光变绿色
+static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }    //空闲时灯光变白色
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -47,7 +63,23 @@ static void default_input_event_handler_cb(lwl_event_t *e)
         wait_for_button = false;
         break;
     case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+        break;
+    case LWL_EVENT_TYPE_CHARGE:
+        // 根据事件更新充电指示灯状态
+        if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_IN) {
+            set_led_charging();
+        }
+        else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_OUT) {
+            u16 voltage = get_vbat_level();
+            if (voltage < LOW_BATT_VOLT) {
+                set_led_low_batt();
+            } else {
+                set_led_idle();
+            }
+        }
+        else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_FULL) {
+            set_led_charged();
+        }
         break;
     }
 }
@@ -58,8 +90,27 @@ static int default_init(void)
     /* 注册lwl事件处理回调 */
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
     lwl_event_handler_add(default_input_event_handler_cb);
-    set_led_idel(); // 设置LED为白色
+
+    u16 voltage = get_vbat_level();
+    
+    int charge_in = gpio_read(CHARGE_IN_IO);
+    int charge_full = gpio_read(CHARGE_FULL_IO);
+    if (charge_in) {
+        if (charge_full) {
+            set_led_charged();
+        } else {
+            set_led_charging();
+        }
+    } else {
+        if (voltage < LOW_BATT_VOLT) {
+            set_led_low_batt();
+        } else {
+            set_led_idle();
+        }
+    }
+
     wifi_and_network_off();
     wait_for_button = true;
     return 0;
@@ -75,8 +126,15 @@ static int default_unint(void)
 
 void app_default_loop()
 {
-    if (!wait_for_button) {
-        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+    u16 voltage = get_vbat_level();
+    if (voltage > LOW_BATT_VOLT) {
+        if (!wait_for_button) {
+            lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        }
+    }
+    int charge_in = gpio_read(CHARGE_IN_IO);
+    if (charge_in) {
+        g_sensor_reset_alive_timer();
     }
 }
 

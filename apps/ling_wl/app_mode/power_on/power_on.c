@@ -66,10 +66,9 @@ static int power_on_init(void)
     init_time = timer_get_ms();
     set_led_power_on();
 
-    
-extern u32 g_KQQ_c_voltage;
+    u16 voltage = get_vbat_level();
     char sn[SN_SIZE+1];
-    if (g_KQQ_c_voltage < LOW_BATT_VOLT) {
+    if (voltage < LOW_BATT_VOLT) {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     } else if (get_SN(sn)) {
         log_i("have sn, go to power on mode");

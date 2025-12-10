@@ -99,6 +99,12 @@ static void power_off_cb(void *priv)
 int lastbattery=0;
 static void do_shutdown()
 {
+    
+    u16 voltage = get_vbat_level();
+    if (voltage < LOW_BATT_VOLT) {
+        log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
+        power_off_cb(NULL);
+    }
     int err = -1;
     lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
