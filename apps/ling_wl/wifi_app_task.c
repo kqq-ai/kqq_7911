@@ -25,6 +25,8 @@
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
 
+#include "app_cookie.h"
+
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
 
@@ -138,7 +140,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         break;
 
     case WIFI_EVENT_STA_START:
-        puts("|network_user_callback->WIFI_EVENT_STA_START\n");
+        puts("|network_user_callback->WIFI_EVENT_STA_START. ");
 
         /*hzx add*/
 
@@ -146,6 +148,9 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_IDLE);
+
+        wifi_set_pwr(2);
+        puts("net wifi_set_pwr:2\n");
 
         break;
 
@@ -414,8 +419,15 @@ void wifi_and_network_off(void)
 
 static int wireless_net_init(void) // 主要是create wifi 线程的
 {
-    puts("wireless_net_init \n\n");
-    wifi_app_task(NULL);
-    puts("wireless_net_init end \n\n");
+    extern u16 g_KQQ_c_voltage;
+    ///log_i("g_KQQ_c_voltage: %d\n", g_KQQ_c_voltage);
+    if( g_KQQ_c_voltage > LOW_BATT_VOLT ){
+        printf("wireless_net_init.  batVolt: %d \n\n", g_KQQ_c_voltage );
+        wifi_app_task(NULL);
+        puts("wireless_net_init end \n\n");
+    }
+    else{
+        ///wifi_on();
+    }
 } 
 late_initcall(wireless_net_init);

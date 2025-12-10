@@ -692,4 +692,4 @@ static int creat_scan_adv_process_task(void)
     return 0;
 }
 
-late_initcall(creat_task_distance);
+///late_initcall(creat_task_distance);

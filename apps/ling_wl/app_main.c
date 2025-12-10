@@ -99,9 +99,9 @@ const struct task_info task_info_table[] = {
     {"usb_msd1",             1,      512,   128   },
     {"uda_main",             2,     7000,   0     },
 
-    {"update",              21,      512,   32    },
-    {"dw_update",           21,      512,   32    },
-    {"iperf_test",          15,     1024,   0     },
+    ///{"update",              21,      512,   32    },
+    ///{"dw_update",           21,      512,   32    },
+    ///{"iperf_test",          15,     1024,   0     },
 #ifdef CONFIG_WIFI_ENABLE
     {"tasklet",             10,     WIFI_TASKLET_STK_SIZE,   0,		 wifi_tasklet_tcb_stk_q	 },//通过调节任务优先级平衡WIFI收发占据总CPU的比重
     {"RtmpMlmeTask",        17,     WIFI_MLME_STK_SIZE,  	 0, 	 wifi_mlme_tcb_stk_q	 },
@@ -110,13 +110,13 @@ const struct task_info task_info_table[] = {
 #endif
 #ifdef CONFIG_BT_ENABLE
 #if CPU_CORE_NUM > 1
-    {"#C0btencry",          14,      512,   128   },
+    ///{"#C0btencry",          14,      512,   128   },
 #else
     {"btencry",             14,      512,   128   },
 #endif
 #if CPU_CORE_NUM > 1
-    {"#C0btctrler",         14,      512,   512   }, // origin :384
-    {"#C0btstack",          14,      1024,  512   }, // origin :384
+    ///{"#C0btctrler",         14,      512,   512   }, // origin :384
+    ///{"#C0btstack",          14,      1024,  512   }, // origin :384
 #else
     {"btctrler",            19,      512,   384   },
     {"btstack",             18,      768,   384   },
@@ -199,9 +199,5 @@ void app_main()
     it.action = ACTION_COOKIE_MAIN;
     start_app(&it);  // See: app_cookie.c:548-553 
 
-#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
-    extern void bt_ble_module_init(void);
-    bt_ble_module_init();
-#endif
 }
 

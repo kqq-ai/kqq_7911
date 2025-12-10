@@ -428,7 +428,7 @@ void cfg_file_parse(void)
         memset(edr_name, 0x00, LOCAL_NAME_LEN);
         memcpy(edr_name, tmp, ret);
     }
-    log_info("edr name config:%s\n", edr_name);
+    log_info("edr name config:%s\n", "KQQ-Cookie");///edr_name
 
     //-----------------------------CFG_BLE_NAME--------------------------------------//
     ret = syscfg_read(CFG_BLE_NAME, tmp, LOCAL_NAME_LEN);
@@ -537,7 +537,7 @@ void cfg_file_parse(void)
         log_info("read wifi ssid err\n");
     } else {
         tmp[ret - 1] = 0;
-        log_info("wifi ssid config:%s\n", tmp);
+        log_info("wifi ssid  KQQ config:%s\n", tmp);
     }
 
     //-----------------------------CFG_WIFI_PWD_ID--------------------------------------//

@@ -46,7 +46,18 @@ static void init_app_context(lwl_app_context_t* context)
 
     int ret = syscfg_read(CFG_USER_MAC, s_app_context->mac, 6);
     if (ret < 0) {
-        wifi_get_mac(s_app_context->mac);
+        ///extern const u8 *bt_get_mac_addr(void);
+        const u8 *mac_ptr = NULL;///bt_get_mac_addr();
+            // 2. 安全检查：指针非空再拷贝
+        if (mac_ptr != NULL){
+            // 3. 将指针指向的6字节MAC地址拷贝到数组中
+            memcpy(s_app_context->mac, mac_ptr, 6);
+        }
+        else{
+            // 指针为空时的容错处理（可选）
+            memset(s_app_context->mac, 0, 6);  // 清空数组，避免脏数据
+        }
+        ///wifi_get_mac(s_app_context->mac);
         syscfg_write(CFG_USER_MAC, s_app_context->mac, 6);
     }
     log_i_buf(s_app_context->mac, 6);
