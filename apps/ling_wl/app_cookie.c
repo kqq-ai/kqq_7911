@@ -87,45 +87,6 @@ static void lwl_app_task(void *priv)
     lwl_app_uninit();
 }
 
-// 关机提示音播放完成后的回调：播放结束再触发关机事件
-static void power_off_cb(void *priv)
-{
-    log_i("----------------------BYE-------------------------\r\n");
-    // 播放完成后再灭灯，防止对侧熄灯动作顺带关闭功放导致听不到提示音
-    set_led_power_off();
-    power_set_soft_poweroff();
-}
-
-int lastbattery=0;
-static void do_shutdown()
-{
-    
-    u16 voltage = get_vbat_level();
-    if (voltage < LOW_BATT_VOLT) {
-        log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
-        power_off_cb(NULL);
-    }
-    int err = -1;
-    lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context && context->music_player) {
-        log_i("Try play PowerOff prompt before shutdown\r\n");
-        msleep(100);
-        gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
-        err = app_music_play_local_music_with_callback(
-                context->music_player,
-                CONFIG_CP_VOICE_FILE_PATH"PowerOff.mp3",
-                power_off_cb,
-                NULL);
-    }
-
-    if (err < 0) {
-        // 没有播放器或播放失败，直接进入关机流程
-        log_w("PowerOff prompt play failed or unavailable, shutdown immediately\r\n");
-        power_off_cb(NULL);
-    }
-}
-
 
 void base_lwl_event_handler(lwl_event_t *e)
 {
@@ -145,10 +106,7 @@ void base_lwl_event_handler(lwl_event_t *e)
             log_i("GSENSOR OFF\n");
         }
     case LWL_EVENT_TYPE_SLEEP:
-            /* 关闭 7016 */
-        log_i("7016 OFF\n");
-        lwl_peri_dev_7016_on(false);
-        do_shutdown();
+        lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {

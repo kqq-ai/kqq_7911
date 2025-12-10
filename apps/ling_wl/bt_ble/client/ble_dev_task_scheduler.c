@@ -75,7 +75,10 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     log_i("[BDO]Active start");
     /* - 查询当前设备状态，是否是一个 off stat，且有 broadcast code */
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
-    ASSERT(dev);
+    if (!dev) {
+        log_i("[BDO]Error dev not found!");
+        return;
+    }
     u32 timestamp_now = lwl_rtc_timer_get_sec();
     if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && dev->deadline >= timestamp_now + 10)) {
         dev->op_state &= ~BDO_STATE_ACTIVATING;

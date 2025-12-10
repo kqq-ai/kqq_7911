@@ -276,7 +276,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
-	../../../../apps/ling_wl/app_mode/peri_device/lwl_peri_dev.c \
+	../../../../apps/ling_wl/app_mode/lwl_peri_dev.c \
 	../../../../apps/ling_wl/app_mode/devices_check/devices_check.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_1_key.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_2_LED.c \
@@ -291,6 +291,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/net_connected/net_connected.c \
 	../../../../apps/ling_wl/app_mode/net_connecting/net_connecting.c \
 	../../../../apps/ling_wl/app_mode/power_on/power_on.c \
+	../../../../apps/ling_wl/app_mode/power_off/power_off.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_application.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_request.c \

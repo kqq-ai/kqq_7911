@@ -169,7 +169,7 @@ void wss_disconnect() {
         wss_url = NULL;
     }
     wss_mark_exception("wss_disconnect manual");
-    log_mqtt_stop();
+    // log_mqtt_stop();//xTaskSwitchContext = 0
     os_mutex_post(&g_wss_mutex);
 }
 

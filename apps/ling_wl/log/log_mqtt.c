@@ -280,7 +280,6 @@ static void* log_monitor_thread(void* arg) {
 
     last_upload_time = timer_get_ms();  // 初始化上传时间
     while (g_monitor_thread_running) {
-        os_mutex_pend(&g_log_mqtt_mutex, 0);
         uint32_t current_time = timer_get_ms();
         bool need_upload = false;
 
@@ -303,9 +302,8 @@ static void* log_monitor_thread(void* arg) {
         if (need_upload) {
             upload_all_logs();  // 触发上传
         }
-        os_mutex_post(&g_log_mqtt_mutex);
         // 休眠100ms，避免CPU空转（可根据需求调整）
-        os_time_dly(100);
+        msleep(100);
     }
     
     log_i("[MQTT log_monitor]Log monitor thread exited\n");
@@ -499,7 +497,9 @@ void log_mqtt_stop(void) {
     os_mutex_post(&g_log_mqtt_mutex);
     if (monitor_thread) {
         pthread_join(monitor_thread, NULL);  // 等待线程退出
+        log_i("MQTT monitor thread joined\n");
         pthread_attr_destroy(&attr);  // 清理线程属性
+        log_i("MQTT pthread_attr_destroy\n");
         monitor_thread = 0;
     }
     os_mutex_pend(&g_log_mqtt_mutex, 0);

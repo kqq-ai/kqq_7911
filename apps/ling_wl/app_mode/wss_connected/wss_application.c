@@ -16,7 +16,7 @@
 
 #include "lwip/stats.h" // 添加头文件
 
-static OS_MUTEX g_wss_mutex;
+static OS_MUTEX g_wss_app_mutex;
 int play_voice_prompt = 0;
 music_player *player;
 
@@ -68,7 +68,7 @@ void wss_disconnect_cbk(void)
 void wss_application_resume_mic()
 {
     log_i("[wss_application]wss_application_resume_mic");
-    os_mutex_pend(&g_wss_mutex, 0);
+    os_mutex_pend(&g_wss_app_mutex, 0);
     if (g_on_touch_key) {
         wss_mic_start();
     }else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
@@ -76,7 +76,7 @@ void wss_application_resume_mic()
     } else if (!g_mic_on || g_device_state == APP_AUDIO) {
         wss_mic_stop();
     }
-    os_mutex_post(&g_wss_mutex);
+    os_mutex_post(&g_wss_app_mutex);
 }
 
 // 查询退出标志
@@ -102,7 +102,7 @@ static void wss_application_touch_key(bool press_down)
 #if TOUCH_KEY_AVAILABLE == 0
     return;
 #endif
-    os_mutex_pend(&g_wss_mutex, 0);
+    os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
         wss_request_pause();
         wss_mic_stop();
@@ -138,7 +138,7 @@ static void wss_application_touch_key(bool press_down)
         }
         set_led_idle();
     }
-    os_mutex_post(&g_wss_mutex);
+    os_mutex_post(&g_wss_app_mutex);
 }
 
 //=================================================================================================
@@ -240,7 +240,7 @@ void *wss_condition_monitor_thread(void *arg)
     u32 last_mem_stats_time = current_time; // 新增变量
 
     log_i("[wss_application]Starting WSS condition monitor thread...");
-    while (monitor_thread_running) {
+    while (monitor_thread_running && lwl_app_mode_get_current_mode() == APP_WSS_CONNECTED_MODE) {
         current_time = timer_get_ms();
         
         // 检查E设备
@@ -308,7 +308,7 @@ void *wss_condition_monitor_thread(void *arg)
                 return NULL;
             }
         }
-        os_time_dly(100);  // 100ms 延迟
+        msleep(100);  // 100ms 延迟
     }
     monitor_thread_running = false;
     return NULL;
@@ -345,8 +345,8 @@ void wss_application_init()
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
 
-    if (!os_mutex_valid(&g_wss_mutex)) {
-        os_mutex_create(&g_wss_mutex);
+    if (!os_mutex_valid(&g_wss_app_mutex)) {
+        os_mutex_create(&g_wss_app_mutex);
     }
     lwl_event_handler_add(input_event_handler_cb);
 }
@@ -358,7 +358,9 @@ void wss_application_uninit()
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(input_event_handler_cb);
 
-    os_mutex_pend(&g_wss_mutex, 0);
+    os_mutex_pend(&g_wss_app_mutex, 0);
+    g_mic_on = false;
+    multi_play_mode = false;
 
     wss_request_uninit();
     wss_audio_uninit();
@@ -366,12 +368,7 @@ void wss_application_uninit()
     monitor_stop();//free all pdev
     bdo_disable();
 
-    os_mutex_post(&g_wss_mutex);
-    monitor_thread_running = false;
-    if (!monitor_thread) {
-        pthread_join(monitor_thread, NULL);  // 等待线程退出
-        monitor_thread = NULL;
-    }
+    os_mutex_post(&g_wss_app_mutex);
 }
 
 bool wss_application_loop()

@@ -258,6 +258,7 @@ uint8_t g_current_pi_broadcast_code[6];
 //=================================================================================================
 static void e_turn_on_cb(bdo_code_e code, void *priv)
 {
+    if (g_mode_state != STATE_TTS_BIND) return;
     os_mutex_pend(&g_request_mutex, 0);
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     

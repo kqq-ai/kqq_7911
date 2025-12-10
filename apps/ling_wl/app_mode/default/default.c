@@ -26,7 +26,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "protocol/cp/c_uart_p.h"
 #include "gpio.h"
-#include "../peri_device/lwl_peri_dev.h"
+#include "../lwl_peri_dev.h"
 
 #include "./bt_ble/app_wifi_manage.h"
 #include "net_music_play_my.h"
@@ -102,10 +102,12 @@ static int default_init(void)
             set_led_charged();
         } else {
             set_led_charging();
+            // play_system_music("Charging.mp3");
         }
     } else {
         if (voltage < LOW_BATT_VOLT) {
             set_led_low_batt();
+            // play_system_music("LowBattery.mp3");
         } else {
             set_led_idle();
         }

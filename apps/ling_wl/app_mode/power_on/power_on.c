@@ -27,7 +27,7 @@
 #include "app_cookie.h"
 #include "protocol/cp/c_uart_p.h"
 #include "gpio.h"
-#include "../peri_device/lwl_peri_dev.h"
+#include "../lwl_peri_dev.h"
 
 #define MODE_TIMEOUT_MS 120000 // 120s
 #define OTA7016_KEY_PRESS_TIME_MS 8000 // 8+2s

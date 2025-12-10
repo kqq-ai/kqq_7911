@@ -230,6 +230,11 @@ void lwl_app_mode_loop()
         app_devices_check_mode();
         lwl_app_mode_exit_ok();
         break;
+    case APP_POWER_OFF_MODE:
+        log_i("APP_POWER_OFF_MODE\n");
+        app_power_off_mode();
+        lwl_app_mode_exit_ok();
+        break;
     }
 }
 
