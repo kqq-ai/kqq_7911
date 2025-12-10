@@ -61,8 +61,7 @@ void wss_application_vailed()
 void wss_disconnect_cbk(void)
 {
     log_i("[wss_application]odmp disconnect!!!");
-    os_time_dly(100);      // 修正：延时 1000ms (假设 1 tick = 10ms)
-    log_i("[wss_application]delay 1000ms");
+    // os_time_dly(100);      // 修正：延时 1000ms (假设 1 tick = 10ms)
     // wss_exception_exit();
 }
 
@@ -360,11 +359,6 @@ void wss_application_uninit()
     lwl_event_handler_remove(input_event_handler_cb);
 
     os_mutex_pend(&g_wss_mutex, 0);
-    monitor_thread_running = false;
-    if (!monitor_thread) {
-        pthread_join(monitor_thread, NULL);  // 等待线程退出
-        monitor_thread = NULL;
-    }
 
     wss_request_uninit();
     wss_audio_uninit();
@@ -373,6 +367,11 @@ void wss_application_uninit()
     bdo_disable();
 
     os_mutex_post(&g_wss_mutex);
+    monitor_thread_running = false;
+    if (!monitor_thread) {
+        pthread_join(monitor_thread, NULL);  // 等待线程退出
+        monitor_thread = NULL;
+    }
 }
 
 bool wss_application_loop()
