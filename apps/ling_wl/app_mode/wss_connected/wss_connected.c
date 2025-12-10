@@ -76,7 +76,6 @@ void app_wss_connected_mode(void)
         if (lwl_app_mode_playing()) continue;
         // 应用代码
         if (wss_application_loop()) {
-            set_led_connect_error();// WSS ERROR
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {
                 log_i("[wss_connected]wifi disconnect detected while in WSS, switch to NET_CONNECTING");
                 lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
@@ -93,6 +92,7 @@ void app_wss_connected_mode(void)
                 }
             } else if (play_prompt_flag) {
                 log_i("[wss_connected]play disconnect prompt because application loop requested exit");
+                set_led_connect_error();// WSS ERROR
                 play_prompt_flag = 0;
                 play_system_music("NetDisc.mp3");
             }

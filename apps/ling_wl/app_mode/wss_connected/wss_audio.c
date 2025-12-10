@@ -468,8 +468,8 @@ void wait_asr_task(void *priv)
 //=================================================================================================
 void app_music_play_end_cb(void *priv)
 {
-    os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO]app_music_play_end_cb");
+    os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
     set_led_idle(); /* 音频播放结束时灯光变白色 */
@@ -498,9 +498,7 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     log_i("[AUDIO]odmp_audio_data_cbk len=%u", len);
 
     /* 快速路径：如果已经进入播放并且正在写流，直接写入流（按原实现） */
-    os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_play_ongoing) {
-        os_mutex_post(&g_audio_mutex);
         goto stream_write;
     }
 
@@ -526,11 +524,9 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             /* 准备播放：启动播放器 */
             music_play_stop();
             stop_prompt();
-            os_mutex_pend(&g_audio_mutex, 0);
             g_audio_play_ongoing = true;
             set_led_tts_play();
             audio_req_time = get_time_stamp();
-            os_mutex_post(&g_audio_mutex);
 
             app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
             set_speaker();
@@ -562,7 +558,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
             /* 继续到流写逻辑 */
             goto stream_write;
         } else {
-            os_mutex_post(&g_audio_mutex);
             return 0;
         }
     } else {
@@ -660,6 +655,7 @@ void wss_audio_init()
 void wss_audio_uninit()
 {
     log_i("[AUDIO]Uninit WSS audio\n");
+    os_mutex_pend(&g_audio_mutex, 0);
     
     lwl_peri_dev_7016_on(false);  // 关闭 7016
     /* 取消录音上传回调 */
@@ -667,7 +663,6 @@ void wss_audio_uninit()
     /* 取消VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
 
-    os_mutex_pend(&g_audio_mutex, 0);
     wss_ble_audio_stop(); // 停止音频播放
     wss_mic_stop(); // 停止录音
 
