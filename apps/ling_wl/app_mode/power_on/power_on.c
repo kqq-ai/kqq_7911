@@ -24,6 +24,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "log.h"
 #include "app_lfs.h"
+#include "app_cookie.h"
 #include "protocol/cp/c_uart_p.h"
 
 #define MODE_TIMEOUT_MS 10000 // 10s
@@ -64,10 +65,15 @@ static int power_on_init(void)
 {
     init_time = timer_get_ms();
     set_led_power_on();
-    play_system_music("poweron.mp3");
-    char sn[25];
-    if (get_SN(sn)) {
+
+    
+extern u32 g_KQQ_c_voltage;
+    char sn[SN_SIZE+1];
+    if (g_KQQ_c_voltage < LOW_BATT_VOLT) {
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    } else if (get_SN(sn)) {
         log_i("have sn, go to power on mode");
+        play_system_music("poweron.mp3");
         lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     } else {
         log_i("no sn, go to device check mode");

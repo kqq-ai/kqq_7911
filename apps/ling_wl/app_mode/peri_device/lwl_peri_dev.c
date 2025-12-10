@@ -91,15 +91,6 @@ void lwl_peri_dev_battery_detect_reset(void)
     // 重置函数用于未来扩展
 }
 
-//==LED LOOP=========================================================================================
-/**
- * @brief 清除LED状态（关闭所有LED）
- */
-void lwl_peri_dev_led_reset(void)
-{
-    // set_rgb_color(0, 0, 0);
-}
-
 //==模块管理器=========================================================================================
 /**
  * @brief 清除所有外设模块状态
@@ -111,7 +102,6 @@ void lwl_peri_dev_reset_all(void)
     lwl_peri_dev_charge_detect_reset();
     lwl_peri_dev_touch_key_reset();
     lwl_peri_dev_battery_detect_reset();
-    lwl_peri_dev_led_reset();
 }
 
 //==KEY SCAN=========================================================================================
@@ -490,33 +480,6 @@ static void battery_detection_loop(uint32_t curr_time)
     }
 }
 
-static void led_loop(uint32_t curr_time)
-{
-    static uint32_t led_timer = 0;
-    static uint8_t color_index = 0;
-    if (curr_time - led_timer >= LED_INTERVAL)
-    {
-        led_timer = curr_time;
-        switch (color_index)
-        {
-        case 0:
-            set_rgb_color(0, 100, 100); // 红色
-            log_i("LED Color: Red");
-            break;
-        case 1:
-            set_rgb_color(100, 0, 100); // 绿色
-            log_i("LED Color: Green");
-            break;
-        case 2:
-            set_rgb_color(100, 100, 0); // 蓝色
-            log_i("LED Color: Blue");
-            break;
-        }
-
-        color_index = (color_index + 1) % 3; // 循环切换 0->1->2->0...
-    }
-}
-
 
 //==Touch-key=========================================================================================
 void lwl_set_touch_key_active() 
@@ -687,8 +650,6 @@ void lwl_peri_dev_loop(uint32_t curr_time)
     touch_key_loop(curr_time);
 
     battery_detection_loop(curr_time);
-
-    ////led_loop(curr_time);
 
 }
 

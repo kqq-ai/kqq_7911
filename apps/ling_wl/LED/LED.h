@@ -30,6 +30,7 @@
 #define COLOR_BROWN       (0), (0),  (0)    // 褐色(165,42,42)
 #define COLOR_GRAY        (0), (0),  (0)    // 灰色(128,128,128)
 
+void set_rgb_color(u16 red, u16 green, u16 blue) ;
 
 
 void led_init(void);

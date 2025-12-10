@@ -12,7 +12,6 @@
 
 
 #include "asm/clock.h"
-void set_rgb_color(u16 red, u16 green, u16 blue) ;
 static JL_TIMER_TypeDef *TMR = JL_TIMER4;//选择定时器4
 static u8 timer_irq = IRQ_TIMER4_IDX;//选择定时器4
 

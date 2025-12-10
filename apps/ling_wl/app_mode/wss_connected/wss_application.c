@@ -22,7 +22,7 @@ music_player *player;
 
 #undef log_i
 #define log_i log_mqtt
-static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_ORANGE); }      //触摸按键时灯光变黄色
+static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_YELLOW); }      //触摸按键时灯光变黄色
 static void set_led_on_normal_key(void) { uart_send_set_led_color(COLOR_BLUE); }        //触摸按键时灯光变蓝色
 static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }       //空闲时灯光变白色
 

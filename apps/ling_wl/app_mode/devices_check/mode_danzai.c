@@ -8,7 +8,7 @@
 static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
 static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }
-static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
+static void set_led_yellow(void)     { uart_send_set_led_color(COLOR_YELLOW); }
  
 // 模式9 E端设备相关变量
 static lwl_eend_dev_t *g_mode9_current_pdev = NULL; // 模式9当前连接的E端设备指针
@@ -159,7 +159,7 @@ void process_mode_9(void)
         // 根据最强信号设备的距离类型设置LED灯效
         switch (closest_distance_type) {
             case DISTANCE_0: // 小于2米 - 黄色
-                set_led_orange();
+                set_led_yellow();
                 log_d("MODE 9: LED set to YELLOW - strongest device within 2m (RSSI: %d)", strongest_rssi);
                 break;
             case DISTANCE_1: // 2米到5米 - 绿色  

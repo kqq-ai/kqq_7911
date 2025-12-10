@@ -27,7 +27,7 @@
 static lwl_app_context_t *g_app_ctx = NULL;
 static OS_MUTEX g_audio_mutex;
 
-static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_ORANGE); }  //麦克风开启时灯光变橙色
+static void set_led_mic_on(void)        { uart_send_set_led_color(COLOR_YELLOW); }  //麦克风开启时灯光变黄色
 static void set_led_asr_upload(void)    { uart_send_set_led_color(COLOR_GREEN); }   //音频上传时灯光变绿色
 static void set_led_tts_play(void)      { uart_send_set_led_color(COLOR_BLUE); }    //音频下载时灯光变蓝色
 static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }   //闲置时灯光变白色

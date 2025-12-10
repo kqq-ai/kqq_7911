@@ -11,7 +11,7 @@
 static u32 init_time = 0;
 
 static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_RED); } /* 控制 led : 正在升级 红色 */
-static void set_led_OTA_10(void)       { uart_send_set_led_color(COLOR_ORANGE); } /* 控制 led : 正在升级 黄色 */
+static void set_led_OTA_10(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
 static void set_led_OTA_40(void)       { uart_send_set_led_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
 static void set_led_OTA_70(void)       { uart_send_set_led_color(COLOR_GREEN); } /* 控制 led : 正在升级 绿色 */
 static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
