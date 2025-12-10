@@ -26,8 +26,11 @@
 #include "app_lfs.h"
 #include "app_cookie.h"
 #include "protocol/cp/c_uart_p.h"
+#include "gpio.h"
+#include "../peri_device/lwl_peri_dev.h"
 
-#define MODE_TIMEOUT_MS 10000 // 10s
+#define MODE_TIMEOUT_MS 120000 // 120s
+#define OTA7016_KEY_PRESS_TIME_MS 8000 // 8+2s
 static u32 init_time = 0;
 static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 上电 蓝色 */
 
@@ -67,16 +70,10 @@ static int power_on_init(void)
     set_led_power_on();
 
     u16 voltage = get_vbat_level();
-    char sn[SN_SIZE+1];
     if (voltage < LOW_BATT_VOLT) {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    } else if (get_SN(sn)) {
-        log_i("have sn, go to power on mode");
-        play_system_music("poweron.mp3");
-        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     } else {
-        log_i("no sn, go to device check mode");
-        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+        play_system_music("poweron.mp3");
     }
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(power_on_input_event_handler_cb);
@@ -89,10 +86,35 @@ static int power_on_unint(void)
     return 0;
 }
 
+void power_on_loop()
+{
+    uint8_t btnCurrState = gpio_read(KEY_IO_PORT);
+    if (btnCurrState == 0) {
+        if (timer_get_ms() - init_time >= OTA7016_KEY_PRESS_TIME_MS) {
+            log_i("LONG PRESS OTA7016 KEY TO ENTER DEVICE CHECK MODE");
+            lwl_peri_dev_7016_on(true);  // 开启 7016
+            msleep(2000);           // 等待 7016 启动完成
+            uart_send_audio_dev_ota();
+            lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+        }
+        g_sensor_reset_alive_timer();
+        return;
+    }
+    char sn[SN_SIZE+1];
+    if (get_SN(sn)) {
+        log_i("have sn, go to power on mode");
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+    } else {
+        log_i("no sn, go to device check mode");
+        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+    }
+}
+
 void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
+        power_on_loop();
         if (lwl_app_mode_exitting()) {
             power_on_unint();
             return;

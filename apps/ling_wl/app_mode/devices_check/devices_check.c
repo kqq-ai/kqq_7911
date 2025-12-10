@@ -245,8 +245,9 @@ static void devices_check_init(void)
         os_mutex_create(&g_mode_mutex);
     }
     os_mutex_pend(&g_mode_mutex, 0);
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    g_sensor_reset_alive_timer();
     
-    msleep(5000);
     log_i("=== DEFAULT MODE INITIALIZED ===");
     log_i("Multi-mode system ready");
     log_i("Key detection enabled");

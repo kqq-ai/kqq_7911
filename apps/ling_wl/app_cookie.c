@@ -132,6 +132,10 @@ void base_lwl_event_handler(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_SHUTDOWN:
         log_i("base_lwl_event_handler LWL_EVENT_TYPE_SHUTDOWN\r\n");
+        if (lwl_app_mode_get_current_mode() == APP_POWER_ON_MODE) {
+            log_i("Already in default mode, proceed to shutdown\r\n");
+            break;
+        }
         log_i("NOTIFY_GSENSOR_OFF\n");
         extern void * g_iic_hdl;
         int ret = 0;

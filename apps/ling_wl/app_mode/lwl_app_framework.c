@@ -18,6 +18,16 @@ static OS_MUTEX g_mode_mutex;
 
 static bool play_voice_prompt = 0;
 
+// 获取当前模式状态
+u8 lwl_app_mode_get_current_mode()
+{
+    u8 mode;
+    os_mutex_pend(&g_mode_mutex, 0);
+    mode = app_curr_mode;
+    os_mutex_post(&g_mode_mutex);
+    return mode;
+}
+
 static void lwl_app_mode_play_cb(void *priv)
 {
     os_mutex_pend(&g_mode_mutex, 0);

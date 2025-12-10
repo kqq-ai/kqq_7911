@@ -24,6 +24,12 @@ enum {
 #define MAX_LE_AUDIO_VOLUME 12
 
 /**
+ * @brief Get the current application mode
+ * @return Current mode (from the mode enumeration)
+ */
+u8 lwl_app_mode_get_current_mode();
+
+/**
  * @brief Switch application to a specific mode
  * @param app_task Target mode to switch to (from the mode enumeration)
  * @return 0 on success, negative value on error
