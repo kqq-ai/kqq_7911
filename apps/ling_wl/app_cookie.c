@@ -157,6 +157,10 @@ void base_lwl_event_handler(lwl_event_t *e)
     case LWL_EVENT_TYPE_KEY:
         log_i("PRESS NORMAL KEY\n");
         break;
+    case LWL_EVENT_TYPE_LOW_BATTERY:
+        u16 voltage = get_vbat_level();
+        log_i("LOW BATTERY EVENT voltage : %d\n", voltage);
+        break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         log_i("PRESS RESET KEY\n");
         // Reset WiFi SSID

@@ -176,6 +176,9 @@ static void input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_GSENSOR_IDLE:
         g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
         break;
+    case LWL_EVENT_TYPE_LOW_BATTERY:
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        break;
     }
 }
 

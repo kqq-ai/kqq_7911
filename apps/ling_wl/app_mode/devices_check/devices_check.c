@@ -231,6 +231,9 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
         }
         break;
+    case LWL_EVENT_TYPE_LOW_BATTERY:
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        break;
     }
 }
 static void devices_check_init(void)
