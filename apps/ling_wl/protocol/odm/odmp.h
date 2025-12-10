@@ -25,6 +25,7 @@ enum odmp_audio_status_type_e{
     OAST_ASR                    = 1,
     OAST_TTS                    = 2,
     OAST_STREAM_AUDIO           = 3,
+    OAST_SCRIPT                 = 4,
 };
 
 enum odmp_audio_status_event_e{

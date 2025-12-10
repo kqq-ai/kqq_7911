@@ -27,6 +27,8 @@ static const char *odmp_et_str[] = {
 static const char *odmp_ast_str[] = {
     [OAST_ASR]                  = "ASR",
     [OAST_TTS]                  = "TTS",
+    [OAST_STREAM_AUDIO]         = "STREAM_AUDIO",
+    [OAST_SCRIPT]               = "SCR",
 };
 
 static const char *odmp_ase_str[] = {
