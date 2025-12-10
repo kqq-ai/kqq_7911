@@ -14,6 +14,6 @@ void register_wifi_connect_fail_func(wifi_connect_fail_cb callback,void * pri); 
 
 typedef void (*wifi_disconnect_cb)(void *pri); //断开连接
 void register_wifi_disconnect_func(wifi_disconnect_cb callback,void *pri);
-
+void wifi_app_task(void *priv);
 
 #endif

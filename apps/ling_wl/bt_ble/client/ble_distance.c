@@ -389,7 +389,7 @@ static void distance_main(void *priv)
         mdelay(100);
     }
 }
-static int creat_task_distance(void)
+int creat_task_distance(void)
 {
     int ret = 0;
     // 创建任务

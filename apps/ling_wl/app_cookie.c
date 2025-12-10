@@ -1,5 +1,6 @@
 #include "app_config.h"
 #include "app_cookie.h"
+#include "wifi_app_task.h"
 
 #include "cpu.h"
 #include "app_core.h"
@@ -273,6 +274,7 @@ static void app_cookie_main(void)
     log_i("g_KQQ_c_voltage end of app_cookie_main: %d;  LOW_BATT_VOLT:%d \n", g_KQQ_c_voltage, LOW_BATT_VOLT);
     if( g_KQQ_c_voltage > LOW_BATT_VOLT){
         extern void bt_ble_module_init(void);
+        extern int creat_task_distance(void);
         bt_ble_module_init();
         creat_task_distance();
         wifi_app_task(NULL);

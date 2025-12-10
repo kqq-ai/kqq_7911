@@ -392,7 +392,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     return ret;
 }
 
-static void wifi_app_task(void *priv) // 主要是create wifi 线程的
+void wifi_app_task(void *priv) // 主要是create wifi 线程的
 {
     wifi_set_store_ssid_cnt(NETWORK_SSID_INFO_CNT);
     // wifi_set_smp_cfg_just_monitor_mode(true);
