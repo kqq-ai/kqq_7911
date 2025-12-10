@@ -568,8 +568,11 @@ static const struct low_power_param power_param = {
 
 /************************** PWR config ****************************/
 //#define PORT_VCC33_CTRL_IO		IO_PORTA_03					//VCC33 DCDC控制引脚,该引脚控制DCDC器件输出的3.3V连接芯片HPVDD、VDDIO、VDD33
-#define PORT_WAKEUP_IO			IO_PORTC_00					//软关机和休眠唤醒引脚
-#define PORT_WAKEUP_NUM			(PORT_WAKEUP_IO/IO_GROUP_NUM)//默认:0-7:GPIOA-GPIOH, 可以指定0-7组
+#define PORT_WAKEUP_IO			IO_PORTC_00					    //软关机和休眠唤醒引脚
+#define PORT_WAKEUP_NUM			(PORT_WAKEUP_IO/IO_GROUP_NUM)   //默认:0-7:GPIOA-GPIOH, 可以指定0-7组
+
+#define PORT_CHG_IO			    IO_PORTH_07					    //充电唤醒引脚
+#define PORT_CHG_NUM			(PORT_CHG_IO/IO_GROUP_NUM)      //默认:0-7:GPIOA-GPIOH, 可以指定0-7组
 
 static const struct port_wakeup port0 = {
     .edge       = FALLING_EDGE,                            //唤醒方式选择,可选：上升沿\下降沿
@@ -581,7 +584,14 @@ static const struct port_wakeup port0 = {
 static const struct port_wakeup port1 = {
     .edge       = FALLING_EDGE,                            //唤醒方式选择,可选：上升沿\下降沿
     .attribute  = BLUETOOTH_RESUME,                        //保留参数
-    .iomap      = IO_PORTC_09,                          //唤醒口选择
+    .iomap      = IO_PORTC_09,                             //唤醒口选择
+    .low_power	= POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,   //低功耗IO唤醒,不需要写0
+};
+
+static const struct port_wakeup port7 = {
+    .edge       = RISING_EDGE,                             //唤醒方式选择,可选：上升沿\下降沿
+    .attribute  = BLUETOOTH_RESUME,                        //保留参数
+    .iomap      = PORT_CHG_IO,                             //唤醒口选择
     .low_power	= POWER_SLEEP_WAKEUP | POWER_OFF_WAKEUP,   //低功耗IO唤醒,不需要写0
 };
 
@@ -590,7 +600,7 @@ static const struct long_press lpres_port = {
     .enable 	= TRUE,
     .use_sec4 	= TRUE,										//enable = TRUE , use_sec4: TRUE --> 4 sec , FALSE --> 8 sec
     .edge		= FALLING_EDGE,								//长按方式,可选：FALLING_EDGE /  RISING_EDGE --> 低电平/高电平
-    .iomap 		= IO_PORTB_01,							//长按复位IO和IO唤醒共用一个IO
+    .iomap 		= IO_PORTB_01,							    //长按复位IO和IO唤醒共用一个IO
 };
 
 static const struct sub_wakeup sub_wkup = {
@@ -604,6 +614,7 @@ static const struct charge_wakeup charge_wkup = {
 static const struct wakeup_param wk_param = {
     .port[0] = &port0,
     .port[PORT_WAKEUP_NUM] = &port1,
+    .port[PORT_CHG_NUM]    = &port7,
     .sub = &sub_wkup,
     .charge = &charge_wkup,
     .lpres = &lpres_port,

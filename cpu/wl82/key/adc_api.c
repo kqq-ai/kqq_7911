@@ -458,7 +458,7 @@ static void vddiom_trim(void)
         VDDIOM_VOL_SEL(VDDIOM_VOL_35V);
     }
 }
-
+u16 g_KQQ_c_voltage;
 void adc_init()
 {
     if (GET_VDDIOM_VOL() == VDDIOM_VOL_34V) {
@@ -468,6 +468,9 @@ void adc_init()
     //trim wvdd
     /* wvdd_trim(); */
     __adc_init();
+    
+    g_KQQ_c_voltage = adc_get_voltage(AD_CH_VBAT) * 4 / 10;
+    log_i("g_KQQ_c_voltage: %d\n", g_KQQ_c_voltage);
 }
 
 void adc_vbg_init()
