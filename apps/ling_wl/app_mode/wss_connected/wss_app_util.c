@@ -297,10 +297,6 @@ int send_audio_status(int type, int event)
     if (ret < 0) {
         log_e("⚠️ [wss_app_utils]Error %s %d. type=%d event=%d ret=%d", __FILE__, __LINE__, type, event, ret);
         free(send_data);
-        ws_client_disconnect(g_ws_client_custom);
-        ws_client_destroy(g_ws_client_custom);
-        g_ws_client_custom = NULL;
-        wss_mark_exception("send_audio_status send failed");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
@@ -310,6 +306,7 @@ int send_audio_status(int type, int event)
     return 0;
 }
 
+// 只在连接成功后发送一次
 int send_audio_format(int type) 
 {
     os_mutex_pend(&g_wss_mutex, 0);
@@ -355,12 +352,8 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
 
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, strlen(send_data));
     if (ret < 0) {
-        log_e("[wss_app_utils]Error %s %d. event_type=%d ret=%d", __FILE__, __LINE__, event_type, ret);
+        log_e("[wss_app_utils]Error send_req_message %s %d. event_type=%d ret=%d", __FILE__, __LINE__, event_type, ret);
         free(send_data);
-        ws_client_disconnect(g_ws_client_custom);
-        ws_client_destroy(g_ws_client_custom);
-        g_ws_client_custom = NULL;
-        wss_mark_exception("send_req_message send failed");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
@@ -389,10 +382,11 @@ int send_bin_data(uint8_t *data, uint32_t len)
     // 发送二进制数据
     int ret = ws_client_send_binary(g_ws_client_custom, data, len);
     if (ret < 0) {
+        // 当队列满时，丢弃也会返回-1，所以不处理
         log_e("[wss_app_util]Error %s %d. len=%u ret=%d", __FILE__, __LINE__, len, ret);
-        ws_client_disconnect(g_ws_client_custom);
-        ws_client_destroy(g_ws_client_custom);
-        g_ws_client_custom = NULL;
+        // ws_client_disconnect(g_ws_client_custom);
+        // ws_client_destroy(g_ws_client_custom);
+        // g_ws_client_custom = NULL;
         // 不标记异常，允许重连
     }
     // log_i("[wss_app_util]wbs send bin : %d", len);
@@ -418,10 +412,10 @@ int send_ping()
     if (ret < 0) {
         log_e("[wss_app_utils]Error %s %d. event_type=ping ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
-        ws_client_disconnect(g_ws_client_custom);
-        ws_client_destroy(g_ws_client_custom);
-        g_ws_client_custom = NULL;
-        wss_mark_exception("send_ping send failed");
+        // ws_client_disconnect(g_ws_client_custom);
+        // ws_client_destroy(g_ws_client_custom);
+        // g_ws_client_custom = NULL;
+        // wss_mark_exception("send_ping send failed");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }

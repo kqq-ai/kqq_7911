@@ -28,8 +28,73 @@ extern unsigned int random32(int type);
 
 #define WS_MAGIC_KEY "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 #define WS_RECV_BUF_SIZE (32 * 1024)
-#define WS_SEND_BUF_SIZE (16 * 1024)
+#define WS_SEND_BUF_SIZE (64 * 1024)
 #define WS_RECV_TIMEOUT_MS 5000
+
+// 简单的字节流 RingBuffer
+typedef struct {
+    u8 *buffer;
+    u32 capacity;
+    u32 head; // 写索引
+    u32 tail; // 读索引
+    u32 count; // 数据量
+} ws_ringbuffer_t;
+
+static void rb_init(ws_ringbuffer_t *rb, u8 *buf, u32 cap) {
+    rb->buffer = buf;
+    rb->capacity = cap;
+    rb->head = 0;
+    rb->tail = 0;
+    rb->count = 0;
+}
+
+static u32 rb_space(ws_ringbuffer_t *rb) {
+    return rb->capacity - rb->count;
+}
+
+static u32 rb_available(ws_ringbuffer_t *rb) {
+    return rb->count;
+}
+
+// 写入数据
+static u32 rb_write(ws_ringbuffer_t *rb, const u8 *data, u32 len) {
+    if (len > rb_space(rb)) len = rb_space(rb); // 简单的截断，实际应用中可能需要更复杂的策略
+    if (len == 0) return 0;
+    
+    u32 first_chunk = rb->capacity - rb->head;
+    if (len <= first_chunk) {
+        memcpy(rb->buffer + rb->head, data, len);
+    } else {
+        memcpy(rb->buffer + rb->head, data, first_chunk);
+        memcpy(rb->buffer, data + first_chunk, len - first_chunk);
+    }
+    rb->head = (rb->head + len) % rb->capacity;
+    rb->count += len;
+    return len;
+}
+
+// 获取可读的连续内存块（Peek）
+static u8* rb_peek(ws_ringbuffer_t *rb, u32 *len) {
+    if (rb->count == 0) {
+        *len = 0;
+        return NULL;
+    }
+    
+    u32 first_chunk = rb->capacity - rb->tail;
+    if (rb->count <= first_chunk) {
+        *len = rb->count;
+    } else {
+        *len = first_chunk;
+    }
+    return rb->buffer + rb->tail;
+}
+
+// 消耗数据（移动读指针）
+static void rb_advance(ws_ringbuffer_t *rb, u32 len) {
+    if (len > rb->count) len = rb->count;
+    rb->tail = (rb->tail + len) % rb->capacity;
+    rb->count -= len;
+}
 
 /**
  * WebSocket客户端内部结构
@@ -50,14 +115,20 @@ struct ws_client_handle {
     
     u8 *recv_buf;                  // 接收缓冲区
     u32 recv_buf_len;              // 接收缓冲区已用长度
-    u8 *send_buf;                  // 发送缓冲区
+    
+    ws_ringbuffer_t send_rb;       // 发送 RingBuffer
+    u8 *send_buf_mem;              // 发送缓冲区内存 (RingBuffer 底层存储)
+    
+    // 临时发送缓冲区 (用于 ws_client_send_binary 中构建帧，避免在锁内长时间占用 RingBuffer)
+    // 或者直接构建进 RingBuffer? 直接构建比较复杂，还是先构建在 temp buf 然后写入 RB
+    u8 *temp_send_buf;
     
     ws_recv_callback_t recv_cb;    // 接收回调
     ws_disconnect_callback_t disconnect_cb; // 断开回调
     
-    int recv_thread_id;            // 接收线程ID
-    OS_MUTEX mutex;                // 互斥锁
-    bool thread_running;          // 接收线程运行标志
+    int recv_thread_id;            // IO 线程ID (原接收线程)
+    OS_MUTEX mutex;                // 互斥锁 (保护 send_rb 和状态)
+    bool thread_running;          // 线程运行标志
 };
 
 /**
@@ -416,13 +487,42 @@ static int read_http_response(int fd, char *buf, int buf_size, int timeout_ms)
     return total_read;
 }
 
+// 自定义 mbedTLS BIO 回调
+static int my_net_send(void *ctx, const unsigned char *buf, size_t len) {
+    int fd = *(int *)ctx;
+    if (fd < 0) return MBEDTLS_ERR_NET_INVALID_CONTEXT;
+
+    int ret = send(fd, buf, len, 0);
+    if (ret < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) return MBEDTLS_ERR_SSL_WANT_WRITE;
+        if (errno == EPIPE || errno == ECONNRESET) return MBEDTLS_ERR_NET_CONN_RESET;
+        if (errno == EINTR) return MBEDTLS_ERR_SSL_WANT_WRITE;
+        return MBEDTLS_ERR_NET_SEND_FAILED;
+    }
+    return ret;
+}
+
+static int my_net_recv(void *ctx, unsigned char *buf, size_t len) {
+    int fd = *(int *)ctx;
+    if (fd < 0) return MBEDTLS_ERR_NET_INVALID_CONTEXT;
+
+    int ret = recv(fd, buf, len, 0);
+    if (ret < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) return MBEDTLS_ERR_SSL_WANT_READ;
+        if (errno == EPIPE || errno == ECONNRESET) return MBEDTLS_ERR_NET_CONN_RESET;
+        if (errno == EINTR) return MBEDTLS_ERR_SSL_WANT_READ;
+        return MBEDTLS_ERR_NET_RECV_FAILED;
+    }
+    return ret;
+}
+
 /**
- * 执行WebSocket握手（普通TCP）
+ * 建立原始TCP连接
  */
-static int do_tcp_handshake(ws_client_t client, const char *host, int port, const char *path)
-{
+static int raw_tcp_connect(const char *host, int port) {
     struct sockaddr_in server_addr;
     struct hostent *server;
+    int sock_fd = -1;
     
     // 解析主机名
     server = gethostbyname(host);
@@ -432,21 +532,22 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     }
     
     // 创建socket
-    client->sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (client->sock_fd < 0) {
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_fd < 0) {
         log_e("[ws_custom]Failed to create socket");
         return -1;
     }
     
     // 设置socket选项
     int opt = 1;
-    setsockopt(client->sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     
-    // 设置接收超时
+    // 设置接收/发送超时 (握手阶段使用)
     struct timeval tv;
     tv.tv_sec = WS_RECV_TIMEOUT_MS / 1000;
     tv.tv_usec = (WS_RECV_TIMEOUT_MS % 1000) * 1000;
-    setsockopt(client->sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sock_fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
     
     // 连接服务器
     memset(&server_addr, 0, sizeof(server_addr));
@@ -454,12 +555,23 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     memcpy(&server_addr.sin_addr.s_addr, server->h_addr, server->h_length);
     server_addr.sin_port = htons(port);
     
-    if (connect(client->sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if (connect(sock_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         log_e("[ws_custom]Failed to connect to %s:%d", host, port);
-        close(client->sock_fd);
-        client->sock_fd = -1;
+        close(sock_fd);
         return -1;
     }
+    
+    return sock_fd;
+}
+
+/**
+ * 执行WebSocket握手（普通TCP）
+ */
+static int do_tcp_handshake(ws_client_t client, const char *host, int port, const char *path)
+{
+    // 连接TCP
+    client->sock_fd = raw_tcp_connect(host, port);
+    if (client->sock_fd < 0) return -1;
     
     log_i("[ws_custom]TCP connected to %s:%d", host, port);
     
@@ -503,7 +615,11 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
         return -1;
     }
     
-    log_i("[ws_custom]WebSocket handshake successful");
+    // 握手成功后，设置Socket为非阻塞模式
+    int flags = fcntl(client->sock_fd, F_GETFL, 0);
+    fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
+    
+    log_i("[ws_custom]WebSocket handshake successful (Non-blocking set)");
     return 0;
 }
 
@@ -560,22 +676,17 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
         goto cleanup;
     }
     
-    // 连接TCP
-    char port_str[16];
-    snprintf(port_str, sizeof(port_str), "%d", port);
-    ret = mbedtls_net_connect(&client->net_ctx, host, port_str, MBEDTLS_NET_PROTO_TCP);
-    if (ret != 0) {
-        log_e("[ws_custom]mbedtls_net_connect failed: -0x%04x", -ret);
+    // 连接TCP (使用 raw_tcp_connect)
+    client->sock_fd = raw_tcp_connect(host, port);
+    if (client->sock_fd < 0) {
+        ret = -1;
         goto cleanup;
     }
     
-    // mbedtls_net_context 使用 hdl 而不是 fd，不需要直接访问
-    // SSL连接时，sock_fd设为-1表示使用SSL
-    client->sock_fd = -1;
     log_i("[ws_custom]TCP connected to %s:%d (SSL)", host, port);
     
-    // 设置bio回调
-    mbedtls_ssl_set_bio(&client->ssl, &client->net_ctx, mbedtls_net_send, mbedtls_net_recv, NULL);
+    // 设置bio回调 (使用 client->sock_fd 而不是 net_ctx)
+    mbedtls_ssl_set_bio(&client->ssl, &client->sock_fd, my_net_send, my_net_recv, NULL);
     
     // 执行SSL握手
     while ((ret = mbedtls_ssl_handshake(&client->ssl)) != 0) {
@@ -638,18 +749,24 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
         goto cleanup;
     }
     
-    log_i("[ws_custom]WebSocket handshake successful (SSL)");
+    // 握手成功后，设置Socket为非阻塞模式
+    int flags = fcntl(client->sock_fd, F_GETFL, 0);
+    fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
+    
+    log_i("[ws_custom]WebSocket handshake successful (SSL, Non-blocking set)");
     return 0;
     
 cleanup:
     if (client->sock_fd >= 0) {
-        mbedtls_net_free(&client->net_ctx);
+        close(client->sock_fd);
         client->sock_fd = -1;
     }
+    // mbedtls cleanup
     mbedtls_ssl_free(&client->ssl);
     mbedtls_ssl_config_free(&client->ssl_conf);
     mbedtls_ctr_drbg_free(&client->ctr_drbg);
     mbedtls_entropy_free(&client->entropy);
+    // net_ctx 不再使用
     return -1;
 }
 
@@ -884,168 +1001,204 @@ static void ws_recv_thread(void *param)
     ws_client_t client = (ws_client_t)param;
     u8 *frame_buf = malloc(WS_RECV_BUF_SIZE);
     
-    // 专门用于接收线程发送响应的局部缓冲区，避免与主线程竞争 send_buf
-    // PING/PONG/CLOSE 帧通常很小，512字节足够
-    u8 resp_buf[512]; 
+    // 临时缓冲区用于构建自动响应 (PING/CLOSE)
+    u8 *resp_buf = malloc(1024);
     
-    if (!frame_buf) {
-        log_e("[ws_custom]Failed to allocate frame buffer");
+    if (!frame_buf || !resp_buf) {
+        log_e("[ws_custom]Failed to allocate buffers");
         client->thread_running = false;
+        if (frame_buf) free(frame_buf);
+        if (resp_buf) free(resp_buf);
         return;
     }
     
-    int frame_buf_len = 0;
+    log_i("[ws_custom]IO thread started (Non-blocking)");
     
-    log_i("[ws_custom]Receive thread started");
-    
-    while (client->thread_running && client->state == WS_STATE_CONNECTED) {
-        // 读取数据
-        int n;
-        if (client->use_ssl) {
-            // SSL连接：直接使用mbedtls_ssl_read，它会处理阻塞/非阻塞
-            n = mbedtls_ssl_read(&client->ssl, client->recv_buf + client->recv_buf_len,
-                                WS_RECV_BUF_SIZE - client->recv_buf_len);
-            if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
-                continue;
-            }
-            if (n <= 0) {
-                if (n != MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
-                    log_e("[ws_custom]SSL read error: -0x%04x", -n);
-                }
-                break;
-            }
-        } else {
-            // 非SSL连接：使用select检查是否有数据可读
-            fd_set read_fds;
-            struct timeval tv;
-            FD_ZERO(&read_fds);
-            FD_SET(client->sock_fd, &read_fds);
-            tv.tv_sec = 1;
-            tv.tv_usec = 0;
-            
-            int ret = select(client->sock_fd + 1, &read_fds, NULL, NULL, &tv);
-            if (ret <= 0) {
-                continue; // 超时或错误，继续循环
-            }
-            
-            n = recv(client->sock_fd, client->recv_buf + client->recv_buf_len,
-                    WS_RECV_BUF_SIZE - client->recv_buf_len, 0);
-            if (n <= 0) {
-                if (n == 0) {
-                    log_i("[ws_custom]Connection closed by peer");
-                } else {
-                    log_e("[ws_custom]TCP recv error: %d", n);
-                }
-                break;
-            }
+    while (client->thread_running && (client->state == WS_STATE_CONNECTED || client->state == WS_STATE_CLOSING)) {
+        fd_set read_fds, write_fds;
+        FD_ZERO(&read_fds);
+        FD_ZERO(&write_fds);
+        
+        int fd = client->sock_fd; // 统一使用 sock_fd
+        
+        if (fd < 0) break;
+        
+        FD_SET(fd, &read_fds);
+        
+        // 检查是否有数据需要发送
+        os_mutex_pend(&client->mutex, 0);
+        bool has_data_to_send = (rb_available(&client->send_rb) > 0);
+        os_mutex_post(&client->mutex);
+        
+        if (has_data_to_send) {
+            FD_SET(fd, &write_fds);
         }
         
-        client->recv_buf_len += n;
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 50 * 1000; // 50ms 轮询
         
-        // 解析WebSocket帧
-        while (client->recv_buf_len > 0) {
-            u8 *payload = NULL;
-            u32 payload_len = 0;
-            ws_frame_type_t frame_type;
-            bool is_fin;
+        int ret = select(fd + 1, &read_fds, &write_fds, NULL, &tv);
+        
+        if (ret < 0) {
+            log_e("[ws_custom]Select error: %d", errno);
+            break;
+        }
+        
+        // 处理写事件
+        if (ret > 0 && FD_ISSET(fd, &write_fds)) {
+            os_mutex_pend(&client->mutex, 0);
+            u32 len = 0;
+            u8 *data = rb_peek(&client->send_rb, &len);
             
-            int frame_len = parse_ws_frame(client->recv_buf, client->recv_buf_len,
-                                          &payload, &payload_len, &frame_type, &is_fin);
-            
-            if (frame_len < 0) {
-                log_e("[ws_custom]Invalid WebSocket frame");
-                client->thread_running = false;
-                break;
-            }
-            
-            if (frame_len == 0) {
-                // 数据不完整，等待更多数据
-                break;
-            }
-            
-            // 处理不同类型的帧
-            switch (frame_type) {
-            case WS_FRAME_TEXT:
-            case WS_FRAME_BINARY:
-                if (client->recv_cb && payload_len > 0) {
-                    client->recv_cb(payload, payload_len, (frame_type == WS_FRAME_TEXT) ? 1 : 0);
-                }
-                break;
-                
-            case WS_FRAME_CLOSE:
-                log_i("[ws_custom]Received CLOSE frame");
-                // 发送CLOSE响应（客户端必须mask）
-                // 使用局部缓冲区 resp_buf，避免竞争
-                int close_len = build_ws_frame(resp_buf, sizeof(resp_buf),
-                                              NULL, 0, WS_FRAME_CLOSE, true);
-                if (close_len > 0) {
-                    // 发送前验证帧头
-                    if (validate_ws_frame_header(resp_buf, close_len) < 0) {
-                        log_e("[ws_custom]ERROR: Frame validation failed for CLOSE response");
-                    } else {
-                        // 必须加锁发送，防止与主线程冲突
-                        os_mutex_pend(&client->mutex, 0);
-                        if (client->use_ssl) {
-                            mbedtls_ssl_write(&client->ssl, resp_buf, close_len);
-                        } else {
-                            send(client->sock_fd, resp_buf, close_len, 0);
-                        }
-                        os_mutex_post(&client->mutex);
-                    }
+            if (data && len > 0) {
+                int sent = 0;
+                if (client->use_ssl) {
+                    sent = mbedtls_ssl_write(&client->ssl, data, len);
                 } else {
-                    log_e("[ws_custom]ERROR: build_ws_frame failed for CLOSE response, close_len=%d", close_len);
+                    sent = send(client->sock_fd, data, len, 0);
                 }
-                client->thread_running = false;
-                break;
                 
-            case WS_FRAME_PING:
-                log_i("[ws_custom]Received PING frame");
-                // 发送PONG响应
-                // 使用局部缓冲区 resp_buf，避免竞争
-                log_i("[ws_custom]Sending PONG response");
-                int pong_len = build_ws_frame(resp_buf, sizeof(resp_buf),
-                                             payload, payload_len, WS_FRAME_PONG, true);
-                if (pong_len > 0) {
-                    // 发送前验证帧头
-                    if (validate_ws_frame_header(resp_buf, pong_len) < 0) {
-                        log_e("[ws_custom]ERROR: Frame validation failed for PONG response");
-                    } else {
-                        // 必须加锁发送，防止与主线程冲突
-                        os_mutex_pend(&client->mutex, 0);
-                        if (client->use_ssl) {
-                            mbedtls_ssl_write(&client->ssl, resp_buf, pong_len);
-                        } else {
-                            send(client->sock_fd, resp_buf, pong_len, 0);
-                        }
-                        os_mutex_post(&client->mutex);
-                    }
+                if (sent > 0) {
+                    // log_d("[ws_custom]Sent %d bytes", sent);
+                    rb_advance(&client->send_rb, sent);
                 } else {
-                    log_e("[ws_custom]ERROR: build_ws_frame failed for PONG response, pong_len=%d", pong_len);
+                    // 处理非阻塞错误
+                    bool would_block = false;
+                    if (client->use_ssl) {
+                        if (sent == MBEDTLS_ERR_SSL_WANT_WRITE || sent == MBEDTLS_ERR_SSL_WANT_READ) {
+                            would_block = true;
+                        }
+                    } else {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            would_block = true;
+                        }
+                    }
+                    
+                    if (!would_block) {
+                        log_e("[ws_custom]Send error: %d", sent);
+                        // client->thread_running = false; // 暂时不退出，可能是临时错误
+                    }
                 }
-                break;
-                
-            case WS_FRAME_PONG:
-                log_i("[ws_custom]Received PONG frame");
-                break;
-                
-            default:
-                log_i("[ws_custom]Received unknown frame type: 0x%02x", frame_type);
-                break;
+            }
+            os_mutex_post(&client->mutex);
+        }
+        
+        // 处理读事件 (或者 SSL 读缓冲中有数据)
+        // SSL 可能内部有缓存数据，select 不一定会触发，所以 SSL 模式下如果没有写事件，也尝试读一下？
+        // 或者依赖 select。通常 SSL 读缓冲有数据时，底层 socket 也是可读的（除非刚好读完了）。
+        if (ret == 0 && !client->use_ssl) continue; // 超时且非SSL
+        
+        if ((ret > 0 && FD_ISSET(fd, &read_fds)) || client->use_ssl) {
+             // 读取数据
+            int n = 0;
+            if (client->use_ssl) {
+                n = mbedtls_ssl_read(&client->ssl, client->recv_buf + client->recv_buf_len,
+                                    WS_RECV_BUF_SIZE - client->recv_buf_len);
+                if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
+                    n = 0; // 忽略
+                } else if (n <= 0) {
+                    if (n != MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY && n != 0) {
+                         log_e("[ws_custom]SSL read error: -0x%04x", -n);
+                    }
+                    if (n != 0) break; // 真正错误或关闭
+                }
+            } else {
+                if (ret > 0 && FD_ISSET(fd, &read_fds)) {
+                    n = recv(client->sock_fd, client->recv_buf + client->recv_buf_len,
+                            WS_RECV_BUF_SIZE - client->recv_buf_len, 0);
+                    if (n < 0) {
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
+                        else {
+                            log_e("[ws_custom]TCP recv error: %d", errno);
+                            break;
+                        }
+                    } else if (n == 0) {
+                        log_i("[ws_custom]Connection closed by peer");
+                        break;
+                    }
+                }
             }
             
-            // 移除已处理的帧
-            memmove(client->recv_buf, client->recv_buf + frame_len,
-                   client->recv_buf_len - frame_len);
-            client->recv_buf_len -= frame_len;
+            if (n > 0) {
+                client->recv_buf_len += n;
+                
+                // 解析WebSocket帧
+                while (client->recv_buf_len > 0) {
+                    u8 *payload = NULL;
+                    u32 payload_len = 0;
+                    ws_frame_type_t frame_type;
+                    bool is_fin;
+                    
+                    int frame_len = parse_ws_frame(client->recv_buf, client->recv_buf_len,
+                                                  &payload, &payload_len, &frame_type, &is_fin);
+                    
+                    if (frame_len == 0) break; // 数据不够
+                    
+                    if (frame_len < 0) {
+                         log_e("[ws_custom]Invalid WebSocket frame");
+                         client->thread_running = false;
+                         break;
+                    }
+                    
+                    // 处理帧
+                    switch (frame_type) {
+                        case WS_FRAME_TEXT:
+                        case WS_FRAME_BINARY:
+                            if (client->recv_cb && payload_len > 0) {
+                                client->recv_cb(payload, payload_len, (frame_type == WS_FRAME_TEXT) ? 1 : 0);
+                            }
+                            break;
+                            
+                        case WS_FRAME_CLOSE:
+                            log_i("[ws_custom]Received CLOSE frame");
+                            // 写入 CLOSE 响应到 RingBuffer
+                            os_mutex_pend(&client->mutex, 0);
+                            int close_len = build_ws_frame(resp_buf, 1024, NULL, 0, WS_FRAME_CLOSE, true);
+                            if (close_len > 0 && rb_space(&client->send_rb) >= close_len) {
+                                rb_write(&client->send_rb, resp_buf, close_len);
+                            }
+                            os_mutex_post(&client->mutex);
+                            client->thread_running = false;
+                            break;
+                            
+                        case WS_FRAME_PING:
+                            log_i("[ws_custom]Received PING frame");
+                            // 写入 PONG 响应到 RingBuffer
+                            os_mutex_pend(&client->mutex, 0);
+                            int pong_len = build_ws_frame(resp_buf, 1024, payload, payload_len, WS_FRAME_PONG, true);
+                            if (pong_len > 0 && rb_space(&client->send_rb) >= pong_len) {
+                                rb_write(&client->send_rb, resp_buf, pong_len);
+                            } else {
+                                log_e("[ws_custom]Failed to buffer PONG response");
+                            }
+                            os_mutex_post(&client->mutex);
+                            break;
+                            
+                        case WS_FRAME_PONG:
+                            log_i("[ws_custom]Received PONG frame");
+                            break;
+                            
+                        default:
+                            log_i("[ws_custom]Received unknown frame type: 0x%02x", frame_type);
+                            break;
+                    }
+                    
+                    // 移除处理过的帧
+                     memmove(client->recv_buf, client->recv_buf + frame_len,
+                           client->recv_buf_len - frame_len);
+                    client->recv_buf_len -= frame_len;
+                }
+            }
         }
     }
     
-    log_i("[ws_custom]Receive thread exited");
+    log_i("[ws_custom]IO thread exited");
     free(frame_buf);
+    free(resp_buf);
     
-    // 通知断开
     if (client->disconnect_cb) {
-        client->disconnect_cb("Receive thread exited");
+        client->disconnect_cb("IO thread exited");
     }
     
     client->thread_running = false;
@@ -1065,12 +1218,15 @@ ws_client_t ws_client_create(void)
     client->state = WS_STATE_DISCONNECTED;
     
     client->recv_buf = malloc(WS_RECV_BUF_SIZE);
-    client->send_buf = malloc(WS_SEND_BUF_SIZE);
+    client->send_buf_mem = malloc(WS_SEND_BUF_SIZE);
+    client->temp_send_buf = malloc(16 * 1024); // 临时构建缓冲区
     
-    if (!client->recv_buf || !client->send_buf) {
+    if (!client->recv_buf || !client->send_buf_mem || !client->temp_send_buf) {
         ws_client_destroy(client);
         return NULL;
     }
+    
+    rb_init(&client->send_rb, client->send_buf_mem, WS_SEND_BUF_SIZE);
     
     os_mutex_create(&client->mutex);
     
@@ -1122,7 +1278,7 @@ int ws_client_connect(ws_client_t client, const char *url,
     client->thread_running = true;
     
     // 启动接收线程
-    thread_fork("ws_custom_recv", 10, 2048, 0, &client->recv_thread_id,
+    thread_fork("ws_custom_io", 10, 2048, 0, &client->recv_thread_id,
                 ws_recv_thread, client);
     
     os_mutex_post(&client->mutex);
@@ -1158,7 +1314,10 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
         return -1;
     }
     
-    int frame_len = build_ws_frame(client->send_buf, WS_SEND_BUF_SIZE,
+    // 使用临时缓冲区构建帧，避免长时间占用锁
+    // 注意：WS_SEND_BUF_SIZE 现在是 RingBuffer 的总大小，不能用来做单帧构建
+    // 使用 temp_send_buf (16KB)
+    int frame_len = build_ws_frame(client->temp_send_buf, 16 * 1024,
                                    data, len, frame_type, true);  // 强制mask=true
     
     if (frame_len < 0) {
@@ -1168,14 +1327,14 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     }
     
     // 发送前最终验证帧头
-    if (validate_ws_frame_header(client->send_buf, frame_len) < 0) {
+    if (validate_ws_frame_header(client->temp_send_buf, frame_len) < 0) {
         log_e("[ws_custom]ERROR: Frame validation failed before send in ws_client_send_binary");
         os_mutex_post(&client->mutex);
         return -1;
     }
     
-    // 发送帧
-    log_i("[ws_custom]Sending frame: type=0x%02x, len=%d", frame_type, len);
+    // 发送帧 -> 写入 RingBuffer
+    log_i("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
     if (len > 0 && len < 128) { // 只打印短数据的内容
         char dump_buf[256] = {0};
         int dump_len = len > 128 ? 128 : len;
@@ -1188,26 +1347,24 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
         }
     }
 
-    int sent = 0;
-    if (client->use_ssl) {
-        while (sent < frame_len) {
-            int n = mbedtls_ssl_write(&client->ssl, client->send_buf + sent, frame_len - sent);
-            if (n <= 0) {
-                if (n != MBEDTLS_ERR_SSL_WANT_READ && n != MBEDTLS_ERR_SSL_WANT_WRITE) {
-                    os_mutex_post(&client->mutex);
-                    return -1;
-                }
-                continue;
-            }
-            sent += n;
-        }
-    } else {
-        sent = send(client->sock_fd, client->send_buf, frame_len, 0);
-        if (sent != frame_len) {
-            os_mutex_post(&client->mutex);
-            return -1;
-        }
+    // 尝试写入 RingBuffer
+    // 检查缓冲区占用率，如果超过50%，则丢弃非关键帧（这里假设所有通过此接口发送的都是可以丢弃的）
+    // WS_SEND_BUF_SIZE = 64KB, 50% = 32KB
+    if (rb_available(&client->send_rb) > (client->send_rb.capacity / 2)) {
+        log_w("[ws_custom]Warning: Send buffer > 50%% full (%d/%d). Dropping frame len=%d to prevent bloat.", 
+              rb_available(&client->send_rb), client->send_rb.capacity, frame_len);
+        os_mutex_post(&client->mutex);
+        return -1; // 模拟发送失败，上层应用应该忽略此错误
     }
+
+    if (rb_space(&client->send_rb) < frame_len) {
+        log_e("[ws_custom]ERROR: Send buffer full! Dropping frame. space=%d, need=%d", 
+              rb_space(&client->send_rb), frame_len);
+        os_mutex_post(&client->mutex);
+        return -1; // 发送缓冲区满，丢弃
+    }
+    
+    rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     
     os_mutex_post(&client->mutex);
     return len; // 返回原始数据长度
@@ -1228,9 +1385,9 @@ int ws_client_send_ping(ws_client_t client)
     
     u8 ping_payload[] = "ping";
     
-    log_i("[ws_custom]Sending PING frame");
+    log_i("[ws_custom]Buffering PING frame");
 
-    int frame_len = build_ws_frame(client->send_buf, WS_SEND_BUF_SIZE,
+    int frame_len = build_ws_frame(client->temp_send_buf, 16 * 1024,
                                    ping_payload, sizeof(ping_payload) - 1,
                                    WS_FRAME_PING, true);
     
@@ -1241,26 +1398,22 @@ int ws_client_send_ping(ws_client_t client)
     }
     
     // 发送前验证帧头
-    if (validate_ws_frame_header(client->send_buf, frame_len) < 0) {
+    if (validate_ws_frame_header(client->temp_send_buf, frame_len) < 0) {
         log_e("[ws_custom]ERROR: Frame validation failed before send in ws_client_send_ping");
         os_mutex_post(&client->mutex);
         return -1;
     }
     
-    int sent = 0;
-    if (client->use_ssl) {
-        sent = mbedtls_ssl_write(&client->ssl, client->send_buf, frame_len);
-        if (sent <= 0 && sent != MBEDTLS_ERR_SSL_WANT_READ && sent != MBEDTLS_ERR_SSL_WANT_WRITE) {
-            os_mutex_post(&client->mutex);
-            return -1;
-        }
-        sent = frame_len;
-    } else {
-        sent = send(client->sock_fd, client->send_buf, frame_len, 0);
+    if (rb_space(&client->send_rb) < frame_len) {
+         log_e("[ws_custom]ERROR: Send buffer full for PING!");
+         os_mutex_post(&client->mutex);
+         return -1;
     }
     
+    rb_write(&client->send_rb, client->temp_send_buf, frame_len);
+    
     os_mutex_post(&client->mutex);
-    return (sent == frame_len) ? 0 : -1;
+    return 0;
 }
 
 void ws_client_disconnect(ws_client_t client)
@@ -1273,40 +1426,51 @@ void ws_client_disconnect(ws_client_t client)
     
     if (client->state == WS_STATE_CONNECTED) {
         client->state = WS_STATE_CLOSING;
-        client->thread_running = false;
+        // client->thread_running = false; // 先不置 false，让线程有机会发送 CLOSE 帧
         
         // 发送CLOSE帧（客户端必须mask）
-        // 使用build_ws_frame确保正确的MASK位和masking key
-        int close_len = build_ws_frame(client->send_buf, WS_SEND_BUF_SIZE,
+        // 使用临时缓冲区
+        int close_len = build_ws_frame(client->temp_send_buf, 16 * 1024,
                                       NULL, 0, WS_FRAME_CLOSE, true);
         if (close_len > 0) {
             // 发送前验证帧头
-            if (validate_ws_frame_header(client->send_buf, close_len) < 0) {
+            if (validate_ws_frame_header(client->temp_send_buf, close_len) < 0) {
                 log_e("[ws_custom]ERROR: Frame validation failed for CLOSE frame in ws_client_disconnect");
             } else {
-                if (client->use_ssl) {
-                    mbedtls_ssl_write(&client->ssl, client->send_buf, close_len);
-                } else {
-                    send(client->sock_fd, client->send_buf, close_len, 0);
+                if (rb_space(&client->send_rb) >= close_len) {
+                    rb_write(&client->send_rb, client->temp_send_buf, close_len);
                 }
             }
         } else {
             log_e("[ws_custom]ERROR: build_ws_frame failed for CLOSE frame, close_len=%d", close_len);
         }
-        
-        // 等待接收线程退出
-        if (client->recv_thread_id > 0) {
-            thread_kill(&client->recv_thread_id, KILL_WAIT);
-        }
-        
+    }
+    
+    os_mutex_post(&client->mutex);
+    
+    // 给一点时间让IO线程发送数据
+    msleep(100);
+    
+    client->thread_running = false;
+    
+    // 等待接收线程退出 (此时不能持有锁)
+    if (client->recv_thread_id > 0) {
+        thread_kill(&client->recv_thread_id, KILL_WAIT);
+    }
+    
+    // 重新获取锁进行清理
+    os_mutex_pend(&client->mutex, 0);
+    
+    if (client->state != WS_STATE_DISCONNECTED) {
         // 关闭socket
         if (client->use_ssl) {
             mbedtls_ssl_close_notify(&client->ssl);
             mbedtls_ssl_free(&client->ssl);
             mbedtls_ssl_config_free(&client->ssl_conf);
-            mbedtls_net_free(&client->net_ctx);
+            // mbedtls_net_free(&client->net_ctx); // 不再使用
             mbedtls_ctr_drbg_free(&client->ctr_drbg);
             mbedtls_entropy_free(&client->entropy);
+            close(client->sock_fd); // 统一关闭 fd
         } else {
             close(client->sock_fd);
         }
@@ -1329,8 +1493,11 @@ void ws_client_destroy(ws_client_t client)
     if (client->recv_buf) {
         free(client->recv_buf);
     }
-    if (client->send_buf) {
-        free(client->send_buf);
+    if (client->send_buf_mem) {
+        free(client->send_buf_mem);
+    }
+    if (client->temp_send_buf) {
+        free(client->temp_send_buf);
     }
     
     os_mutex_del(&client->mutex, 0);
