@@ -393,7 +393,7 @@ void wait_vad_task(void *priv)
             msleep(10);
             if (g_recording_vad == true) {
                 if (send_audio_status(OAST_ASR, OASE_START) == -1) {
-                    break;
+                    // break; // 防止发送失败时，关闭音频上传
                 }
                 start_audio_upload();
                 set_led_mic_on(); // 开启录音时灯光变橙色

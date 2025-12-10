@@ -72,7 +72,7 @@ void wss_application_resume_mic()
     os_mutex_pend(&g_wss_mutex, 0);
     if (g_on_touch_key) {
         wss_mic_start();
-    }else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
+    } else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
         wss_mic_start();
     } else if (!g_mic_on || g_device_state == APP_AUDIO) {
         wss_mic_stop();

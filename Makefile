@@ -1,4 +1,13 @@
 # 总的 Makefile，用于调用目录下各个子工程对应的 Makefile
+
+# 自动检测 CPU 核心数
+ifeq ($(OS),Windows_NT)
+    # 用户要求使用超高并发
+    JOBS ?= 48
+else
+    JOBS ?= 48
+endif
+
 # 注意： Linux 下编译方式：
 # 1. 从 http://pkgman.jieliapp.com/doc/all 处找到下载链接
 # 2. 下载后，解压到 /opt/jieli 目录下，保证
@@ -154,7 +163,16 @@ clean_ac791n_wifi_story_machine:
 	$(MAKE) -C apps/wifi_story_machine/board/wl82 -f Makefile clean
 
 ac791n_cookie:
-	$(MAKE) -C apps/ling_wl/board/wl82 -f Makefile
+ifeq ($(OS),Windows_NT)
+	@powershell -Command "$$sw = [System.Diagnostics.Stopwatch]::StartNew(); cmd /c \"$(MAKE) -C apps/ling_wl/board/wl82 -f Makefile -j$(JOBS)\"; $$exit = $$LASTEXITCODE; $$sw.Stop(); Write-Host \"Build Cost: $$($$sw.ElapsedMilliseconds) ms\"; exit $$exit"
+else
+	@start_time=$$(date +%s%3N); \
+	$(MAKE) -C apps/ling_wl/board/wl82 -f Makefile -j$(JOBS); \
+	rc=$$?; \
+	end_time=$$(date +%s%3N); \
+	echo "Build Cost: $$(($$end_time - $$start_time)) ms"; \
+	exit $$rc
+endif
 
 clean_ac791n_cookie:
 	$(MAKE) -C apps/ling_wl/board/wl82 -f Makefile clean

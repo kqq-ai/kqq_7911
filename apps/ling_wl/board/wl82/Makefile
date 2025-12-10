@@ -168,6 +168,7 @@ INCLUDES := \
 	-I../../../../include_lib/utils/ui \
 	-I../../../../include_lib/driver/device/video \
 	-I../../../../include_lib/net \
+	-I../../../../include_lib/net/web_socket \
 	-I../../../../include_lib/net/mbedtls_2_2_1 \
 	-I../../../../include_lib/net/server \
 	-I../../../../include_lib/net/wifi_module \
@@ -269,6 +270,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_cookie.c \
 	../../../../apps/ling_wl/net_music_play_my.c \
 	../../../../apps/ling_wl/wss/wss_client.c \
+	../../../../apps/ling_wl/wss/wss_client_custom.c \
 	../../../../apps/ling_wl/ota/http_ota.c \
 	../../../../apps/ling_wl/LED/LED.c \
 	../../../../apps/ling_wl/log/log_mqtt.c \
@@ -383,7 +385,6 @@ LFLAGS := \
 	--plugin-opt=-inline-max-allocated-size=32 \
 	--plugin-opt=-inline-normal-into-special-section=true \
 	--plugin-opt=-dont-used-symbol-list=malloc,free,sprintf,printf,puts,putchar \
-	--plugin-opt=save-temps \
 	--plugin-opt=-pi32v2-enable-rep-memop \
 	--sort-common \
 	--plugin-opt=-used-symbol-file=../../../../cpu/wl82/sdk_used_list.used \
@@ -586,37 +587,31 @@ endif
 $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 	$(info +CC $<)
 	$(QUITE) $(MKDIR) $(@D)
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MMD -MT $@ -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/%.S.o : $(ROOT_PREFIX)/%.S
 	$(info +AS $<)
 	$(QUITE) $(MKDIR) $(@D)
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MMD -MT $@ -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/%.s.o : $(ROOT_PREFIX)/%.s
 	$(info +AS $<)
 	$(QUITE) $(MKDIR) $(@D)
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
-	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -MMD -MT $@ -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/%.cpp.o : $(ROOT_PREFIX)/%.cpp
 	$(info +CXX $<)
 	$(QUITE) $(MKDIR) $(@D)
-	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
-	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MMD -MT $@ -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/%.cxx.o : $(ROOT_PREFIX)/%.cxx
 	$(info +CXX $<)
 	$(QUITE) $(MKDIR) $(@D)
-	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
-	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MMD -MT $@ -MF $(@:.o=.d) -c $< -o $@
 
 $(BUILD_DIR)/%.cc.o : $(ROOT_PREFIX)/%.cc
 	$(info +CXX $<)
 	$(QUITE) $(MKDIR) $(@D)
-	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
-	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -c $< -o $@
+	$(QUITE) $(CXX) $(CXXFLAGS) $(CFLAGS) $(DEFINES) $(INCLUDES) -MMD -MT $@ -MF $(@:.o=.d) -c $< -o $@
 
 -include $(DEP_FILES)
