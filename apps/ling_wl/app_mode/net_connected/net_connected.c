@@ -53,7 +53,6 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_KEY:
         break;
     case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
         break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
@@ -63,6 +62,8 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
 
 static int net_connected_init(void)
 {
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    
     init_time = timer_get_ms();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_add(net_connected_event_handler_cb);
@@ -78,11 +79,11 @@ static int net_connected_init(void)
     int ret = log_mqtt_start();
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+        play_system_music("NetCfgSucc.mp3");
     } else {
         log_i("websockets init failed\n");
         set_led_connect_error();// WSS ERROR
     }
-    play_system_music("NetCfgSucc.mp3");
     return 0;
 }
 
@@ -104,6 +105,7 @@ void app_net_connected_loop()
     }
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+        play_system_music("NetCfgSucc.mp3");
     } else {
         log_i("websockets init failed\n");
         set_led_connect_error();// WSS ERROR

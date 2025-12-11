@@ -83,9 +83,6 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
             play_system_music("t_key.mp3");
         }
         break;
-    case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
-        break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         break;
@@ -95,6 +92,8 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
+    g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
     wifi_manager_state = false;
     ble_connecting = false;

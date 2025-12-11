@@ -58,15 +58,14 @@ static void power_on_input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_KEY:
         break;
-    case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
-        break;
     }
 }
 
 static int power_on_init(void)
 {
     init_time = timer_get_ms();
+    g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
     set_led_power_on();
 
     u16 voltage = get_vbat_level();

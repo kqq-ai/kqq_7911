@@ -132,7 +132,7 @@ static void wss_application_touch_key(bool press_down)
             log_i("[wss_application]STATE: long press -> APP_WAIT");
             g_device_state = APP_WAIT;
             multi_play_mode = true;
-            g_mic_on = !multi_play_mode;
+            g_mic_on = false;
             // wss_application_resume_mic();
             last_req_time = g_curr_time + 10000;
         }
@@ -173,7 +173,7 @@ static void input_event_handler_cb(lwl_event_t *e)
         wss_application_vailed();
         break;
     case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
+        // g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
         break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
@@ -318,6 +318,8 @@ void *wss_condition_monitor_thread(void *arg)
 void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
+    g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
     play_voice_prompt = 0;
     player = lwl_app_core_context_get_instance()->music_player;
 

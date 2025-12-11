@@ -33,9 +33,6 @@ static void update_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         // TODO STOP THE OTA
         break;
-    case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
-        break;
     }
 }
 static int update_init(void)

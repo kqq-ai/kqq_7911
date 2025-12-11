@@ -196,9 +196,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         g_new_mode = WORK_MODE_INIT;
         os_mutex_post(&g_mode_mutex);
         break;
-    case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
-        break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
         log_i("=== UART TOUCH KEY DOWN DETECTED ===");
         if (e->touch_key_cmd.touch_key_event_type == 0) {
@@ -239,14 +236,14 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
 static void devices_check_init(void)
 {
     init_time = timer_get_ms();
+    g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
     lwl_app_context_t *g_app_ctx = lwl_app_core_context_get_instance();
     
     if (!os_mutex_valid(&g_mode_mutex)) {
         os_mutex_create(&g_mode_mutex);
     }
     os_mutex_pend(&g_mode_mutex, 0);
-    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
-    g_sensor_reset_alive_timer();
     
     log_i("=== DEFAULT MODE INITIALIZED ===");
     log_i("Multi-mode system ready");
