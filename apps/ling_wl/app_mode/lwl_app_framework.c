@@ -73,9 +73,6 @@ static int lwl_app_mode_switch_exit_check(u8 curr_task)
 {
     int ret = false;
     switch (curr_task) {
-    case APP_DEVICE_CHECK_MODE:
-        ret = false;
-        break;
     default:
         ret = TRUE;
         break;
