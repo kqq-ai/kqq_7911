@@ -74,9 +74,7 @@ static int power_on_init(void)
     int charge_in = gpio_read(CHARGE_IN_IO);
     int charge_full = gpio_read(CHARGE_FULL_IO);
     log_i("[power_on]voltage=%d, charge_in=%d, charge_full=%d", voltage, charge_in, charge_full);
-    if (voltage < LOW_BATT_VOLT) {
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
-    } else {
+    if (voltage > LOW_BATT_VOLT) {
         play_system_music("poweron.mp3");
     }
     /* 注册lwl事件处理回调 */
@@ -104,8 +102,12 @@ void power_on_loop()
         g_sensor_reset_alive_timer();
         return;
     }
+    u16 voltage = get_vbat_level();
     char sn[SN_SIZE+1];
-    if (get_SN(sn)) {
+    if (voltage < LOW_BATT_VOLT) {
+        log_i("LOW BATTERY VOLTAGE, GO TO DEFAULT MODE");
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    } else if (get_SN(sn)) {
         log_i("have sn, go to power on mode");
         lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     } else {
@@ -118,11 +120,11 @@ void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
+        power_on_loop();
         if (lwl_app_mode_exitting()) {
             power_on_unint();
             return;
         }
-        power_on_loop();
         // 应用代码
         mdelay(10);
     }
