@@ -376,9 +376,10 @@ static int verify_handshake_response(const char *response, int response_len, con
     }
     
     // 检查Connection头
-    if (strstr(response, "Connection: Upgrade") == NULL &&
-        strstr(response, "connection: upgrade") == NULL) {
-        log_e("[ws_custom]Missing Connection header");
+     if (strstr(response, "Connection: Upgrade") == NULL &&
+        strstr(response, "connection: upgrade") == NULL &&
+        strstr(response, "Connection: upgrade") == NULL) {
+        log_e("[ws_custom]Missing Connection header. Headers received:\n%.*s", response_len, response); // 增加了响应内容的打印
         return -1;
     }
     
@@ -656,7 +657,7 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
         goto cleanup;
     }
     
-    mbedtls_ssl_conf_authmode(&client->ssl_conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+    mbedtls_ssl_conf_authmode(&client->ssl_conf, MBEDTLS_SSL_VERIFY_NONE);
     mbedtls_ssl_conf_rng(&client->ssl_conf, mbedtls_ctr_drbg_random, &client->ctr_drbg);
     
     // 设置CA证书（如果需要验证）
