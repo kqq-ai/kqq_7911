@@ -50,6 +50,7 @@ u32 get_time_stamp() {
 static int g_audio_off = true; // 音频播放结束标志（外部请求状态）
 static int g_audio_play_ongoing = false; // 音频启动中标志（播放器状态）
 static int g_audio_playing = false; // 音频播放中标志（播放器状态）
+static int g_audio_player_start = false; // 音频播放中标志（播放器状态）
 /*=================================================================================================
  * Record app context
  *=================================================================================================*/
@@ -80,7 +81,6 @@ static u8 g_asr_ringbuffer_buffer[MY_ASR_RING_BUFFER_CAPACITY * sizeof(AsrData)]
 
 static uint8_t g_prebuffer[PREBUFFER_SIZE];
 static uint32_t g_prebuffer_pos = 0;
-static bool g_prebuffer_active = false;
 
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 void wait_vad_task(void *priv);
@@ -305,14 +305,15 @@ void wss_ble_audio_stop() {
 }
 
 // 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器
-void wss_ble_audio_start() {
-    log_i("[AUDIO]wss_ble_audio_start");
+void wss_ble_audio_start(const char *broadcast_code) {
+    log_i("[AUDIO]wss_ble_audio_start %s", broadcast_code);
+    uart_send_switch_audio_bc(broadcast_code, 0x01);
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
+    g_audio_player_start = false;
     /* reset prebuffer */
     total_written = 0;
     g_prebuffer_pos = 0;
-    g_prebuffer_active = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
@@ -541,29 +542,29 @@ static int wss_audio_playback_start(void)
         os_mutex_post(&g_audio_mutex);
         return 0;
     }
-
-    if (!g_prebuffer) {
-        log_e("[AUDIO]prebuffer not allocated");
-        os_mutex_post(&g_audio_mutex);
-        return -1;
-    }
-
-    log_i("[AUDIO]playback_start: flushing %u bytes from prebuffer", g_prebuffer_pos);
-
-    /* 标记为播放中 */
-    g_audio_play_ongoing = true;
-    set_led_tts_play();
-    audio_req_time = get_time_stamp();
+    log_i("[AUDIO]starting music player");
 
     /* 停止其他音频 */
     music_play_stop();
     stop_prompt();
     set_speaker();
 
-    log_i("[AUDIO]starting music player");
+    /* 标记为播放中 */
+    audio_req_time = get_time_stamp();
+    g_audio_play_ongoing = true;
+    set_led_tts_play();
+
+    if (g_prebuffer_pos == 0) {
+        log_e("[AUDIO]no prebuffer data to play");
+        os_mutex_post(&g_audio_mutex);
+        return -1;
+    }
+
+    log_i("[AUDIO]playback_start: flushing %u bytes from prebuffer", g_prebuffer_pos);
 
     /* 启动播放器 */
     app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+    g_audio_player_start = true;
 
     /* 把预缓冲的数据分片写入播放器 */
     uint32_t written_all = 0;
@@ -581,8 +582,6 @@ static int wss_audio_playback_start(void)
 
     /* reset prebuffer */
     g_prebuffer_pos = 0;
-    g_prebuffer_active = false;
-    g_audio_playing = true;
     os_mutex_post(&g_audio_mutex);
 
     log_i("[AUDIO]playback_start completed, flushed %u bytes", written_all);
@@ -636,6 +635,11 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
     }
 
 stream_write:
+    if (g_audio_player_start == false) {
+        log_i("[AUDIO]stream_write: starting music player");
+        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+        g_audio_player_start = true;
+    }
     /* 直接写入播放器流（data/len 为需要写入的部分） */
     while (len > 0 && !g_audio_off) {
         uint32_t chunk_size = (len > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len;

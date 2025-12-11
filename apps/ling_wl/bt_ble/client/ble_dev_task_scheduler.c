@@ -67,7 +67,6 @@ void bdo_disable()
 {
     log_i("[BDO]bdo_disable");
     uart_send_switch_audio_bc(empty_broadcast_code, 0x00);
-    uart_send_set_ctrl(0);
 }
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
@@ -209,7 +208,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         // mdelay(500);
     }
     // log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    // uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
+    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
     
     dev->set_ctrl(dev, 1, 1);
 

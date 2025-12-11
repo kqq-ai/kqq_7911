@@ -48,7 +48,6 @@ static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
 // 0：无动作，允许推进新流程
 static u8 g_mode6_action_in_progress = 0;
 
-extern uint8_t g_current_pi_broadcast_code[6];
 // ========== 模式6回调函数声明 ===========
 static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 {
@@ -62,8 +61,7 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
     if (BDOCode_Success == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
         log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-        memcpy(g_current_pi_broadcast_code, &pdev->sn[10], sizeof(g_current_pi_broadcast_code));
-        uart_send_switch_audio_bc(g_current_pi_broadcast_code, 0x01);
+        uart_send_switch_audio_bc(&sn_string[10], 0x01);
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针

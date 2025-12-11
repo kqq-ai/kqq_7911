@@ -38,6 +38,7 @@ void set_ctrl_impl(void *__this, uint8_t on, uint8_t play)
     }
     that->ctrl_mask_flags = ctrl;
     uart_send_set_ctrl(that->ctrl_mask_flags);
+    log_i("[EEND]set_ctrl_impl %s: on=%d play=%d ctrl=0x%02X", that->sn, on, play, that->ctrl_mask_flags);
 }
 
 void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)

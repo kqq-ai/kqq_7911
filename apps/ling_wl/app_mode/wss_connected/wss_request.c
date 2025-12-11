@@ -193,7 +193,9 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
-                wss_ble_audio_start();
+                if (g_edev_connected_sn[0] != 0) {
+                    wss_ble_audio_start(&g_edev_connected_sn[10]);
+                }
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
@@ -247,7 +249,6 @@ void wss_request_resume()
 {
     odmp_register_rsp_cbk(wss_rsp_cbk);
 }
-uint8_t g_current_pi_broadcast_code[6];
 //=================================================================================================
 // pDev response callback
 //=================================================================================================
@@ -267,9 +268,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
         if (strcmp(sn_string,g_edev_target_sn) == 0) {
             send_message = ORMET_SWITCH_SUCCESS;
-            log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-            memcpy(g_current_pi_broadcast_code, &pdev->sn[10], sizeof(g_current_pi_broadcast_code));
-            uart_send_switch_audio_bc(g_current_pi_broadcast_code, 0x01);
             wss_audio_set_player(WSS_MUSIC_TIMEOUT);
         } else {
             turn_off_Pi();
@@ -407,7 +405,7 @@ bool wss_request_loop()
         break;
 
     case STATE_WAITING: // until player end
-        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
+        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT * 2) {
             g_mode_script = 0;
             wss_request_update_state(STATE_IDLE, "WSS_TIMEOUT");
         }
