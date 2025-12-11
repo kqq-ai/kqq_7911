@@ -9,6 +9,7 @@
 
 #define MODE_TIMEOUT_MS 600000 // 10 minutes
 static u32 init_time = 0;
+int led_color = 0;
 
 static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_RED); } /* 控制 led : 正在升级 红色 */
 static void set_led_OTA_10(void)       { uart_send_set_led_color(COLOR_YELLOW); } /* 控制 led : 正在升级 黄色 */
@@ -39,8 +40,10 @@ static int update_init(void)
 {
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
     lwl_event_handler_add(update_event_handler_cb);
     set_led_OTA_on();
+    led_color = 0;
     play_system_music("OtaInUpdate.mp3");
     
     while (lwl_app_mode_playing()) {
@@ -68,12 +71,15 @@ void update_loop()
     }
     int progress = get_download_progress();
     log_i("update_loop downloading >> %d%%\n", progress);
-    if (progress > 10 && progress < 40) {
+    if (progress > 10 && progress < 40 && led_color < 1) {
         set_led_OTA_10();// OTA IN PROGRESS
-    } else if (progress >= 40 && progress < 70) {
+        led_color = 1;
+    } else if (progress >= 40 && progress < 70 && led_color < 2) {
         set_led_OTA_40();// OTA IN PROGRESS
-    } else if (progress >= 70 && progress < 100) {
+        led_color = 2;
+    } else if (progress >= 70 && progress < 100 && led_color < 3) {
         set_led_OTA_70();// OTA IN PROGRESS
+        led_color = 3;
     }
     msleep(1000);
 }
