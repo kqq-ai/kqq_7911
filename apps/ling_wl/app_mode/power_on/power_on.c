@@ -70,6 +70,10 @@ static int power_on_init(void)
     set_led_power_on();
 
     u16 voltage = get_vbat_level();
+    
+    int charge_in = gpio_read(CHARGE_IN_IO);
+    int charge_full = gpio_read(CHARGE_FULL_IO);
+    log_i("[power_on]voltage=%d, charge_in=%d, charge_full=%d", voltage, charge_in, charge_full);
     if (voltage < LOW_BATT_VOLT) {
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     } else {

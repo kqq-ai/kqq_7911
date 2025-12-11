@@ -97,6 +97,7 @@ static int default_init(void)
     
     int charge_in = gpio_read(CHARGE_IN_IO);
     int charge_full = gpio_read(CHARGE_FULL_IO);
+    log_i("[default_mode]voltage=%d, charge_in=%d, charge_full=%d", voltage, charge_in, charge_full);
     if (charge_in) {
         if (charge_full) {
             set_led_charged();
