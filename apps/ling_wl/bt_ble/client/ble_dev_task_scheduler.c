@@ -63,10 +63,17 @@ void notify_e_disconncted()
 }
 
 const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+uint8_t broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 void bdo_disable()
 {
     log_i("[BDO]bdo_disable");
     uart_send_switch_audio_bc(empty_broadcast_code, 0x00);
+}
+
+void bdo_enable()
+{
+    log_i("[BDO]bdo_enable %s", broadcast_code);
+    uart_send_switch_audio_bc(broadcast_code, 0x01);
 }
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
@@ -209,6 +216,8 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     }
     // log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
     uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
+    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+
     
     dev->set_ctrl(dev, 1, 1);
 

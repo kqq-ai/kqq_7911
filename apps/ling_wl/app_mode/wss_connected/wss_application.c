@@ -197,6 +197,7 @@ static void wss_app_mode_play_cb(void *priv)
     log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
     play_voice_prompt = 0;
     wss_application_resume_mic();
+    bdo_enable();
 }
 
 void wss_app_mode_play() 

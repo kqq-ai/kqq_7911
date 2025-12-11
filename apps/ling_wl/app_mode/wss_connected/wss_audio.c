@@ -305,9 +305,8 @@ void wss_ble_audio_stop() {
 }
 
 // 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器
-void wss_ble_audio_start(const char *broadcast_code) {
-    log_i("[AUDIO]wss_ble_audio_start %s", broadcast_code);
-    uart_send_switch_audio_bc(broadcast_code, 0x01);
+void wss_ble_audio_start() {
+    log_i("[AUDIO]wss_ble_audio_start");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
     g_audio_player_start = false;
