@@ -30,7 +30,7 @@ static u32 g_curr_time = 0;
 static u32 g_wss_last_time = 0;
 static u32 g_mode_last_time = 0;
 #define WSS_TIMEOUT 10000
-#define WSS_MUSIC_TIMEOUT 1000
+#define WSS_MUSIC_TIMEOUT 1200
 static OS_MUTEX g_request_mutex;
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -270,7 +270,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
             memcpy(g_current_pi_broadcast_code, &pdev->sn[10], sizeof(g_current_pi_broadcast_code));
             uart_send_switch_audio_bc(g_current_pi_broadcast_code, 0x01);
-            wss_audio_set_player(1200);
+            wss_audio_set_player(WSS_MUSIC_TIMEOUT);
         } else {
             turn_off_Pi();
         }
