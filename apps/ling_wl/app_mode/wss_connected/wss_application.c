@@ -67,7 +67,7 @@ void wss_disconnect_cbk(void)
 
 void wss_application_resume_mic()
 {
-    log_i("[wss_application]wss_application_resume_mic");
+    log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (g_on_touch_key) {
         wss_mic_start();
@@ -133,7 +133,7 @@ static void wss_application_touch_key(bool press_down)
             g_device_state = APP_WAIT;
             multi_play_mode = true;
             g_mic_on = !multi_play_mode;
-            wss_application_resume_mic();
+            // wss_application_resume_mic();
             last_req_time = g_curr_time + 10000;
         }
         set_led_idle();
@@ -209,11 +209,12 @@ void wss_app_mode_play()
         wss_ble_audio_stop();
         turn_off_Pi();
     }
+    bdo_disable();
     log_i("[wss_application]wss_app_mode_play: %s", music_file);
-    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
-    set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     wss_mic_stop(); // 停止录音
     
+    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
+    set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     int err = app_music_play_local_music_with_callback(player, music_file, wss_app_mode_play_cb, NULL);
     // int err = app_music_play_mix_file(music_file);
     if (!err) {
@@ -381,8 +382,10 @@ bool wss_application_loop()
             wss_request_stop();
             wss_mic_stop();
         }
-        log_i("[wss_application]STATE: wss_check_exit -> APP_IDLE");
-        g_device_state = APP_IDLE;
+        if (g_device_state != APP_IDLE) {
+            log_i("[wss_application]STATE: wss_check_exit -> APP_IDLE");
+            g_device_state = APP_IDLE;
+        }
         return true;
     }
     if (music_file[0] != 0 && play_voice_prompt == 0) {

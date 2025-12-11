@@ -213,19 +213,10 @@ void set_tts_volume(int volume) {
     g_volume = volume * G_MAX_VOLUME / 100; // 保护E的电池，需要设置最高默认音量为 G_MAX_VOLUME
 }
 
-bool c_speaker_on = false;
-// 设置C音箱开关
-void set_C_speaker_on(bool on) {
-    log_i("[AUDIO]set_C_speaker_on: %d", on);
-    os_mutex_pend(&g_audio_mutex, 0);
-    c_speaker_on = on;
-    os_mutex_post(&g_audio_mutex);
-}
-
 void set_speaker() {
-    log_i("[AUDIO]set_speaker Pi: %d Cookie: %d", g_volume, c_speaker_on);
+    log_i("[AUDIO]set_speaker Pi: %d", g_volume);
     os_mutex_pend(&g_audio_mutex, 0);
-    gpio_direction_output(IO_PORTA_00, c_speaker_on);  //Disable C speaker
+    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
     os_mutex_post(&g_audio_mutex);

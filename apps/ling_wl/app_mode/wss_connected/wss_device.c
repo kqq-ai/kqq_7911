@@ -265,9 +265,6 @@ lwl_eend_dev_t *wss_device_call()
     lwl_eend_dev_t *pdev = get_edev();
     char* sn = NULL;
     if (pdev) sn = pdev->sn;
-#ifdef C_SPEAKLER
-    else sn = "KPCNC5J26SEEGF0";//小智
-#endif
     if (sn) {
         wss_request_send_event(sn, ORMET_NEAR_TRIGGER);
         last_dequeue_time = g_curr_time;

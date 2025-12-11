@@ -22,6 +22,5 @@ void wss_asr_start();
 void wss_asr_stop();
 
 void set_tts_volume(int volume);
-void set_C_speaker_on(bool on);
 
 #endif

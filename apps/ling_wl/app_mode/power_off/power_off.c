@@ -58,7 +58,6 @@ static void power_off_init(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context && context->music_player) {
         log_i("Try play PowerOff prompt before shutdown\r\n");
-        gpio_direction_output(IO_PORTA_00, 1);  // 设置C出声
         play_system_music("PowerOff.mp3");
     }
 }

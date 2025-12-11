@@ -103,11 +103,6 @@ void turn_on_Pi(const char *pdev_sn) {
     if (pdev == NULL) {
         log_i("[wss_request]turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
         send_message = ORMET_SWITCH_FAILED;
-#ifdef C_SPEAKLER
-        memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE);
-        send_message = ORMET_SWITCH_SUCCESS;
-        set_C_speaker_on(true);
-#endif
         return;
     }
     //上传E的电量
@@ -272,7 +267,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
         if (strcmp(sn_string,g_edev_target_sn) == 0) {
             send_message = ORMET_SWITCH_SUCCESS;
-            set_C_speaker_on(false);
             log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
             memcpy(g_current_pi_broadcast_code, &pdev->sn[10], sizeof(g_current_pi_broadcast_code));
             uart_send_switch_audio_bc(g_current_pi_broadcast_code, 0x01);
@@ -296,12 +290,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     }
     if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
         send_message = ORMET_SWITCH_FAILED;
-#ifdef C_SPEAKLER
-        log_i("[wss_request]bdo_turn_on %s ORMET_PLAY_STOP but use C speaker\n", sn_string);
-        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
-        send_message = ORMET_SWITCH_SUCCESS;
-        set_C_speaker_on(true);
-#endif
     }
     os_mutex_post(&g_request_mutex);
 }
@@ -420,6 +408,7 @@ bool wss_request_loop()
 
     case STATE_WAITING: // until player end
         if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
+            g_mode_script = 0;
             wss_request_update_state(STATE_IDLE, "WSS_TIMEOUT");
         }
         break;
