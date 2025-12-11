@@ -114,11 +114,11 @@ void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
-        power_on_loop();
         if (lwl_app_mode_exitting()) {
             power_on_unint();
             return;
         }
+        power_on_loop();
         // 应用代码
         mdelay(10);
     }
