@@ -12,7 +12,7 @@
 #include "usb_host.h"
 #include "usb_storage.h"
 #endif
-
+#include "../../app_mode/lwl_peri_dev.h"
 // *INDENT-OFF*
 
 UART0_PLATFORM_DATA_BEGIN(uart0_data)
@@ -815,7 +815,7 @@ static void board_power_init(void)
     dump_system_reset_reason();
     int ret = 0;
     ret = system_wakeup_reset();
-    ///if (ret == 1)
+    if (ret == 1)
     {
         ret = system_wakeup_port_get();
         ///if (ret >= 0)
@@ -838,6 +838,9 @@ static void board_power_init(void)
             // }
         }
     }
+    printf( "NOW ports, key:%d , RST:%d , CHG_IN:%d ,full:%d, gSensor:%d, touch:%d \n", 
+            gpio_read(KEY_IO_PORT),     gpio_read(IO_PORTB_01),  gpio_read(PORT_CHG_IO),
+            gpio_read(CHARGE_FULL_IO),  gpio_read(GSENSOR_IO),      gpio_read(TOUCH_IO) );
 
 
     extern void clean_wakeup_source_port(void);
