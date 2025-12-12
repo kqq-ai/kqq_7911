@@ -347,6 +347,23 @@ static int audio_status_event_handler(const cJSON *nroot, odmp_package_t *pkg)
     return PARSE_Success;
 }
 
+static int error_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    const cJSON *ndata = cjson_get_object(nroot, "data");
+    if (ndata == NULL) {
+        return PARSE_Error;
+    }
+    if (cjson_get_integer_value(ndata, "err_code", pkg->error.err_code)) {
+        return PARSE_Error;
+    }
+    char *reason = cjson_get_string_value(ndata, "reason");
+    if (reason == NULL) {
+        return PARSE_Error;
+    }
+    pkg->error.reason = reason;
+    return PARSE_Success;
+}
+
 static int message_text_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 {
     const cJSON *ndata = cjson_get_object(nroot, "data");
@@ -423,6 +440,7 @@ static struct odmp_rsp_cb_entry_t g_rsp_cb_table[] = {
     {"tts_bind", OR_TTS_BIND, tts_bind_event_handler, NULL},
     {"initial_setup_response", OR_INITIAL_SETUP_RESPONSE, initial_setup_response_event_handler, NULL}, 
     {"device_switch_response", OR_DEVICE_SWITCH_RESPONSE, device_switch_response_event_handler, NULL}, 
+    {"event_error", OR_ERROR_EVENT, error_event_handler, NULL}, 
     {"message_text", OR_MESSAGE_TEXT, message_text_event_handler, NULL}, 
     {"execution_time", OR_EXECUTION_TIME, execution_time_event_handler, NULL},
     {"pong", OR_PONG, pong_event_handler}, 

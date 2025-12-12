@@ -223,6 +223,13 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             g_wss_last_time = g_curr_time;
         }
         break;
+    case OR_ERROR_EVENT:
+        log_i("ERROR_EVENT %d reason: %s\n", pkg->error.err_code, pkg->error.reason);
+        if (pkg->error.err_code == 1001) {
+            g_mode_script = false;
+            play_prompt_sound("script_err.mp3");
+        }
+        break;
     case OR_MESSAGE_TEXT:
         // if (pkg->message_text.type == 1)
         //     log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
@@ -297,12 +304,11 @@ void wss_request_stop()
     log_i("[wss_request]Stop WSS request\n");
     os_mutex_pend(&g_request_mutex, 0);
 
-    // 在STATE_DOWNLOAD时发送TTS异常
     if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND) {
-        wss_request_send_event_target(ORMET_PLAY_STOP);
         wss_ble_audio_stop();
         turn_off_Pi();
     }
+    wss_request_send_event_target(ORMET_PLAY_STOP);
 
     // 重置状态到IDLE
     wss_request_update_state(STATE_IDLE, "wss_request_stop");
