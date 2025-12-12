@@ -71,10 +71,8 @@ void wss_application_resume_mic()
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (g_on_touch_key) {
         wss_mic_start();
-        // bdo_disable();
     }else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
         wss_mic_start();
-        // bdo_disable();
     } else if (!g_mic_on || g_device_state == APP_AUDIO) {
         wss_mic_stop();
     }
@@ -211,7 +209,7 @@ void wss_app_mode_play()
     } else if (g_device_state == APP_AUDIO) {
         wss_ble_audio_stop();
     }
-    bdo_disable();
+    // bdo_disable();
     log_i("[wss_application]wss_app_mode_play: %s", music_file);
     wss_mic_stop(); // 停止录音
     

@@ -115,9 +115,13 @@ void power_on_loop()
         return;
     }
     u16 voltage = get_vbat_level();
+    int charge_in = gpio_read(CHARGE_IN_IO);
     char sn[SN_SIZE+1];
     if (voltage < LOW_BATT_VOLT) {
         log_i("LOW BATTERY VOLTAGE, GO TO DEFAULT MODE");
+        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    } else if (charge_in == 1) {
+        log_i("CHARGING IN, GO TO DEFAULT MODE");
         lwl_app_mode_switch_to(APP_DEFAULT_MODE);
     } else if (get_SN(sn)) {
         log_i("have sn, go to power on mode");
