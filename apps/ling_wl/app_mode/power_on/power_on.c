@@ -25,17 +25,17 @@
 #include "log.h"
 #include "app_lfs.h"
 #include "app_cookie.h"
-#include "protocol/cp/c_uart_p.h"
 #include "gpio.h"
 #include "../lwl_peri_dev.h"
+#include "LED/LED.h"
 
 #define MODE_TIMEOUT_MS 120000 // 120s
 #define OTA7016_KEY_PRESS_TIME_MS 8000 // 8+2s
 static u32 init_time = 0;
 static bool c_7016_power_on = false;
-static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 上电 蓝色 */
-// static void set_led_7016_on(void)       { uart_send_set_led_color(COLOR_YELLOW); }   /* 控制 led : 7016上电 黄色 */
-static void set_led_ota(void)           { uart_send_set_led_color(COLOR_PURPLE); }
+static void set_led_power_on(void)      { set_rgb_color(COLOR_BLUE); }   /* 控制 led : 上电 蓝色 */
+// static void set_led_7016_on(void)       { set_rgb_color(COLOR_YELLOW); }   /* 控制 led : 7016上电 黄色 */
+static void set_led_ota(void)           { set_rgb_color(COLOR_PURPLE); }
 
 int app_power_on_event_handler(struct application *app, struct sys_event *event)
 {

@@ -4,10 +4,10 @@
 #include "../../../common/gsensor/gSensor_manage.h"  // G-Sensor管理头文件
 #include "../../SC7A20/sc7a20.h"           // SC7A20陀螺仪头文件
 #include "../../SC7A20/app_sc7a20_task.h"  // SC7A20任务头文件
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 
-static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
+static void set_led_red(void)        { set_rgb_color(COLOR_RED); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
 
 // 模式4 VAD相关变量
 static int g_vad_state = 0;          // 当前VAD状态 (0=无语音, 1=有语音)

@@ -11,9 +11,9 @@
 #include "app_config.h"
 #include "wifi/wifi_connect.h"
 #include "util/cjson_util.h"
-#include "protocol/cp/c_uart_p.h"
 #include "app_mode/lwl_app_core.h"
 #include "net_music_play_my.h"
+#include "LED/LED.h"
 
 #define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数

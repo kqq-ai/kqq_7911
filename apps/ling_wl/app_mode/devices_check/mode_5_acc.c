@@ -1,10 +1,10 @@
 #include "mode_list.h"
 
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 
-static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_red(void)        { set_rgb_color(COLOR_RED); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
 
 // 模式5 加速度传感器相关变量
 extern void *g_iic_hdl;                            // 外部IIC句柄声明（在app_sc7a20_task.c中定义）

@@ -28,15 +28,15 @@
 #include "ota/http_ota.h"
 #include "log/log_mqtt.h"
 #include "bt_ble/app_wifi_manage.h"
-#include "protocol/cp/c_uart_p.h"
+#include "LED/LED.h"
 
 #include "protocol/odm/odm_secure.h"
 
 #define MODE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 
-static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
+static void set_led_connect_error(void)     { set_rgb_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
 
 //=================================================================================================
 // LWL event callback

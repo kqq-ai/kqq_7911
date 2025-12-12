@@ -30,10 +30,10 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
 #include "gpio.h"
-#include "protocol/cp/c_uart_p.h"
+#include "LED/LED.h"
 
-static void set_led_connected(void)         { uart_send_set_led_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接中 红色 */
+static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
+static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 控制 led : 网络连接中 红色 */
 bool play_prompt_flag = 0;
 
 static int wss_connected_init(void)

@@ -24,7 +24,7 @@
 #include "log.h"
 #include "app_cookie.h"
 #include "app_mode/lwl_app_core.h"
-#include "protocol/cp/c_uart_p.h"
+#include "LED/LED.h"
 #include "gpio.h"
 #include "../lwl_peri_dev.h"
 
@@ -39,14 +39,14 @@ bool wait_for_button = false;
 // 正常使用中显示白灯
 static void set_led_idel(void)
 {
-    uart_send_set_led_color(COLOR_WHITE); //空闲时灯光变白色
+    set_rgb_color(COLOR_WHITE); //空闲时灯光变白色
 }
 
-static void set_led_low_batt(void)  { uart_send_set_led_color(COLOR_RED); }      //低电量时灯光变红色 
+static void set_led_low_batt(void)  { set_rgb_color(COLOR_RED); }      //低电量时灯光变红色 
 
-static void set_led_charging(void)  { uart_send_set_led_color(COLOR_YELLOW); }   //充电中时灯光变黄色
-static void set_led_charged(void)   { uart_send_set_led_color(COLOR_GREEN); }    //充电完成时灯光变绿色
-static void set_led_idle(void)      { uart_send_set_led_color(COLOR_WHITE); }    //空闲时灯光变白色
+static void set_led_charging(void)  { set_rgb_color(COLOR_YELLOW); }   //充电中时灯光变黄色
+static void set_led_charged(void)   { set_rgb_color(COLOR_GREEN); }    //充电完成时灯光变绿色
+static void set_led_idle(void)      { set_rgb_color(COLOR_WHITE); }    //空闲时灯光变白色
 //=================================================================================================
 // LWL event callback
 //=================================================================================================

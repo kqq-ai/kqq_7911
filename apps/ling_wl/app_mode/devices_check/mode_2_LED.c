@@ -1,28 +1,31 @@
 #include "mode_list.h"
 
-#include "../../protocol/cp/c_uart_p.h"
 #include "../../LED/LED.h"
 
 // 使用系统预定义的颜色常量
-static void set_led_red(void)        { set_rgb_ON(COLORp_RED,1); }
-static void set_led_green(void)      { set_rgb_ON(COLORp_GREEN,2); }
-static void set_led_blue(void)       { set_rgb_ON(COLORp_BLUE,3); }
-static void set_rgb_OFF_1(void)      { set_rgb_OFF(1); }
-static void set_rgb_OFF_2(void)      { set_rgb_OFF(2); }
-static void set_rgb_OFF_3(void)      { set_rgb_OFF(3); }
-static void set_led_cyan(void)       { set_rgb_ON(COLORp_CYAN,3); }
-static void set_led_white(void)      { set_rgb_ON(COLORp_WHITE,3); }
-static void set_led_black(void)      { set_rgb_ON(COLOR_BLACK,3); }
-static void set_led_yellow(void)     { set_rgb_ON(COLORp_YELLOW,3); }
-static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
-static void set_led_pink(void)       { uart_send_set_led_color(COLOR_PINK); }
-static void set_led_purple(void)     { set_rgb_ON(COLORp_PURPLE,3); }
+static void set_led_white(void)      { set_rgb_color(COLOR_WHITE); }
+static void set_led_black(void)      { set_rgb_color(COLOR_BLACK); }
+static void set_led_red(void)        { set_rgb_color(COLOR_RED); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
+static void set_led_cyan(void)       { set_rgb_color(COLOR_CYAN); }
+static void set_led_yellow(void)     { set_rgb_color(COLOR_YELLOW); }
+static void set_led_purple(void)     { set_rgb_color(COLOR_PURPLE); }
 
-static void set_led_dark_yellow(void){ uart_send_set_led_color(COLOR_DARK_YELLOW); }
-static void set_led_dark_blue(void)  { uart_send_set_led_color(COLOR_DARK_BLUE); }
-static void set_led_maroon(void)     { uart_send_set_led_color(COLOR_MAROON); }
-static void set_led_brown(void)      { uart_send_set_led_color(COLOR_BROWN); }
-static void set_led_gray(void)       { uart_send_set_led_color(COLOR_GRAY); }
+
+static void set_led_on_red(void)        { set_rgb_ON(COLOR_RED,1); }
+static void set_led_on_green(void)      { set_rgb_ON(COLOR_GREEN,2); }
+static void set_led_on_blue(void)       { set_rgb_ON(COLOR_BLUE,3); }
+static void set_led_on_cyan(void)       { set_rgb_ON(COLOR_CYAN,3); }
+static void set_led_on_yellow(void)     { set_rgb_ON(COLOR_YELLOW,2); }
+static void set_led_on_purple(void)     { set_rgb_ON(COLOR_PURPLE,1); }
+
+static void set_led_off_red(void)        { set_rgb_OFF(COLOR_RED,1); }
+static void set_led_off_green(void)      { set_rgb_OFF(COLOR_GREEN,2); }
+static void set_led_off_blue(void)       { set_rgb_OFF(COLOR_BLUE,3); }
+static void set_led_off_cyan(void)       { set_rgb_OFF(COLOR_CYAN,3); }
+static void set_led_off_yellow(void)     { set_rgb_OFF(COLOR_YELLOW,2); }
+static void set_led_off_purple(void)     { set_rgb_OFF(COLOR_PURPLE,1); }
 
 
 static u32 g_mode_timer = 0;
@@ -34,7 +37,7 @@ void mode2_init()
 {
     g_mode_timer = timer_get_ms();
     g_led_color_index = 0;
-    set_led_red();
+    set_led_white();
     log_i("MODE 2: All colors cycling started (0.5s interval), C speaker enabled");
     // 播放进入模式2的音频          LED
     devices_check_play_music(CONFIG_CP_VOICE_FILE_PATH"test_led.mp3");
@@ -55,16 +58,29 @@ void process_mode_2(void)
     if (current_time - g_mode_timer >= 500) {
         // 使用系统预定义的颜色设置函数数组 - 准确颜色优先
         void (*all_color_functions[])(void) = {
+            set_led_white,         // 白色 = 红+绿+蓝
             set_led_red,           // 红色 
             set_led_green,         // 绿色 
             set_led_blue,          // 蓝色 
-            set_rgb_OFF_3,          // 关闭当前颜色
-            set_rgb_OFF_1,          // 关闭当前颜色
-            set_rgb_OFF_2,          // 关闭当前颜色
-            set_led_purple,        // 紫色 
-            set_led_yellow,        // 黄色
             set_led_cyan,          // 青色
-            set_led_white,         // 白色 = 红+绿+蓝
+            set_led_yellow,        // 黄色
+            set_led_purple,        // 紫色 
+
+            // set_led_on_red,           // 红色 
+            // set_led_on_green,         // 绿色 
+            // set_led_on_blue,          // 蓝色 
+            // set_led_off_red,          // 关闭当前颜色
+            // set_led_off_green,          // 关闭当前颜色
+            // set_led_off_blue,          // 关闭当前颜色
+
+            // set_led_on_cyan,          // 青色
+            // set_led_on_yellow,        // 黄色
+            // set_led_on_purple,        // 紫色 
+            // set_led_off_cyan,          // 关闭当前颜色
+            // set_led_off_yellow,          // 关闭当前颜色
+            // set_led_off_purple,          // 关闭当前颜色
+
+            set_led_black,          // 关闭当前颜色
             
         };
         

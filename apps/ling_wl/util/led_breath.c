@@ -3,6 +3,7 @@
 #include "led_breath.h"
 #include "os/os_api.h" // 添加互斥锁支持
 #include "os/pthread.h"
+#include "LED/LED.h"
 
 /* 互斥锁 */
 static OS_MUTEX g_led_breath_mutex;
@@ -56,7 +57,7 @@ int led_breathing_simple(uint16_t color1_r, uint16_t color1_g, uint16_t color1_b
             uint16_t g = (uint16_t)(color1_g + (color2_g - color1_g) * ratio);
             uint16_t b = (uint16_t)(color1_b + (color2_b - color1_b) * ratio);
             
-            uart_send_set_led_color(r, g, b);
+            set_rgb_color(r, g, b);
             mdelay(step_delay_ms);
         }
         
@@ -67,7 +68,7 @@ int led_breathing_simple(uint16_t color1_r, uint16_t color1_g, uint16_t color1_b
             uint16_t g = (uint16_t)(color2_g + (color1_g - color2_g) * ratio);
             uint16_t b = (uint16_t)(color2_b + (color1_b - color2_b) * ratio);
             
-            uart_send_set_led_color(r, g, b);
+            set_rgb_color(r, g, b);
             mdelay(step_delay_ms);
         }
         
@@ -144,7 +145,7 @@ static void* breath_thread_func(void* arg) {
             uint16_t r = (uint16_t)(color1_r + (color2_r - color1_r) * ratio);
             uint16_t g = (uint16_t)(color1_g + (color2_g - color1_g) * ratio);
             uint16_t b = (uint16_t)(color1_b + (color2_b - color1_b) * ratio);
-            uart_send_set_led_color(r, g, b);
+            set_rgb_color(r, g, b);
             mdelay(step_delay_ms);
         }
         // color2 -> color1
@@ -153,7 +154,7 @@ static void* breath_thread_func(void* arg) {
             uint16_t r = (uint16_t)(color2_r + (color1_r - color2_r) * ratio);
             uint16_t g = (uint16_t)(color2_g + (color1_g - color2_g) * ratio);
             uint16_t b = (uint16_t)(color2_b + (color1_b - color2_b) * ratio);
-            uart_send_set_led_color(r, g, b);
+            set_rgb_color(r, g, b);
             mdelay(step_delay_ms);
         }
         cycles++;
@@ -192,7 +193,7 @@ void led_set_color(uint8_t r, uint8_t g, uint8_t b)
 
     pthread_join(breath_thread, NULL);
 
-    uart_send_set_led_color(r, g, b);
+    set_rgb_color(r, g, b);
 }
 
 

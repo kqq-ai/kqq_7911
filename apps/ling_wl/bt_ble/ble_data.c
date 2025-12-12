@@ -9,7 +9,7 @@
 #include "lwip.h"
 #include "app_wifi_manage.h"
 #include "app_mode/lwl_app_core.h"
-#include "protocol/cp/c_uart_p.h"
+#include "LED/LED.h"
 
 char current_connected_ssid[MAX_SSID_LEN] = {0};
 char current_connected_password[MAX_SSID_LEN] = {0};
@@ -27,7 +27,7 @@ uint32_t g_wifi_scan_timeout = 0;
 uint32_t g_wifi_scan_flag = 1;
 
 
-static void set_led_wifi_scan(void)       { uart_send_set_led_color(COLOR_BLUE); } /* 控制 led : 正在扫描网络 蓝色 */
+static void set_led_wifi_scan(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在扫描网络 蓝色 */
 
 void set_current_connected_ssid(char *ssid)
 {

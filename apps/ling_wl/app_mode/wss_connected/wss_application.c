@@ -9,12 +9,12 @@
 #include "bt_ble/client/ble_distance.h"
 #include "app_mode/lwl_app_core.h"
 #include "protocol/odm/odmp.h"
-#include "protocol/cp/c_uart_p.h"
 #include "log/log_mqtt.h"
 #include "../../SC7A20/sc7a20.h"
 #include <string.h>
 
 #include "lwip/stats.h" // 添加头文件
+#include "LED/LED.h"
 
 static OS_MUTEX g_wss_app_mutex;
 int play_voice_prompt = 0;
@@ -22,9 +22,9 @@ music_player *player;
 
 #undef log_i
 #define log_i log_mqtt
-static void set_led_on_touch(void)      { uart_send_set_led_color(COLOR_YELLOW); }      //触摸按键时灯光变黄色
-static void set_led_on_normal_key(void) { uart_send_set_led_color(COLOR_BLUE); }        //触摸按键时灯光变蓝色
-static void set_led_idle(void)          { uart_send_set_led_color(COLOR_WHITE); }       //空闲时灯光变白色
+static void set_led_on_touch(void)      { set_rgb_color(COLOR_YELLOW); }      //触摸按键时灯光变黄色
+static void set_led_on_normal_key(void) { set_rgb_color(COLOR_BLUE); }        //触摸按键时灯光变蓝色
+static void set_led_idle(void)          { set_rgb_color(COLOR_WHITE); }       //空闲时灯光变白色
 
 #define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 10分钟
 #define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 5分钟
@@ -435,6 +435,7 @@ bool wss_application_loop()
                 // turn_off_Pi();
             } else {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+                wss_request_send_event_target(ORMET_PLAY_END);
                 g_device_state = APP_IDLE;
                 wss_application_resume_mic();
                 // turn_off_Pi();

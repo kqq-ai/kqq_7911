@@ -9,7 +9,7 @@
 #include "bt_ble/client/ble_dev_task_scheduler.h"
 #include "../../bt_ble/client/ble_simple_client.h"
 #include "../../include/app_config.h"
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 #include "../../protocol/odm/odm_secure.h"
 
 #include "../../bt_ble/client/ble_distance.h"
@@ -26,7 +26,7 @@ static OS_MUTEX g_mode_mutex;
 #define MODE_TIMEOUT_MS 1200000 // 20 minutes
 static u32 init_time = 0;
 
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
 
 static void switch_to_mode(work_mode_e new_mode);
 

@@ -18,13 +18,13 @@
 #include "protocol/odm/odmp.h"
 
 #include "protocol/odm/odm_secure.h"
-#include "protocol/cp/c_uart_p.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
 
 // 提示音资源路径与本地播放接口
 #include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
 
 #include "log/log_mqtt.h"
+#include "LED/LED.h"
 
 static u32 g_curr_time = 0;
 static u32 g_wss_last_time = 0;
@@ -40,7 +40,7 @@ static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
 static bool g_mode_script = 0;
 
-static void set_led_red_error(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
+static void set_led_red_error(void)        { set_rgb_color(COLOR_RED); } //red~ low power
 
 /*=================================================================================================
  * Audio dec app context

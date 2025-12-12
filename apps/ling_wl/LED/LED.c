@@ -28,9 +28,89 @@ static u16 g_green_LED;     // 绿色，0-10000，值越大越亮
 static u16 g_blue__LED;     // 蓝色，0-10000，值越大越亮
 
 static u16 g_priority_LED = 0; // 当前LED颜色优先级，初始为0
-u16 priority_RED[10] = {0};   // 红色优先级数组
-u16 priority_GREEN[10] = {0}; // 绿色优先级数组
-u16 priority_BLUE[10] = {0};  // 蓝色优先级数组
+
+/* 新实现：按 (priority desc, seq desc) 排序的活动 LED 列表。
+ * priority 越大越靠前；相同 priority 按后开启（seq 较大）靠前。
+ * set_rgb_ON 插入一条记录，set_rgb_OFF 删除与 (r,g,b,priority) 完全匹配的最新一条记录。
+ */
+#define LED_MAX_ENTRIES 32
+struct led_entry {
+    u16 red;
+    u16 green;
+    u16 blue;
+    u16 priority;
+    u32 seq; /* 单调递增，用于判定后开启 */
+    u8  used;
+};
+static struct led_entry led_entries[LED_MAX_ENTRIES];
+static u32 led_seq_counter = 0;
+
+/* helper: find best entry index according to priority desc, seq desc */
+static int led_find_best_index(void)
+{
+    int best = -1;
+    for (int i = 0; i < LED_MAX_ENTRIES; i++) {
+        if (!led_entries[i].used) continue;
+        if (best == -1) {
+            best = i;
+            continue;
+        }
+        if (led_entries[i].priority > led_entries[best].priority) {
+            best = i;
+        } else if (led_entries[i].priority == led_entries[best].priority) {
+            if (led_entries[i].seq > led_entries[best].seq) {
+                best = i;
+            }
+        }
+    }
+    return best;
+}
+
+/* helper: insert a new entry (returns 0 on success, -1 on full) */
+static int led_insert_entry(u16 red, u16 green, u16 blue, u16 priority)
+{
+    if (priority == 0) {
+        led_entries[0].used = 1;
+        led_entries[0].red = red;
+        led_entries[0].green = green;
+        led_entries[0].blue = blue;
+        led_entries[0].priority = priority;
+        return 0;
+    }
+    for (int i = 0; i < LED_MAX_ENTRIES; i++) {
+        if (!led_entries[i].used) {
+            led_entries[i].used = 1;
+            led_entries[i].red = red;
+            led_entries[i].green = green;
+            led_entries[i].blue = blue;
+            led_entries[i].priority = priority;
+            led_entries[i].seq = ++led_seq_counter;
+            return 0;
+        }
+    }
+    return -1; /* full */
+}
+
+/* helper: remove the most-recent entry that exactly matches r,g,b,priority. Return 0 if removed, -1 if not found */
+static int led_remove_matching_entry(u16 red, u16 green, u16 blue, u16 priority)
+{
+    int found = -1;
+    u32 max_seq = 0;
+    for (int i = 0; i < LED_MAX_ENTRIES; i++) {
+        if (!led_entries[i].used) continue;
+        if (led_entries[i].red == red && led_entries[i].green == green && led_entries[i].blue == blue && led_entries[i].priority == priority) {
+            if (led_entries[i].seq >= max_seq) {
+                max_seq = led_entries[i].seq;
+                found = i;
+            }
+        }
+    }
+    if (found != -1) {
+        led_entries[found].used = 0;
+        return 0;
+    }
+    return -1;
+}
 
 static AWINLINE TSEC void timer_cfg(u32 freq, u32 us)
 {
@@ -141,47 +221,12 @@ static ___interrupt TSEC void timer_isr(void)//中断
     }
 }
 
-void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
-    //10个优先级，都存储下来，高优先级生效，直到同优先级set_rgb_OFF或者更高优先级覆盖
-    log_i("Event set_rgb_ON: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
-    if( priority < 10 ){
-        priority_RED[priority] = red;
-        priority_GREEN[priority] = green;
-        priority_BLUE[priority] = blue;
-    }
-    if( priority >= g_priority_LED ){
-        g_priority_LED = priority;
-        set_rgb_color(red, green, blue);
-    }
-}
-void set_rgb_OFF(u16 priority){
-    //关闭某个优先级的颜色显示，并且恢复到下一个最高优先级颜色显示
-    if( priority < 10 ){
-        priority_RED[priority] = 0;
-        priority_GREEN[priority] = 0;
-        priority_BLUE[priority] = 0;
-    }
-    if( priority == g_priority_LED ){
-         /// 如果是当前优先级，则降低优先级，直到0；其他优先级，仅清空颜色
-        if( priority > 0 ){
-            //如果当前优先级颜色已经被清空，则继续降低优先级，直到找到有颜色的优先级
-            while( g_priority_LED > 0 ){
-                if( priority_RED[g_priority_LED] + priority_GREEN[g_priority_LED] + priority_BLUE[g_priority_LED] > 0 ){
-                    break;
-                }
-                g_priority_LED --;
-            }
-        }
-        set_rgb_color(priority_RED[g_priority_LED], priority_GREEN[g_priority_LED], priority_BLUE[g_priority_LED]);
-    }
-}
-
 // 控制RGB颜色
-void set_rgb_color(u16 red, u16 green, u16 blue) {
+void set_rgb_LED(u16 red, u16 green, u16 blue) {
     g_red___LED = red;
     g_green_LED = green;
     g_blue__LED = blue;
-    log_i("Event set_rgb_color: %d  : %d  : %d \n", red, green, blue);
+    // log_i("Event set_rgb_color: %d  : %d  : %d \n", red, green, blue);
     
     ///port_wakeup_reg(EVENT_PA8, IO_PORTA_08, EDGE_NEGATIVE, lwl_IO_key_active);
     // struct pwm_platform_data pwm = {0};
@@ -196,6 +241,47 @@ void set_rgb_color(u16 red, u16 green, u16 blue) {
     // pwm.pwm_ch = PWM_TIMER3_OPCH3;
     // pwm.duty = blue;
     // dev_ioctl(pwm_dev_handle, PWM_SET_DUTY, (u32)&pwm);
+}
+
+void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
+    // 新行为：插入一条记录并按 (priority desc, seq desc) 选取第一位显示
+    log_i("Event set_rgb_ON: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
+    if (led_insert_entry(red, green, blue, priority) != 0) {
+        log_w("LED entries full, cannot insert new entry\n");
+        return;
+    }
+
+    /* 更新显示为当前最佳 */
+    int best = led_find_best_index();
+    if (best >= 0) {
+        set_rgb_LED(led_entries[best].red, led_entries[best].green, led_entries[best].blue);
+        g_priority_LED = led_entries[best].priority;
+    }
+}
+
+void set_rgb_OFF(u16 red, u16 green, u16 blue, u16 priority) {
+    // 新行为：删除与 (r,g,b,priority) 完全匹配的最新一条记录
+    log_i("Event set_rgb_OFF: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
+
+    if (led_remove_matching_entry(red, green, blue, priority) != 0) {
+        log_w("No matching LED entry found to remove\n");
+        return;
+    }
+
+    /* 更新显示为当前最佳 */
+    int best = led_find_best_index();
+    if (best >= 0) {
+        set_rgb_LED(led_entries[best].red, led_entries[best].green, led_entries[best].blue);
+        g_priority_LED = led_entries[best].priority;
+    } else {
+        /* 无记录，关闭LED */
+        set_rgb_LED(0, 0, 0);
+        g_priority_LED = 0;
+    }
+}
+
+void set_rgb_color(u16 red, u16 green, u16 blue) {
+    set_rgb_ON(red, green, blue, 0);
 }
 
 

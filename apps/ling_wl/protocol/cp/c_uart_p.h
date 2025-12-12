@@ -95,27 +95,24 @@ int uart_send_move_detect_en(uint8_t en);
 // 占空比SDK中是最大10000
 // 颜色定义 (R, G, B) —— 共阳极模式（值越高实际输出越低）
 // 以下只做参考的RGB值 实际灯光颜色看调整 （r g b的值是根据你们给的表格中的255转化而来，在此基础上根据实际效果努力做了调整，是否满足需求可自行更改）
-#define COLOR_CYAN        (10000), (0),     (0)       // 青色(0,255,255)
-#define COLOR_RED         (0),     (10000), (10000)   // 红色(255,0,0)                          //√
-#define COLOR_WHITE       (0),     (0),     (0)    // 白色(255,255,255)                      //√
-#define COLOR_GREEN       (10000), (0),     (10000)   // 绿色(0,255,0)                          //√
-#define COLOR_BLUE        (10000), (10000), (0)       // 蓝色(0,0,255)                          //√
-#define COLOR_YELLOW      (0),     (0),     (10000)  // 黄色(?,92,0)                           //√
-#define COLOR_ORANGE      (7500),   (7000),  (9500)   // 橙色(235,92,92)                        //×
-#define COLOR_PINK        (509),   (3882),  (3058)    // 粉红(242,156,177)
-#define COLOR_DARK_YELLOW (2980),  (4980),  (10000)   // 深黄(128,128,0)
-#define COLOR_MAROON      (4980),  (10000), (10000)   // 栗色(128,0,0)
-#define COLOR_DARK_BLUE   (10000), (10000), (4549)    // 深蓝(0,0,139)
-#define COLOR_BLACK       (10000), (10000), (10000)   // 黑色(0,0,0)
-#define COLOR_BROWN       (3529),  (8352),  (8352)    // 褐色(165,42,42)
-#define COLOR_PURPLE      (4980),  (10000), (4980)    // 紫色(128,0,128)
-#define COLOR_GRAY        (4980),  (4980),  (4980)    // 灰色(128,128,128)
+// #define COLOR_CYAN        (10000), (0),     (0)       // 青色(0,255,255)
+// #define COLOR_RED         (0),     (10000), (10000)   // 红色(255,0,0)                          //√
+// #define COLOR_WHITE       (0),     (0),     (0)    // 白色(255,255,255)                      //√
+// #define COLOR_GREEN       (10000), (0),     (10000)   // 绿色(0,255,0)                          //√
+// #define COLOR_BLUE        (10000), (10000), (0)       // 蓝色(0,0,255)                          //√
+// #define COLOR_YELLOW      (0),     (0),     (10000)  // 黄色(?,92,0)                           //√
+// #define COLOR_ORANGE      (7500),   (7000),  (9500)   // 橙色(235,92,92)                        //×
+// #define COLOR_PINK        (509),   (3882),  (3058)    // 粉红(242,156,177)
+// #define COLOR_DARK_YELLOW (2980),  (4980),  (10000)   // 深黄(128,128,0)
+// #define COLOR_MAROON      (4980),  (10000), (10000)   // 栗色(128,0,0)
+// #define COLOR_DARK_BLUE   (10000), (10000), (4549)    // 深蓝(0,0,139)
+// #define COLOR_BLACK       (10000), (10000), (10000)   // 黑色(0,0,0)
+// #define COLOR_BROWN       (3529),  (8352),  (8352)    // 褐色(165,42,42)
+// #define COLOR_PURPLE      (4980),  (10000), (4980)    // 紫色(128,0,128)
+// #define COLOR_GRAY        (4980),  (4980),  (4980)    // 灰色(128,128,128)
 
 /* 5. 7911申请软关机 发送函数 */
 int uart_send_apply_soft_poweroff(void);
-
-int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b);
-void set_led_off(void);
 
 /* 6. 指定广播配对码重新打开Audio广播 */
 int uart_send_open_le_audio(uint8_t *mac);

@@ -1,10 +1,10 @@
 #include "mode_list.h"
 #include "../lwl_app_framework.h"
 #include "log.h"
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
 
 // 模式1 触摸按键检测相关变量
 static u8 g_mode1_touch_enabled = 0;    // 模式1 触摸检测是否已启用

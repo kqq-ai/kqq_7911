@@ -24,6 +24,7 @@
 #include "app_mode/7911_uart_7016/app_uart_task.h"
 #include "SC7A20/app_sc7a20_task.h"
 #include "protocol/cp/c_uart_p.h"
+#include "LED/LED.h"
 #include "app_mode/lwl_app_framework.h"
 
 #include "protocol/odm/odm_secure.h"
@@ -34,9 +35,9 @@
 #include "log/log_mqtt.h"
 #include "system/sys_time.h"
 
-static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
-static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
-static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_red_low_power(void)        { set_rgb_color(COLOR_RED); } //red~ low power
+static void set_led_power_off(void)      { set_rgb_color(COLOR_BLACK); } /// off LED before power Off
+static void set_led_power_on(void)      { set_rgb_color(COLOR_BLUE); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 

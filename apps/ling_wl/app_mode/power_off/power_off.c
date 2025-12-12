@@ -25,14 +25,14 @@
 #include "log.h"
 #include "app_lfs.h"
 #include "app_cookie.h"
-#include "protocol/cp/c_uart_p.h"
 #include "gpio.h"
 #include "../lwl_peri_dev.h"
+#include "LED/LED.h"
 
 #define KEY_PRESS_POWER_OFF_TIME_MS 4000 // 4s
 #define WAIT_FOR_POWER_OFF_TIME_MS 8000 // 8s
 static u32 init_time = 0;
-static void set_led_power_off(void)     { uart_send_set_led_color(COLOR_RED); }   /* 控制 led : 关机 黑色 */
+static void set_led_power_off(void)     { set_rgb_color(COLOR_RED); }   /* 控制 led : 关机 黑色 */
 
 int led_off = 0;
 
@@ -76,14 +76,11 @@ void power_off_loop()
             // log_i("LONG PRESS POWER OFF KEY");
             if (!led_off) {
                 led_off = 1;
-                set_led_off();
             }
         }
     } else if (!lwl_app_mode_playing()) {
-        set_led_off();
         power_set_soft_poweroff();
     } else if (timer_get_ms() - init_time >= WAIT_FOR_POWER_OFF_TIME_MS) {
-        set_led_off();
         power_set_soft_poweroff();
     }
 }

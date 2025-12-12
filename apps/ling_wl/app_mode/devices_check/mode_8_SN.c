@@ -19,11 +19,11 @@
 // 为模式8 SN/Key写入功能添加必要的头文件
 #include "../../../common/example/third_party/littlefs/lfs.h"  // LittleFS文件系统
 
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 
-static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_red(void)        { set_rgb_color(COLOR_RED); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
 
 // 外部声明全局LittleFS实例
 extern lfs_t g_lfs;

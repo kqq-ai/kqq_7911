@@ -23,7 +23,7 @@
 #include "mode_list.h"
 #include "gpio.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
  
 static u8 g_mode6_playing_prompt = 1; // 模式6状态：1=播放提示音，0=循环播放测试音
 
@@ -48,8 +48,8 @@ static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
 // 1：有动作在执行（如连接、播放等），防止重复或并发操作
 // 0：无动作，允许推进新流程
 static u8 g_mode6_action_in_progress = 0;
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
 
 // ========== 模式6回调函数声明 ===========
 static void mode6_e_connect_cb(bdo_code_e code, void *priv)

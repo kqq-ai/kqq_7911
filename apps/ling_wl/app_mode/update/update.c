@@ -4,18 +4,18 @@
 #include "app_mode/lwl_app_core.h"
 #include "log.h"
 #include "app_lfs.h"
-#include "protocol/cp/c_uart_p.h"
 #include "bt_ble/app_wifi_manage.h"
+#include "LED/LED.h"
 
 #define MODE_TIMEOUT_MS 600000 // 10 minutes
 static u32 init_time = 0;
 int led_color = 0;
 
-static void set_led_OTA_on(void)       { uart_send_set_led_color(COLOR_RED); } /* 控制 led : 正在升级 红色 */
-static void set_led_OTA_10(void)       { uart_send_set_led_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
-static void set_led_OTA_40(void)       { uart_send_set_led_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
-static void set_led_OTA_70(void)       { uart_send_set_led_color(COLOR_GREEN); } /* 控制 led : 正在升级 绿色 */
-static void set_led_connect_error(void)     { uart_send_set_led_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_OTA_on(void)       { set_rgb_color(COLOR_RED); } /* 控制 led : 正在升级 红色 */
+static void set_led_OTA_10(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
+static void set_led_OTA_40(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
+static void set_led_OTA_70(void)       { set_rgb_color(COLOR_GREEN); } /* 控制 led : 正在升级 绿色 */
+static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
 //=================================================================================================
 // LWL event callback

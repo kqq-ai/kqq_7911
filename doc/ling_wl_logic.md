@@ -45,7 +45,7 @@
   - `SYS_NET_EVENT` → WiFi 状态提示、RF 共存表切换、通知 LWL 模式。
   - `SYS_BT_EVENT` → 透传给 BLE demo。
 - **UART 7016 通道**（`app_mode/7911_uart_7016`）：
-  - 提供封装 `uart_send_set_led_color`、`uart_response_synch_status` 等接口，负责 LED、触控、普通按键、Gseneor 电源等；`base_lwl_event_handler` 接收关机/清配置命令，并可触发 `system_reset()` 或 `do_shutdown()`。
+  - 提供封装 `set_rgb_color`、`uart_response_synch_status` 等接口，负责 LED、触控、普通按键、Gseneor 电源等；`base_lwl_event_handler` 接收关机/清配置命令，并可触发 `system_reset()` 或 `do_shutdown()`。
 - **音频子系统**：
   - `music_player_init()` 创建本地 + 网络播放能力。
   - 用于提示音（`CONFIG_CP_VOICE_FILE_PATH` 下的 mp3）和远端播放 (`app_music_play_net_music_with_callback`)。

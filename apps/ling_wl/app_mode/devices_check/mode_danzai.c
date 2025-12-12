@@ -3,12 +3,12 @@
 #include "../../bt_ble/client/ble_distance.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
 
-#include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
-static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }
-static void set_led_yellow(void)     { uart_send_set_led_color(COLOR_YELLOW); }
+static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
+static void set_led_white(void)      { set_rgb_color(COLOR_WHITE); }
+static void set_led_yellow(void)     { set_rgb_color(COLOR_YELLOW); }
  
 // 模式9 E端设备相关变量
 static lwl_eend_dev_t *g_mode9_current_pdev = NULL; // 模式9当前连接的E端设备指针

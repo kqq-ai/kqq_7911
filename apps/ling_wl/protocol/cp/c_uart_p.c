@@ -204,22 +204,22 @@ int uart_send_move_detect_en(uint8_t en)
 }
 
 /* 4. 设置LED颜色 的发送函数 */
-int uart_send_set_led_color(uint16_t r, uint16_t g, uint16_t b)
-{
-    set_rgb_color(10000 - r, 10000 - g, 10000 - b); // 本地也设置LED颜色
-    // uint8_t send_led_payload[7];
-    // memset(send_led_payload, 0, sizeof(send_led_payload));
-    // send_led_payload[0] = UART_CMD_SET_LED_COLOR;   
-    // /* 小端序 */
-    // send_led_payload[1] = r & 0xFF;        // r 低字节
-    // send_led_payload[2] = (r >> 8) & 0xFF; // r 高字节
-    // send_led_payload[3] = g & 0xFF;        // g 低字节
-    // send_led_payload[4] = (g >> 8) & 0xFF; // g 高字节
-    // send_led_payload[5] = b & 0xFF;        // b 低字节
-    // send_led_payload[6] = (b >> 8) & 0xFF; // b 高字节
+// int set_rgb_color(uint16_t r, uint16_t g, uint16_t b)
+// {
+//     set_rgb_color(10000 - r, 10000 - g, 10000 - b); // 本地也设置LED颜色
+//     // uint8_t send_led_payload[7];
+//     // memset(send_led_payload, 0, sizeof(send_led_payload));
+//     // send_led_payload[0] = UART_CMD_SET_LED_COLOR;   
+//     // /* 小端序 */
+//     // send_led_payload[1] = r & 0xFF;        // r 低字节
+//     // send_led_payload[2] = (r >> 8) & 0xFF; // r 高字节
+//     // send_led_payload[3] = g & 0xFF;        // g 低字节
+//     // send_led_payload[4] = (g >> 8) & 0xFF; // g 高字节
+//     // send_led_payload[5] = b & 0xFF;        // b 低字节
+//     // send_led_payload[6] = (b >> 8) & 0xFF; // b 高字节
 
-    // return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
-}
+//     // return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
+// }
 
 /* 5. 7911申请软关机 发送函数 */
 int uart_send_apply_soft_poweroff(void)
@@ -229,8 +229,6 @@ int uart_send_apply_soft_poweroff(void)
     send_payload[0] = UART_CMD_APPLY_SOFT_POWEROFF;
     return uart_send_inquiry(send_payload, 1);
 }
-
-void set_led_off(void)          { uart_send_set_led_color(COLOR_BLACK); }   //结束对话时灯光关闭
 
 int uart_send_open_le_audio(uint8_t *mac)
 {
