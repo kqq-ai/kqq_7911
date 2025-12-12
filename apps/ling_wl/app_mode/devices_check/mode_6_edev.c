@@ -61,7 +61,7 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
     if (BDOCode_Success == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
         log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-        uart_send_switch_audio_bc(&sn_string[10], 0x01);
+        bdo_enable();
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针

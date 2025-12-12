@@ -64,6 +64,7 @@ void notify_e_disconncted()
 
 const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 uint8_t broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+uint8_t ctrl_code = 0x00;
 void bdo_disable()
 {
     log_i("[BDO]bdo_disable");
@@ -73,7 +74,12 @@ void bdo_disable()
 void bdo_enable()
 {
     log_i("[BDO]bdo_enable %s", broadcast_code);
-    uart_send_switch_audio_bc(broadcast_code, 0x01);
+    uart_send_switch_audio_bc(broadcast_code, ctrl_code);
+}
+
+bdo_set_ctrl(uint8_t code)
+{
+    ctrl_code = code;
 }
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
@@ -215,11 +221,13 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         // mdelay(500);
     }
     // log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
     memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+    bdo_set_ctrl(0x01);
+    bdo_enable();
+    // uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
 
     
-    dev->set_ctrl(dev, 1, 1);
+    // dev->set_ctrl(dev, 1, 1);
 
 #if 0
     log_i("[BDO]Waiting adv state change...");
@@ -250,7 +258,9 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         return;
     }
     
-    dev->set_ctrl(dev, 0, 0);
+    bdo_set_ctrl(0x00);
+    bdo_enable();
+    // dev->set_ctrl(dev, 0, 0);
 
     os_sem_set(&g_e_disconnected_sem, 0);
     ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);
@@ -365,7 +375,9 @@ int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void
     if (dev->op_state & BDO_STATE_TURNNING_OFF)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_OFF;
-    dev->set_ctrl(dev, 0, 0);
+    bdo_set_ctrl(0x00);
+    bdo_enable();
+    // dev->set_ctrl(dev, 0, 0);
 
     ble_dev_op_t op;
     op.op_type = BDPDOT_TURNOFF;
