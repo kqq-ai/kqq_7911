@@ -9,6 +9,7 @@ static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
 static void set_led_cyan(void)       { uart_send_set_led_color(COLOR_CYAN); }
 static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }
 static void set_led_black(void)      { uart_send_set_led_color(COLOR_BLACK); }
+static void set_led_yellow(void)     { uart_send_set_led_color(COLOR_YELLOW); }
 static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
 static void set_led_pink(void)       { uart_send_set_led_color(COLOR_PINK); }
 static void set_led_purple(void)     { uart_send_set_led_color(COLOR_PURPLE); }
@@ -53,8 +54,9 @@ void process_mode_2(void)
             set_led_green,         // 绿色 
             set_led_blue,          // 蓝色 
             set_led_purple,        // 紫色 
+            set_led_yellow,        // 黄色
+            set_led_cyan,          // 青色
             set_led_white,         // 白色 = 红+绿+蓝
-            set_led_orange,        // 橙色 = 红+少绿 (调整更偏红)
             
         };
         

@@ -32,7 +32,10 @@
 #define MODE_TIMEOUT_MS 120000 // 120s
 #define OTA7016_KEY_PRESS_TIME_MS 8000 // 8+2s
 static u32 init_time = 0;
+static bool c_7016_power_on = false;
 static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }   /* 控制 led : 上电 蓝色 */
+// static void set_led_7016_on(void)       { uart_send_set_led_color(COLOR_YELLOW); }   /* 控制 led : 7016上电 黄色 */
+static void set_led_ota(void)           { uart_send_set_led_color(COLOR_PURPLE); }
 
 int app_power_on_event_handler(struct application *app, struct sys_event *event)
 {
@@ -69,6 +72,7 @@ static int power_on_init(void)
     set_led_power_on();
 
     u16 voltage = get_vbat_level();
+    c_7016_power_on = 0;
     
     int charge_in = gpio_read(CHARGE_IN_IO);
     int charge_full = gpio_read(CHARGE_FULL_IO);
@@ -91,14 +95,23 @@ void power_on_loop()
 {
     uint8_t btnCurrState = gpio_read(KEY_IO_PORT);
     if (btnCurrState == 0) {
-        if (timer_get_ms() - init_time >= OTA7016_KEY_PRESS_TIME_MS) {
-            log_i("LONG PRESS OTA7016 KEY TO ENTER DEVICE CHECK MODE");
+        if (c_7016_power_on == false && timer_get_ms() - init_time >= OTA7016_KEY_PRESS_TIME_MS - 2000) {
+            c_7016_power_on = true;
             lwl_peri_dev_7016_on(true);  // 开启 7016
-            msleep(2000);           // 等待 7016 启动完成
-            uart_send_audio_dev_ota();
+            set_led_ota();
+        }
+        if (c_7016_power_on == true && timer_get_ms() - init_time >= OTA7016_KEY_PRESS_TIME_MS) {
+            log_i("LONG PRESS KEY TO DEVICE CHECK MODE");
             lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
         }
         g_sensor_reset_alive_timer();
+        return;
+    }
+    if (c_7016_power_on) {
+        log_i("RELEASE OTA7016 KEY TO ENTER DEVICE CHECK MODE");
+        msleep(2000);           // 等待 7016 启动完成
+        uart_send_audio_dev_ota();
+        lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
         return;
     }
     u16 voltage = get_vbat_level();
