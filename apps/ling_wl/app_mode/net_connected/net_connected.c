@@ -63,6 +63,7 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
 static int net_connected_init(void)
 {
     g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    ble_simple_client_module_enable(1);
     
     init_time = timer_get_ms();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();

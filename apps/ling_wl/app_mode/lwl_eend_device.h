@@ -108,6 +108,8 @@ typedef struct {
 
     distance_info_t distance_info;                //!< Distance information
 
+    s8 max_rssi;                                 //!< Maximum RSSI value observed
+
     /**
      * @brief Callback to match advertisement data
      * @param __this Pointer to the device instance

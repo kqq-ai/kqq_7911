@@ -55,6 +55,7 @@ void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
     dev->deadline = 0;
     dev->ctrl_mask_flags = BDPCTRL_TURNON_FLAG | BDPCTRL_PLAY_FLAG;
     dev->active_time = 0;
+    dev->max_rssi = -127;
 
     os_mutex_create(&dev->distance_info.mutex);
     dev->distance_info.distance = 5;

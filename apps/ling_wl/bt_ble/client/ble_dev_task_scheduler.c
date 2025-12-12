@@ -84,6 +84,8 @@ void bdo_set_ctrl(uint8_t code)
     uart_send_set_ctrl(ctrl_code);
 }
 
+int max_rssi = -127;
+
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
 {
     log_i("[BDO]Active start");
@@ -93,8 +95,16 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         log_i("[BDO]Error dev not found!");
         return;
     }
+    if (dev->max_rssi < max_rssi) {
+        log_i("[BDO]not the closest dev, ignore!");
+        dev->op_state &= ~BDO_STATE_ACTIVATING;
+        process_cb(op, BDOCode_Skip);
+        return;
+    }
+    max_rssi = -127;
     u32 timestamp_now = lwl_rtc_timer_get_sec();
     if (dev->adv_state == BDPAS_OFF && (dev->has_deadline && dev->deadline >= timestamp_now + 10)) {
+        log_i("[BDO]Device already active, skip!");
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
         return;
@@ -290,8 +300,9 @@ static void ble_disconn_event_handler(uint8_t *packet) {
     os_sem_post(&g_disconn_sem);
 }
 
-static void ble_dev_task_scheduler()
+void ble_dev_task_scheduler_init()
 {
+    log_i("ble_dev_task_scheduler_init");
     ASSERT(my_blocking_queue_init(&g_ble_dev_op_queue, sizeof(ble_dev_op_t), BLE_DEV_TASK_SCHEDULER_OP_QUEUE_CAPACITY) == 0);
     
     os_sem_create(&g_conn_sem, 0);
@@ -300,24 +311,40 @@ static void ble_dev_task_scheduler()
     os_sem_create(&g_e_disconnected_sem, 0);
     ble_conn_event_user_handler_add(ble_conn_event_handler, NULL);
     ble_disconn_event_user_handler_add(ble_disconn_event_handler, NULL);
+}
+
+int dev_task_is_running = 0;
+
+static void ble_dev_task_scheduler()
+{
 
     ble_dev_op_t op;
 
     log_i("ble_dev_task_scheduler");
 
-    while (true) {
+    dev_task_is_running = 1;
+
+    while (dev_task_is_running) {
         my_blocking_queue_dequeue(&g_ble_dev_op_queue, &op);
         ASSERT(op.op_type < g_op_handler_entries_count);
+        if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
+            max_rssi = -127;
+        }
 
         if (g_op_handler_entries[op.op_type] != NULL) {
             g_op_handler_entries[op.op_type](&op);
         }
     }
-    my_blocking_queue_destroy(&g_ble_dev_op_queue);
+    my_blocking_queue_clear(&g_ble_dev_op_queue);
 }
 
-void ble_dev_task_scheduler_init()
+void ble_dev_task_scheduler_start()
 {
+    if (dev_task_is_running) {
+        return;
+    }
+    max_rssi = -127;
+    log_i("ble_dev_task_scheduler_start");
     if (thread_fork("ble_dev_task_scheduler", 15, 512, 0, 0, ble_dev_task_scheduler, NULL)) {
         log_e("Error: Failed to create task ble_dev_task_scheduler.");
     }
@@ -325,7 +352,13 @@ void ble_dev_task_scheduler_init()
 
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
-    log_i("[MEASDIST]Active %s", dev->sn);
+    log_i("[MEASDIST]Active %s, %d", dev->sn, dev->max_rssi);
+    // 获取dev的最大rssi信号值
+    int rssi = dev->max_rssi;
+    if (max_rssi > dev->max_rssi) {
+        return -1;
+    }
+    
     if (dev->op_state & BDO_STATE_ACTIVATING)
         return 0;
     dev->op_state |= BDO_STATE_ACTIVATING;
@@ -359,7 +392,7 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
     log_i("[MEASDIST]bdo_turn_on %s(%s)", dev->sn, op.turnon.broadcast_code);
     op.cb = cb;
     op.cb_priv = priv;
-    return my_blocking_queue_try_enqueue(&g_ble_dev_op_queue, &op) == MYERROR_Success;
+    return my_blocking_queue_push_front(&g_ble_dev_op_queue, &op) == MYERROR_Success;
 }
 
 int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
@@ -376,5 +409,5 @@ int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void
     op.turnoff.scan_timeout = timeout;
     op.cb = cb;
     op.cb_priv = priv;
-    return my_blocking_queue_try_enqueue(&g_ble_dev_op_queue, &op) == MYERROR_Success;
+    return my_blocking_queue_push_front(&g_ble_dev_op_queue, &op) == MYERROR_Success;
 }
