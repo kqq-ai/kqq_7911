@@ -222,14 +222,9 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     } else {
         // mdelay(500);
     }
-    // log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
     memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
     bdo_set_ctrl(0x03);
     bdo_enable();
-    // uart_send_switch_audio_bc(op->turnon.broadcast_code, 0x01);
-
-    
-    dev->set_ctrl(dev, 1, 1);
 
 #if 0
     log_i("[BDO]Waiting adv state change...");
@@ -260,7 +255,7 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         return;
     }
     
-    dev->set_ctrl(dev, 0, 0);
+    bdo_set_ctrl(0x00);
 
     os_sem_set(&g_e_disconnected_sem, 0);
     ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);
@@ -270,10 +265,8 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         dev->op_state &= ~BDO_STATE_TURNNING_OFF;
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
-        // bdo_disable();
         return;
     }
-    // bdo_disable();
 
     log_i("[BDO]Turn off end");
     dev->op_state &= ~BDO_STATE_TURNNING_OFF;
@@ -376,7 +369,6 @@ int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_OFF;
     bdo_set_ctrl(0x00);
-    dev->set_ctrl(dev, 0, 0);
 
     ble_dev_op_t op;
     op.op_type = BDPDOT_TURNOFF;

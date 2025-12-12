@@ -235,7 +235,6 @@ static void app_cookie_main(void)
     context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
 
     ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
-    // bdo_disable();                                           // 关闭 BDO，避免默认蓝牙广播干扰
 
     /* 创建线程池 */
     pool = threadpool_create(4, 16);                        // 创建 4 个线程、队列深度 16 的线程池
