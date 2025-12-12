@@ -1,18 +1,23 @@
 #include "mode_list.h"
 
 #include "../../protocol/cp/c_uart_p.h"
+#include "../../LED/LED.h"
 
 // 使用系统预定义的颜色常量
-static void set_led_red(void)        { uart_send_set_led_color(COLOR_RED); }
-static void set_led_green(void)      { uart_send_set_led_color(COLOR_GREEN); }
-static void set_led_blue(void)       { uart_send_set_led_color(COLOR_BLUE); }
-static void set_led_cyan(void)       { uart_send_set_led_color(COLOR_CYAN); }
-static void set_led_white(void)      { uart_send_set_led_color(COLOR_WHITE); }
-static void set_led_black(void)      { uart_send_set_led_color(COLOR_BLACK); }
-static void set_led_yellow(void)     { uart_send_set_led_color(COLOR_YELLOW); }
+static void set_led_red(void)        { set_rgb_ON(COLORp_RED,1); }
+static void set_led_green(void)      { set_rgb_ON(COLORp_GREEN,2); }
+static void set_led_blue(void)       { set_rgb_ON(COLORp_BLUE,3); }
+static void set_rgb_OFF_1(void)      { set_rgb_OFF(1); }
+static void set_rgb_OFF_2(void)      { set_rgb_OFF(2); }
+static void set_rgb_OFF_3(void)      { set_rgb_OFF(3); }
+static void set_led_cyan(void)       { set_rgb_ON(COLORp_CYAN,3); }
+static void set_led_white(void)      { set_rgb_ON(COLORp_WHITE,3); }
+static void set_led_black(void)      { set_rgb_ON(COLOR_BLACK,3); }
+static void set_led_yellow(void)     { set_rgb_ON(COLORp_YELLOW,3); }
 static void set_led_orange(void)     { uart_send_set_led_color(COLOR_ORANGE); }
 static void set_led_pink(void)       { uart_send_set_led_color(COLOR_PINK); }
-static void set_led_purple(void)     { uart_send_set_led_color(COLOR_PURPLE); }
+static void set_led_purple(void)     { set_rgb_ON(COLORp_PURPLE,3); }
+
 static void set_led_dark_yellow(void){ uart_send_set_led_color(COLOR_DARK_YELLOW); }
 static void set_led_dark_blue(void)  { uart_send_set_led_color(COLOR_DARK_BLUE); }
 static void set_led_maroon(void)     { uart_send_set_led_color(COLOR_MAROON); }
@@ -53,6 +58,9 @@ void process_mode_2(void)
             set_led_red,           // 红色 
             set_led_green,         // 绿色 
             set_led_blue,          // 蓝色 
+            set_rgb_OFF_3,          // 关闭当前颜色
+            set_rgb_OFF_1,          // 关闭当前颜色
+            set_rgb_OFF_2,          // 关闭当前颜色
             set_led_purple,        // 紫色 
             set_led_yellow,        // 黄色
             set_led_cyan,          // 青色
@@ -62,7 +70,7 @@ void process_mode_2(void)
         
         // 对应的颜色名称
         const char *color_names[] = {
-            "RED", "GREEN", "BLUE", "PURPLE", "WHITE", "ORANGE"
+            "RED", "GREEN", "BLUE", "GREEN", "GREEN", "PURPLE", "WHITE", "ORANGE", "ORANGE", "GREEN", "BLUE"
         };
         
         int total_colors = sizeof(all_color_functions) / sizeof(all_color_functions[0]);

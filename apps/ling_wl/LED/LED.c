@@ -27,6 +27,11 @@ static u16 g_red___LED;     // 红色，0-10000，值越大越亮，外部进入
 static u16 g_green_LED;     // 绿色，0-10000，值越大越亮
 static u16 g_blue__LED;     // 蓝色，0-10000，值越大越亮
 
+static u16 g_priority_LED = 0; // 当前LED颜色优先级，初始为0
+u16 priority_RED[10] = {0};   // 红色优先级数组
+u16 priority_GREEN[10] = {0}; // 绿色优先级数组
+u16 priority_BLUE[10] = {0};  // 蓝色优先级数组
+
 static AWINLINE TSEC void timer_cfg(u32 freq, u32 us)
 {
     u32 clock = timer_clk;
@@ -136,7 +141,40 @@ static ___interrupt TSEC void timer_isr(void)//中断
     }
 }
 
-
+void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
+    //10个优先级，都存储下来，高优先级生效，直到同优先级set_rgb_OFF或者更高优先级覆盖
+    log_i("Event set_rgb_ON: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
+    if( priority < 10 ){
+        priority_RED[priority] = red;
+        priority_GREEN[priority] = green;
+        priority_BLUE[priority] = blue;
+    }
+    if( priority >= g_priority_LED ){
+        g_priority_LED = priority;
+        set_rgb_color(red, green, blue);
+    }
+}
+void set_rgb_OFF(u16 priority){
+    //关闭某个优先级的颜色显示，并且恢复到下一个最高优先级颜色显示
+    if( priority < 10 ){
+        priority_RED[priority] = 0;
+        priority_GREEN[priority] = 0;
+        priority_BLUE[priority] = 0;
+    }
+    if( priority == g_priority_LED ){
+         /// 如果是当前优先级，则降低优先级，直到0；其他优先级，仅清空颜色
+        if( priority > 0 ){
+            //如果当前优先级颜色已经被清空，则继续降低优先级，直到找到有颜色的优先级
+            while( g_priority_LED > 0 ){
+                if( priority_RED[g_priority_LED] + priority_GREEN[g_priority_LED] + priority_BLUE[g_priority_LED] > 0 ){
+                    break;
+                }
+                g_priority_LED --;
+            }
+        }
+        set_rgb_color(priority_RED[g_priority_LED], priority_GREEN[g_priority_LED], priority_BLUE[g_priority_LED]);
+    }
+}
 
 // 控制RGB颜色
 void set_rgb_color(u16 red, u16 green, u16 blue) {
