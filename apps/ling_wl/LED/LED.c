@@ -23,9 +23,9 @@ static u32 timer_clk = 0;
 
 #define TSEC SEC_USED(.volatile_ram_code) //当中断1ms一下，建议使用函数放在内部ram
 //#define TSEC
-static u16 g_red___LED;
-static u16 g_green_LED;
-static u16 g_blue__LED;
+static u16 g_red___LED;     // 红色，0-10000，值越大越亮，外部进入时，做了10000-处理
+static u16 g_green_LED;     // 绿色，0-10000，值越大越亮
+static u16 g_blue__LED;     // 蓝色，0-10000，值越大越亮
 
 static AWINLINE TSEC void timer_cfg(u32 freq, u32 us)
 {
@@ -100,6 +100,10 @@ static ___interrupt TSEC void timer_isr(void)//中断
             }else {
                 gpio_direction_output(LED_R_IO, 1);
             }
+            //判断是否只有红色
+            if( (g_green_LED <= 50) && (g_blue__LED <= 50) ){
+                ms_count = 0;
+            }
             break;
         case 2:
             gpio_direction_output(LED_R_IO, 1);
@@ -108,6 +112,10 @@ static ___interrupt TSEC void timer_isr(void)//中断
                 gpio_direction_output(LED_G_IO, 0);
             }else {
                 gpio_direction_output(LED_G_IO, 1);
+            }
+            //判断是否只有绿色
+            if( (g_red___LED <= 50) && (g_blue__LED <= 50) ){
+                ms_count = 1;
             }
             break;
         case 3:
@@ -118,6 +126,10 @@ static ___interrupt TSEC void timer_isr(void)//中断
                 gpio_direction_output(LED_B_IO, 0);
             }else {
                 gpio_direction_output(LED_B_IO, 1);
+            }
+            //判断是否只有蓝色
+            if( (g_red___LED <= 50) && (g_green_LED <= 50) ){
+                ms_count = 3;
             }
             break;
         }
@@ -156,11 +168,11 @@ void led_init(void)
     timer_clk = clk_get("timer");//先获取定时器的时钟源
     request_irq(timer_irq, 3, timer_isr, 0);//注册中断函数定和中断优先级
 #if 1
-    timer_set(1 * 1000); //初始化1ms进一次中断
+    timer_set(1 * 100); //初始化1ms进一次中断
 #else
     //timer_freq_set(10000);//设置10K频率进中断
 #endif
-    set_rgb_color(100, 100, 0); // 蓝色
+    set_rgb_color(10000, 10000, 0); // 黄色！这里，与外部定义不同
     // struct pwm_platform_data pwm = {0};
     // struct pwm_platform_data pwm1 = {0};
     // // 打开PWM设备
