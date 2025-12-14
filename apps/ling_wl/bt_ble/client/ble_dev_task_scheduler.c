@@ -23,7 +23,7 @@
 
 #define BLE_DISCONNECT_TIMEOUT 500 // TODO
 
-#define SET_PI_ADV_INTERVAL_MS 20 // unit: ms range: 20 ~ 1000
+#define SET_PI_ADV_INTERVAL_MS 30 // unit: ms range: 20 ~ 1000
 #define SET_PI_ADV_DURATION_S 600 // unit: s  range: 0 ~ 65535
 
 // 0000fff0-0000-1000-8000-00805f9b34fb
