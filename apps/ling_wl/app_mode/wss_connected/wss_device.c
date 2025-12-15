@@ -287,25 +287,18 @@ static void clear_edev_set()
 }
 
 /**
- * 清空E端设备集合
+ * 清理和更新集合中的设备信息(已持有互斥锁)
+ * 功能：刷新距离信息，移除无效设备(不再获取锁)
  */
-static void clear_edev_by_dis()
+static void refresh_and_clean_edev_set(void)
 {
-    os_mutex_pend(&edev_manager_mutex, 0);
-
     /* 第一步：刷新距离，移除无效设备(距离>3.5m或RSSI无效) */
     for (int i = 0; i < edev_set_count; i++) {
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(edev_set[i].sn);
         
         if (!pdev || pdev->distance_info.distance > 3.5f || 
             pdev->distance_info.rssi_sample_count == 0) {
-            
-            log_i("[get_edev] Remove invalid sn=%s (pdev=%p dist=%.2f rssi=%d)",
-                  edev_set[i].sn, pdev, 
-                  pdev ? pdev->distance_info.distance : -1,
-                  pdev ? pdev->distance_info.rssi_sample_count : 0);
-            
-            if (edev_last == edev_set[i].edev) {
+            if (edev_last == edev_set[i].edev && pdev->distance_info.rssi_sample_count == 0) {
                 edev_last = NULL;
             }
             
@@ -320,18 +313,18 @@ static void clear_edev_by_dis()
         edev_set[i].edev = pdev;
         edev_set[i].distance = pdev->distance_info.distance;
     }
-    os_mutex_post(&edev_manager_mutex);
 }
 
 /**
  * 从集合中获取距离最近的有效设备
- * 流程：刷新距离→移除无效设备→优化集合(保留2个)→返回最近设备
+ * 流程：刷新距离→移除无效设备→返回最近设备
  */
 static lwl_eend_dev_t* get_edev()
 {
     os_mutex_pend(&edev_manager_mutex, 0);
 
-    clear_edev_by_dis();
+    /* 第一步：刷新距离并清理无效设备(已持有锁) */
+    refresh_and_clean_edev_set();
 
     if (edev_set_count == 0) {
         os_mutex_post(&edev_manager_mutex);
@@ -347,9 +340,6 @@ static lwl_eend_dev_t* get_edev()
     }
 
     lwl_eend_dev_t *result_dev = edev_set[min_index].edev;
-    
-    log_i("[get_edev] Select nearest sn=%s dist=%0.2f cnt=%d",
-          edev_set[min_index].sn, edev_set[min_index].distance, edev_set_count);
     
     os_mutex_post(&edev_manager_mutex);
     return result_dev;
@@ -367,18 +357,15 @@ void update_edev_time(char* sn)
     }
 
     os_mutex_pend(&edev_manager_mutex, 0);
-
-    clear_edev_by_dis();
     
+    /* 查找并更新目标设备 */
+    refresh_and_clean_edev_set();
     int index = -1;
     for (int i = 0; i < edev_set_count; ++i) {
         if (strncmp(edev_set[i].sn, sn, SN_SIZE) == 0) {
             edev_set[i].last_get_time = g_curr_time;
             edev_last = edev_set[i].edev;
             index = i;
-            
-            log_i("[update_edev_time] Update sn=%s time=%u dist=%.2f",
-                  sn, g_curr_time, edev_set[i].distance);
             break;
         }
     }
@@ -427,11 +414,6 @@ static void device_event_handler_cb(lwl_event_t *e)
         log_i("[device_event_handler_cb] Skip sn=%s (no RSSI)", p_eend_dev->sn);
         return;
     }
-
-    log_i("[device_event_handler_cb] Event sn=%s type=%d dist=%.2f",
-          p_eend_dev->sn, p_eend_dev->distance_info.distance_type, 
-          p_eend_dev->distance_info.distance);
-
     os_mutex_pend(&edev_manager_mutex, 0);
     
     switch (p_eend_dev->distance_info.distance_type) {
@@ -536,12 +518,11 @@ lwl_eend_dev_t *wss_device_loop()
     }
 
     if (pdev->distance_info.distance >= 2.0f) {
-        log_i("[wss_device_loop] sn=%s dist=%.2f out of range",
-              pdev->sn, pdev->distance_info.distance);
         return NULL;
     }
 
-    log_i("[wss_device_loop] Trigger sn=%s dist=%.2f", pdev->sn, pdev->distance_info.distance);
+    int dist_int = (int)(pdev->distance_info.distance * 100);
+    log_i("[wss_device_loop] Trigger sn=%s dist=%d", pdev->sn, dist_int);
     
     wss_request_send_event(pdev->sn, ORMET_NEAR_TRIGGER);
     last_dequeue_time = g_curr_time;
@@ -568,8 +549,8 @@ lwl_eend_dev_t *wss_device_call()
         return NULL;
     }
 
-    log_i("[wss_device_call] Active trigger sn=%s dist=%.2f",
-          pdev->sn, pdev->distance_info.distance);
+    log_i("[wss_device_call] Active trigger sn=%s dist=%d",
+          pdev->sn, (int)(pdev->distance_info.distance * 100));
     
     wss_request_send_event(pdev->sn, ORMET_NEAR_TRIGGER);
     last_dequeue_time = g_curr_time;
@@ -579,7 +560,7 @@ lwl_eend_dev_t *wss_device_call()
 
 /**
  * 判断最近唤起的设备是否仍在通话范围内
- * 返回值：true=在范围内(距离<3.5m)，false=超出范围
+ * 返回值：true=在范围内(距离<2.5m)，false=超出范围
  */
 bool wss_device_is_calling()
 {
@@ -587,12 +568,12 @@ bool wss_device_is_calling()
         return false;
     }
 
-    bool in_range = edev_last->distance_info.distance < 3.5f;
+    bool in_range = edev_last->distance_info.distance < 2.5f;
     
     if (!in_range) {
+        int dist_int = (int)(edev_last->distance_info.distance * 100);
+        log_i("[wss_device_is_calling] Device out of range dist=%d", dist_int);
         edev_last = NULL;
-        log_i("[wss_device_is_calling] Device out of range dist=%.2f",
-              edev_last->distance_info.distance);
     }
 
     return in_range;
