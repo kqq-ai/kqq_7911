@@ -14,7 +14,6 @@
 #include <string.h>
 
 #include "lwip/stats.h" // 添加头文件
-#include "LED/LED.h"
 
 static OS_MUTEX g_wss_app_mutex;
 int play_voice_prompt = 0;
@@ -22,9 +21,6 @@ music_player *player;
 
 #undef log_i
 #define log_i log_mqtt
-static void set_led_on_touch(void)      { set_rgb_color(COLOR_YELLOW); }      //触摸按键时灯光变黄色
-static void set_led_on_normal_key(void) { set_rgb_color(COLOR_BLUE); }        //触摸按键时灯光变蓝色
-static void set_led_idle(void)          { set_rgb_color(COLOR_WHITE); }       //空闲时灯光变白色
 
 #define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 10分钟
 #define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 5分钟
@@ -108,7 +104,6 @@ static void wss_application_touch_key(bool press_down)
         wss_mic_stop();
         wss_asr_start();
         play_prompt_sound("t_key.mp3");
-        set_led_on_touch();
     } else {
         bool is_short_press = !is_recording_uploading(); //未上传音频，是短按
         wss_request_resume();
@@ -136,7 +131,6 @@ static void wss_application_touch_key(bool press_down)
             // wss_application_resume_mic();
             last_req_time = g_curr_time + 10000;
         }
-        set_led_idle();
     }
     os_mutex_post(&g_wss_app_mutex);
 }

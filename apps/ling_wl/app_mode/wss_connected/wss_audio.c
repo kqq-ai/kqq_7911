@@ -27,10 +27,13 @@
 static lwl_app_context_t *g_app_ctx = NULL;
 static OS_MUTEX g_audio_mutex;
 
-static void set_led_mic_on(void)        { set_rgb_color(COLOR_YELLOW); }  //麦克风开启时灯光变黄色
-static void set_led_asr_upload(void)    { set_rgb_color(COLOR_GREEN); }   //音频上传时灯光变绿色
-static void set_led_tts_play(void)      { set_rgb_color(COLOR_BLUE); }    //音频下载时灯光变蓝色
-static void set_led_idle(void)          { set_rgb_color(COLOR_WHITE); }   //闲置时灯光变白色
+
+static void set_led_mic_on(void)    { set_rgb_ON(COLOR_YELLOW,1); }
+static void set_led_mic_off(void)   { set_rgb_OFF(COLOR_YELLOW,1); }
+static void set_led_vad_on(void)    { set_rgb_ON(COLOR_GREEN,2); }
+static void set_led_vad_off(void)   { set_rgb_OFF(COLOR_GREEN,2); }
+static void set_led_tts_on(void)    { set_rgb_ON(COLOR_BLUE,3); }
+static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 
 /*=================================================================================================
  * Vad timer
@@ -382,7 +385,6 @@ static int wss_asr_data_to_server(AsrData *asr_data)
 static void start_audio_upload()
 {
     log_i("[AUDIO]Start audio upload.");
-    set_led_asr_upload(); /* 音频上传时灯光变绿色 */
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     g_recording_uploading = true;
@@ -444,10 +446,9 @@ void wait_vad_task(void *priv)
                     // break; // 防止发送失败时，关闭音频上传
                 }
                 start_audio_upload();
-                set_led_mic_on(); // 开启录音时灯光变橙色
             }
         }
-        set_led_idle();
+        set_led_mic_off();
         wss_app_recorder_data_upstream(NULL);
         if (!is_mic_on()) {
             log_i("[AUDIO]Stop VAD because wss_mic_stop.");
@@ -481,7 +482,6 @@ void wait_asr_task(void *priv)
     if (g_recording) {
         log_i("[AUDIO]ASR upload started\n");
         send_audio_status(OAST_STREAM_AUDIO, OASE_START);
-        set_led_asr_upload(); /* 音频上传时灯光变绿色 */
         wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
         g_recording_uploading = true;
     }
@@ -502,12 +502,12 @@ void wait_asr_task(void *priv)
         }
         msleep(10);
     }
+    set_led_mic_off();
 
     if (g_recording_uploading) {
         g_recording_uploading = false;
         send_audio_status(OAST_STREAM_AUDIO, OASE_END);
         wss_app_recorder_data_upstream(NULL);
-        set_led_idle();
     }
 }
 
@@ -520,7 +520,7 @@ void app_music_play_end_cb(void *priv)
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
-    set_led_idle(); /* 音频播放结束时灯光变白色 */
+    set_led_tts_off();
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -551,7 +551,7 @@ static int wss_audio_playback_start(void)
     /* 标记为播放中 */
     audio_req_time = get_time_stamp();
     g_audio_play_ongoing = true;
-    set_led_tts_play();
+    set_led_tts_on();
 
     if (g_prebuffer_pos == 0) {
         log_e("[AUDIO]no prebuffer data to play");
@@ -699,11 +699,13 @@ static void recorder_vad_cb(void* priv, int type)
     case 0: /* VAD speaker stop */
         if (g_recording_vad == true) {
             g_recording_vad = false;
+            set_led_vad_off();
         }
         break;
     case 1: /* VAD speaker start */
         if (g_recording_vad == false) {
             g_recording_vad = true;
+            set_led_vad_on();
         }
         break;
     }

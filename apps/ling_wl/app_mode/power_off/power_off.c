@@ -32,7 +32,8 @@
 #define KEY_PRESS_POWER_OFF_TIME_MS 4000 // 4s
 #define WAIT_FOR_POWER_OFF_TIME_MS 8000 // 8s
 static u32 init_time = 0;
-static void set_led_power_off(void)     { set_rgb_color(COLOR_RED); }   /* 控制 led : 关机 黑色 */
+static void set_led_power_off(void)     { set_rgb_color(COLOR_RED); }   /* 控制 led : 关机红色 */
+static void set_led_bye(void)           { set_rgb_ON(COLOR_BLACK, 20); }
 
 int led_off = 0;
 
@@ -73,9 +74,10 @@ void power_off_loop()
     uint8_t btnCurrState = gpio_read(KEY_IO_PORT);
     if (btnCurrState == 0) {
         if (timer_get_ms() - init_time >= KEY_PRESS_POWER_OFF_TIME_MS) {
-            // log_i("LONG PRESS POWER OFF KEY");
             if (!led_off) {
                 led_off = 1;
+                set_led_bye();
+                log_i("LONG PRESS POWER OFF KEY");
             }
         }
     } else if (!lwl_app_mode_playing()) {

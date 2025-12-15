@@ -42,9 +42,11 @@ void clear_key_press_time_ms(){
     ble_connected = false;
     key_press_time_ms = 0;
 }
-static void set_led_connect_error(void)     { set_rgb_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 蓝色 */
-static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
-static void set_led_confirm(void)        { set_rgb_color(COLOR_YELLOW); }  //确认配网后灯光变橙色
+
+static void set_led_connecting(void)        { set_rgb_color(COLOR_BLUE); }
+static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }
+static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_YELLOW,2); }
+static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_YELLOW,2); }
 
 int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
 {
@@ -92,6 +94,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
+    set_led_connecting();
     g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
@@ -119,7 +122,7 @@ static void handle_ble_connection_state()
 {
     /* BLE连接超时处理 */
     if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
-        set_led_connect_error();
+        set_led_confirm_off();
         key_press_time_ms = 0;
         ble_simple_server_name_enable(0);
         ble_connecting = false;
@@ -130,7 +133,7 @@ static void handle_ble_connection_state()
 
     /* BLE连接尝试 */
     if (!ble_connecting && key_press_time_ms > 0) {
-        set_led_confirm();
+        set_led_confirm_on();
         ble_connecting = true;
         ble_simple_server_name_enable(1);
         printf("try to connect ble\n");
@@ -172,7 +175,6 @@ void app_net_connecting_loop()
 
     if (!wifi_manager_state && is_connection_failed) {
         printf("Network connection is failed!\n");
-        set_led_connect_error();  // 设置连接错误LED状态
         
         ble_simple_server_name_enable(0);
         wifi_manager_state = true;

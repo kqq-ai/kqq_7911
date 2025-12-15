@@ -35,7 +35,7 @@
 #include "log/log_mqtt.h"
 #include "system/sys_time.h"
 
-static void set_led_red_low_power(void)        { set_rgb_color(COLOR_RED); } //red~ low power
+static void set_led_red_low_power(void)         { set_rgb_color(COLOR_RED); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 

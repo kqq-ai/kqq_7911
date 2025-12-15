@@ -40,8 +40,6 @@ static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
 static bool g_mode_script = 0;
 
-static void set_led_red_error(void)        { set_rgb_color(COLOR_RED); } //red~ low power
-
 /*=================================================================================================
  * Audio dec app context
  *=================================================================================================*/
@@ -309,7 +307,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     }
     if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
         send_message = ORMET_SWITCH_FAILED;
-        play_prompt_sound("SwFailed.mp3");
     }
     os_mutex_post(&g_request_mutex);
 }
@@ -388,10 +385,9 @@ bool wss_request_loop()
             wss_request_send_event_target(send_message);
             g_edev_target_sn[0] = 0;
             send_message = 0; // 重置发送消息标志
-            set_led_red_error();
+            play_prompt_sound("SwFailed.mp3");
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-            wss_request_stop();
-            set_led_red_error();
+            send_message = ORMET_SWITCH_FAILED;
         }
         break;
 
@@ -407,7 +403,7 @@ bool wss_request_loop()
             if ((g_curr_time & 7) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
             if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
                 wss_request_stop();
-                set_led_red_error();
+                play_prompt_sound("SwFailed.mp3");
             }
         } else {
             g_wss_last_time = g_curr_time;
