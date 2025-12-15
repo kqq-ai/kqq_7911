@@ -350,7 +350,7 @@ static void g_sensor_loop(uint32_t curr_time)
         // 按业务设置的超时通知一次并且避免重复
         if (elapsed_since_move >= g_gsensor_user_alive_timeout) {
             // 发送关机通知（仅发送一次）
-            log_i("G-Sensor: no movement, trigger sleep (elapsed %u ms)\n", elapsed_since_move);
+            log_i("❌ G-Sensor: no movement, trigger sleep (elapsed %u ms)\n", elapsed_since_move);
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_SLEEP;
             lwl_event_notify(&e);

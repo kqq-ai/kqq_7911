@@ -37,6 +37,11 @@ void * app_sc7a20_init(void)
 
     g_iic_hdl = iic_hdl;
 
+    if (iic_hdl == NULL) {
+        printf("app_sc7a20_init 陀螺仪 初始化 failed! Task not created.\n");
+        return NULL;
+    }
+
     os_task_create(app_sc7a20_task, NULL, 10, 1000, 0, "app_sc7a20_task");
 
     return g_iic_hdl;
