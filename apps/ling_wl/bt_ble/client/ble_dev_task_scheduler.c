@@ -1,3 +1,238 @@
+/**
+ * ============================================================================
+ * 文件: ble_dev_task_scheduler.c
+ * 功能: BLE 设备操作任务调度器
+ * 描述: 管理 BLE 设备的异步操作(激活、打开、关闭)，采用任务队列模型统一处理
+ * ============================================================================
+ *
+ * 【实现逻辑】
+ * ------
+ * 1. 任务队列模型:
+ *    - 使用阻塞队列(MyBlockingQueue)存储待执行的BLE操作
+ *    - 主任务线程(ble_dev_task_scheduler)循环从队列取出操作并执行
+ *    - 用户通过 bdo_active/bdo_turn_on/bdo_turn_off 接口异步提交操作
+ *
+ * 2. 操作类型(3种):
+ *    a) BDPDOT_ACTIVE   - 激活设备: 建立连接->发送激活数据->断连
+ *    b) BDPDOT_TURNON   - 打开设备: 建立连接->断连->启用广播
+ *    c) BDPDOT_TURNOFF  - 关闭设备: 禁用广播->扫描设备状态变化
+ *
+ * 3. 事件驱动同步机制:
+ *    - 使用信号量(OS_SEM)实现BLE事件与操作的同步
+ *    - g_conn_sem: BLE连接完成信号
+ *    - g_disconn_sem: BLE断连完成信号
+ *    - g_e_connected_sem: 端点设备连接(广播状态)信号
+ *    - g_e_disconnected_sem: 端点设备断连(off状态)信号
+ *
+ * 4. 回调机制:
+ *    - 每个操作关联一个回调函数(cb)和私有数据(cb_priv)
+ *    - 操作完成或出错时调用回调，传递结果码(BDOCode_*)
+ *
+ * 【外部接口说明】
+ * ------
+ *
+ * 【BLE 基础接口】(来源: btstack/le/ble_api.h, ble_simple_client.h)
+ * -------
+ * int ble_simple_client_create_connection(const uint8_t *addr, uint8_t addr_type)
+ *     功能: 建立BLE连接
+ *     参数: addr - 目标设备地址(6字节)
+ *           addr_type - 地址类型(公有/随机)
+ *     返回: APP_BLE_OPERATION_SUCCESS / APP_BLE_OPERATION_ERROR
+ *     说明: 异步操作，完成时触发 ble_conn_event_handler
+ *
+ * int ble_simple_client_disconnect(void)
+ *     功能: 断开BLE连接
+ *     返回: APP_BLE_OPERATION_SUCCESS / APP_BLE_OPERATION_ERROR
+ *     说明: 异步操作，完成时触发 ble_disconn_event_handler
+ *
+ * int ble_simple_client_create_cannel(void)
+ *     功能: 取消BLE连接操作(在连接超时时使用)
+ *     返回: 操作状态
+ *
+ * int ble_simple_client_write_without_respond_send(void *param, uint16_t handle,
+ *                                                   uint8_t *data, uint16_t len)
+ *     功能: 发送BLE特征值写入请求(无需响应)
+ *     参数: handle - GATT特征值句柄(本文件固定为write_handle=0x18)
+ *           data - 待发送数据
+ *           len - 数据长度
+ *     返回: BLE_BUFFER_FULL / 其他
+ *
+ * int ble_simple_client_scan_enable(uint8_t enable, uint16_t interval, uint16_t window)
+ *     功能: 启用/禁用BLE扫描
+ *     参数: enable - 1启用, 0禁用
+ *           interval - 扫描间隔(单位: 0.625ms)
+ *           window - 扫描窗口(单位: 0.625ms)
+ *
+ * void ble_conn_event_user_handler_add(ble_callback_t handler, void *param)
+ *     功能: 注册BLE连接事件处理器
+ *     参数: handler - 事件回调函数指针
+ *           param - 回调私有数据(可为NULL)
+ *
+ * void ble_disconn_event_user_handler_add(ble_callback_t handler, void *param)
+ *     功能: 注册BLE断连事件处理器
+ *
+ * 【GATT 配置信息】
+ * -------
+ * UUID_SERVER (uuid_server): 0000fff0-0000-1000-8000-00805f9b34fb
+ *     BLE服务UUID，用于发现目标设备
+ *
+ * UUID_CHAR_TX (uuid_char_tx): 0000fff3-0000-1000-8000-00805f9b34fb
+ *     特征值UUID - TX(接收)特征
+ *
+ * UUID_CHAR_RX (uuid_char_rx): 0000fff4-0000-1000-8000-00805f9b34fb
+ *     特征值UUID - RX(发送)特征
+ *
+ * GATT Handles (固定):
+ *     - notify_handle (0x1A): 通知特征句柄
+ *     - write_handle (0x18): 写入特征句柄
+ *
+ * 【设备管理接口】(来源: app_mode/lwl_eend_device.h)
+ * -------
+ * lwl_eend_dev_t *find_eend_dev_by_sn(const char *sn)
+ *     功能: 通过序列号查找端点设备
+ *     参数: sn - 设备序列号(16字节)
+ *     返回: 设备结构体指针，未找到返回NULL
+ *
+ * 【系统接口】
+ * -------
+ * u32 lwl_rtc_timer_get_sec(void)
+ *     功能: 获取当前RTC时间戳(秒)
+ *     返回: 当前时间戳
+ *
+ * void mdelay(u32 ms)
+ *     功能: 阻塞延迟
+ *     参数: ms - 延迟毫秒数
+ *
+ * int thread_fork(const char *name, uint8_t priority, uint16_t stack_size,
+ *                 uint32_t flag, uint32_t timeout, void (*func)(void *),
+ *                 void *priv)
+ *     功能: 创建新线程(来源: task.h)
+ *     参数: name - 线程名称
+ *           priority - 线程优先级(0-31, 数字越小优先级越高)
+ *           stack_size - 堆栈大小(字节)
+ *           flag - 线程标志
+ *           timeout - 超时时间
+ *           func - 线程入口函数
+ *           priv - 入口函数私有参数
+ *     返回: 0成功, 非0失败
+ *
+ * 【信号量接口】(来源: OS层)
+ * -------
+ * int os_sem_create(OS_SEM *sem, u32 value)
+ *     功能: 创建信号量
+ *     参数: value - 初始计数值
+ *
+ * int os_sem_set(OS_SEM *sem, u32 value)
+ *     功能: 设置信号量值
+ *
+ * int os_sem_post(OS_SEM *sem)
+ *     功能: 信号量加1(释放)
+ *
+ * int os_sem_pend(OS_SEM *sem, u32 timeout)
+ *     功能: 等待信号量(阻塞直到非0)
+ *     参数: timeout - 等待超时时间(单位: 10ms)
+ *     返回: 0成功, OS_TIMEOUT超时
+ *     说明: timeout = MS2TICK(ms) = (ms)/10
+ *
+ * 【队列接口】(来源: util/cqueue.h)
+ * -------
+ * int my_blocking_queue_init(MyBlockingQueue *queue, size_t elem_size, size_t capacity)
+ *     功能: 初始化阻塞队列
+ *     参数: elem_size - 元素大小(这里为 sizeof(ble_dev_op_t))
+ *           capacity - 队列容量(BLE_DEV_TASK_SCHEDULER_OP_QUEUE_CAPACITY=100)
+ *
+ * int my_blocking_queue_enqueue(MyBlockingQueue *queue, const void *elem)
+ *     功能: 入队(阻塞式)
+ *
+ * int my_blocking_queue_try_enqueue(MyBlockingQueue *queue, const void *elem)
+ *     功能: 尝试入队(非阻塞)
+ *     返回: MYERROR_Success成功, 其他值失败或队列满
+ *
+ * int my_blocking_queue_dequeue(MyBlockingQueue *queue, void *elem)
+ *     功能: 出队(阻塞式，队列为空时等待)
+ *
+ * int my_blocking_queue_destroy(MyBlockingQueue *queue)
+ *     功能: 销毁队列
+ *
+ * 【UART通信接口】(来源: protocol/cp/c_uart_p.h)
+ * -------
+ * void uart_send_switch_audio_bc(const uint8_t *broadcast_code, uint8_t flag)
+ *     功能: 发送音频广播切换命令
+ *     参数: broadcast_code - 广播代码(6字节)
+ *           flag - 标志位(0x01)
+ *     说明: 用于启用/禁用BDO音频广播功能
+ *
+ * void uart_send_set_ctrl(uint8_t ctrl_code)
+ *     功能: 发送BDO控制码
+ *     参数: ctrl_code - 控制码(0x00=禁用, 0x03=启用)
+ *     说明: 用于控制端点设备的BDO功能状态
+ *
+ * 【日志接口】(来源: log.h)
+ * -------
+ * void log_i(const char *fmt, ...)
+ *     功能: 打印信息级别日志
+ *
+ * void log_e(const char *fmt, ...)
+ *     功能: 打印错误级别日志
+ *
+ * void log_i_buf(const uint8_t *buf, uint16_t len)
+ *     功能: 打印二进制数据缓冲区(十六进制格式)
+ *
+ * 【公开接口】(供外部调用)
+ * -------
+ * void ble_dev_task_scheduler_init(void)
+ *     功能: 初始化BLE设备任务调度器
+ *     说明: 启动调度器线程，应在应用初始化时调用一次
+ *
+ * int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
+ *     功能: 异步激活BLE设备
+ *     参数: dev - 目标设备指针
+ *           timeout - BLE连接超时(毫秒)
+ *           cb - 完成回调函数(可为NULL)
+ *           priv - 回调私有数据
+ *     返回: 1成功加入队列, 0操作已在进行或队列满
+ *     说明: 检查设备是否有截止时间，满足条件则建立连接->发送激活数据->断连
+ *
+ * int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout,
+ *                  ble_dev_op_cb_func_t cb, void *priv)
+ *     功能: 异步打开(启用)BLE设备
+ *     参数: dev - 目标设备指针
+ *           conn_timeout - BLE连接超时(毫秒)
+ *           scan_timeout - 广播扫描超时(毫秒)
+ *           cb - 完成回调函数
+ *           priv - 回调私有数据
+ *     返回: 1成功加入队列, 0操作已在进行
+ *     说明: 如果设备处于OFF状态则建立连接，然后启用音频广播功能
+ *
+ * int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
+ *     功能: 异步关闭(禁用)BLE设备
+ *     参数: dev - 目标设备指针
+ *           timeout - 广播扫描超时(毫秒)
+ *           cb - 完成回调函数
+ *           priv - 回调私有数据
+ *     返回: 1成功加入队列, 0操作已在进行
+ *     说明: 禁用音频广播，等待设备进入OFF状态
+ *
+ * void bdo_enable(void)
+ *     功能: 启用BDO(Broadcast Device Operation)功能
+ *     说明: 向UART发送启用命令和当前广播码
+ *
+ * void bdo_disable(void)
+ *     功能: 禁用BDO功能
+ *     说明: 向UART发送禁用命令(使用全0广播码)
+ *
+ * void bdo_set_ctrl(uint8_t code)
+ *     功能: 设置BDO控制码
+ *     参数: code - 控制码值(0x00/0x03)
+ *
+ * void notify_e_conncted(void)
+ *     功能: 通知端点设备已连接/启用(供外部事件回调调用)
+ *
+ * void notify_e_disconncted(void)
+ *     功能: 通知端点设备已断连/禁用(供外部事件回调调用)
+ *
+ * ============================================================================
+ */
 #include "ble_dev_task_scheduler.h"
 
 #include "app_mode/lwl_app_core.h"
@@ -94,6 +329,15 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     if (!dev) {
         log_i("[BDO]Error dev not found!");
         return;
+    }
+    for (int i=0;i<10;i++) {
+        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
+            log_i("[BDO]There are other pending tasks, skip this activation!");
+            dev->op_state &= ~BDO_STATE_ACTIVATING;
+            process_cb(op, BDOCode_Skip);
+            return;
+        }
+        mdelay(50);
     }
     if (dev->max_rssi < max_rssi) {
         log_i("[BDO]not the closest dev, ignore!");
@@ -325,11 +569,11 @@ static void ble_dev_task_scheduler()
     dev_task_is_running = 1;
 
     while (dev_task_is_running) {
-        my_blocking_queue_dequeue(&g_ble_dev_op_queue, &op);
-        ASSERT(op.op_type < g_op_handler_entries_count);
         if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
             max_rssi = -127;
         }
+        my_blocking_queue_dequeue(&g_ble_dev_op_queue, &op);
+        ASSERT(op.op_type < g_op_handler_entries_count);
 
         if (g_op_handler_entries[op.op_type] != NULL) {
             g_op_handler_entries[op.op_type](&op);
