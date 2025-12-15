@@ -559,6 +559,8 @@ static void scan_adv_process_task(void *priv)
         dev->address_type = adv_data.address_type;    // 其他任务会读，可能存在安全问题，也可能没问题
         memcpy(dev->address, adv_data.address, 6);    // 其他任务会读，可能存在安全问题，也可能没问题
 
+        dev->max_rssi = (rssi > dev->max_rssi) ? rssi : dev->max_rssi;
+
         if (dev->has_deadline)
         {
             dev->deadline = buffer[19] | (buffer[20] << 8) | (buffer[21] << 16) | (buffer[22] << 24);
@@ -668,7 +670,7 @@ static void scan_adv_process_task(void *priv)
         // 激活的前提条件：1. 广播状态为 OFF, 2. 当前没有正在进行的激活/开机/关机任务, 3. 距离最近一次激活时间超过3秒(防止短时间内重复激活)
         if (dev->adv_state == BDPAS_OFF && dev->op_state == BDO_STATE_IDLE && ((timer_get_ms() - dev->active_time) > 1000)) {
             if (dev->deadline < (timestamp_now + 10)) log_i("[MEASDIST]bdo_active: %s %d deadline = %d\n", sn, rssi, dev->deadline);
-            if (!dev->has_deadline && rssi > -80) {
+            if (!dev->has_deadline && dev->max_rssi > -80) {
                 // 如果广播是未激活的广播，则尝试进行激活
                 bdo_active(dev, 1100, active_op_callback, dev);
             } else if (dev->has_deadline && dev->deadline < (timestamp_now + 10)) {
