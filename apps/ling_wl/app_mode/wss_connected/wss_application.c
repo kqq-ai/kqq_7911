@@ -157,7 +157,15 @@ static void input_event_handler_cb(lwl_event_t *e)
         } else {
             multi_play_mode = !multi_play_mode;
             g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-            wss_application_resume_mic();
+            if (!wss_request_is_playing()) {
+                if (multi_play_mode) {
+                    play_prompt_sound("1to2.mp3");
+                } else {
+                    play_prompt_sound("1to1.mp3");
+                }
+            } else {
+                wss_application_resume_mic();
+            }
         }
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:

@@ -248,8 +248,22 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 
 void wss_request_pause()
 {
+    log_i("[wss_request]Stop WSS pause\n");
+    os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
-    wss_request_stop(); // 停止当前对话
+
+    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND) {
+        wss_ble_audio_stop();
+        wss_request_send_event_target(ORMET_PLAY_STOP);
+        turn_off_Pi();
+    }
+
+    // 重置状态到IDLE
+    wss_request_update_state(STATE_IDLE, "wss_request_pause");
+    last_message_type = 0;
+    last_event = 0;
+    g_mode_script = false;
+    os_mutex_post(&g_request_mutex);
 }
 
 void wss_request_resume()
@@ -295,6 +309,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     }
     if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
         send_message = ORMET_SWITCH_FAILED;
+        play_prompt_sound("SwFailed.mp3");
     }
     os_mutex_post(&g_request_mutex);
 }
