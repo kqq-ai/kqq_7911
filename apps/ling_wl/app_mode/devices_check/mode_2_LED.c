@@ -46,7 +46,13 @@ void mode2_init()
 
 void mode2_uninit()
 {
-
+    set_led_off_red();
+    set_led_off_green();
+    set_led_off_blue();
+    set_led_off_cyan();
+    set_led_off_yellow();
+    set_led_off_purple();
+    set_led_green();
 }
 
 // 模式2处理函数：所有颜色循环闪烁

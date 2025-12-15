@@ -10,6 +10,11 @@
 #include "lwl_peri_dev.h"
 #include "app_mode/lwl_app_core.h"
 
+static void set_led_touch_on(void)   { set_rgb_ON(COLOR_PURPLE,10); }
+static void set_led_touch_off(void)  { set_rgb_OFF(COLOR_PURPLE,10); }
+static void set_led_normal_key_on(void)   { set_rgb_ON(COLOR_RED,11); }
+static void set_led_normal_key_off(void)  { set_rgb_OFF(COLOR_RED,11); }
+
 static uint32_t g_key_scan_timer = 0;
 static uint8_t  g_key_scan_ongoing = 0;
 static uint8_t  g_key_action_start = 0;
@@ -199,8 +204,10 @@ static void key_scan_loop(uint32_t current_time_ms)
         if (hasFlip) {
             if (btnCurrState == 0) {
                 // on_key_down();
+                set_led_normal_key_on();
             } else {
                 // on_key_up();
+                set_led_normal_key_off();
             }  
         }
         
@@ -497,6 +504,7 @@ void touch_key_loop(uint32_t curr_time)
         /* 如果上一帧为0，下一帧为1，表示触发touch_key按下 */
         if (g_touch_key_event_active_priv == 0 && g_touch_key_event_active == 1) {
             log_i("Touch key release!");
+            set_led_touch_off();
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_TOUCH_KEY;
             e.touch_key_cmd.touch_key_event_type = 0x01;
@@ -505,6 +513,7 @@ void touch_key_loop(uint32_t curr_time)
         else if (g_touch_key_event_active_priv == 1 && g_touch_key_event_active == 0)
         {
             log_i("Touch key press!");
+            set_led_touch_on();
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_TOUCH_KEY;
             e.touch_key_cmd.touch_key_event_type = 0x00;

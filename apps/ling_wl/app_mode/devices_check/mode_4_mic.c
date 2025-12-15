@@ -6,8 +6,10 @@
 #include "../../SC7A20/app_sc7a20_task.h"  // SC7A20任务头文件
 #include "../../LED/LED.h"
 
-static void set_led_red(void)        { set_rgb_color(COLOR_RED); }
-static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_mic_on(void)    { set_rgb_ON(COLOR_YELLOW,1); }
+static void set_led_mic_off(void)   { set_rgb_OFF(COLOR_YELLOW,1); }
+static void set_led_vad_on(void)    { set_rgb_ON(COLOR_GREEN,2); }
+static void set_led_vad_off(void)   { set_rgb_OFF(COLOR_GREEN,2); }
 
 // 模式4 VAD相关变量
 static int g_vad_state = 0;          // 当前VAD状态 (0=无语音, 1=有语音)
@@ -67,7 +69,7 @@ static void mode4_vad_callback(void* priv, int type)
         }
         
         // 检测到语音时设置红灯
-        set_led_red();
+        set_led_vad_on();
         log_i("MODE 4: Voice detected - LED set to RED");
         
     } else {
@@ -82,7 +84,7 @@ static void mode4_vad_callback(void* priv, int type)
         }
         
         // 语音结束时恢复绿灯
-        set_led_green();
+        set_led_vad_off();
         log_i("MODE 4: Voice ended - LED set to GREEN");
         
         // 如果语音持续时间超过1秒，可以触发某些动作
@@ -114,6 +116,7 @@ static int mode4_vad_init(void)
     
     // 启动录音器以启用VAD功能
     ret = recorder_start(context->recorder);
+    set_led_mic_on();
     if (ret != 0) {
         log_e("[MODE 4 VAD] Failed to start recorder: %d", ret);
         return -1;
@@ -141,6 +144,7 @@ static void mode4_vad_uninit(void)
     if (context && context->recorder) {
         // 停止录音器
         recorder_stop(context->recorder);
+        set_led_mic_off();
         // 清除VAD回调
         recorder_set_vad_cbk(context->recorder, NULL, NULL);
         log_i("[MODE 4 VAD] VAD functionality stopped - recorder stopped and callback cleared");

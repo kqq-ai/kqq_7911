@@ -178,7 +178,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             break;
         case WORK_MODE_8:
-            next_mode = WORK_MODE_9;
+            next_mode = WORK_MODE_INIT;
             break;
         case WORK_MODE_9:
         default:

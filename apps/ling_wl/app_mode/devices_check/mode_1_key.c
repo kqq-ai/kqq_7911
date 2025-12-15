@@ -3,9 +3,6 @@
 #include "log.h"
 #include "../../LED/LED.h"
 
-static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
-static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
-
 // 模式1 触摸按键检测相关变量
 static u8 g_mode1_touch_enabled = 0;    // 模式1 触摸检测是否已启用
 static u32 g_mode1_touch_start_time = 0; // 触摸开始时间（保留兼容性）
@@ -31,8 +28,6 @@ void process_mode_1_touch_key(u8 touch_key_event_type)
 {
     if (g_mode1_touch_enabled) {
         if (touch_key_event_type == 0) {
-            // 按键按下事件：设置蓝灯
-            set_led_blue();
             g_mode1_touch_active = 1;
             log_i("MODE 1: Touch key pressed - LED set to BLUE");
             log_i("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
@@ -56,8 +51,6 @@ void process_mode_1_touch_key(u8 touch_key_event_type)
                 }
             }
         } else if (touch_key_event_type == 1 && g_mode1_touch_active) {
-            // 按键释放事件：恢复绿灯
-            set_led_green();
             g_mode1_touch_active = 0;
             log_i("MODE 1: Touch key released - LED restored to GREEN");
             log_i("------------------------------------------------------------------------");
@@ -94,7 +87,6 @@ void mode1_audio_callback(void *priv)
     // 提示音播放完成，启用触摸按键检测功能
     g_mode1_touch_enabled = 1;
     g_mode1_touch_active = 0;
-    set_led_green();  // 确保LED为绿色
     log_i("MODE 1: Touch key monitoring enabled successfully");
 }
 

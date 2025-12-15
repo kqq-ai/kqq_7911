@@ -48,8 +48,8 @@ static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
 // 1：有动作在执行（如连接、播放等），防止重复或并发操作
 // 0：无动作，允许推进新流程
 static u8 g_mode6_action_in_progress = 0;
-static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
-static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
+static void set_led_tts_on(void)    { set_rgb_ON(COLOR_BLUE,3); }
+static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 
 // ========== 模式6回调函数声明 ===========
 static void mode6_e_connect_cb(bdo_code_e code, void *priv)
@@ -99,7 +99,7 @@ void mode6_audio_callback(void *priv)
         log_i("MODE 6: Audio callback ignored - not in mode 6 (current mode: %d)", get_current_mode());
         return;
     }
-    set_led_green();
+    set_led_tts_off();
     
     gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
 
@@ -180,7 +180,7 @@ void process_mode_6(void)
             CONFIG_CP_VOICE_FILE_PATH"test_dev2.mp3", 
             mode6_audio_callback, NULL);
         }
-        set_led_blue();
+        set_led_tts_on();
         
             
         if (err == 0) {

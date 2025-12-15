@@ -36,8 +36,6 @@
 #include "system/sys_time.h"
 
 static void set_led_red_low_power(void)        { set_rgb_color(COLOR_RED); } //red~ low power
-static void set_led_power_off(void)      { set_rgb_color(COLOR_BLACK); } /// off LED before power Off
-static void set_led_power_on(void)      { set_rgb_color(COLOR_BLUE); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -123,6 +121,9 @@ void base_lwl_event_handler(lwl_event_t *e)
     case LWL_EVENT_TYPE_LOW_BATTERY:
         u16 voltage = get_vbat_level();
         log_i("LOW BATTERY EVENT voltage : %d\n", voltage);
+        if (voltage < LOW_BATT_VOLT) {
+            set_led_red_low_power();
+        }
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         log_i("PRESS RESET KEY\n");
@@ -442,7 +443,6 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("[NET] NET_EVENT_CONNECTED (arg=%s)", event->arg);
-            //set_led_white();; /// Net Succ
             // 播放联网成功提示音
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
