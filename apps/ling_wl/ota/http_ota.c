@@ -335,8 +335,10 @@ int compare_versions(const char* ver1, const char* ver2) {
     }
     
     // 逐级比较版本号
-    if (major1 > major2) return 1;
-    if (major1 < major2) return -1;
+    // if (major1 > major2) return 1;
+    // if (major1 < major2) return -1;
+    // 大版本标识硬件，必须一致
+    if (major1 != major2) return -1;
     
     if (minor1 > minor2) return 1;
     if (minor1 < minor2) return -1;
