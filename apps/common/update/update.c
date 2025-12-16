@@ -464,6 +464,10 @@ static void update_common_state_cbk(update_mode_info_t *info, u32 state, void *p
 
 static int app_update_init(void)
 {
+#if defined(CONFIG_BOOT_OPUS_ONLY)
+    // Boot opus only: do not init update module / any network update paths.
+    return 0;
+#endif
     update_module_init(update_common_state_cbk);
     /* testbox_update_init(); */
     return 0;

@@ -694,4 +694,6 @@ static int creat_scan_adv_process_task(void)
     return 0;
 }
 
+#if !defined(CONFIG_BOOT_OPUS_ONLY)
 late_initcall(creat_task_distance);
+#endif

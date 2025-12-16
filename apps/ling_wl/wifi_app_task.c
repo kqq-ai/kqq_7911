@@ -418,4 +418,7 @@ static int wireless_net_init(void) // 主要是create wifi 线程的
     wifi_app_task(NULL);
     puts("wireless_net_init end \n\n");
 } 
+
+#if !defined(CONFIG_BOOT_OPUS_ONLY)
 late_initcall(wireless_net_init);
+#endif

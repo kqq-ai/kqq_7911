@@ -5,6 +5,9 @@
 #define TEST_LOCOL_SERVER
 ```
 
+版本号:
+LOCAL_VERSION_CODE
+
 
 ## 烧录流程
 

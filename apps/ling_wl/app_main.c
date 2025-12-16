@@ -10,6 +10,22 @@
 #include "event/net_event.h"
 #include "wifi/wifi_connect.h"
 #include "app_cookie.h"
+#include "asm/cpu.h"
+#include "asm/wdt.h"
+
+/*
+ * Fix for frequent "axi_rd_inv" exceptions on CPU1:
+ * - Exception analyzer maps DEBUG_MSG bit4 (0x10) to "axi_rd_inv" (see cpu/wl82/debug.c).
+ * - The crash backtrace resolves to FreeRTOS idle hook calling wdt_clear() on CPU1.
+ * - On this platform, CPU1 reading WDT registers can trigger AXI invalid read.
+ * Therefore only clear WDT from CPU0 in the idle hook.
+ */
+void vApplicationIdleHook(void)
+{
+    if (current_cpu_id() == 0) {
+        wdt_clear();
+    }
+}
 
 
 /*中断列表 */
@@ -70,12 +86,14 @@ const struct task_info task_info_table[] = {
     {"sys_event",           29,     SYS_EVENT_STK_SIZE,	   0, 					 sys_event_tcb_stk_q },
     {"systimer",            14,     SYSTIMER_STK_SIZE, 	   0,					 systimer_tcb_stk_q },
     {"sys_timer",            9,     SYS_TIMER_STK_SIZE,	  SYS_TIMER_Q_SIZE,		 sys_timer_tcb_stk_q },
-    {"audio_server",        16,      512,   64    },
-    {"audio_mix",           28,      512,   0     },
+    {"audio_server",        16,     4096,   64    },
+    {"audio_mix",           28,     1024,   0     },
     {"audio_encoder",       12,      384,   64    },
     {"speex_encoder",       13,      512,   0     },
     {"mp3_encoder",         13,      768,   0     },
-    {"opus_encoder",        13,     1536,   0     },
+    {"opus_encoder",        13,     8192,   0     },
+    {"opus_decoder",        13,     8192,   0     },
+    {"opus",                13,     8192,   0     },
     {"vir_dev_task",        14,      256,   0     },
     {"amr_encoder",         13,     1024,   0     },
     {"cvsd_encoder",        13,      512,   0     },
@@ -199,7 +217,7 @@ void app_main()
     it.action = ACTION_COOKIE_MAIN;
     start_app(&it);  // See: app_cookie.c:548-553 
 
-#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
+#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1 && !defined(CONFIG_BOOT_OPUS_ONLY)
     extern void bt_ble_module_init(void);
     bt_ble_module_init();
 #endif

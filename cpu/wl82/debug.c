@@ -388,6 +388,38 @@ void exception_analyze(int *sp)
                __func__, corex2(0)->DBG_MSG, q32DSP(1)->EMU_MSG, corex2(0)->C1_CON);
     }
 
+    /* Print both CPUs' EMU_MSG and stack limits (helps distinguish CPU0 vs CPU1 stack/emu faults). */
+    printf("DBG_MSG=0x%x, EMU_MSG0=0x%x, EMU_MSG1=0x%x\r\n",
+           corex2(0)->DBG_MSG, q32DSP(0)->EMU_MSG, q32DSP(1)->EMU_MSG);
+    printf("CPU0 usp limit %x..%x, ssp limit %x..%x\r\n",
+           q32DSP(0)->EMU_USP_L, q32DSP(0)->EMU_USP_H, q32DSP(0)->EMU_SSP_L, q32DSP(0)->EMU_SSP_H);
+    printf("CPU1 usp limit %x..%x, ssp limit %x..%x\r\n",
+           q32DSP(1)->EMU_USP_L, q32DSP(1)->EMU_USP_H, q32DSP(1)->EMU_SSP_L, q32DSP(1)->EMU_SSP_H);
+
+    /*
+     * When the fault is reported as AXI invalid read, CPU0 is often the master.
+     * Print CPU0 register snapshot from HW debug registers to help locate which pointer became invalid.
+     * (DR00..DR15 map to r0..r15 for the faulting CPU core.)
+     */
+    printf("CPU0 SNAP: RETI=0x%x RETS=0x%x USP=0x%x SSP=0x%x SP=0x%x PCRS=0x%x\r\n",
+           q32DSP(0)->RETI, q32DSP(0)->RETS, q32DSP(0)->USP, q32DSP(0)->SSP, q32DSP(0)->SP, q32DSP(0)->PCRS);
+    printf("CPU0 SNAP: R0=0x%x R1=0x%x R2=0x%x R3=0x%x R12=0x%x R13=0x%x R14=0x%x R15=0x%x\r\n",
+           q32DSP(0)->DR00, q32DSP(0)->DR01, q32DSP(0)->DR02, q32DSP(0)->DR03,
+           q32DSP(0)->DR12, q32DSP(0)->DR13, q32DSP(0)->DR14, q32DSP(0)->DR15);
+
+    /*
+     * Print the AXI/MMU related IDs as early as possible.
+     * When the UART output is truncated (reset/timeout), this line helps identify
+     * which master triggered the fault (CPU0/CPU1/others) for DEBUG_MSG=0x10 (axi_rd_inv).
+     */
+    printf("%s AXI_WR_INV_ID : 0x%x, AXI_RD_INV_ID : 0x%x, PRP_WR_LIMIT_ID : 0x%x, PRP_MMU_ERR_RID : 0x%x, PRP_MMU_ERR_WID : 0x%x\r\n",
+           corex2(0)->AXI_RD_INV_ID == 0X100 ? "CPU0/MASTER" : "CPU1/MASTER",
+           corex2(0)->AXI_WR_INV_ID,
+           corex2(0)->AXI_RD_INV_ID,
+           corex2(0)->PRP_WR_LIMIT_ID,
+           corex2(0)->PRP_MMU_ERR_RID,
+           corex2(0)->PRP_MMU_ERR_WID);
+
 #ifdef CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH
     len += snprintf(exception_log_buf + len, sizeof(exception_log_buf) - len, "CPU%d run addr = 0x%x\r\ncpu %d DEBUG_MSG = 0x%x, EMU_MSG = 0x%x C%d_CON=%x\r\n",
                     !cpu_id, q32DSP(!cpu_id)->PCRS, cpu_id, corex2(0)->DBG_MSG, q32DSP(0)->EMU_MSG, cpu_id, cpu_id ? corex2(0)->C1_CON : corex2(0)->C0_CON);

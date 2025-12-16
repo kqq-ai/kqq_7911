@@ -170,7 +170,15 @@ static void app_task_handler(void *p)
     sys_timer_task_init();
 
 #ifdef RTOS_STACK_CHECK_ENABLE
+    /*
+     * DEBUG: run much earlier to catch stack/heap stats before early crash (~5s).
+     * This is instrumentation only; change back to 60*1000 after root cause found.
+     */
+#if defined(CONFIG_BOOT_OPUS_ONLY)
     sys_timer_add(NULL, rtos_stack_check_func, 60 * 1000);
+#else
+    sys_timer_add(NULL, rtos_stack_check_func, 1000);
+#endif
 #endif
 
 #ifdef MEM_LEAK_CHECK_ENABLE

@@ -183,5 +183,7 @@ void c_main(void *priv)
     }
 }
 
+#if !defined(CONFIG_BOOT_OPUS_ONLY)
 late_initcall(c_main);
+#endif
 #endif

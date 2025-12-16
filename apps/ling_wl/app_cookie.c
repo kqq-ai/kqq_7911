@@ -204,16 +204,50 @@ static void peri_events(void *priv)
 
 // ====== Boot-only OPUS loop playback (no other subsystems) ======
 static volatile u8 g_boot_opus_need_restart = 0;
+#if defined(CONFIG_BOOT_OPUS_ONLY)
+static OS_SEM g_boot_opus_sem;
+static volatile u8 g_boot_opus_thread_started = 0;
+#endif
 
 static void boot_opus_play_end_cb(void *priv)
 {
     // Audio server end callback context: only set a flag here.
+    (void)priv;
     g_boot_opus_need_restart = 1;
+#if defined(CONFIG_BOOT_OPUS_ONLY)
+    log_i("[BOOT_OPUS] end_cb -> restart");
+    os_sem_post(&g_boot_opus_sem);
+#endif
 }
 
 static void boot_opus_try_play_once(void)
 {
-    const char *path = CONFIG_CP_VOICE_FILE_PATH "test_doubao.opus";
+    const char *path_opus = CONFIG_CP_VOICE_FILE_PATH "doubao.opus";
+    const char *path_mp3  = CONFIG_CP_VOICE_FILE_PATH "doubao.mp3";
+    const char *path = path_opus;
+
+    /*
+     * Runtime evidence:
+     * - Current doubao.opus is an Ogg Opus (starts with "OggS", contains "OpusHead").
+     * - AC79 SDK V1.1.x Opus decoder does NOT support Ogg container decode (official doc).
+     *   Feeding Ogg Opus to dec_type="opus" will typically sound like noise.
+     *
+     * So we detect Ogg header and fallback to MP3 (supported by this SDK) automatically.
+     */
+    FILE *fp = fopen(path_opus, "r");
+    if (fp) {
+        char hdr[4] = {0};
+        int n = fread(hdr, 1, sizeof(hdr), fp);
+        fclose(fp);
+        if (n == 4 && !memcmp(hdr, "OggS", 4)) {
+            log_i("[BOOT_OPUS] WARN: doubao.opus is Ogg Opus (OggS). This SDK can't decode Ogg Opus -> will be noise.");
+            log_i("[BOOT_OPUS] WARN: fallback to %s", path_mp3);
+            path = path_mp3;
+        }
+    } else {
+        // If opus file missing, try mp3 directly.
+        path = path_mp3;
+    }
 
     log_i("[BOOT_OPUS] play %s", path);
 
@@ -225,20 +259,69 @@ static void boot_opus_try_play_once(void)
                                              NULL);
 }
 
+#if defined(CONFIG_BOOT_OPUS_ONLY)
+static void boot_opus_loop_thread(void *priv)
+{
+    (void)priv;
+    log_i("[BOOT_OPUS] loop thread start");
+    while (1) {
+        g_boot_opus_need_restart = 0;
+        boot_opus_try_play_once();
+        os_sem_pend(&g_boot_opus_sem, 0);
+        // loop
+    }
+}
+#endif
+
 static void app_cookie_main(void)
 {
-    // Requirement: on boot, try to loop-play test_doubao.opus (8k) and do nothing else.
+    // Requirement: on boot, try to loop-play doubao.opus (8k) and do nothing else.
     log_i("[BOOT_OPUS] start");
     log_i("%s %s\r\n", __DATE__, __TIME__);
 
+    /*
+     * DEBUG isolate crash source:
+     * Set to 0 to disable audio decode/playback and verify whether the
+     * axi_rd_inv (FreeRTOS list corruption) still reproduces.
+     */
+#ifndef BOOT_OPUS_ENABLE_PLAYBACK
+#if defined(CONFIG_BOOT_OPUS_ONLY)
+#define BOOT_OPUS_ENABLE_PLAYBACK 1
+#else
+#define BOOT_OPUS_ENABLE_PLAYBACK 0
+#endif
+#endif
+
+#if !BOOT_OPUS_ENABLE_PLAYBACK
+    log_i("[BOOT_OPUS] playback disabled (debug isolate)");
+    while (1) {
+        msleep(1000);
+    }
+#endif
+
     // Enable speaker output (keep minimal HW init needed for audio).
     gpio_direction_output(IO_PORTA_00, 1);
-    gpio_direction_output(IO_PORTB_02, 0);
+#if defined(TCFG_DAC_MUTE_ENABLE) && (TCFG_DAC_MUTE_ENABLE)
+    // Unmute DAC output (board_config.h: TCFG_DAC_MUTE_VALUE is the "mute" level).
+    gpio_direction_output(TCFG_DAC_MUTE_PORT, !TCFG_DAC_MUTE_VALUE);
+#endif
 
     // Initialize audio decoder server and start playback.
     music_player_init(&g_music_player);
     set_dec_volume(&g_music_player, INIT_VOLUME_VALUE);
 
+#if defined(CONFIG_BOOT_OPUS_ONLY)
+    // IMPORTANT:
+    // Do NOT block app_core forever here; server events (AUDIO_SERVER_EVENT_END)
+    // are dispatched via the core task, and blocking would prevent end callback,
+    // causing no loop-restart.
+    if (!g_boot_opus_thread_started) {
+        g_boot_opus_thread_started = 1;
+        os_sem_create(&g_boot_opus_sem, 0);
+        thread_fork("boot_opus_loop", 20, 768, 0, NULL, boot_opus_loop_thread, NULL);
+    }
+    return;
+#else
     g_boot_opus_need_restart = 0;
     boot_opus_try_play_once();
 
@@ -250,6 +333,7 @@ static void app_cookie_main(void)
         }
         msleep(50);
     }
+#endif
 
 }
 

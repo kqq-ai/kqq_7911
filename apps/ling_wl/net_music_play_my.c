@@ -108,6 +108,81 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
 }
 
 /*======================================================================================================================
+ * local FILE vfs ops (for Opus raw stream)
+ *
+ * Doc reference:
+ * - For Opus decode, fread must return exactly the requested len, otherwise audio can be corrupted/noisy.
+ *   https://doc.zh-jieli.com/AC79/zh-cn/master/module_example/audio/opus.html
+ *======================================================================================================================*/
+static void *local_vfs_fopen(const char *path, const char *mode)
+{
+    return fopen(path, mode);
+}
+static int local_vfs_fread(void *file, void *buf, u32 len)
+{
+    FILE *fp = (FILE *)file;
+    static u32 s_rd_cnt = 0;
+    u32 got = 0;
+    while (got < len) {
+        int r = fread((u8 *)buf + got, 1, len - got, fp);
+        if (r <= 0) {
+            break;
+        }
+        got += (u32)r;
+    }
+    // For Opus stream, returning <len can cause bad frames; return 0 to signal EOS instead.
+    if (s_rd_cnt < 10 || (s_rd_cnt % 50) == 0) {
+        long pos = ftell(fp);
+        log_i("[OPUS_VFS] fread#%u req=%u got=%u pos=%ld", s_rd_cnt, len, got, pos);
+    }
+    s_rd_cnt++;
+    if (got != len) {
+        return 0;
+    }
+    return (int)got;
+}
+static int local_vfs_fwrite(void *file, void *buf, u32 len)
+{
+    return fwrite(buf, 1, len, (FILE *)file);
+}
+static int local_vfs_fseek(void *file, u32 offset, int seek_mode)
+{
+    int whence = SEEK_SET;
+    if (seek_mode == 1) {
+        whence = SEEK_CUR;
+    } else if (seek_mode == 2) {
+        whence = SEEK_END;
+    }
+    return fseek((FILE *)file, (long)offset, whence);
+}
+static int local_vfs_ftell(void *file)
+{
+    return (int)ftell((FILE *)file);
+}
+static int local_vfs_flen(void *file)
+{
+    FILE *fp = (FILE *)file;
+    long cur = ftell(fp);
+    fseek(fp, 0, SEEK_END);
+    long end = ftell(fp);
+    fseek(fp, cur, SEEK_SET);
+    return (int)end;
+}
+static int local_vfs_fclose(void *file)
+{
+    return fclose((FILE *)file);
+}
+static const struct audio_vfs_ops local_audio_dec_vfs_ops = {
+    .fopen  = local_vfs_fopen,
+    .fread  = local_vfs_fread,
+    .fwrite = local_vfs_fwrite,
+    .fseek  = local_vfs_fseek,
+    .ftell  = local_vfs_ftell,
+    .flen   = local_vfs_flen,
+    .fclose = local_vfs_fclose,
+};
+
+/*======================================================================================================================
  * lfs music decoder
  *======================================================================================================================*/
 int my_lfs_download_read(void *file, void *buf, u32 len)
@@ -469,7 +544,8 @@ static int local_music_dec_file(music_player *player, void *fname)
         }
     }
 
-    FILE *file = fopen(fname, "r");
+    // Use binary mode to avoid any newline translation on some VFS.
+    FILE *file = fopen(fname, "rb");
     if (!file) {
         return -1;
     }
@@ -480,10 +556,24 @@ static int local_music_dec_file(music_player *player, void *fname)
     req.dec.output_buf_len  = DEC_BUF_LEN;
     req.dec.file            = (FILE *)file;
     req.dec.dec_type        = music_guess_dec_type_from_fname((const char *)fname);
-    req.dec.channel         = 0;
-    req.dec.sample_rate     = 0;
+    /*
+     * Opus decode on this SDK expects explicit output channel/sample_rate in many examples:
+     * - channel: 2 (decoder outputs stereo)
+     * - sample_rate: match the stream's target sample rate (8k/16k)
+     * Leaving these as 0 can lead to incorrect output (heard as noise on some builds).
+     */
+    if (req.dec.dec_type && !strcmp(req.dec.dec_type, "opus")) {
+        // Follow official opus decode example: output is fixed 2 channels.
+        req.dec.channel = 2;
+        req.dec.sample_rate = 16000;
+        req.dec.vfs_ops = &local_audio_dec_vfs_ops;
+        req.dec.output_buf_len = 4 * 1024;
+    } else {
+        req.dec.channel = 0;
+        req.dec.sample_rate = 0;
+        req.dec.vfs_ops = NULL;
+    }
     req.dec.priority        = 1;
-    req.dec.vfs_ops         = NULL;
     req.dec.sample_source   = "dac";
 
 #if TCFG_EQ_ENABLE
