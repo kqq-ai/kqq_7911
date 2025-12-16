@@ -12,6 +12,7 @@
 #include "errno.h"
 #include "netdb.h"
 #include "lfs.h"
+#include "string.h"
 
 static const struct music_dec_ops local_music_dec_ops;
 static const struct music_dec_ops net_music_dec_ops;
@@ -19,6 +20,22 @@ static const struct music_dec_ops lfs_music_dec_ops;
 static const struct music_dec_ops cbuf_music_dec_ops;
 // 定义文件系统的全局句柄
 extern lfs_t g_lfs;
+
+static const char *music_guess_dec_type_from_fname(const char *fname)
+{
+    if (!fname) {
+        return NULL;
+    }
+    const char *ext = strrchr(fname, '.');
+    if (!ext) {
+        return NULL;
+    }
+    // Minimal: only force OPUS for this project task; others keep auto-detect.
+    if (!ASCII_StrCmp(ext, ".opus", 5) || !ASCII_StrCmp(ext, ".OPUS", 5)) {
+        return "opus";
+    }
+    return NULL;
+}
 
 
 static void led_ui_post_msg(const char *msg, ...) {
@@ -462,6 +479,7 @@ static int local_music_dec_file(music_player *player, void *fname)
     req.dec.output_buf      = NULL;
     req.dec.output_buf_len  = DEC_BUF_LEN;
     req.dec.file            = (FILE *)file;
+    req.dec.dec_type        = music_guess_dec_type_from_fname((const char *)fname);
     req.dec.channel         = 0;
     req.dec.sample_rate     = 0;
     req.dec.priority        = 1;

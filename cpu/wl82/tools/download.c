@@ -57,6 +57,8 @@ echo "set UI_RES=ui_res" >> ${PROJ_BUILD}
 echo "packres\packres.exe -n tone -o packres/AUPACKRES audlogo" >> ${PROJ_BUILD}
 #else
 echo "set AUDIO_RES=audlogo" >> ${PROJ_BUILD}
+# Ensure test_doubao.opus is included in the audlogo resource folder (packaged into mnt/sdfile/res/audlogo/)
+echo "if exist ..\..\..\test_doubao.opus copy /y ..\..\..\test_doubao.opus audlogo\test_doubao.opus" >> ${PROJ_BUILD}
 #endif
 #endif
 #if CONFIG_DOUBLE_BANK_ENABLE
@@ -119,6 +121,11 @@ rm isd_config.ini
 cd /d %~dp0
 
 echo %*
+
+REM Ensure test_doubao.opus is included in the audlogo resource folder (packaged into mnt/sdfile/res/audlogo/)
+if exist ..\..\..\test_doubao.opus (
+    copy /y ..\..\..\test_doubao.opus audlogo\test_doubao.opus
+)
 
 #if defined CONFIG_UI_ENABLE
 #if UI_USE_WIFI_CAMERA_PROJECT

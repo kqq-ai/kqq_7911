@@ -202,70 +202,54 @@ static void peri_events(void *priv)
     }
 }
 
+// ====== Boot-only OPUS loop playback (no other subsystems) ======
+static volatile u8 g_boot_opus_need_restart = 0;
+
+static void boot_opus_play_end_cb(void *priv)
+{
+    // Audio server end callback context: only set a flag here.
+    g_boot_opus_need_restart = 1;
+}
+
+static void boot_opus_try_play_once(void)
+{
+    const char *path = CONFIG_CP_VOICE_FILE_PATH "test_doubao.opus";
+
+    log_i("[BOOT_OPUS] play %s", path);
+
+    // NOTE: app_music_play_local_music_with_callback() currently always returns 0,
+    // so we rely on audio server logs to judge success.
+    app_music_play_local_music_with_callback(&g_music_player,
+                                             (void *)path,
+                                             boot_opus_play_end_cb,
+                                             NULL);
+}
+
 static void app_cookie_main(void)
 {
-    log_i("Hello World2!\r\n");
-    log_i("Version: 12\r\n");
+    // Requirement: on boot, try to loop-play test_doubao.opus (8k) and do nothing else.
+    log_i("[BOOT_OPUS] start");
     log_i("%s %s\r\n", __DATE__, __TIME__);
 
-    lwl_app_core_init();
-    
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    // Enable speaker output (keep minimal HW init needed for audio).
+    gpio_direction_output(IO_PORTA_00, 1);
+    gpio_direction_output(IO_PORTB_02, 0);
 
-    lwl_event_handler_add(base_lwl_event_handler);
+    // Initialize audio decoder server and start playback.
+    music_player_init(&g_music_player);
+    set_dec_volume(&g_music_player, INIT_VOLUME_VALUE);
 
-    // led_breath_init(); // 初始化LED呼吸灯
-    // pthread_t monitor_thread;
-    // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
-    
-    /* 初始化数据通信串口 */
-    uart0_hdl = app_uart_dev_init("uart0");
-    context->uartdev = uart0_hdl;
+    g_boot_opus_need_restart = 0;
+    boot_opus_try_play_once();
 
-    // 初始化录音
-    recorder_mode_init(&g_recorder);
-    context->recorder = &g_recorder;
-
-    // 取消静音
-    gpio_direction_output(IO_PORTA_00, 1);                  // 拉高 C 口功放使能脚，恢复扬声器输出
-    gpio_direction_output(IO_PORTB_02, 0);                  // 备用方案：拉高 E 口功放使能
-    uart_response_synch_status(1, MAX_LE_AUDIO_VOLUME);     // 同步初始音量状态给 7016
-    /* 创建网络&提示音解码播放器 */
-    music_player_init(&g_music_player);                     // 初始化音乐播放器，支持本地/网络音频
-    context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
-
-    ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
-    bdo_disable();                                          // 关闭 BDO，避免默认蓝牙广播干扰
-
-    /* 创建线程池 */
-    pool = threadpool_create(4, 16);                        // 创建 4 个线程、队列深度 16 的线程池
-    context->threadpool = pool;                             // 保存线程池实例供异步任务复用
-
-    /*wifi manager 所需要的一些初始化*/
-    wifi_manage_init(NULL);                                 // 初始化 WiFi 管理器（STA/BLE 共存配置）
-
-    /* 初始化RSSI测距 */
-    monitor_init();                                      // 可选：初始化 RSSI 测距组件
-
-    /* 开始RSSI测距 */
-    monitor_start();                                     // 可选：启动测距任务
-
-    // 初始化lfs
-    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");   // 挂载 LittleFS，用于配置和资源读写
-    ASSERT(lfs_hdl);                                        // 确保文件系统初始化成功
-    context->lfs_hdl = lfs_hdl;                             // 保存文件系统句柄
-    //app_lfs_cfgfile_init(context->lfs_hdl);
-    get_flash_app_cfg_data(context->lfs_hdl);               // 从配置区加载设备参数（SN、OTA 等）
-
-
-    /* 创建sc7a20 task 陀螺仪 */
-    app_sc7a20_init();                                      // 启动 SC7A20 加速度计任务，支持姿态/震动检测
-
-    lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
-    thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
-
-    /* APP_MDOE 开始 */
-    thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
+    // Polling loop: restart when playback finishes.
+    while (1) {
+        if (g_boot_opus_need_restart) {
+            g_boot_opus_need_restart = 0;
+            boot_opus_try_play_once();
+        }
+        msleep(50);
+    }
 
 }
 
@@ -486,18 +470,10 @@ static int app_music_net_event_handler(struct net_event *event)
 
 static int app_cookie_event_handler(struct application *app, struct sys_event *event)
 {
-    switch (event->type) {
-    case SYS_KEY_EVENT:
-        return app_cookie_key_event_handler((struct key_event *)event->payload);
-    case SYS_DEVICE_EVENT:
-        return app_cookie_device_event_handler(event);
-    case SYS_NET_EVENT:
-        return app_music_net_event_handler((struct net_event *)event->payload);
-    case SYS_BT_EVENT:
-        return ble_demo_bt_event_handler(event);
-    default:
-        return false;
-    }
+    // Boot OPUS loop mode: ignore all system events (keys/net/bt/etc).
+    (void)app;
+    (void)event;
+    return false;
 }
 
 // 状态机：管理APP的生命周期和状态转换
