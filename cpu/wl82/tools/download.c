@@ -58,8 +58,7 @@ echo "packres\packres.exe -n tone -o packres/AUPACKRES audlogo" >> ${PROJ_BUILD}
 #else
 echo "set AUDIO_RES=audlogo" >> ${PROJ_BUILD}
 # Ensure test_doubao.opus is included in the audlogo resource folder (packaged into mnt/sdfile/res/audlogo/)
-echo "if exist ..\..\..\doubao.opus copy /y ..\..\..\doubao.opus audlogo\doubao.opus" >> ${PROJ_BUILD}
-echo "if exist ..\..\..\doubao.mp3 copy /y ..\..\..\doubao.mp3 audlogo\doubao.mp3" >> ${PROJ_BUILD}
+echo "if exist ..\..\..\dd_raw.opus copy /y ..\..\..\dd_raw.opus audlogo\dd_raw.opus" >> ${PROJ_BUILD}
 #endif
 #endif
 #if CONFIG_DOUBLE_BANK_ENABLE
@@ -129,6 +128,12 @@ if exist ..\..\..\doubao.opus (
 )
 if exist ..\..\..\doubao.mp3 (
     copy /y ..\..\..\doubao.mp3 audlogo\doubao.mp3
+)
+if exist ..\..\..\dd.opus (
+    copy /y ..\..\..\dd.opus audlogo\dd.opus
+)
+if exist ..\..\..\dd_raw.opus (
+    copy /y ..\..\..\dd_raw.opus audlogo\dd_raw.opus
 )
 
 #if defined CONFIG_UI_ENABLE

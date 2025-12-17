@@ -222,32 +222,7 @@ static void boot_opus_play_end_cb(void *priv)
 
 static void boot_opus_try_play_once(void)
 {
-    const char *path_opus = CONFIG_CP_VOICE_FILE_PATH "doubao.opus";
-    const char *path_mp3  = CONFIG_CP_VOICE_FILE_PATH "doubao.mp3";
-    const char *path = path_opus;
-
-    /*
-     * Runtime evidence:
-     * - Current doubao.opus is an Ogg Opus (starts with "OggS", contains "OpusHead").
-     * - AC79 SDK V1.1.x Opus decoder does NOT support Ogg container decode (official doc).
-     *   Feeding Ogg Opus to dec_type="opus" will typically sound like noise.
-     *
-     * So we detect Ogg header and fallback to MP3 (supported by this SDK) automatically.
-     */
-    FILE *fp = fopen(path_opus, "r");
-    if (fp) {
-        char hdr[4] = {0};
-        int n = fread(hdr, 1, sizeof(hdr), fp);
-        fclose(fp);
-        if (n == 4 && !memcmp(hdr, "OggS", 4)) {
-            log_i("[BOOT_OPUS] WARN: doubao.opus is Ogg Opus (OggS). This SDK can't decode Ogg Opus -> will be noise.");
-            log_i("[BOOT_OPUS] WARN: fallback to %s", path_mp3);
-            path = path_mp3;
-        }
-    } else {
-        // If opus file missing, try mp3 directly.
-        path = path_mp3;
-    }
+    const char *path = CONFIG_CP_VOICE_FILE_PATH "dd_raw.opus";
 
     log_i("[BOOT_OPUS] play %s", path);
 
