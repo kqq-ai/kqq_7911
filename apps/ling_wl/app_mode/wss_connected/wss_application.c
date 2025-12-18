@@ -49,6 +49,9 @@ typedef enum {
 
 AppTaskStepState g_device_state = APP_IDLE;
 
+//=================================================================================================
+// 联网有效工作状态维护
+//=================================================================================================
 void wss_application_vailed()
 {
     last_req_time = g_curr_time;
@@ -62,6 +65,17 @@ void wss_disconnect_cbk(void)
     // wss_exception_exit();
 }
 
+// 查询退出标志
+bool wss_application_check_power_key()
+{
+    bool rst = g_power_key_retry;
+    g_power_key_retry = false;
+    return rst;
+}
+
+//=================================================================================================
+// 麦克风相关
+//=================================================================================================
 void wss_application_resume_mic()
 {
     log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
@@ -76,14 +90,6 @@ void wss_application_resume_mic()
     os_mutex_post(&g_wss_app_mutex);
 }
 
-// 查询退出标志
-bool wss_application_check_power_key()
-{
-    bool rst = g_power_key_retry;
-    g_power_key_retry = false;
-    return rst;
-}
-
 // 打开麦克风并启动vad录音
 void wss_application_start_mic()
 {
@@ -92,6 +98,10 @@ void wss_application_start_mic()
     g_device_state = APP_VAD;
     wss_vad_start(600000); // 开始录音
 }
+
+//=================================================================================================
+// 按键相关
+//=================================================================================================
 
 // 设置退出标志
 static void wss_application_touch_key(bool press_down)
@@ -136,9 +146,6 @@ static void wss_application_touch_key(bool press_down)
     os_mutex_post(&g_wss_app_mutex);
 }
 
-//=================================================================================================
-// LWL event callback
-//=================================================================================================
 static void input_event_handler_cb(lwl_event_t *e)
 {
     static int en = 1;
@@ -184,6 +191,9 @@ static void input_event_handler_cb(lwl_event_t *e)
     }
 }
 
+//=================================================================================================
+// 播放提示音相关
+//=================================================================================================
 char music_file[128];
 
 void stop_prompt()
@@ -232,6 +242,9 @@ void play_prompt(const char *fname)
     memcpy(music_file, fname, strlen(fname)+1);
 }
 
+//=================================================================================================
+// 休眠退出相关
+//=================================================================================================
 static pthread_t monitor_thread = NULL;
 static bool monitor_thread_running = false;
 // 模式5 加速度传感器相关变量
@@ -307,7 +320,7 @@ void *wss_condition_monitor_thread(void *arg)
                       current_time - last_E_found_time,
                       current_time - last_move_time,
                       current_time - last_req_time);
-                lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+                lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
                 monitor_thread_running = false;
                 return NULL;
             }
@@ -318,6 +331,9 @@ void *wss_condition_monitor_thread(void *arg)
     return NULL;
 }
 
+//=================================================================================================
+// 应用初始化和循环
+//=================================================================================================
 void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
