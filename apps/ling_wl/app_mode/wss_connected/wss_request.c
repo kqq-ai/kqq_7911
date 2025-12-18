@@ -148,6 +148,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
         log_i("send_id: %s (%s)\n", pkg->tts_bind.send_id, g_edev_target_sn);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
+        log_mqtt("🔥🔥🔥🔥🔥收到 TTS_BIND 请求 c_id: %s, send_id: %s, wait_time: %d🔥🔥🔥🔥🔥", pkg->tts_bind.c_id, pkg->tts_bind.send_id, pkg->tts_bind.wait_time);
         if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
         
         if (strncmp(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE) != 0) {
@@ -178,6 +179,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("event: %s\n", odmp_ase_to_text(pkg->audio_status.event));
         log_i("format: %s\n", pkg->audio_status.audio_param.format);
         log_i("sample_rate: %d\n", pkg->audio_status.audio_param.sample_rate);
+        log_mqtt("🔥🔥🔥🔥🔥收到 AUDIO_STATUS 请求 c_id: %s, type: %s, event: %s, format: %s, sample_rate: %d🔥🔥🔥🔥🔥", pkg->audio_status.c_id, odmp_ast_to_text(pkg->audio_status.type), odmp_ase_to_text(pkg->audio_status.event), pkg->audio_status.audio_param.format, pkg->audio_status.audio_param.sample_rate);
         
         if (pkg->audio_status.type == OAST_ASR) {
             // if (pkg->audio_status.event == OASE_START) {
@@ -374,6 +376,7 @@ bool wss_request_loop()
         // TTS下载流程
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("[wss_request]Switch success, starting audio playback");
+            log_mqtt("🔥🔥🔥🔥🔥切换成功,开始播放音频🔥🔥🔥🔥🔥");
             wss_request_send_event_target(send_message);
             // wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
             send_message = 0; // 重置发送消息标志
@@ -381,6 +384,7 @@ bool wss_request_loop()
             wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
             last_event = 0;
         } else if (send_message == ORMET_SWITCH_FAILED) {
+            log_mqtt("🔥🔥🔥🔥🔥切换失败🔥🔥🔥🔥🔥");
             wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
             wss_request_send_event_target(send_message);
             g_edev_target_sn[0] = 0;

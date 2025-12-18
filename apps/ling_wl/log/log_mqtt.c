@@ -2,10 +2,10 @@
 
 #include "log_mqtt.h"
 
-#include "system/includes.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>  // 添加可变参数支持
 #include <netdb.h> // 添加域名解析支持
 #include "cJSON_common/cJSON.h"
 #include "../protocol/odm/odm_secure.h"
@@ -14,6 +14,9 @@
 #include "../util/cqueue.h"
 #include "system/os/os_api.h"
 #include "app_mode/lwl_app_framework.h"
+#include "system/sys_time.h"
+#include "driver/device/ioctl_cmds.h"
+#include "driver/device/device.h"
 
 #define LOG_QUEUE_MAX_COUNT 15    // 最大元素个数（原LOG_QUEUE_SIZE）
 #define LOG_QUEUE_ITEM_MAX_LEN 256 // 单个元素最大长度（字节）（原LOG_ITEM_MAXLEN）
@@ -40,7 +43,6 @@ typedef struct {
     char* topic;            // 发布主题
     int keep_alive;            // 保活时间(秒)
     bool use_tls;              // 是否使用TLS
-    bool auto_reconnect;       // 是否自动重连
 } mqtt_log_config_t;
 
 /* 全局MQTT配置 */
@@ -53,14 +55,14 @@ static mqtt_log_config_t g_mqtt_config = {
     .topic = "h-log",
     .keep_alive = 30,
     .use_tls = false,
-    .auto_reconnect = true
 };
 
 /* MQTT客户端实例 */
 static Client mqtt_client;
 static Network mqtt_network;
-static unsigned char mqtt_send_buf[1024];
+static unsigned char mqtt_send_buf[2048];
 static unsigned char mqtt_read_buf[2048];
+static char json_build_buf[2048];  // 用于构建JSON数组的独立缓冲区
 
 //char temp[LOG_ITEM_MAXLEN];
 /* 连接状态 */
@@ -75,9 +77,7 @@ void log_mqtt_battery(const char* sn_param,int battery);
 static MyBlockingQueue log_queue;
 static char log_queue_data[LOG_QUEUE_MAX_COUNT * LOG_QUEUE_ITEM_MAX_LEN];
 
-static pthread_t monitor_thread;  // 声明监控线程
-pthread_attr_t attr;
-size_t stack_size = 1024 * 8;  // 设置栈大小为8KB
+static int monitor_thread_pid = 0;  // 线程PID
 
 static bool g_monitor_thread_running = false;  // 线程运行标志
 static uint32_t last_upload_time = 0;  // 上次上传时间（用于超时判断）
@@ -95,44 +95,22 @@ static int init_mqtt_network(void) {
     // 连接网络
     int rc = ConnectNetwork(&mqtt_network, g_mqtt_config.server, g_mqtt_config.port);
     if (rc != 0) {
-        log_i("MQTT network connection failed: %s:%d, error code: %d\n", 
+        //表示在网络连接端口层面就失败了
+        log_i("【MQTT】网络连接端口失败: %s:%d, error code: %d\n", 
                g_mqtt_config.server, g_mqtt_config.port, rc);
         return rc;
     }
     
     return 0;
 }
+/* 检查MQTT连接状态 */
+bool log_mqtt_is_connected(void) {
+    return (g_mqtt_client != NULL && g_mqtt_connected);
+}
 
-/* 连接MQTT服务器 */
-int log_mqtt_connect(void) {
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    if (g_mqtt_connected) {
-        return 0; // 已经连接
-    }
-    
-    // 先断开可能存在的旧连接
-    if (g_mqtt_client != NULL) {
-        log_mqtt_disconnect();
-    }
-    
-    // 初始化网络
-    int rc = init_mqtt_network();
-    if (rc != 0) {
-        os_mutex_post(&g_log_mqtt_mutex);
-        return rc;
-    }
-
-    // 获取token,也就是password
-    char* token = get_mqtt_token();
-
-    if (token == NULL) {
-        log_i("获取MQTT token失败\n");
-        os_mutex_post(&g_log_mqtt_mutex);
-        return -1;
-    }
-
-    //Mqtt超时时间设置成2000ms
-    // 初始化MQTT客户端
+/* 初始化MQTT客户端和连接参数 */
+static int init_mqtt_client(const char* token) {
+    // 初始化MQTT客户端，超时时间设置成2000ms
     MQTTClient(&mqtt_client, &mqtt_network, 2000, 
                mqtt_send_buf, sizeof(mqtt_send_buf),
                mqtt_read_buf, sizeof(mqtt_read_buf));
@@ -144,142 +122,220 @@ int log_mqtt_connect(void) {
     connect_data.MQTTVersion = 3;
     connect_data.clientID.cstring = g_mqtt_config.client_id;
     connect_data.username.cstring = sn;
-    
     connect_data.password.cstring = token;
     connect_data.keepAliveInterval = g_mqtt_config.keep_alive;
     connect_data.cleansession = 1;
     connect_data.willFlag = 0;
     
     // 连接MQTT服务器
-    rc = MQTTConnect(g_mqtt_client, &connect_data);
+    int rc = MQTTConnect(g_mqtt_client, &connect_data);
     if (rc != 0) {
-        log_i("MQTT connection failed, error code: %d\n", rc);
-        log_mqtt_disconnect();  // 连接失败，清理资源
-        os_mutex_post(&g_log_mqtt_mutex);
+        log_i("【MQTT】连接失败, error code: %d\n", rc);
         return rc;
     }
     
-    g_mqtt_connected = true;
-    os_mutex_post(&g_log_mqtt_mutex);
     return 0;
 }
 
-/* 检查MQTT连接状态 */
-bool log_mqtt_is_connected(void) {
-    if (!os_mutex_valid(&g_log_mqtt_mutex) || !g_mqtt_connected) return false;
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    bool ret = (g_mqtt_client != NULL && g_mqtt_connected);
-    os_mutex_post(&g_log_mqtt_mutex);
-    return ret;
+/* 连接MQTT服务器 */
+int log_mqtt_connect(void) {
+    // 先断开可能存在的旧连接
+    log_mqtt_disconnect();
+    // 初始化网络
+    int rc = init_mqtt_network();
+    if (rc != 0) {
+        return rc;
+    }
+    // 获取token,也就是password
+    char* token = get_mqtt_token();
+    if (token == NULL) {
+        log_i("【MQTT】获取MQTT token失败\n");
+        return -1;
+    }
+    // 初始化MQTT客户端并连接
+    rc = init_mqtt_client(token);
+    if (rc != 0) {
+        log_mqtt_disconnect();  // 连接失败，清理资源
+        return rc;
+    }
+    g_mqtt_connected = true;
+    return 0;
+}
+
+/* MQTT重连函数，持续重连直到成功 */
+static void log_mqtt_reconnect_until_success(void) {
+    while (!log_mqtt_is_connected()) {
+        log_i("【MQTT】尝试连接......\n");
+        int ret = log_mqtt_connect();
+        if (ret == 0) {
+            log_i("【MQTT】连接成功\n");
+            mqtt_subscribe_reset();
+            break;
+        } else {
+            log_i("【MQTT】连接失败，5秒后重试, error code: %d\n", ret);
+            msleep(5000);  // 等待5秒后重试
+        }
+    }
 }
 
 /* 断开MQTT连接 */
 void log_mqtt_disconnect(void) {
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    if (g_mqtt_client!=NULL) {
+    if (g_mqtt_client != NULL) {
         MQTTDisconnect(g_mqtt_client);
         g_mqtt_client = NULL;
         mqtt_network.disconnect(&mqtt_network);
         g_mqtt_connected = false;
         log_i("MQTT connection disconnected\n");
     }
-    os_mutex_post(&g_log_mqtt_mutex);
 }
 
 /* 通过MQTT发送消息 */
 int log_mqtt_send_message(const char* topic, const char* message) {
-    os_mutex_pend(&g_log_mqtt_mutex, 0);  // 添加锁
-    if (!log_mqtt_is_connected()) {
-        // 尝试重连
-        if (g_mqtt_config.auto_reconnect) {
-            log_mqtt_connect();
-        }
-    }
-    if (!log_mqtt_is_connected()) {
-        os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
-        return -1;
-    }
-    
     MQTTMessage mqtt_msg;
     mqtt_msg.qos = QOS1;
     mqtt_msg.retained = 0;
     mqtt_msg.payload = (void*)message;
     mqtt_msg.payloadlen = strlen(message);  // 修正：不包含'\0'
-
     int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
     if (rc != 0) {
-        log_i("MQTT publish failed, error code: %d\n", rc);
+        log_i("【MQTT】publish failed, error code: %d\n", rc);
         g_mqtt_connected = false;  // 发布失败，标记连接断开
     }
     
-    os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
     return rc;
+}
+
+// 获取与log_i相同格式的系统时间戳
+static int get_system_timestamp(char *time_str, int str_len) {
+    struct sys_time t;
+    
+    // 获取系统时间
+    void *dev = dev_open("rtc", NULL);
+    if (!dev) {
+        return -1;  // 无法打开RTC设备
+    }
+    
+    int ret = dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
+    dev_close(dev);
+    
+    if (ret != 0) {
+        return -1;  // 获取时间失败
+    }
+    
+    // 获取毫秒部分（从系统运行时间）
+    uint32_t total_ms = timer_get_ms();
+    uint32_t milliseconds = total_ms % 1000;
+    
+    // 格式化为与log_i相同的时间戳格式 [HH:MM:SS.mmm]
+    // 使用RTC的时分秒 + 运行时间的毫秒部分
+    snprintf(time_str, str_len, "[%02u:%02u:%02u.%03u]", t.hour, t.min, t.sec, milliseconds);
+    return 0;
 }
 
 // 批量上传队列中的所有日志
 static void upload_all_logs(void) {
-    os_mutex_pend(&g_log_mqtt_mutex, 0);  // 添加锁
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    
     if (log_queue.size == 0) {
         os_mutex_post(&g_log_mqtt_mutex);
         return;
     }
-
+    
     uint32_t start_time = timer_get_ms();
+    const int MAX_SIZE = sizeof(mqtt_send_buf) - 20;  // 380字节
+    int count = 0;
     
-    // 创建JSON数组
-    cJSON *array = cJSON_CreateArray();
-    if (!array) {
-        return;
-    }
-    int size = log_queue.size;
-    while (log_queue.size > 0) {
-        if (my_blocking_queue_try_dequeue(&log_queue, temp) == MYERROR_Success) {
-
-            cJSON *item = cJSON_Parse(temp);
-            if (item) {
-                cJSON_AddItemToArray(array, item);
-            } else {
-                log_i("Failed to parse log item to JSON: %s\n", temp);
+    // 使用独立缓冲区构建JSON数组
+    char *ptr = json_build_buf;
+    int current_len = 0;
+    
+    // 写入开始的 '['
+    current_len = snprintf(ptr, sizeof(json_build_buf), "[");
+    ptr += current_len;
+    
+    while (log_queue.size > 0 && my_blocking_queue_try_dequeue(&log_queue, temp) == MYERROR_Success) {
+        int item_len = strlen(temp);
+        
+        // 判断单条是否超限: '[' + item + ']'
+        if (1 + item_len + 1 > MAX_SIZE) {
+            log_i("【MQTT】单条日志超限(%d字节)，已丢弃\n", item_len);
+            continue;
+        }
+        
+        // 计算添加这条后的总长度: 当前长度 + 逗号(如果不是第一条) + 日志内容 + ']'
+        int need_len = current_len + (count > 0 ? 1 : 0) + item_len + 1;
+        
+        // 判断累积是否超限
+        if (need_len > MAX_SIZE) {
+            // 封装当前缓冲区
+            snprintf(ptr, sizeof(json_build_buf) - current_len, "]");
+            
+            // 把当前取出的放回队列头
+            if (my_blocking_queue_push_front(&log_queue, temp) != MYERROR_Success) {
+                log_i("【MQTT】放回队列失败，日志丢失: %s\n", temp);
             }
+            
+            // 发送当前批次
+            int result = log_mqtt_send_message("h-log", json_build_buf);
+            if (result != 0) {
+                log_i("【MQTT】批量日志发送失败, error code: %d\n", result);
+            }
+            
+            uint32_t end_time = timer_get_ms();
+            int send_bytes = strlen(json_build_buf);
+            log_i("【MQTT】批量发送完成（超限）- %d字节, 耗时 %u ms\n", send_bytes, end_time - start_time);
+            
+            // 累积超限后结束本次调用，剩余日志下次处理
+            os_mutex_post(&g_log_mqtt_mutex);
+            return;
         }
+        
+        // 未超限，追加到缓冲区
+        int len = snprintf(ptr, sizeof(json_build_buf) - current_len, "%s%s", 
+                          count > 0 ? "," : "", temp);
+        ptr += len;
+        current_len += len;
+        count++;
     }
     
-    // 一次性转换成JSON字符串
-    char *batch_json = cJSON_PrintUnformatted(array);
-    if (batch_json != NULL) {
-        int result = log_mqtt_send_message("h-log", batch_json);
+    // 收尾处理
+    if (count > 0) {
+        // 封装并发送
+        snprintf(ptr, sizeof(json_build_buf) - current_len, "]");
+        
+        int result = log_mqtt_send_message("h-log", json_build_buf);
         if (result != 0) {
-            log_i("MQTT message log sending failed, error code: %d\n", result);
+            log_i("【MQTT】批量日志发送失败, error code: %d\n", result);
         }
+        
+        uint32_t end_time = timer_get_ms();
+        int send_bytes = strlen(json_build_buf);
+        log_i("【MQTT】批量发送完成 - %d字节, 耗时 %u ms\n", send_bytes, end_time - start_time);
+    } else {
+        log_i("【MQTT】队列中的日志全部超限被丢弃，无数据发送\n");
     }
-
-    // 清理资源
-    if (batch_json) {
-        free(batch_json);
-    }
-    cJSON_Delete(array);
     
-    uint32_t end_time = timer_get_ms();
-    log_i("[MQTT upload]Batch send messages took %u ms %d\n", end_time - start_time, size);
-    os_mutex_post(&g_log_mqtt_mutex);  // 释放锁
+    os_mutex_post(&g_log_mqtt_mutex);
 }
 
 
-/* 常驻监控线程：检测队列阈值和超时 */
-static void* log_monitor_thread(void* arg) {
-    log_i("[MQTT log_monitor]Log monitor thread started\n");
+// 常驻上传线程：检测队列阈值和超时，并上传日志
+static void log_monitor_thread(void* arg) {
+    // 启动MQTT日志上传线程
+    log_i("【MQTT】日志上传线程启动\n");
+
+    g_monitor_thread_running = true;
     
-    if(!log_mqtt_is_connected()) {
-        int ret=log_mqtt_connect(); // 内部调用log_mqtt_connect
-        if (ret==0) {
-            log_i("MQTT connected successfully\n");
-            ret = mqtt_subscribe_reset();
-            g_monitor_thread_running = true;
-        }
-    }
+    // 初次连接，失败则持续重连
+    log_mqtt_reconnect_until_success();
 
     last_upload_time = timer_get_ms();  // 初始化上传时间
     while (g_monitor_thread_running) {
+        // 检查连接状态，断线则重连
+        if (!log_mqtt_is_connected()) {
+            log_mqtt_reconnect_until_success();
+        }
+        
         uint32_t current_time = timer_get_ms();
         bool need_upload = false;
 
@@ -301,13 +357,14 @@ static void* log_monitor_thread(void* arg) {
 
         if (need_upload) {
             upload_all_logs();  // 触发上传
+            last_upload_time = current_time;  // 更新上传时间
         }
+        
         // 休眠100ms，避免CPU空转（可根据需求调整）
         msleep(100);
     }
     
-    log_i("[MQTT log_monitor]Log monitor thread exited\n");
-    return NULL;
+    log_i("【MQTT】上传线程退出 Log monitor thread exited\n");
 }
 
 // 设置需要更新电量上传消息的SN和电量参数，SN为NULL时使用默认SN,即C的SN，电量范围0-100
@@ -326,17 +383,23 @@ void log_mqtt_set_battery_level(char *sn_battery, int battery_level) {
 
 // 发送电池状态日志
 void log_mqtt_battery(const char* sn_param,int battery) {
-    if (!log_mqtt_is_connected()) return;
     os_mutex_pend(&g_log_mqtt_mutex, 0);
-    uint32_t total_ms = timer_get_ms();
-    uint32_t seconds = total_ms / 1000;
-    uint32_t milliseconds = total_ms % 1000;
-    uint32_t minutes = seconds / 60;
-    seconds %= 60;
-    uint32_t hours = minutes / 60;
-    minutes %= 60;
-    // 格式化时间戳 [hh:mm:ss.mmm]
-    snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
+    
+    // 尝试获取系统时间戳
+    if (get_system_timestamp(time_str, sizeof(time_str)) != 0) {
+        // 回退方案：使用运行时间
+        log_i("【MQTT】RTC获取失败，使用运行时间");
+        uint32_t total_ms = timer_get_ms();
+        uint32_t seconds = total_ms / 1000;
+        uint32_t milliseconds = total_ms % 1000;
+        uint32_t minutes = seconds / 60;
+        seconds %= 60;
+        uint32_t hours = minutes / 60;
+        minutes %= 60;
+        snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
+    } else {
+        log_i("【MQTT】使用RTC系统时间: %s", time_str);
+    }
 
     // 构造JSON
     cJSON *root = cJSON_CreateObject();
@@ -348,7 +411,7 @@ void log_mqtt_battery(const char* sn_param,int battery) {
     char *json_str = cJSON_PrintUnformatted(root);
 
     // 打印到控制台
-    log_i("[MQTT battery]%s %d\n", sn_param, battery);
+    log_i("【MQTT】battery: %s %d\n", sn_param, battery);
 
     // 发送到MQTT
     if (json_str != NULL) {
@@ -373,28 +436,31 @@ void log_mqtt_enqueue(const char *msg) {
 
 /* 日志发送函数 */
 void log_mqtt(const char* format, ...) {
-    va_list args;
+    
+    __builtin_va_list args;
     va_start(args, format);
     vsnprintf(log_buffer, sizeof(log_buffer), format, args);
     va_end(args);
     
     // 打印到控制台
-    log_i("[MQTT message] %s", log_buffer);
+    log_i("【MQTT】message: %s", log_buffer);
 
     if (!log_mqtt_is_connected()) return;
 
     os_mutex_pend(&g_log_mqtt_mutex, 0);
     
-    uint32_t total_ms = timer_get_ms();
-    uint32_t seconds = total_ms / 1000;
-    uint32_t milliseconds = total_ms % 1000;
-    uint32_t minutes = seconds / 60;
-    seconds %= 60;
-    uint32_t hours = minutes / 60;
-    minutes %= 60;
-    
-    snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
-
+    // 尝试获取系统时间戳
+    if (get_system_timestamp(time_str, sizeof(time_str)) != 0) {
+        // 回退方案：使用运行时间
+        uint32_t total_ms = timer_get_ms();
+        uint32_t seconds = total_ms / 1000;
+        uint32_t milliseconds = total_ms % 1000;
+        uint32_t minutes = seconds / 60;
+        seconds %= 60;
+        uint32_t hours = minutes / 60;
+        minutes %= 60;
+        snprintf(time_str, sizeof(time_str), "[%02u:%02u:%02u.%03u]", hours, minutes, seconds, milliseconds);
+    }
 
     // 构造JSON
     cJSON *root = cJSON_CreateObject();
@@ -454,55 +520,36 @@ int mqtt_subscribe_reset() {
 int log_mqtt_start(void) {
     if (!os_mutex_valid(&g_log_mqtt_mutex)) {
         os_mutex_create(&g_log_mqtt_mutex);
-        get_SN(sn);
     }
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    if (g_monitor_thread_running) {
-        os_mutex_post(&g_log_mqtt_mutex);
-        return 0;
-    }
-    if (g_mqtt_start) log_mqtt_stop();
+    // 获取SN
+    get_SN(sn);
+    // 设置启动标志
     g_mqtt_start = true;
-
+    // 初始化队列用于缓存MQTT日志消息
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
-    //创建线程
-    // 启动监控线程
-
-    // 初始化线程属性并设置栈大小
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, stack_size);
-    
-    int ret = pthread_create(&monitor_thread, &attr, log_monitor_thread, NULL);
+    // 启动线程用于监控队列阈值和超时
+    int ret = thread_fork("log_mqtt_monitor", 15, 2048 * 4, 0, &monitor_thread_pid, log_monitor_thread, NULL);
     if (ret != 0) {
-        log_i("Failed to create monitor thread, error: %d\n", ret);
+        log_i("【MQTT】Failed to create monitor thread, error: %d\n", ret);
+        return ret;
     }
-    os_mutex_post(&g_log_mqtt_mutex);
     return 0;
 }
 
 // 添加停止函数
 void log_mqtt_stop(void) {
-    if (!os_mutex_valid(&g_log_mqtt_mutex)) {
-        return;
-    }
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
     if (!g_mqtt_start) {
-        os_mutex_post(&g_log_mqtt_mutex);
         return;
     }
     // 停止监控线程
     g_monitor_thread_running = false;
     
     log_i("MQTT pthread_join\n");
-    os_mutex_post(&g_log_mqtt_mutex);
-    if (monitor_thread) {
-        pthread_join(monitor_thread, NULL);  // 等待线程退出
-        log_i("MQTT monitor thread joined\n");
-        pthread_attr_destroy(&attr);  // 清理线程属性
-        log_i("MQTT pthread_attr_destroy\n");
-        monitor_thread = 0;
+    if (monitor_thread_pid) {
+        thread_kill(&monitor_thread_pid, KILL_WAIT);  // 等待线程退出
+        log_i("MQTT monitor thread killed\n");
+        monitor_thread_pid = 0;
     }
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
 
     // 确保最后的消息都发送出去
     upload_all_logs();
@@ -512,5 +559,4 @@ void log_mqtt_stop(void) {
     log_mqtt_disconnect();// 断开MQTT连接
 
     g_mqtt_start = false;
-    os_mutex_post(&g_log_mqtt_mutex);
 }

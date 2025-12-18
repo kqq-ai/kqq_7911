@@ -222,13 +222,13 @@ static void add_edev(lwl_eend_dev_t *pdev)
         if (strncmp(edev_set[i].sn, pdev->sn, SN_SIZE) == 0) {
             edev_set[i].edev = pdev;
             edev_set[i].distance = pdev->distance_info.distance;
-            log_i("[add_edev] Update sn=%s dist=%.2f", pdev->sn, pdev->distance_info.distance);
+            // log_i("【WSS】添加E设备到集合：更新设备=%s 距离=%.2f", pdev->sn, pdev->distance_info.distance);
             return;
         }
     }
 
     if (edev_set_count >= MAX_EDEV_SIZE) {
-        log_i("[add_edev] Set full(%d), drop sn=%s", MAX_EDEV_SIZE, pdev->sn);
+        // log_i("【WSS】添加E设备到集合：集合满(%d), 丢弃设备=%s", MAX_EDEV_SIZE, pdev->sn);
         return;
     }
 
@@ -239,7 +239,7 @@ static void add_edev(lwl_eend_dev_t *pdev)
     edev_set_count++;
     
     add_target_sn(pdev->sn);
-    log_i("[add_edev] Add new sn=%s dist=%.2f cnt=%d", pdev->sn, pdev->distance_info.distance, edev_set_count);
+    // log_i("【WSS】添加E设备到集合：新增设备=%s 距离=%.2f 计数=%d", pdev->sn, pdev->distance_info.distance, edev_set_count);
 }
 
 /**
@@ -250,13 +250,13 @@ static void add_edev(lwl_eend_dev_t *pdev)
 static void remove_edev(lwl_eend_dev_t *pdev)
 {
     if (!pdev) {
-        log_i("[remove_edev] Invalid: pdev is NULL");
+        log_i("【WSS】从集合中删除E设备：无效：pdev is NULL");
         return;
     }
 
     for (int i = 0; i < edev_set_count; ++i) {
         if (strncmp(edev_set[i].sn, pdev->sn, SN_SIZE) == 0) {
-            log_i("[remove_edev] Remove sn=%s dist=%.2f cnt=%d->%d", 
+            log_i("【WSS】从集合中删除E设备：移除设备=%s 距离=%.2f 计数=%d->%d", 
                   pdev->sn, edev_set[i].distance, edev_set_count, edev_set_count - 1);
             
             if (edev_last == edev_set[i].edev) {
@@ -272,7 +272,7 @@ static void remove_edev(lwl_eend_dev_t *pdev)
         }
     }
     
-    log_i("[remove_edev] Device sn=%s not found", pdev->sn);
+    log_i("【WSS】从集合中删除E设备：设备=%s 没找到，当前设备数量=%d", pdev->sn, edev_set_count);
 }
 
 /**
@@ -352,7 +352,7 @@ static lwl_eend_dev_t* get_edev()
 void update_edev_time(char* sn)
 {
     if (!sn) {
-        log_i("[update_edev_time] Invalid: sn is NULL");
+        log_i("【WSS】更新E设备最后使用时间：无效：sn is NULL");
         return;
     }
 
@@ -371,7 +371,7 @@ void update_edev_time(char* sn)
     }
 
     if (index == -1) {
-        log_i("[update_edev_time] Device sn=%s not found", sn);
+        log_i("【WSS】更新E设备最后使用时间：设备=%s not found", sn);
     }
     clear_target_sn_set();
 
@@ -396,7 +396,7 @@ void update_edev_time(char* sn)
 static void device_event_handler_cb(lwl_event_t *e)
 {
     if (!e) {
-        log_i("[device_event_handler_cb] Invalid: e is NULL");
+        // log_i("【WSS】BLE距离变化事件处理回调：无效：e is NULL");
         return;
     }
 
@@ -406,12 +406,12 @@ static void device_event_handler_cb(lwl_event_t *e)
 
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
     if (!p_eend_dev) {
-        log_i("[device_event_handler_cb] Invalid device pointer in event");
+        // log_i("【WSS】BLE距离变化事件处理回调：无效设备指针");
         return;
     }
 
     if (p_eend_dev->distance_info.rssi_sample_count == 0) {
-        log_i("[device_event_handler_cb] Skip sn=%s (no RSSI)", p_eend_dev->sn);
+        // log_i("【WSS】BLE距离变化事件处理回调：跳过设备=%s (无RSSI)", p_eend_dev->sn);
         return;
     }
     os_mutex_pend(&edev_manager_mutex, 0);
@@ -420,14 +420,18 @@ static void device_event_handler_cb(lwl_event_t *e)
     case DISTANCE_0:
     case DISTANCE_1:
         add_edev(p_eend_dev);
+        //使用中文打印
+        // log_i("【WSS】BLE距离变化事件处理回调：添加设备=%s 距离=%d", p_eend_dev->sn, (int)(p_eend_dev->distance_info.distance * 100));
         break;
     case DISTANCE_2:
     case DISTANCE_3:
         remove_edev(p_eend_dev);
+        //使用中文打印
+        // log_i("【WSS】BLE距离变化事件处理回调：移除设备=%s 距离=%d", p_eend_dev->sn, (int)(p_eend_dev->distance_info.distance * 100));
         break;
     default:
-        log_i("[device_event_handler_cb] Unknown distance type: %d", 
-              p_eend_dev->distance_info.distance_type);
+        // log_i("【WSS】BLE距离变化事件处理回调：未知距离类型: %d", 
+        //       p_eend_dev->distance_info.distance_type);
         break;
     }
     
@@ -440,33 +444,33 @@ static void device_event_handler_cb(lwl_event_t *e)
  */
 void wss_device_init()
 {
-    log_i("[wss_device_init] Initializing...");
+    log_i("【WSS】初始化WSS设备管理模块：初始化...");
 
     g_app_ctx = lwl_app_core_context_get_instance();
     if (!g_app_ctx) {
-        log_i("[wss_device_init] Warning: g_app_ctx is NULL");
+        log_i("【WSS】初始化WSS设备管理模块：警告：g_app_ctx is NULL");
     }
 
     if (!os_mutex_valid(&edev_manager_mutex)) {
         os_mutex_create(&edev_manager_mutex);
-        log_i("[wss_device_init] Create mutex");
+        log_i("【WSS】初始化WSS设备管理模块：创建互斥锁");
     }
 
     clear_edev_set();
-    log_i("[wss_device_init] Clear edev_set");
+    log_i("【WSS】初始化WSS设备管理模块：清空edev_set");
 
     clear_target_sn_set();
-    log_i("[wss_device_init] Clear target_sn_set");
+    log_i("【WSS】初始化WSS设备管理模块：清空target_sn_set");
 
     ble_simple_client_module_enable(1);
-    log_i("[wss_device_init] Enable BLE module");
+    log_i("【WSS】初始化WSS设备管理模块：启用BLE模块");
 
     lwl_event_handler_add(device_event_handler_cb);
-    log_i("[wss_device_init] Register event handler");
+    log_i("【WSS】初始化WSS设备管理模块：注册事件处理回调");
 
     edev_last = NULL;
 
-    log_i("[wss_device_init] Done");
+    log_i("【WSS】初始化WSS设备管理模块：完成");
 }
 
 /**
@@ -475,25 +479,25 @@ void wss_device_init()
  */
 void wss_device_uninit()
 {
-    log_i("[wss_device_uninit] Uninitializing...");
+    log_i("【WSS】反初始化WSS设备管理模块：初始化...");
 
     lwl_event_handler_remove(device_event_handler_cb);
-    log_i("[wss_device_uninit] Unregister event handler");
+    log_i("【WSS】反初始化WSS设备管理模块：注销事件处理回调");
 
     ble_simple_client_module_enable(0);
-    log_i("[wss_device_uninit] Disable BLE module");
+    log_i("【WSS】反初始化WSS设备管理模块：禁用BLE模块");
 
     clear_target_sn_set();
-    log_i("[wss_device_uninit] Clear target_sn_set");
+    log_i("【WSS】反初始化WSS设备管理模块：清空target_sn_set");
 
     clear_edev_set();
-    log_i("[wss_device_uninit] Clear edev_set");
+    log_i("【WSS】反初始化WSS设备管理模块：清空edev_set");
 
     edev_last = NULL;
 
     msleep(10);
 
-    log_i("[wss_device_uninit] Done");
+    log_i("【WSS】反初始化WSS设备管理模块：完成");
 }
 
 /**
@@ -522,7 +526,8 @@ lwl_eend_dev_t *wss_device_loop()
     }
 
     int dist_int = (int)(pdev->distance_info.distance * 100);
-    log_i("[wss_device_loop] Trigger sn=%s dist=%d", pdev->sn, dist_int);
+    //使用中文打印
+    // log_i("【WSS】设备循环处理函数：触发设备=%s 距离=%d", pdev->sn, dist_int);
     
     wss_request_send_event(pdev->sn, ORMET_NEAR_TRIGGER);
     last_dequeue_time = g_curr_time;
@@ -540,17 +545,17 @@ lwl_eend_dev_t *wss_device_call()
 
     lwl_eend_dev_t *pdev = get_edev();
     if (!pdev) {
-        log_i("[wss_device_call] No available device");
+        // log_i("【WSS】主动请求最近设备通话：没有可用设备");
         return NULL;
     }
 
     if (!pdev->sn) {
-        log_i("[wss_device_call] Invalid device SN");
+        // log_i("【WSS】主动请求最近设备通话：无效设备SN");
         return NULL;
     }
 
-    log_i("[wss_device_call] Active trigger sn=%s dist=%d",
-          pdev->sn, (int)(pdev->distance_info.distance * 100));
+    // log_i("【WSS】主动请求最近设备通话：触发设备=%s 距离=%d",
+    //       pdev->sn, (int)(pdev->distance_info.distance * 100));
     
     wss_request_send_event(pdev->sn, ORMET_NEAR_TRIGGER);
     last_dequeue_time = g_curr_time;
@@ -572,7 +577,7 @@ bool wss_device_is_calling()
     
     if (!in_range) {
         int dist_int = (int)(edev_last->distance_info.distance * 100);
-        log_i("[wss_device_is_calling] Device out of range dist=%d", dist_int);
+        // log_i("【WSS】判断最近唤起的设备是否仍在通话范围内：设备超出范围 dist=%d", dist_int);
         edev_last = NULL;
     }
 

@@ -56,14 +56,14 @@ void wss_application_vailed()
 
 void wss_disconnect_cbk(void)
 {
-    log_i("[wss_application]odmp disconnect!!!");
+    log_i("【WSS】应用程序ODMP断开：ODMP断开!!!");
     // os_time_dly(100);      // 修正：延时 1000ms (假设 1 tick = 10ms)
     // wss_exception_exit();
 }
 
 void wss_application_resume_mic()
 {
-    log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
+    log_i("恢复麦克风：触摸键=%d 麦克风=%d", g_on_touch_key, g_mic_on);
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (g_on_touch_key) {
         wss_mic_start();
@@ -87,7 +87,7 @@ bool wss_application_check_power_key()
 void wss_application_start_mic()
 {
     g_mic_on = true;
-    log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+    log_i("开始录音");
     g_device_state = APP_VAD;
     wss_vad_start(600000); // 开始录音
 }
@@ -112,19 +112,19 @@ static void wss_application_touch_key(bool press_down)
         if (is_short_press) {
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
-                log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
+                log_i("打断/切换对话状态");
                 g_device_state = APP_WAIT;
                 wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
                 wss_application_vailed();
             } else {             // 按键前未在说话
-                log_i("[wss_application]STATE: Touch key -> APP_VAD");
+                log_i("开始录音");
                 g_device_state = APP_VAD;
                 g_mic_on = true;
                 wss_vad_start(600000); // 开始录音
             }
         } else {
             // 长按默认进剧本和多角色模式
-            log_i("[wss_application]STATE: long press -> APP_WAIT");
+            log_i("切换到多角色模式");
             g_device_state = APP_WAIT;
             multi_play_mode = true;
             g_mic_on = false;
@@ -145,7 +145,7 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_KEY:
-        log_i("[wss_application]APPLICATION SHORT_CLICK %d", multi_play_mode);
+        log_i("短按：%d", multi_play_mode);
         if (wss_check_exit()) {
             g_power_key_retry = true;
         } else {
@@ -164,11 +164,11 @@ static void input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
-            log_i("[wss_application]Touch key pressed down");
+            log_i("触摸键按下");
             g_on_touch_key = true;
             wss_application_touch_key(true);
         } else {
-            log_i("[wss_application]Touch key released");
+            log_i("触摸键释放");
             wss_application_touch_key(false);
             g_on_touch_key = false;
         }
@@ -187,6 +187,7 @@ char music_file[128];
 
 void stop_prompt()
 {
+
     log_i("stop_prompt %d", play_voice_prompt);
     music_file[0] = 0;
     play_voice_prompt = 0;
@@ -194,7 +195,7 @@ void stop_prompt()
 
 static void wss_app_mode_play_cb(void *priv)
 {
-    log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
+    log_i("播放结束，恢复麦克风");
     play_voice_prompt = 0;
     wss_application_resume_mic();
     bdo_enable();
@@ -212,7 +213,7 @@ void wss_app_mode_play()
         wss_ble_audio_stop();
     }
     // bdo_disable();
-    log_i("[wss_application]wss_app_mode_play: %s", music_file);
+    log_i("播放：%s", music_file);
     wss_mic_stop(); // 停止录音
     
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
@@ -227,7 +228,7 @@ void wss_app_mode_play()
 
 void play_prompt(const char *fname) 
 {
-    log_i("[wss_application]prepare to play_prompt: %s", fname);
+    // log_i("准备播放提示：%s", fname);
     memcpy(music_file, fname, strlen(fname)+1);
 }
 
@@ -242,7 +243,7 @@ void *wss_condition_monitor_thread(void *arg)
     u32 last_move_time = current_time;
     u32 last_mem_stats_time = current_time; // 新增变量
 
-    log_i("[wss_application]Starting WSS condition monitor thread...");
+    log_i("启动WSS条件监控线程...");
     while (monitor_thread_running && lwl_app_mode_get_current_mode() == APP_WSS_CONNECTED_MODE) {
         current_time = timer_get_ms();
         
@@ -260,27 +261,27 @@ void *wss_condition_monitor_thread(void *arg)
         if (current_time - last_mem_stats_time > 60000) {
             last_mem_stats_time = current_time;
             
-            log_i("=== LwIP Memory Stats Debug ===");
+            log_i("LwIP内存统计调试");
             
             // 1. 尝试打印 Heap (System Heap / LwIP Heap)
             #if MEM_STATS
-            log_i("[HEAP] avail: %d, used: %d, max: %d, err: %d", 
+            log_i("【WSS】Heap: 可用=%d, 已用=%d, 最大=%d, 错误=%d", 
                   lwip_stats.mem.avail, lwip_stats.mem.used, 
                   lwip_stats.mem.max, lwip_stats.mem.err);
             #else
-            log_i("[HEAP] MEM_STATS not enabled");
+            log_i("【WSS】Heap: MEM_STATS未启用");
             #endif
 
             // 2. 打印 PBUF_POOL (关键!)
             #if MEMP_STATS
-            log_i("[PBUF] avail: %d, used: %d, max: %d, err: %d",
+            log_i("PBUF: 可用=%d, 已用=%d, 最大=%d, 错误=%d",
                   lwip_stats.memp[MEMP_PBUF_POOL]->avail,
                   lwip_stats.memp[MEMP_PBUF_POOL]->used,
                   lwip_stats.memp[MEMP_PBUF_POOL]->max,
                   lwip_stats.memp[MEMP_PBUF_POOL]->err);
                   
             // 3. 打印 TCP_SEG (防止发送积压)
-            log_i("[SEG ] avail: %d, used: %d, max: %d, err: %d",
+            log_i("TCP_SEG: 可用=%d, 已用=%d, 最大=%d, 错误=%d",
                   lwip_stats.memp[MEMP_TCP_SEG]->avail,
                   lwip_stats.memp[MEMP_TCP_SEG]->used,
                   lwip_stats.memp[MEMP_TCP_SEG]->max,
@@ -381,13 +382,13 @@ bool wss_application_loop()
     g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
         if (wss_request_is_busy()) {
-            log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
+            log_i("异常退出，(原因=%s), 停止繁忙请求",
             wss_get_last_disconnect_reason());
             wss_request_stop();
             wss_mic_stop();
         }
         if (g_device_state != APP_IDLE) {
-            log_i("[wss_application]STATE: wss_check_exit -> APP_IDLE");
+            log_i("异常退出，回到IDLE状态");
             g_device_state = APP_IDLE;
         }
         return true;
@@ -405,16 +406,16 @@ bool wss_application_loop()
     switch (g_device_state) {
     case APP_IDLE:
         if (wss_request_is_playing()) {
-            log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
+            log_i("开始播放音频");
             g_device_state = APP_AUDIO;
             wss_mic_stop(); // 停止录音
         } else if (g_mic_on && wss_device_is_calling()) {
-            log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
+            log_i("开始录音");
             g_device_state = APP_VAD;
             wss_vad_start(600000); // 开始录音
         } else if (!wss_device_is_calling() || multi_play_mode) {
             if (wss_device_loop()) {
-                log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
+                log_i("等待下个角色说话");
                 g_device_state = APP_WAIT;
                 wss_application_vailed();
             }
@@ -425,18 +426,18 @@ bool wss_application_loop()
         // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
         if (!wss_request_is_playing()) { //也可能是超时退出
             if (multi_play_mode) {
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
+                log_i("切换到下一个角色");
                 wss_request_send_event_target(ORMET_PLAY_NEXT);
                 g_device_state = APP_WAIT;
             } else if (wss_device_is_calling()) {
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_VAD");
+                log_i("结束当前角色播放，开始录音");
                 wss_request_send_event_target(ORMET_PLAY_END);
                 g_device_state = APP_VAD;
                 wss_application_resume_mic();
                 wss_vad_start(600000); // 开始录音
                 // turn_off_Pi();
             } else {
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+                log_i("结束当前角色播放，回到IDLE状态");
                 wss_request_send_event_target(ORMET_PLAY_END);
                 g_device_state = APP_IDLE;
                 wss_application_resume_mic();
@@ -449,13 +450,13 @@ bool wss_application_loop()
     case APP_VAD: // until audio upload end
         // 音频上传结束，回到IDLE状态
         if (wss_request_is_playing()) {
-            log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
+            log_i("录音结束，回到IDLE状态");
             g_device_state = APP_AUDIO;
             g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
             wss_mic_stop(); // 停止录音
         }
         if (!wss_device_is_calling()) {
-            log_i("[wss_application]STATE: APP_VAD -> APP_IDLE");
+            log_i("当前角色播放结束，回到IDLE状态");
             g_device_state = APP_IDLE;
         }
         break;
@@ -463,13 +464,13 @@ bool wss_application_loop()
     case APP_WAIT: // until TTS_bind
         // 等待下个角色说话
         if (wss_request_is_playing()) {
-            log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
+            log_i("等待下个角色说话，开始播放音频");
             g_device_state = APP_AUDIO;
             wss_mic_stop(); // 停止录音
         } else if (wss_request_is_busy()) {
             // 继续等待
         } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-            log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");
+            log_i("等待超时，回到IDLE状态");
             g_device_state = APP_IDLE;
         }
         break;

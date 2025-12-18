@@ -19,6 +19,7 @@
 #include "protocol/odm/odm_secure.h"
 #include "LED/LED.h"
 
+#include "log/log_mqtt.h"
 #include "os/os_api.h"
 
 #define TOUCH_KEY_HEAT_TIMEOUT_MS 500
@@ -127,6 +128,7 @@ void music_play_stop()
 {
     if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
         log_i("[AUDIO]music_play_stop");
+        log_mqtt("停止播放音频");
         app_music_play_stop(g_app_ctx->music_player);
     }
 }
@@ -136,6 +138,7 @@ void music_play_stop_in_thread()
 {
     if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
         log_i("[AUDIO]music_play_stop_in_thread");
+        log_mqtt("开启新线程停止播放音频");
         threadpool_add_task(g_app_ctx->threadpool, music_play_stop, NULL);
     }
 }
@@ -158,6 +161,7 @@ static bool is_mic_on() {
 // 停止麦克风录音，可选择是否上传剩余音频数据
 void wss_mic_stop() {
     log_i("[AUDIO]wss_mic_stop");
+    log_mqtt("停止麦克风录音");
     os_mutex_pend(&g_audio_mutex, 0);
     wss_app_recorder_data_upstream(NULL);
     wss_app_recorder_en(DISABLE);
@@ -167,6 +171,7 @@ void wss_mic_stop() {
 // 开始麦克风录音，设置VAD超时时间
 void wss_mic_start() {
     log_i("[AUDIO]wss_mic_start");
+    log_mqtt("开始麦克风录音");
     os_mutex_pend(&g_audio_mutex, 0);
     wss_app_recorder_en(ENABLE);
     vad_start_time = get_time_stamp();
@@ -176,6 +181,7 @@ void wss_mic_start() {
 // 开始麦克风录音，设置VAD超时时间
 void wss_vad_start(uint timestamp) {
     log_i("[AUDIO]wss_vad_start set timeout %d", timestamp);
+    // log_mqtt("开始VAD录音，超时时间 %d", timestamp);
     os_mutex_pend(&g_audio_mutex, 0);
     if (vad_stop_time == 0 && !g_recording) {
         g_recording_upload = true;
@@ -190,6 +196,7 @@ void wss_vad_start(uint timestamp) {
 // 开始麦克风录音，准备上传ASR
 void wss_asr_start() {
     log_i("[AUDIO]wss_asr_start");
+    log_mqtt("开始ASR录音");
     os_mutex_pend(&g_audio_mutex, 0);
     if (!g_recording) {
         g_recording_upload = false; // 停止VAD上传
@@ -201,6 +208,8 @@ void wss_asr_start() {
 
 // 取消上传ASR
 void wss_asr_stop() {
+    log_i("[AUDIO]wss_asr_stop");
+    log_mqtt("停止ASR录音");
     os_mutex_pend(&g_audio_mutex, 0);
     g_recording = false;
     os_mutex_post(&g_audio_mutex);
@@ -217,6 +226,7 @@ void set_tts_volume(int volume) {
 
 void set_speaker() {
     log_i("[AUDIO]set_speaker Pi: %d", g_volume);
+    log_mqtt("设置扬声器音量: %d", g_volume);
     os_mutex_pend(&g_audio_mutex, 0);
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
@@ -265,7 +275,7 @@ static void delayed_playback_task(void *priv)
  */
 void wss_audio_set_player(u32 delta)
 {
-    
+    log_mqtt("设置播放器延迟启动: %u ms", delta);
     log_i("[AUDIO]wss_audio_set_player: scheduling playback start after %u ms", delta);
     
     /* 分配任务结构体 */
@@ -296,6 +306,7 @@ bool is_audio_playing(){
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
 void wss_ble_audio_stop() {
     log_i("[AUDIO]wss_ble_audio_stop");
+    log_mqtt("停止蓝牙音频播放");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = true;
     odmp_register_audio_data_cbk(NULL); 
@@ -310,6 +321,7 @@ void wss_ble_audio_stop() {
 // 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器
 void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
+    log_mqtt("开始蓝牙音频播放");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
     g_audio_player_start = false;
@@ -385,6 +397,7 @@ static int wss_asr_data_to_server(AsrData *asr_data)
 static void start_audio_upload()
 {
     log_i("[AUDIO]Start audio upload.");
+    log_mqtt("🔥🔥🔥开始音频上传");
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     g_recording_uploading = true;
@@ -417,6 +430,7 @@ static void start_audio_upload()
         log_i("[AUDIO]Stop audio_upload because wss_mic_stop.");
     }
     send_audio_status(OAST_ASR, OASE_END);
+    log_mqtt("🔥🔥🔥音频上传结束");
 }
 
 /**
@@ -428,6 +442,7 @@ static void start_audio_upload()
 void wait_vad_task(void *priv)
 {
     log_i("[AUDIO]start VAD until %d\n", vad_stop_time);
+    // log_mqtt("开始VAD录音，超时时间 %d", vad_stop_time);
     while (is_mic_on() == false && g_recording_upload) {
         msleep(30);
     }
@@ -517,6 +532,7 @@ void wait_asr_task(void *priv)
 void app_music_play_end_cb(void *priv)
 {
     log_i("[AUDIO]app_music_play_end_cb");
+    log_mqtt("音频播放结束");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
@@ -542,7 +558,7 @@ static int wss_audio_playback_start(void)
         return 0;
     }
     log_i("[AUDIO]starting music player");
-
+    log_mqtt("开始音频播放并刷入预缓冲数据");
     /* 停止其他音频 */
     music_play_stop();
     stop_prompt();
@@ -555,6 +571,7 @@ static int wss_audio_playback_start(void)
 
     if (g_prebuffer_pos == 0) {
         log_e("[AUDIO]no prebuffer data to play");
+        // log_mqtt("没有预缓冲数据，无法播放");
         os_mutex_post(&g_audio_mutex);
         return -1;
     }
@@ -572,10 +589,12 @@ static int wss_audio_playback_start(void)
         uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, g_prebuffer + written_all, chunk);
         if (written == 0) {
             log_e("[AUDIO]failed to write prebuffer chunk at offset %u", written_all);
+            log_mqtt("预缓冲数据写入失败，offset %u", written_all);
             break;
         }
         written_all += written;
         log_d("[AUDIO]flushed prebuffer chunk %u/%u", written_all, g_prebuffer_pos);
+        log_mqtt("预缓冲数据写入成功，offset %u/%u", written_all, g_prebuffer_pos);
         msleep(10);
     }
 
@@ -584,6 +603,7 @@ static int wss_audio_playback_start(void)
     os_mutex_post(&g_audio_mutex);
 
     log_i("[AUDIO]playback_start completed, flushed %u bytes", written_all);
+    log_mqtt("音频播放完成，刷入预缓冲数据 %u 字节", written_all);
     return 0;
 }
 
@@ -610,7 +630,7 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
     }
 
     log_d("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
-
+    // log_mqtt("音频数据流写入，长度 %u，播放中 %d，预缓冲位置 %u", len, g_audio_play_ongoing, g_prebuffer_pos);
     os_mutex_pend(&g_audio_mutex, 0);
 
     /* 如果已启动播放，直接写入流 */
@@ -658,6 +678,7 @@ stream_write:
     if (g_audio_playing == false && app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
         g_audio_playing = true;
         log_i("[AUDIO]stream playing...");
+        log_mqtt("音频播放正在播放......");
     }
     os_mutex_post(&g_audio_mutex);
 
@@ -714,6 +735,7 @@ static void recorder_vad_cb(void* priv, int type)
 void wss_audio_init()
 {
     log_i("[AUDIO]Init WSS audio\n");
+    log_mqtt("初始化WSS音频");
     if (!os_mutex_valid(&g_audio_mutex)) {
         os_mutex_create(&g_audio_mutex);
     }
@@ -740,6 +762,7 @@ void wss_audio_init()
 void wss_audio_uninit()
 {
     log_i("[AUDIO]Uninit WSS audio\n");
+    log_mqtt("释放WSS音频");
     os_mutex_pend(&g_audio_mutex, 0);
     
     lwl_peri_dev_7016_on(false);  // 关闭 7016
