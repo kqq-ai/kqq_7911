@@ -3,6 +3,7 @@
 #include "device/device.h"
 #include "app_mode/lwl_app_core.h"
 #include "gpio.h"                 // for gpio_direction_output
+#include "app_cookie.h"
 
 extern g_dev_uart_hdl;
 
@@ -184,12 +185,12 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
 
 int uart_send_set_sn(char *sn)
 {
-    uint8_t busy_status_payload[1 + SN_SIZE] = {0};
+    uint8_t busy_status_payload[1 + SN_SIZE +1] = {0};
     busy_status_payload[0] = UART_CMD_SET_BLESN;
     if (strcmp(sn, "WECNC4H06CPLJE7") == 0) {
-        memcpy(busy_status_payload + 1, "WCCN24H28FEEEFA", SN_SIZE);
+        memcpy(busy_status_payload + 1, "WCCN24H28FEEEFA", SN_SIZE+1);
     } else {
-        memcpy(busy_status_payload + 1, sn, SN_SIZE);
+        memcpy(busy_status_payload + 1, sn, SN_SIZE+1);
     }
     return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
 }

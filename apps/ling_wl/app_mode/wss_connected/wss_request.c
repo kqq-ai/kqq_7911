@@ -32,8 +32,8 @@ static int send_message = 0;
 
 static bool g_mode_script = 0; // 如果true则不播放切换提示音
 
-static char g_edev_target_sn[SN_SIZE]; // 服务器维护
-static char g_edev_connected_sn[SN_SIZE]; // E 已连接
+static char g_edev_target_sn[SN_SIZE+1]; // 服务器维护
+static char g_edev_connected_sn[SN_SIZE+1]; // E 已连接
 
 //=================================================================================================
 // 当前状态维护
@@ -109,14 +109,14 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     os_mutex_pend(&g_request_mutex, 0);
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     
-    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
+    char sn_string[SN_SIZE + 1] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
     switch(code) {
     case BDOCode_Success:
         log_i("[wss_request]Switch PortE %s OK\n", sn_string);
-        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
         if (strcmp(sn_string,g_edev_target_sn) == 0) {
             send_message = ORMET_SWITCH_SUCCESS;
             wss_audio_set_player(WSS_MUSIC_TIMEOUT);
@@ -178,11 +178,11 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
         log_i("send_id: %s (%s)\n", pkg->tts_bind.send_id, g_edev_target_sn);
         log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
-        if (strlen(pkg->tts_bind.send_id)!= SN_SIZE-1) break;
+        if (strlen(pkg->tts_bind.send_id)!= SN_SIZE) break;
         
         if (strncmp(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE) != 0) {
             wss_ble_audio_stop();
-            memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE);
+            memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE+1);
             send_message = 0; // 重置发送消息标志
             turn_on_Pi(g_edev_target_sn);
             if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
@@ -431,7 +431,7 @@ bool wss_request_loop()
 void wss_request_send_event(char *sn, int msg_event)
 {
     g_wss_last_time = g_curr_time;
-    if (sn != NULL && strlen(sn)!= SN_SIZE-1) {
+    if (sn != NULL && strlen(sn)!= SN_SIZE) {
         sn = NULL;
     }
     if (sn != NULL) {

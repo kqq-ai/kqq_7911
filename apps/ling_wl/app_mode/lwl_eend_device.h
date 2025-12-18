@@ -8,7 +8,7 @@
 #include "btstack/le/le_common_define.h"
 #include "bt_ble/client/ble_att_util.h"
 
-#define SN_SIZE 16 /**< Size of the serial number buffer */
+#define PI_SN_SIZE 15 /**< Size of the serial number buffer */
 
 #define MAX_SAMPLES 64 /**< Size of the RSSI sample array */
 
@@ -86,7 +86,7 @@ typedef struct {
  * @brief Structure representing an LWL EEND device
  */
 typedef struct {
-    u8 sn[SN_SIZE];                               //!< Serial number of the device
+    u8 sn[PI_SN_SIZE+1];                               //!< Serial number of the device
 
     u8 bat_level;                                 //!< E 端设备电量
 

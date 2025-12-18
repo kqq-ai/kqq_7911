@@ -118,7 +118,7 @@
  * device.h
  *   结构体：lwl_eend_dev_t - E端设备结构体
  *   包含字段：
- *     - sn[SN_SIZE] - 设备序列号
+ *     - sn[SN_SIZE+1] - 设备序列号
  *     - distance_info.distance - 当前距离值(米)
  *     - distance_info.distance_type - 距离分级(DISTANCE_0/1/2/3)
  *     - distance_info.rssi_sample_count - RSSI样本数量(用于距离有效性验证)
@@ -193,7 +193,7 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static lwl_eend_dev_t *edev_last;
 
 typedef struct {
-    char sn[SN_SIZE];
+    char sn[SN_SIZE+1];
     u32 last_get_time;
     double distance;
     lwl_eend_dev_t *edev;
@@ -231,7 +231,7 @@ static void add_edev(lwl_eend_dev_t *pdev)
         return;
     }
 
-    strncpy(edev_set[edev_set_count].sn, pdev->sn, SN_SIZE);
+    strncpy(edev_set[edev_set_count].sn, pdev->sn, SN_SIZE+1);
     edev_set[edev_set_count].last_get_time = 0;
     edev_set[edev_set_count].distance = pdev->distance_info.distance;
     edev_set[edev_set_count].edev = pdev;

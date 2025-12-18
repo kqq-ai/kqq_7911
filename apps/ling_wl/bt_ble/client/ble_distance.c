@@ -110,7 +110,7 @@ static void print_rssi_samples(lwl_eend_dev_t *dev, void *priv)
         return;
     }
 #if PRINT_RSSI_LOG
-    char sn[SN_SIZE * 2 + 1] = "(NULL)";
+    char sn[SN_SIZE+1] = "(NULL)";
     // 增加get_string回调函数的NULL检查
     if (dev->get_string)
     {

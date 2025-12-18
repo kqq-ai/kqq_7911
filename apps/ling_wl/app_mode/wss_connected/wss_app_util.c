@@ -4,6 +4,7 @@
 #include "wss/wss_client.h"
 #include "wss/wss_client_custom.h"  // 使用自定义WebSocket实现
 #undef ESTABLISHED
+#include "app_cookie.h"
 #include "lwip/tcp.h"
 #include "lwip/priv/tcp_priv.h"
 #include "os/os_api.h"
@@ -33,7 +34,7 @@ static ws_client_t g_ws_client_custom = NULL;
 // 添加SN到集合
 void add_target_sn(const char* sn) {
     if (!sn) return;
-    if (strlen(sn)!= SN_SIZE-1) return;
+    if (strlen(sn)!= SN_SIZE) return;
     os_mutex_pend(&g_wss_mutex, 0);
     // 检查是否已存在
     for (int i = 0; i < target_sn_count; ++i) {

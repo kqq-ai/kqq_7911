@@ -2,6 +2,7 @@
 #define __APP_COOKIE_H__
 
 #include "cpu.h"
+#define SN_SIZE 15
 
 struct app_cookie_hdl {
 

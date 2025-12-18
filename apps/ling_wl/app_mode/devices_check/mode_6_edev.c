@@ -24,6 +24,7 @@
 #include "gpio.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
 #include "../../LED/LED.h"
+#include "app_cookie.h"
  
 static u8 g_mode6_playing_prompt = 1; // 模式6状态：1=播放提示音，0=循环播放测试音
 
@@ -55,7 +56,7 @@ static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    char sn_string[SN_SIZE] = "(NULL)";
+    char sn_string[SN_SIZE+1] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
@@ -73,7 +74,7 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 static void switch_to_e_target(lwl_eend_dev_t* pdev)
 {
     if (pdev == NULL) return;
-    char sn_string[SN_SIZE] = "(NULL)";
+    char sn_string[SN_SIZE+1] = "(NULL)";
     pdev->get_string(pdev, sn_string, sizeof(sn_string));
     log_i("Switching to target: %s", sn_string);
     
@@ -105,7 +106,7 @@ void mode6_audio_callback(void *priv)
 
     // 播放结束后，先关闭当前已连接的E端设备（如果有）
     if (current_pdev) {
-        char sn_string[SN_SIZE] = "(NULL)";
+        char sn_string[SN_SIZE+1] = "(NULL)";
         current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 6: Turn OFF current E device: %s", sn_string);
         uint cmd_id;

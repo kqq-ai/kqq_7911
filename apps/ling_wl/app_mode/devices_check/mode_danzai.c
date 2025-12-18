@@ -2,6 +2,7 @@
 #include "gpio.h"
 #include "../../bt_ble/client/ble_distance.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
+#include "app_cookie.h"
 
 #include "../../LED/LED.h"
 
@@ -47,7 +48,7 @@ void mode9_random_audio_end_cb(void *priv)
     
     // 断开当前E端设备
     if (g_mode9_current_pdev) {
-        char sn_string[SN_SIZE] = "(NULL)";
+        char sn_string[SN_SIZE+1] = "(NULL)";
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Disconnecting E-device after playback: %s (DISTANCE: %.2f)", sn_string, previous_distance);
         
@@ -58,7 +59,7 @@ void mode9_random_audio_end_cb(void *priv)
     
     // 如果找到了信号更强的设备，立即连接并播放
     if (strongest_pdev && strongest_distance > previous_distance) {
-        char sn_string[SN_SIZE] = "(NULL)";
+        char sn_string[SN_SIZE+1] = "(NULL)";
         strongest_pdev->get_string(strongest_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Found stronger signal device after playback, switching to: %s (DISTANCE: %.2f -> %.2f)", 
             sn_string, previous_distance, strongest_distance);
@@ -82,7 +83,7 @@ void mode9_random_audio_end_cb(void *priv)
 static void mode9_e_connect_cb(bdo_code_e code, void *priv)
 {
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    char sn_string[SN_SIZE] = "(NULL)";
+    char sn_string[SN_SIZE+1] = "(NULL)";
     if (pdev) {
         pdev->get_string(pdev, sn_string, sizeof(sn_string));
     }
@@ -192,7 +193,7 @@ void process_mode_9(void)
                 if (!g_audio_playing) {
                     if (g_mode9_current_pdev) {
                         // 先断开当前连接的设备
-                        char current_sn[SN_SIZE] = "(NULL)";
+                        char current_sn[SN_SIZE+1] = "(NULL)";
                         g_mode9_current_pdev->get_string(g_mode9_current_pdev, current_sn, sizeof(current_sn));
                         log_i("MODE 9: Disconnecting current device: %s (DISTANCE: %.2f)", current_sn, current_distance);
                         uint cmd_id;
@@ -201,7 +202,7 @@ void process_mode_9(void)
                     }
                     
                     // 连接信号更强的设备
-                    char sn_string[SN_SIZE] = "(NULL)";
+                    char sn_string[SN_SIZE+1] = "(NULL)";
                     strongest_pdev->get_string(strongest_pdev, sn_string, sizeof(sn_string));
                     log_i("MODE 9: Connecting to stronger signal device: %s (DISTANCE: %.2f -> %.2f)", 
                         sn_string, current_distance, best_distance);
@@ -254,7 +255,7 @@ void mode9_uninit()
     g_mode9_prompt_finished = 0;
     // 断开当前连接的E端设备
     if (g_mode9_current_pdev) {
-        char sn_string[SN_SIZE] = "(NULL)";
+        char sn_string[SN_SIZE+1] = "(NULL)";
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Disconnecting E-device during cleanup: %s", sn_string);
         uint cmd_id;

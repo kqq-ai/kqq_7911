@@ -2,6 +2,7 @@
 
 #include "../lwl_app_framework.h"
 #include "log.h"
+#include "app_cookie.h"
 #include "../../bt_ble/server/ble_simple_server.h"
 #include "../../bt_ble/client/ble_simple_client.h"
 #include "../../include/app_config.h"
@@ -355,7 +356,6 @@ static void mode8_wrsn_audio_callback(void *priv)
 // 模式8 SN/Key写入功能实现
 //=================================================================================================
 
-#define SN_SIZE 15
 #define KEY_SIZE 16
 /**
  * @brief 将SN和Key写入存储

@@ -12,7 +12,7 @@ bool adv_match_impl(const void *__this, const u8 *adv_data, const u16 adv_len)
 {
     uint8_t buffer[32];
     int r = ble_adv_report_get_data(adv_data, adv_len, HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA, buffer);
-    return memcmp(((lwl_eend_dev_t *)__this)->sn, buffer + 3, SN_SIZE) == 0;
+    return memcmp(((lwl_eend_dev_t *)__this)->sn, buffer + 3, PI_SN_SIZE + 1) == 0;
 }
 
 void get_string_impl(const void *__this, char *buffer, const int size)
@@ -43,7 +43,7 @@ void set_ctrl_impl(void *__this, uint8_t on, uint8_t play)
 
 void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
 {
-    memcpy(dev->sn, sn, SN_SIZE);
+    memcpy(dev->sn, sn, PI_SN_SIZE + 1);
     dev->adv_match = adv_match_impl;
     dev->get_string = get_string_impl;
     dev->set_ctrl = set_ctrl_impl;

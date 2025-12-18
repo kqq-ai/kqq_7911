@@ -4,6 +4,7 @@
  */
 #include "devices_check.h"
 #include "mode_list.h"
+#include "app_cookie.h"
 #include "gpio.h"
 #include "log.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
@@ -59,7 +60,7 @@ static int is_pdev_in_list(lwl_eend_dev_t* pdev) {
 static void add_pdev_to_list(lwl_eend_dev_t* pdev) {
     if (!pdev || is_pdev_in_list(pdev) || pdev_list_count >= MAX_PDEV_LIST) return;
     pdev_list[pdev_list_count++] = pdev;
-    char sn_string[SN_SIZE] = "(NULL)";
+    char sn_string[SN_SIZE+1] = "(NULL)";
     pdev->get_string(pdev, sn_string, sizeof(sn_string));
     log_i("[PDEV_LIST] Added: %s, total: %d", sn_string, pdev_list_count);
     
@@ -76,7 +77,7 @@ static void remove_pdev_from_list(lwl_eend_dev_t* pdev) {
                 pdev_list[j] = pdev_list[j + 1];
             }
             pdev_list[--pdev_list_count] = NULL;
-            char sn_string[SN_SIZE] = "(NULL)";
+            char sn_string[SN_SIZE+1] = "(NULL)";
             pdev->get_string(pdev, sn_string, sizeof(sn_string));
             log_i("[PDEV_LIST] Removed: %s, total: %d", sn_string, pdev_list_count);
             break;
@@ -121,13 +122,13 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE: {
         log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE %d %d", p_eend_dev, p_eend_dev);
         if (p_eend_dev != NULL) {
-            char sn_string[SN_SIZE] = "(NULL)";
+            char sn_string[SN_SIZE+1] = "(NULL)";
             p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
             log_i("LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE %s", sn_string);
         }
     }   break;
     case LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE: {
-        char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
+        char sn_string[SN_SIZE+1] = "(NULL)";
         p_eend_dev->get_string(p_eend_dev, sn_string, sizeof(sn_string));
         log_i("[MEASDIST] LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE %s: %d\r\n", sn_string, p_eend_dev->distance_info.distance_type);
         if (p_eend_dev->distance_info.distance_type == DISTANCE_0) {

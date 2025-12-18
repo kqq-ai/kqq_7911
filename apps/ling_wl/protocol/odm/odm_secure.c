@@ -14,10 +14,9 @@
 extern lfs_t g_lfs;
 
 #define BUF_SIZE 128
-#define SN_SIZE 15
 #define KEY_SIZE 16
 
-char snInVm[SN_SIZE+SN_SIZE]="\0";
+char snInVm[SN_SIZE+1]="\0";
 
 char keyInVm[KEY_SIZE];
 
@@ -108,7 +107,7 @@ static void gen_SN()
                 LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
     /* 3. 写入数据 */
     size_t bytes_written = lfs_file_write(&g_lfs, &file, snInVm, SN_SIZE );
-    assert(bytes_written == SN_SIZE);
+    assert(bytes_written == SN_SIZE+1);
     bytes_written        = lfs_file_write(&g_lfs, &file, keyInVm, KEY_SIZE);
     assert(bytes_written == KEY_SIZE);
     log_i(" write LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_written );

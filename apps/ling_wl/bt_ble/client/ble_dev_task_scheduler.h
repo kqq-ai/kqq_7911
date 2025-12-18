@@ -43,7 +43,7 @@ typedef struct {
 } bdo_turn_off_t;
 
 typedef struct {
-    uint8_t sn[SN_SIZE];            //!< 设备序列号
+    uint8_t sn[PI_SN_SIZE+1];            //!< 设备序列号
     uint8_t op_type;                //!< 操作码 详情见 bdp_dev_op_type_e
     union {
         bdo_active_t active;        //!< 激活操作参数

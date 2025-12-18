@@ -2,6 +2,7 @@
 #include "os/os_api.h"
 #include "syscfg_id.h"
 #include "wifi/wifi_connect.h"
+#include "app_cookie.h"
 
 static lwl_app_context_t* s_app_context = NULL;
 static OS_MUTEX g_mutex;
@@ -115,7 +116,7 @@ void lwl_app_core_destroy()
 lwl_eend_dev_t *add_new_eend_dev(u8 *sn)
 {
     ASSERT(s_app_context != NULL);
-    ASSERT(strlen(sn) == SN_SIZE - 1);
+    ASSERT(strlen(sn) == SN_SIZE);
 
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)malloc(sizeof(lwl_eend_dev_t));
     ASSERT(pdev != NULL);
