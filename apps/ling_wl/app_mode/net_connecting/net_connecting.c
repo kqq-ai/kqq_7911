@@ -28,7 +28,8 @@
 #include "log.h"
 #include "LED/LED.h"
 
-#define MODE_TIMEOUT_MS 600000 // 600s
+#define MODE_TIMEOUT_MS 180000 // 180s
+#define MOVE_TIMEOUT_MS 60000 // 60s
 #define MODE_BLE_TIMEOUT_MS 15000 // 15s
 static u32 init_time = 0;
 static u32 key_press_time_ms = 0;
@@ -67,6 +68,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
+            g_sensor_reset_alive_timer();
         } else {
             log_i("Touch key released");
             if (wifi_manager_state) {
@@ -96,7 +98,7 @@ static int net_connecting_init(void)
     init_time = timer_get_ms();
     set_led_connecting();
     g_sensor_reset_alive_timer();
-    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
     wifi_manager_state = false;
     ble_connecting = false;
@@ -187,6 +189,14 @@ void app_net_connecting_loop()
     /* BLE连接处理 */
     if (wifi_manager_state && key_press_time_ms > 0) {
         handle_ble_connection_state();
+    }
+
+    /* 超时处理 */
+    if (timer_get_ms() - init_time > MODE_TIMEOUT_MS) {
+        printf("Net connecting mode timeout, switch to POWER_OFF mode\n");
+        disable_gsensor();// 无联网避免晃动反复唤醒设备，需要关机，而不是休眠
+        lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
+        return;
     }
 }
 

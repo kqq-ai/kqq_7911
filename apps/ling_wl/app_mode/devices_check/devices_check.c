@@ -23,7 +23,7 @@
 #include "os/os_api.h"
 static OS_MUTEX g_mode_mutex;
 
-#define MODE_TIMEOUT_MS 1200000 // 20 minutes
+#define MOVE_TIMEOUT_MS 600000 // 10 minutes
 static u32 init_time = 0;
 
 static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
@@ -237,7 +237,7 @@ static void devices_check_init(void)
 {
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
-    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_app_context_t *g_app_ctx = lwl_app_core_context_get_instance();
     
     if (!os_mutex_valid(&g_mode_mutex)) {

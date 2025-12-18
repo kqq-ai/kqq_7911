@@ -32,7 +32,7 @@
 
 #include "protocol/odm/odm_secure.h"
 
-#define MODE_TIMEOUT_MS 10000 // 10s
+#define MOVE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 
 static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
@@ -62,7 +62,7 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
 
 static int net_connected_init(void)
 {
-    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     ble_simple_client_module_enable(1);
     
     init_time = timer_get_ms();

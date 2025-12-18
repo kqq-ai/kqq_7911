@@ -30,7 +30,8 @@
 
 #include "./bt_ble/app_wifi_manage.h"
 #include "net_music_play_my.h"
-#define MODE_TIMEOUT_MS 5000 // 1s
+#define MODE_TIMEOUT_MS 5000 // 5s
+#define MOVE_TIMEOUT_MS 3000 // 3s
 static u32 init_time = 0;
 bool wait_for_button = false;
 
@@ -90,7 +91,7 @@ static int default_init(void)
     /* 注册lwl事件处理回调 */
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
-    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(default_input_event_handler_cb);
 
     u16 voltage = get_vbat_level();
@@ -138,6 +139,14 @@ void app_default_loop()
     int charge_in = gpio_read(CHARGE_IN_IO);
     if (charge_in) {
         g_sensor_reset_alive_timer();
+    } else { // 超时关机，低电量避免反复关机
+        if (timer_get_ms() - init_time >= MODE_TIMEOUT_MS) {
+            if (voltage < LOW_BATT_VOLT) {
+                log_i("Low battery timeout, shutdown immediately\r\n");
+                disable_gsensor();// 低电量避免晃动反复唤醒设备，需要关机，而不是休眠
+            }
+            lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
+        }
     }
 }
 

@@ -53,6 +53,7 @@ static void power_off_init(void)
     u16 voltage = get_vbat_level();
     if (voltage < LOW_BATT_VOLT) {
         log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
+        disable_gsensor();
         return;
     }
     int err = -1;

@@ -86,6 +86,18 @@ static void lwl_app_task(void *priv)
     lwl_app_uninit();
 }
 
+void disable_gsensor()
+{
+    extern void * g_iic_hdl;
+    int ret = 0;
+    log_i("NOTIFY_GSENSOR_OFF\n");
+    ret = sc7a20h_disable(g_iic_hdl);
+    if (0 == ret)
+    {
+        log_i("GSENSOR OFF\n");
+    }
+}
+
 
 void base_lwl_event_handler(lwl_event_t *e)
 {
@@ -96,14 +108,9 @@ void base_lwl_event_handler(lwl_event_t *e)
             log_i("Already in default mode, proceed to shutdown\r\n");
             break;
         }
-        log_i("NOTIFY_GSENSOR_OFF\n");
-        extern void * g_iic_hdl;
-        int ret = 0;
-        ret = sc7a20h_disable(g_iic_hdl);
-        if (0 == ret)
-        {
-            log_i("GSENSOR OFF\n");
-        }
+        disable_gsensor();
+        lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
+        break;
     case LWL_EVENT_TYPE_SLEEP:
         lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
         break;

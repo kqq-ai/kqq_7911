@@ -29,7 +29,7 @@
 #include "../lwl_peri_dev.h"
 #include "LED/LED.h"
 
-#define MODE_TIMEOUT_MS 120000 // 120s
+#define MOVE_TIMEOUT_MS 60000 // 60s
 #define OTA7016_KEY_PRESS_TIME_MS 8000 // 8+2s
 static u32 init_time = 0;
 static bool c_7016_power_on = false;
@@ -68,7 +68,7 @@ static int power_on_init(void)
 {
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
-    g_sensor_set_alive_timeout(MODE_TIMEOUT_MS);
+    g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     set_led_power_on();
 
     u16 voltage = get_vbat_level();

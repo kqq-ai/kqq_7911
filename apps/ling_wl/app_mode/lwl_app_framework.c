@@ -31,6 +31,7 @@ u8 lwl_app_mode_get_current_mode()
 static void lwl_app_mode_play_cb(void *priv)
 {
     os_mutex_pend(&g_mode_mutex, 0);
+    g_sensor_reset_alive_timer();
     play_voice_prompt = 0;
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     os_mutex_post(&g_mode_mutex);
@@ -43,6 +44,7 @@ void lwl_app_mode_play(const char *fname)
     }
     os_mutex_pend(&g_mode_mutex, 0);
     log_i("play: %s", fname);
+    g_sensor_reset_alive_timer();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
