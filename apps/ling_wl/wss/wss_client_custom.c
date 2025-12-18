@@ -298,14 +298,6 @@ static int verify_handshake_response(const char *response, int response_len, con
     // 添加调试日志：打印实际收到的响应（前200字节）
     int log_len = (response_len < 200) ? response_len : 200;
     log_i("[ws_custom]Received handshake response (%d bytes, first %d):", response_len, log_len);
-    for (int i = 0; i < log_len; i++) {
-        if (response[i] >= 32 && response[i] < 127) {
-            log_i("%c", response[i]);
-        } else {
-            log_i("[0x%02x]", (u8)response[i]);
-        }
-    }
-    log_i("\n");
     
     // 检查HTTP状态码（更灵活的方式：查找 " 101 " 或 " 101\r"）
     const char *status_code = strstr(response, " 101 ");
@@ -620,7 +612,7 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     int flags = fcntl(client->sock_fd, F_GETFL, 0);
     fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
     
-    log_i("[ws_custom]WebSocket handshake successful (Non-blocking set)");
+    log_i("🤝 [ws_custom]WebSocket handshake successful (Non-blocking set)");
     return 0;
 }
 
@@ -899,6 +891,9 @@ static int build_ws_frame(u8 *buf, int buf_size, const u8 *payload, u32 payload_
     
     // Masking key（客户端必须mask）
     if (mask) {
+        // 关键：确保 payload 写入不会溢出 buf
+        // pos 此时是“帧头(含扩展长度)已写入后的偏移”，接下来还会写入 4 字节 masking key 和 payload。
+        // 由于下面会先写入 masking key（pos 会自增 4），我们在写 payload 前再次检查一次即可。
         u32 mask_key = random32(0);
         // 保存masking key的位置
         u8 *mask_bytes = buf + pos;
@@ -908,6 +903,13 @@ static int build_ws_frame(u8 *buf, int buf_size, const u8 *payload, u32 payload_
         buf[pos++] = (mask_key >> 16) & 0xFF;
         buf[pos++] = (mask_key >> 24) & 0xFF;
         // 注意：pos已经通过上面的4个pos++增加了4，不需要再加4
+
+        // 再次检查：pos 已包含 masking key；保证 pos + payload_len <= buf_size
+        if ((u32)pos + payload_len > (u32)buf_size) {
+            log_e("[ws_custom]ERROR: build_ws_frame overflow prevented. buf_size=%d header+mask=%d payload_len=%u opcode=0x%02x",
+                  buf_size, pos, payload_len, opcode);
+            return -1;
+        }
         
         // 应用掩码
         if (payload_len > 0 && payload != NULL) {
@@ -1283,7 +1285,7 @@ int ws_client_connect(ws_client_t client, const char *url,
                 ws_recv_thread, client);
     
     os_mutex_post(&client->mutex);
-    log_i("[ws_custom]WebSocket connected successfully");
+    log_i("[ws_custom] WebSocket connected successfully✅");
     return 0;
 }
 

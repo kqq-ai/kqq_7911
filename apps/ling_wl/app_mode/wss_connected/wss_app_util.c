@@ -16,6 +16,9 @@
 
 #define MAX_TARGET_SN_SET 16
 #define SN_LEN 16
+// 自定义 WebSocket 实现的临时帧构建缓冲区是 16KB（见 ws_client_custom.c 的 temp_send_buf）
+// 为避免超大 JSON 帧导致构建失败或潜在内存问题，这里对文本 payload 做一个保守上限。
+#define WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD (15 * 1024)
 
 char sn_c_id[25];
 static int g_exception_exit = true;
@@ -292,7 +295,19 @@ int send_audio_status(int type, int event)
     }
 
     char *send_data = odmp_audio_status(sn_c_id, type, event);
-    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, strlen(send_data));
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_status: odmp_audio_status returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util] send_audio_status: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
     
     if (ret < 0) {
         log_e("⚠️ [wss_app_utils]Error %s %d. type=%d event=%d ret=%d", __FILE__, __LINE__, type, event, ret);
@@ -317,7 +332,19 @@ int send_audio_format(int type)
     }
 
     char *send_data = odmp_set_audio_format(sn_c_id, type);
-    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, strlen(send_data));
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_format: odmp_set_audio_format returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_format: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
 
     if (ret < 0) {
         log_e("[wss_app_utils]Error %s %d. type=%d ret=%d", __FILE__, __LINE__, type, ret);
@@ -348,9 +375,21 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     }
 
     char *send_data = odmp_req_message(target_sn_set, target_sn_count, sn_c_id, send_id, is_play, event_type);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_req_message: odmp_req_message returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_req_message: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[wss_app_util]wbs send msg : %s", send_data);
 
-    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, strlen(send_data));
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
     if (ret < 0) {
         log_e("[wss_app_utils]Error send_req_message %s %d. event_type=%d ret=%d", __FILE__, __LINE__, event_type, ret);
         free(send_data);
@@ -406,9 +445,21 @@ int send_ping()
 
     // 发送应用层ping消息（通过文本消息）
     char *send_data = odmp_send_ping();
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_ping: odmp_send_ping returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_ping: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[wss_app_util]wbs send msg : %s", send_data);
 
-    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, strlen(send_data));
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
     if (ret < 0) {
         log_e("[wss_app_utils]Error %s %d. event_type=ping ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
