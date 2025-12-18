@@ -98,8 +98,11 @@ void turn_off_Pi() {
             bdo_turn_off(pdev, 500, e_turn_off_cb, NULL);
         } else {
             log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
+            bdo_disable();
         }
         g_edev_connected_sn[0] = 0;
+    } else {
+        bdo_disable();
     }
 }
 

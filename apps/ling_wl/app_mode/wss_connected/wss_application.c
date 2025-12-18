@@ -28,10 +28,8 @@ music_player *player;
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
 
-static int g_audio_playing = false;
 static bool g_mic_on = false;
 static bool multi_play_mode = false;
-static bool is_user_speaking = false;
 
 static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
@@ -368,16 +366,15 @@ void wss_application_init()
         monitor_thread_running = true; 
     }
 
-    /* 注册lwl事件处理回调 */
-
     /* 重置 */
-    g_audio_playing = false;
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
 
     if (!os_mutex_valid(&g_wss_app_mutex)) {
         os_mutex_create(&g_wss_app_mutex);
     }
+
+    /* 注册lwl事件处理回调 */
     lwl_event_handler_add(input_event_handler_cb);
 }
 
@@ -402,6 +399,29 @@ void wss_application_uninit()
     os_mutex_post(&g_wss_app_mutex);
 }
 
+void wss_application_reset()
+{
+    log_i("[wss_application]Reset WSS application\n");
+    log_mqtt("🤖🤖🤖 重置WSS应用");
+    g_sensor_reset_alive_timer();
+    g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
+    play_voice_prompt = 0;
+    wss_request_init();//发送1
+    wss_device_init();//设备初始化，包含设备队列等
+    wss_mic_stop(); // 停止录音
+
+    g_mic_on = true;
+    multi_play_mode = false;
+    music_file[0] = 0;
+
+    /* 重置 */
+    g_curr_time = timer_get_ms();
+    last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
+
+    /* 注册lwl事件处理回调 */
+    lwl_event_handler_add(input_event_handler_cb);
+}
+
 bool wss_application_loop()
 {
     g_curr_time = timer_get_ms();
@@ -409,7 +429,7 @@ bool wss_application_loop()
         if (wss_request_is_busy()) {
             log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
             wss_get_last_disconnect_reason());
-            wss_request_stop();
+            wss_request_pause();
             wss_mic_stop();
         }
         if (g_device_state != APP_IDLE) {

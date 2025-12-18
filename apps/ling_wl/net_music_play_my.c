@@ -20,6 +20,9 @@ static const struct music_dec_ops cbuf_music_dec_ops;
 // 定义文件系统的全局句柄
 extern lfs_t g_lfs;
 
+/* Serialize audio decoder open/close to avoid concurrent allocations in decoder/audio server */
+static OS_MUTEX audio_play_mutex;
+
 
 static void led_ui_post_msg(const char *msg, ...) {
     // nothing to do
@@ -442,6 +445,9 @@ static int local_music_dec_file(music_player *player, void *fname)
 
     log_i("app_music_dec_local_file\n");
 
+    /* serialize decoder open/close to avoid concurrent allocations in audio server */
+    os_mutex_pend(&audio_play_mutex, 0);
+
     if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
         // 停止解码
         player->dec_ops->dec_stop(player);
@@ -454,6 +460,7 @@ static int local_music_dec_file(music_player *player, void *fname)
 
     FILE *file = fopen(fname, "r");
     if (!file) {
+        os_mutex_post(&audio_play_mutex);
         return -1;
     }
 
@@ -488,10 +495,18 @@ static int local_music_dec_file(music_player *player, void *fname)
 #endif
 #endif
 
+    if (!player || !player->dec_server) {
+        log_e("audio_dec_open: invalid player or dec_server\n");
+        fclose((FILE *)file);
+        os_mutex_post(&audio_play_mutex);
+        return -EFAULT;
+    }
+
     err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
     if (err) {
         log_e("audio_dec_open: err = %d\n", err);
         fclose((FILE *)file);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
 
@@ -504,6 +519,7 @@ static int local_music_dec_file(music_player *player, void *fname)
     if (err) {
         log_e("audio_dec_start: err = %d\n", err);
         fclose((FILE *)file);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
     player->file = (FILE *)file;
@@ -517,6 +533,8 @@ static int local_music_dec_file(music_player *player, void *fname)
     led_ui_post_msg("dec_start");
     puts("play_music_file: suss\n");
 
+    /* release mutex after decoder successfully started */
+    os_mutex_post(&audio_play_mutex);
     return 0;
 }
 
@@ -958,5 +976,9 @@ int music_player_init(music_player *player)
         return -EPERM;
     }
     server_register_event_handler(player->dec_server, player, dec_server_event_handler);
+    /* initialize audio play mutex on first music_player_init call */
+    if (!os_mutex_valid(&audio_play_mutex)) {
+        os_mutex_create(&audio_play_mutex);
+    }
     return 0;
 }

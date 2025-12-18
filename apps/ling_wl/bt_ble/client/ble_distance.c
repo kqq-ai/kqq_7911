@@ -673,7 +673,7 @@ static void scan_adv_process_task(void *priv)
             if (dev->deadline < (timestamp_now + 10)) log_i("[MEASDIST]bdo_active: %s %d deadline = %d\n", sn, rssi, dev->deadline);
             if (!dev->has_deadline && dev->max_rssi > -80) {
                 // 如果广播是未激活的广播，则尝试进行激活
-                bdo_active(dev, 1100, active_op_callback, dev);
+                bdo_active(dev, 2000, active_op_callback, dev);
             } else if (dev->has_deadline && dev->deadline < (timestamp_now + 10)) {
                 // 如果距离过期时间仅剩 10s，则尝试进行激活
                 bdo_active(dev, 500, active_op_callback, dev);

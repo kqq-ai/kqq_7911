@@ -93,6 +93,7 @@ void app_wss_connected_mode(void)
                     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
                 } else {
                     set_led_connecting_off();
+                    wss_application_reset();
                     play_prompt_flag = 1;
                 }
             } else if (play_prompt_flag) {
