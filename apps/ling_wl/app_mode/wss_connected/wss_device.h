@@ -8,6 +8,6 @@ void wss_device_init();
 void wss_device_uninit();
 lwl_eend_dev_t * wss_device_loop();
 lwl_eend_dev_t * wss_device_call();
-void update_edev_time(char* sn);
+bool update_edev_time(char* sn);
 
 #endif

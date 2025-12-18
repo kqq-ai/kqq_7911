@@ -348,11 +348,11 @@ static lwl_eend_dev_t* get_edev()
  * 更新E设备最后使用时间
  * 参数：sn - 目标设备序列号
  */
-void update_edev_time(char* sn)
+bool update_edev_time(char* sn)
 {
     if (!sn) {
         log_i("[update_edev_time] Invalid: sn is NULL");
-        return;
+        return false;
     }
 
     os_mutex_pend(&edev_manager_mutex, 0);
@@ -371,6 +371,7 @@ void update_edev_time(char* sn)
 
     if (index == -1) {
         log_i("[update_edev_time] Device sn=%s not found", sn);
+        edev_last = NULL;
     }
     clear_target_sn_set();
 
@@ -386,6 +387,7 @@ void update_edev_time(char* sn)
     }
 
     os_mutex_post(&edev_manager_mutex);
+    return index != -1;
 }
 
 /**
@@ -417,8 +419,9 @@ static void device_event_handler_cb(lwl_event_t *e)
     
     switch (p_eend_dev->distance_info.distance_type) {
     case DISTANCE_0:
-    case DISTANCE_1:
         add_edev(p_eend_dev);
+        break;
+    case DISTANCE_1:
         break;
     case DISTANCE_2:
     case DISTANCE_3:

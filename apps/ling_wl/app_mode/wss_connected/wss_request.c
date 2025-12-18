@@ -377,7 +377,7 @@ bool wss_request_loop()
         } else if (send_message == ORMET_SWITCH_FAILED) {
             wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
             wss_request_send_event_target(send_message);
-            g_edev_target_sn[0] = 0;
+            // g_edev_target_sn[0] = 0;
             send_message = 0; // 重置发送消息标志
             play_prompt_sound("SwFailed.mp3");
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
@@ -435,7 +435,9 @@ void wss_request_send_event(char *sn, int msg_event)
         sn = NULL;
     }
     if (sn != NULL) {
-        update_edev_time(sn);
+        if (update_edev_time(sn) == false) {
+            sn = NULL;
+        }
     }
     send_req_message(sn, is_audio_playing(), msg_event);
 }

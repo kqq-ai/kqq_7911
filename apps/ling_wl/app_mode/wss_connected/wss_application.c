@@ -20,10 +20,10 @@ static OS_MUTEX g_wss_app_mutex;
 int play_voice_prompt = 0;
 music_player *player;
 
-#define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 10分钟
-#define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 5分钟
-#define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 5分钟
-#define DEV_CALL_TIMEOUT_MS     (3 * 1000)       // 3s
+#define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 连续10分钟无请求则超时
+#define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 触发超时，5分钟内无Pi则关机
+#define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 触发超时，5分钟内无移动则关机
+#define DEV_CALL_TIMEOUT_MS     (3 * 1000)       // 等待后端发送tts_bind，超过3s则回到靠近触发
 
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
@@ -462,13 +462,10 @@ bool wss_application_loop()
                 g_device_state = APP_VAD;
                 wss_application_resume_mic();
                 wss_vad_start(600000); // 开始录音
-                // turn_off_Pi();
             } else {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
-                wss_request_send_event_target(ORMET_PLAY_END);
-                g_device_state = APP_IDLE;
-                wss_application_resume_mic();
-                // turn_off_Pi();
+                wss_request_send_event_target(ORMET_PLAY_NEXT);
+                g_device_state = APP_WAIT;
             }
         }
         wss_application_vailed();
