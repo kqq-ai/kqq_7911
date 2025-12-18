@@ -312,6 +312,7 @@ bool is_audio_playing(){
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
 void wss_ble_audio_stop() {
     log_i("[AUDIO]wss_ble_audio_stop");
+    log_mqtt("💔💔💔 停止蓝牙音频播放");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = true;
     odmp_register_audio_data_cbk(NULL); 
@@ -327,6 +328,7 @@ void wss_ble_audio_stop() {
 // 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器
 void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
+    log_mqtt("❤️‍🔥❤️‍🔥❤️‍🔥 开始蓝牙音频播放");
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = false;
     g_audio_player_start = false;

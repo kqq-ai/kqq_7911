@@ -396,6 +396,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    log_mqtt("➡️➡️➡️➡️【req_message】设备数=%d 事件类型=%d", target_sn_count, event_type);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;

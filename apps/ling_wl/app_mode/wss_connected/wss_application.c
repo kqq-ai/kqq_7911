@@ -20,9 +20,6 @@ static OS_MUTEX g_wss_app_mutex;
 int play_voice_prompt = 0;
 music_player *player;
 
-#undef log_i
-#define log_i log_mqtt
-
 #define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 10分钟
 #define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 5分钟
 #define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 5分钟
@@ -79,6 +76,7 @@ bool wss_application_check_power_key()
 void wss_application_resume_mic()
 {
     log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
+    log_mqtt("🔄🔄🔄 麦克风重启");
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (g_on_touch_key) {
         wss_mic_start();
@@ -124,6 +122,7 @@ static void wss_application_touch_key(bool press_down)
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
                 log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
+                log_mqtt("🔄🔄🔄 短按触摸键，打断/切换对话状态");
                 g_device_state = APP_WAIT;
                 wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
                 wss_application_vailed();
@@ -153,7 +152,7 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_KEY:
-        log_i("[wss_application]APPLICATION SHORT_CLICK %d", multi_play_mode);
+        log_mqtt("👆👆👆 短按 此时multi_play_mode=%d", multi_play_mode);
         if (wss_check_exit()) {
             g_power_key_retry = true;
         } else {
@@ -172,11 +171,11 @@ static void input_event_handler_cb(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
-            log_i("[wss_application]Touch key pressed down");
+            log_mqtt("👆👆 触摸键按下");
             g_on_touch_key = true;
             wss_application_touch_key(true);
         } else {
-            log_i("[wss_application]Touch key released");
+            log_mqtt("👇👇 触摸键释放");
             wss_application_touch_key(false);
             g_on_touch_key = false;
         }
@@ -225,7 +224,6 @@ void wss_app_mode_play()
     // bdo_disable();
     log_i("[wss_application]wss_app_mode_play: %s", music_file);
     wss_mic_stop(); // 停止录音
-    
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
     set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
     int err = app_music_play_local_music_with_callback(player, music_file, wss_app_mode_play_cb, NULL);
@@ -337,6 +335,7 @@ void *wss_condition_monitor_thread(void *arg)
 void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
+    log_mqtt("🤖🤖🤖 初始化WSS应用");
     g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
     play_voice_prompt = 0;
@@ -489,6 +488,7 @@ bool wss_application_loop()
             // 继续等待
         } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");
+            log_mqtt("🧬🧬🧬 等待超时");
             g_device_state = APP_IDLE;
         }
         break;

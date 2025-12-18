@@ -412,6 +412,26 @@ static int pong_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 {
     return PARSE_Success;
 }
+void mqtt_print_pkg_content(const cJSON *nroot, const char *event)
+{
+    const cJSON *ndata = cjson_get_object(nroot, "data");
+    if (ndata == NULL) {
+        return;
+    }
+    if (strcmp(event, "audio_status") == 0) {
+        int type = 0;
+        int event = 0;
+        cjson_get_integer_value(ndata, "type", &type);
+        cjson_get_integer_value(ndata, "event", &event);
+        log_mqtt("⬅️⬅️⬅️⬅️ [audio_status] type: %d, event: %d", type, event);
+    }
+    else if (strcmp(event, "tts_bind") == 0) {
+        char *send_id = cjson_get_string_value(ndata, "send_id");
+        if (send_id != NULL) {
+            log_mqtt("⬅️⬅️⬅️⬅️ [tts_bind] send_id: %s", send_id);
+        }
+    }
+}
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk)
 {
@@ -467,7 +487,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
     if (pkg.event == NULL) {
         goto error_ret;
     }
-    
+    mqtt_print_pkg_content(nroot, pkg.event);
     struct odmp_rsp_cb_entry_t *entry = NULL;
     for (int i = 0; i < g_rsp_cb_table_size; ++i) {
         if (strcmp(pkg.event, g_rsp_cb_table[i].event_name) == 0) {

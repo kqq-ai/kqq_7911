@@ -323,7 +323,7 @@ bool is_recording_uploading() {
 
 // 停止麦克风录音，可选择是否上传剩余音频数据
 void wss_mic_stop() {
-    log_i("[WSS_MIC]wss_mic_stop");
+    log_mqtt("💧💧💧 停止麦克风录音");
     os_mutex_pend(&g_mic_mutex, 0);
     recorder_data_upstream(NULL);
     app_recorder_en(DISABLE);
@@ -332,7 +332,7 @@ void wss_mic_stop() {
 
 // 开始麦克风录音，设置VAD超时时间
 void wss_mic_start() {
-    log_i("[WSS_MIC]wss_mic_start");
+    log_mqtt("🔥🔥🔥 开始麦克风录音");
     os_mutex_pend(&g_mic_mutex, 0);
     app_recorder_en(ENABLE);
     vad_start_time = timer_get_ms();

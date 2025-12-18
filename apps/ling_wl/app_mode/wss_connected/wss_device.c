@@ -182,7 +182,6 @@
 #include "os/os_api.h"
 #include "log/log_mqtt.h"
 
-#define log_i log_mqtt
 
 static u32 g_curr_time = 0;
 static u32 last_dequeue_time = 0;
