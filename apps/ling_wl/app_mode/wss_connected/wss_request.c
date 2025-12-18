@@ -5,52 +5,39 @@
 #include "app_cookie.h"
 #include "wss_application.h"
 
-#include "util/cqueue.h"
-#include "util/ringbuffer.h"
-#include "bt_ble/client/ble_distance.h"
 #include "app_mode/lwl_app_core.h"
-#include "device.h"
-#include "util/threadpool_tasks.h"
-#include "protocol/cp/c_uart_p.h"
-#include "ota/http_ota.h"
-#include "uart.h"
-
 #include "protocol/odm/odmp.h"
-
-#include "protocol/odm/odm_secure.h"
 #include "bt_ble/client/ble_dev_task_scheduler.h"
-
-// 提示音资源路径与本地播放接口
-#include "net_music_play_my.h"   // for app_music_play_local_music_with_callback
 
 #include "log/log_mqtt.h"
 #include "LED/LED.h"
 
+#define WSS_TIMEOUT 10000
+#define WSS_MUSIC_TIMEOUT 1200
+
 static u32 g_curr_time = 0;
 static u32 g_wss_last_time = 0;
 static u32 g_mode_last_time = 0;
-#define WSS_TIMEOUT 10000
-#define WSS_MUSIC_TIMEOUT 1200
 static OS_MUTEX g_request_mutex;
 
 static lwl_app_context_t *g_app_ctx = NULL;
+/*=================================================================================================
+ * 请求状态
+ *=================================================================================================*/
+static int wait_time = 0;
+static int last_message_type = 0;
+static int last_event = 0;
+
+static int send_message = 0;
+
+static bool g_mode_script = 0; // 如果true则不播放切换提示音
 
 static char g_edev_target_sn[SN_SIZE]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE]; // E 已连接
 
-static bool g_mode_script = 0;
-
-/*=================================================================================================
- * Audio dec app context
- *=================================================================================================*/
-int wait_time = 0;
-int last_message_type = 0;
-int last_event = 0;
-
-int send_message = 0;
-
-
-/* Task state */
+//=================================================================================================
+// 当前状态维护
+//=================================================================================================
 typedef enum {
     STATE_IDLE,
     STATE_TTS_BIND,
@@ -70,43 +57,6 @@ bool wss_request_is_playing(){
     return (g_mode_state != STATE_IDLE && g_mode_state != STATE_WAITING);
 }
 
-static void e_turn_off_cb(uint8_t code, void *priv)
-{
-    log_i("turn off result code: %d", code);
-    // lwl_peri_dev_7016_on(false);  // 关闭 7016
-    // log_i("[wss_request]lwl_peri_dev_7016_on false\n");
-}
-
-void turn_off_Pi() {
-    if (g_edev_connected_sn[0] != 0) {
-        
-        lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
-        if (pdev) {
-            bdo_turn_off(pdev, 500, e_turn_off_cb, NULL);
-        } else {
-            log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
-        }
-        g_edev_connected_sn[0] = 0;
-    }
-}
-static void e_turn_on_cb(bdo_code_e code, void *priv);
-
-void turn_on_Pi(const char *pdev_sn) {
-// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
-    log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
-    if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
-        turn_off_Pi();
-    }
-    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
-    if (pdev == NULL) {
-        log_i("[wss_request]turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
-        send_message = ORMET_SWITCH_FAILED;
-        return;
-    }
-    //上传E的电量
-    log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-    bdo_turn_on(pdev, 500, 500, e_turn_on_cb, pdev);
-}
 static void wss_request_update_state(AppRequestState mode_state, char* tag)
 {
     switch (mode_state) {
@@ -128,6 +78,86 @@ static void wss_request_update_state(AppRequestState mode_state, char* tag)
     g_mode_last_time = g_curr_time;
     last_message_type = 0;
     last_event = 0;
+}
+
+//=================================================================================================
+// Pi设备切换 callback
+//=================================================================================================
+static void e_turn_off_cb(uint8_t code, void *priv)
+{
+    log_i("turn off result code: %d", code);
+    // lwl_peri_dev_7016_on(false);  // 关闭 7016
+    // log_i("[wss_request]lwl_peri_dev_7016_on false\n");
+}
+
+void turn_off_Pi() {
+    if (g_edev_connected_sn[0] != 0) {
+        
+        lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
+        if (pdev) {
+            bdo_turn_off(pdev, 500, e_turn_off_cb, NULL);
+        } else {
+            log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
+        }
+        g_edev_connected_sn[0] = 0;
+    }
+}
+
+static void e_turn_on_cb(bdo_code_e code, void *priv)
+{
+    if (g_mode_state != STATE_TTS_BIND) return;
+    os_mutex_pend(&g_request_mutex, 0);
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    
+    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
+    if (pdev) {
+        pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    }
+    switch(code) {
+    case BDOCode_Success:
+        log_i("[wss_request]Switch PortE %s OK\n", sn_string);
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
+        if (strcmp(sn_string,g_edev_target_sn) == 0) {
+            send_message = ORMET_SWITCH_SUCCESS;
+            wss_audio_set_player(WSS_MUSIC_TIMEOUT);
+        } else {
+            turn_off_Pi();
+        }
+        break;
+    case BDOCode_Connection_Timeout:
+        log_i("[wss_request]Switch PortE BDOCode_Connection_Timeout\n");
+        break;
+    case BDOCode_Disconnect_Timeout:
+        log_i("[wss_request]Switch PortE BDOCode_Disconnect_Timeout\n");
+        break;
+    case BDOCode_Scan_Adv_Stat_Timeout:
+        log_i("[wss_request]Switch PortE BDOCode_Scan_Adv_Stat_Timeout\n");
+        break;
+    case BDOCode_Unexpected_Error:
+        log_i("[wss_request]Switch PortE Error\n");
+        break;
+    }
+    if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
+        send_message = ORMET_SWITCH_FAILED;
+    }
+    os_mutex_post(&g_request_mutex);
+}
+
+void turn_on_Pi(const char *pdev_sn) {
+// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
+    log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
+    if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
+        turn_off_Pi();
+    }
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
+    if (pdev == NULL) {
+        log_i("[wss_request]turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
+        send_message = ORMET_SWITCH_FAILED;
+        return;
+    }
+    //上传E的电量
+    log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
+    bdo_turn_on(pdev, 500, 500, e_turn_on_cb, pdev);
 }
 
 //=================================================================================================
@@ -244,6 +274,28 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     os_mutex_post(&g_request_mutex);
 }
 
+//=================================================================================================
+// 请求中断相关接口
+//=================================================================================================
+void wss_request_stop()
+{
+    log_i("[wss_request]Stop WSS request\n");
+    os_mutex_pend(&g_request_mutex, 0);
+
+    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND) {
+        wss_ble_audio_stop();
+        turn_off_Pi();
+    }
+    wss_request_send_event_target(ORMET_PLAY_STOP);
+
+    // 重置状态到IDLE
+    wss_request_update_state(STATE_IDLE, "wss_request_stop");
+    last_message_type = 0;
+    last_event = 0;
+    g_mode_script = false;
+    os_mutex_post(&g_request_mutex);
+}
+
 void wss_request_pause()
 {
     log_i("[wss_request]Stop WSS pause\n");
@@ -268,68 +320,10 @@ void wss_request_resume()
 {
     odmp_register_rsp_cbk(wss_rsp_cbk);
 }
+
 //=================================================================================================
-// pDev response callback
+// 请求状态机初始化与循环接口
 //=================================================================================================
-static void e_turn_on_cb(bdo_code_e code, void *priv)
-{
-    if (g_mode_state != STATE_TTS_BIND) return;
-    os_mutex_pend(&g_request_mutex, 0);
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    
-    char sn_string[SN_SIZE * 2 + 1] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    }
-    switch(code) {
-    case BDOCode_Success:
-        log_i("[wss_request]Switch PortE %s OK\n", sn_string);
-        memcpy(g_edev_connected_sn, sn_string, SN_SIZE);
-        if (strcmp(sn_string,g_edev_target_sn) == 0) {
-            send_message = ORMET_SWITCH_SUCCESS;
-            wss_audio_set_player(WSS_MUSIC_TIMEOUT);
-        } else {
-            turn_off_Pi();
-        }
-        break;
-    case BDOCode_Connection_Timeout:
-        log_i("[wss_request]Switch PortE BDOCode_Connection_Timeout\n");
-        break;
-    case BDOCode_Disconnect_Timeout:
-        log_i("[wss_request]Switch PortE BDOCode_Disconnect_Timeout\n");
-        break;
-    case BDOCode_Scan_Adv_Stat_Timeout:
-        log_i("[wss_request]Switch PortE BDOCode_Scan_Adv_Stat_Timeout\n");
-        break;
-    case BDOCode_Unexpected_Error:
-        log_i("[wss_request]Switch PortE Error\n");
-        break;
-    }
-    if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
-        send_message = ORMET_SWITCH_FAILED;
-    }
-    os_mutex_post(&g_request_mutex);
-}
-
-void wss_request_stop()
-{
-    log_i("[wss_request]Stop WSS request\n");
-    os_mutex_pend(&g_request_mutex, 0);
-
-    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND) {
-        wss_ble_audio_stop();
-        turn_off_Pi();
-    }
-    wss_request_send_event_target(ORMET_PLAY_STOP);
-
-    // 重置状态到IDLE
-    wss_request_update_state(STATE_IDLE, "wss_request_stop");
-    last_message_type = 0;
-    last_event = 0;
-    g_mode_script = false;
-    os_mutex_post(&g_request_mutex);
-}
-
 void wss_request_init()
 {
     log_i("[wss_request]Init WSS request\n");
