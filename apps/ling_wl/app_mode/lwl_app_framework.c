@@ -196,41 +196,41 @@ void lwl_app_mode_loop()
 {
     switch(app_curr_mode) {
     case APP_POWER_ON_MODE:
-        log_i("APP_POWER_ON_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_POWER_ON_MODE\n");
         app_power_on_mode();
         lwl_app_mode_exit_ok();
         break;
     case APP_DEFAULT_MODE:
-        log_i("APP_DEFAULT_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_DEFAULT_MODE\n");
         app_default_mode();
         lwl_app_mode_exit_ok();
         break;
     case APP_NET_CONNECTING_MODE:
-        log_i("APP_NET_CONNECTING_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_NET_CONNECTING_MODE\n");
         app_net_connecting_mode();
         lwl_app_mode_exit_ok();
         break;
     case APP_NET_CONNECTED_MODE:
-        log_i("APP_NET_CONNECTED_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_NET_CONNECTED_MODE\n");
         app_net_connected_mode();
         lwl_app_mode_exit_ok();
         break;
     case APP_UPDATE_MODE:
-        log_i("APP_UPDATE_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_UPDATE_MODE\n");
         app_update_mode();
         lwl_app_mode_exit_ok();
     case APP_WSS_CONNECTED_MODE:
-        log_i("APP_WSS_CONNECTED_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_WSS_CONNECTED_MODE\n");
         app_wss_connected_mode();
         lwl_app_mode_exit_ok();
         break;
     case APP_DEVICE_CHECK_MODE:
-        log_i("APP_DEVICE_CHECK_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_DEVICE_CHECK_MODE\n");
         app_devices_check_mode();
         lwl_app_mode_exit_ok();
         break;
     case APP_POWER_OFF_MODE:
-        log_i("APP_POWER_OFF_MODE\n");
+        log_i("🚀🚀🚀 switch to APP_POWER_OFF_MODE\n");
         app_power_off_mode();
         lwl_app_mode_exit_ok();
         break;
