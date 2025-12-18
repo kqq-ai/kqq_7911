@@ -47,13 +47,13 @@ static void power_off_init(void)
     /* 关闭 7016 */
     log_i("7016 OFF\n");
     lwl_peri_dev_7016_on(false);
+    disable_gsensor();
 
     led_off = 0;
     
     u16 voltage = get_vbat_level();
     if (voltage < LOW_BATT_VOLT) {
         log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
-        disable_gsensor();
         return;
     }
     int err = -1;
