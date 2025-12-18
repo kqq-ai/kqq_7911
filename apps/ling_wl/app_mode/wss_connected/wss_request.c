@@ -116,13 +116,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     switch(code) {
     case BDOCode_Success:
         log_i("[wss_request]Switch PortE %s OK\n", sn_string);
-        memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
-        if (strcmp(sn_string,g_edev_target_sn) == 0) {
-            send_message = ORMET_SWITCH_SUCCESS;
-            wss_audio_set_player(WSS_MUSIC_TIMEOUT);
-        } else {
-            turn_off_Pi();
-        }
         break;
     case BDOCode_Connection_Timeout:
         log_i("[wss_request]Switch PortE BDOCode_Connection_Timeout\n");
@@ -137,15 +130,26 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         log_i("[wss_request]Switch PortE Error\n");
         break;
     }
-    if (code != BDOCode_Success && strcmp(sn_string,g_edev_target_sn) == 0) {
-        send_message = ORMET_SWITCH_FAILED;
+    if (code == BDOCode_Success) { // 连接成功
+        memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
+        if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
+            send_message = ORMET_SWITCH_SUCCESS;
+            wss_audio_set_player(WSS_MUSIC_TIMEOUT);
+        } else {
+            turn_off_Pi();
+        }
+    } else {
+        if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的目标E失败
+            send_message = ORMET_SWITCH_FAILED;
+        }
     }
     os_mutex_post(&g_request_mutex);
 }
 
 void turn_on_Pi(const char *pdev_sn) {
-// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
+    send_message = 0; // 重置发送消息标志
     log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
+// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
     if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
         turn_off_Pi();
     }
@@ -183,7 +187,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         if (strncmp(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE) != 0) {
             wss_ble_audio_stop();
             memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE+1);
-            send_message = 0; // 重置发送消息标志
             turn_on_Pi(g_edev_target_sn);
             if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
         } else if (g_mode_state == STATE_TTS_BIND) {
@@ -192,7 +195,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             wss_ble_audio_stop();
             send_message = ORMET_SWITCH_SUCCESS;
         } else if (g_mode_state == STATE_IDLE || g_mode_state == STATE_WAITING) {
-            send_message = 0; // 重置发送消息标志
             turn_on_Pi(g_edev_target_sn);
             if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
         }
