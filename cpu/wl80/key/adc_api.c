@@ -5,6 +5,7 @@
 #include "asm/efuse.h"
 #include "asm/p33.h"
 #include "asm/power_interface.h"
+#include "app_cookie.h"
 
 static u32 adc_sample(u32 ch);
 static volatile u16 _adc_res;
@@ -459,7 +460,7 @@ static void vddiom_trim(void)
         VDDIOM_VOL_SEL(VDDIOM_VOL_36V);
     }
 }
-
+u16 g_KQQ_c_voltage;
 void adc_init()
 {
     if (GET_VDDIOM_VOL() == VDDIOM_VOL_34V) {
@@ -469,6 +470,20 @@ void adc_init()
     //trim wvdd
     /* wvdd_trim(); */
     __adc_init();
+    
+    g_KQQ_c_voltage = adc_get_voltage(AD_CH_VBAT) * 4 / 10;
+    log_i("g_KQQ_c_voltage: %d\n", g_KQQ_c_voltage);
+    //检测电池电压，小于LOW_BATT_VERY_SHUTDOWN 直接关机
+    if (g_KQQ_c_voltage < LOW_BATT_VERY_SHUTDOWN) {
+        log_i("battery voltage too low, power off\n");
+        while (1){
+            power_set_soft_poweroff(0);
+        }
+    }else {
+        log_i("battery voltage ok,    battery voltage ok,    battery voltage ok,  continue to power on\n");
+    }
+
+
 }
 
 void adc_vbg_init()

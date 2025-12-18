@@ -841,6 +841,23 @@ static void board_power_init(void)
     printf( "NOW ports, key:%d , RST:%d , CHG_IN:%d ,full:%d, gSensor:%d, touch:%d \n", 
             gpio_read(KEY_IO_PORT),     gpio_read(IO_PORTB_01),  gpio_read(PORT_CHG_IO),
             gpio_read(CHARGE_FULL_IO),  gpio_read(GSENSOR_IO),      gpio_read(TOUCH_IO) );
+    //判断 仅key和 CHG_IN为0；其他都是1，则delay 2秒，再执行后续。否则直接执行后续
+    if( (0 == gpio_read(KEY_IO_PORT)) && (0 == gpio_read(PORT_CHG_IO))
+        && (1 == gpio_read(IO_PORTB_01)) && (1 == gpio_read(CHARGE_FULL_IO)) && (1 == gpio_read(GSENSOR_IO)) && (1 == gpio_read(TOUCH_IO)) )
+    {
+        //2秒后，再次判断，一致，则继续开机，否则关机
+        delay_2ms(1000); // 延时2秒，开机
+        if( (0 == gpio_read(KEY_IO_PORT)) && (0 == gpio_read(PORT_CHG_IO))
+            && (1 == gpio_read(IO_PORTB_01)) && (1 == gpio_read(CHARGE_FULL_IO)) && (1 == gpio_read(GSENSOR_IO)) && (1 == gpio_read(TOUCH_IO)) )
+        {
+            log_i("key and CHG_IN low, other high,  after delay 2s, condition still meet, continue power on\n");
+        }else {
+            log_i("short key , power off !!\n");
+            power_set_soft_poweroff(0);
+        }
+    }else {
+        log_i("not meet power on delay condition, no delay\n");
+    }
 
 
     extern void clean_wakeup_source_port(void);
