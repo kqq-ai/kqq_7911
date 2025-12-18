@@ -515,7 +515,7 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
     ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);
     /* - 扫描设备 ADV 状态变化 -> off */
     if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnoff.scan_timeout)) == OS_TIMEOUT) {
-        log_e("[BDO]Error scan adv state timeout!!!");
+        log_e("[BDO]Error scan adv state timeout!!! %d", op->turnoff.scan_timeout);
         ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         dev->op_state &= ~BDO_STATE_TURNNING_OFF;
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
