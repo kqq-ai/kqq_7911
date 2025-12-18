@@ -376,6 +376,7 @@ static int __stream_music_dec_file(music_player *player)
 
 static int stream_music_dec_file(music_player *player)
 {
+    os_mutex_pend(&audio_play_mutex, 0);
     log_i("app_stream_music_dec_file\n");
 
     /*
@@ -393,6 +394,7 @@ static int stream_music_dec_file(music_player *player)
 
     led_ui_post_msg("dec_start");
     puts("play_music_file: suss\n");
+    os_mutex_post(&audio_play_mutex);
     return 0;
 }
 
@@ -918,6 +920,7 @@ int app_music_play_local_music_with_callback(music_player *player, void *fname, 
 int app_music_play_stop(music_player *player)
 {
     log_i("app_music_play_stop");
+    os_mutex_pend(&audio_play_mutex, 0);
     if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
         // 停止解码
         int ret = player->dec_ops->dec_stop(player);
@@ -926,8 +929,10 @@ int app_music_play_stop(music_player *player)
             player->dec_end_cb(player->dec_end_cb_priv);
             player->dec_end_cb = NULL;
         }
+        os_mutex_post(&audio_play_mutex);
         return ret;
     }
+    os_mutex_post(&audio_play_mutex);
     return 0;
 }
 

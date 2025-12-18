@@ -64,6 +64,17 @@ bool lwl_app_mode_playing()
     return rst;
 } 
 
+void lwl_app_mode_stop_playing()
+{
+    os_mutex_pend(&g_mode_mutex, 0);
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if (app_music_play_get_status(context->music_player) == AUDIO_DEC_START) {
+        log_i("music_play_stop");
+        app_music_play_stop(context->music_player);
+    }
+    os_mutex_post(&g_mode_mutex);
+}
+
 //*----------------------------------------------------------------------------*/
 /**@brief    模式退出检查
    @param    curr_task:当前模式

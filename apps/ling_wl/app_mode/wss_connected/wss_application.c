@@ -221,9 +221,9 @@ void wss_app_mode_play()
     if (music_file[0] == 0) {
         return;
     }
+    lwl_app_mode_stop_playing();
     if (play_voice_prompt == 1) {
         play_voice_prompt = 0;
-        music_play_stop();
     } else if (g_device_state == APP_AUDIO) {
         wss_ble_audio_stop();
     }

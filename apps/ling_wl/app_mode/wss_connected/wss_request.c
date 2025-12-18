@@ -226,9 +226,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
-                if (g_edev_connected_sn[0] != 0) {
-                    wss_ble_audio_start();
-                }
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
@@ -374,11 +371,14 @@ bool wss_request_loop()
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("[wss_request]Switch success, starting audio playback");
             wss_request_send_event_target(send_message);
-            // wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
-            send_message = 0; // 重置发送消息标志
-        } else if (last_message_type == OAST_TTS && last_event == OASE_START) {
             wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
-            last_event = 0;
+            send_message = 0; // 重置发送消息标志
+        // } else if (last_message_type == OAST_TTS && last_event == OASE_START) {
+        //     wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
+        //     if (g_edev_connected_sn[0] != 0) {
+        //         wss_ble_audio_start();
+        //     }
+        //     last_event = 0;
         } else if (send_message == ORMET_SWITCH_FAILED) {
             wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
             wss_request_send_event_target(send_message);
@@ -393,7 +393,10 @@ bool wss_request_loop()
     case STATE_DOWNLOAD: // until receive AUDIO END
         // 下载结束，继续播放
         if (last_message_type == OAST_TTS && last_event == OASE_START) {
-            wss_request_update_state(STATE_DOWNLOAD, "receive AUDIO START");
+            if (g_edev_connected_sn[0] != 0) {
+                wss_ble_audio_start();
+            }
+            last_event = 0;
         }
         if (last_message_type == OAST_TTS && last_event == OASE_END){
             wss_request_update_state(STATE_PLAYING, "receive AUDIO END");

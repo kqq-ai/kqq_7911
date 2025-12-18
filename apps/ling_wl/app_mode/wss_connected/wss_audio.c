@@ -53,23 +53,6 @@ void set_speaker() {
     os_mutex_post(&g_audio_mutex);
 }
 
-void music_play_stop()
-{
-    if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
-        log_i("[AUDIO]music_play_stop");
-        app_music_play_stop(g_app_ctx->music_player);
-    }
-}
-
-// 用一个新线程停止音频播放，避免阻塞主线程
-void music_play_stop_in_thread()
-{
-    if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
-        log_i("[AUDIO]music_play_stop_in_thread");
-        threadpool_add_task(g_app_ctx->threadpool, music_play_stop, NULL);
-    }
-}
-
 //=================================================================================================
 // MUSIC response callback
 //=================================================================================================
@@ -103,7 +86,7 @@ static int wss_audio_playback_start(void)
     log_i("[AUDIO]starting music player");
 
     /* 停止其他音频 */
-    music_play_stop();
+    lwl_app_mode_stop_playing();
     stop_prompt();
     set_speaker();
 
@@ -319,7 +302,7 @@ void wss_ble_audio_stop() {
     if (g_audio_play_ongoing) {
         g_audio_play_ongoing = false; // 停止音频播放
         g_audio_playing = false;
-        music_play_stop();
+        lwl_app_mode_stop_playing();
         set_led_tts_off();
     }
     os_mutex_post(&g_audio_mutex);
