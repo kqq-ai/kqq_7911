@@ -326,6 +326,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/bt_ble/client/ble_distance.c \
 	../../../../apps/ling_wl/bt_ble/client/ble_dev_task_scheduler.c \
 	../../../../apps/ling_wl/bt_ble/server/ble_simple_server.c \
+	../../../../apps/ling_wl/bt_ble/server/ble_opus_stream_rx.c \
 	../../../../apps/ling_wl/board/wl82/board_7911B.c \
 	../../../../apps/ling_wl/board/wl82/board_7911D.c \
 	../../../../apps/ling_wl/board/wl82/board_7912D.c \

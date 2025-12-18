@@ -55,7 +55,9 @@
 #endif
 
 #define CONFIG_DEBUG_ENABLE                     //打印开关
-#define RTOS_STACK_CHECK_ENABLE                 //是否启用定时检查任务栈
+// 定时打印任务/CPU/heap统计（会周期性输出 get_task_state + DLMALLOC_STATS）
+// 0: 关闭（默认，避免串口刷屏）  1: 开启（调试用）
+#define RTOS_STACK_CHECK_ENABLE                 0
 // #define CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH   //保存异常打印信息到flash
 // #define MEM_LEAK_CHECK_ENABLE                //是否启用内存泄漏检查(需要包含mem_leak_test.h头文件)
 // #define CONFIG_AUTO_SHUTDOWN_ENABLE          //自动倒数关机
@@ -72,7 +74,45 @@
 //*********************************************************************************//
 //                                  网络相关配置                                   //
 //*********************************************************************************//
-#define CONFIG_BOOT_OPUS_ONLY                 /* 仅播放本地Opus：禁用WiFi连接/BT等多余动作（临时调试开关） */
+// #define CONFIG_BOOT_OPUS_ONLY              /* 仅播放本地Opus：禁用WiFi连接/BT等多余动作（临时调试开关） */
+
+/*
+ * Boot BLE Opus stream RX:
+ * - On boot: enable BLE advertising, wait for BLE connection
+ * - After connected: receive Opus byte stream over GATT write and decode/play on DAC
+ *
+ * Notes:
+ * - Current implementation reuses the existing BLE simple server write characteristic (fff1) as the Opus ingress.
+ * - If you still need the legacy JSON WiFi-config protocol on fff1, disable CONFIG_BLE_OPUS_STREAM_RX.
+ */
+#define CONFIG_BOOT_BLE_OPUS_STREAM_RX_ONLY
+#define CONFIG_BLE_OPUS_STREAM_RX
+
+// Opus stream parameters (adjust to match your sender)
+#ifndef CONFIG_BLE_OPUS_STREAM_RX_DEBUG
+// 0: minimal logs, 1: verbose but rate-limited end-to-end logs for BLE Opus streaming
+#define CONFIG_BLE_OPUS_STREAM_RX_DEBUG      1
+#endif
+#ifndef CONFIG_BLE_OPUS_STREAM_SAMPLE_RATE
+#define CONFIG_BLE_OPUS_STREAM_SAMPLE_RATE   16000
+#endif
+#ifndef CONFIG_BLE_OPUS_STREAM_PREBUF_BYTES
+/*
+ * BLE Opus streaming prebuffer threshold (bytes).
+ *
+ * With the BLE Opus framing (magic + total_len), the RX path will effectively
+ * use: min(CONFIG_BLE_OPUS_STREAM_PREBUF_BYTES, total_len) as the start gate.
+ * This makes short clips wait for full download, and longer clips start after
+ * enough buffering to avoid underflow noise.
+ */
+// Reduce start latency: with framing we can safely start earlier for long clips.
+// Short clips still wait for full file because start gate uses min(prebuf, total_len).  不能使用512 否则无法正常播放
+#define CONFIG_BLE_OPUS_STREAM_PREBUF_BYTES  1204
+#endif
+#ifndef CONFIG_BLE_OPUS_STREAM_READ_TIMEOUT_MS
+// Increase read-side starvation timeout to tolerate temporary BLE backpressure/CPU spikes.
+#define CONFIG_BLE_OPUS_STREAM_READ_TIMEOUT_MS  60000
+#endif
 #ifdef CONFIG_NET_ENABLE
 #define CONFIG_WIFI_ENABLE  					/* 无线WIFI */
 #ifdef CONFIG_NO_SDRAM_ENABLE

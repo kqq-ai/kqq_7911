@@ -400,7 +400,7 @@ void free_5m_edev_targets(char **targets, int targets_num)
  * 
  * @param [in] handler 回调函数引用
  */
-void lwl_event_handler_add(lwl_event_handler_cb_t *handler) 
+void lwl_event_handler_add(lwl_event_handler_cb_t handler)
 {
     ASSERT(s_app_context != NULL);
 
@@ -424,7 +424,7 @@ void lwl_event_handler_add(lwl_event_handler_cb_t *handler)
  * 
  * @param [in] handler 回调函数引用
  */
-void lwl_event_handler_remove(lwl_event_handler_cb_t *handler)
+void lwl_event_handler_remove(lwl_event_handler_cb_t handler)
 {
     ASSERT(s_app_context != NULL);
 

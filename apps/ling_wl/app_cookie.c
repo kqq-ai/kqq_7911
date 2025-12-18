@@ -15,6 +15,7 @@
 #include "bt_ble/ble_combined.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "bt_ble/client/ble_simple_client.h"
+#include "bt_ble/server/ble_opus_stream_rx.h"
 #include "uart.h"
 #include "syscfg_id.h"
 #include "audio/recorder.h"
@@ -24,6 +25,7 @@
 #include "app_mode/7911_uart_7016/app_uart_task.h"
 #include "SC7A20/app_sc7a20_task.h"
 #include "protocol/cp/c_uart_p.h"
+#include "LED/LED.h"
 #include "app_mode/lwl_app_framework.h"
 
 #include "protocol/odm/odm_secure.h"
@@ -34,9 +36,7 @@
 #include "log/log_mqtt.h"
 #include "system/sys_time.h"
 
-static void set_led_red_low_power(void)        { uart_send_set_led_color(COLOR_RED); } //red~ low power
-static void set_led_power_off(void)      { uart_send_set_led_color(COLOR_BLACK); } /// off LED before power Off
-static void set_led_power_on(void)      { uart_send_set_led_color(COLOR_BLUE); }
+static void set_led_red_low_power(void)         { set_rgb_color(COLOR_RED); }
 
 extern int app_music_bt_event_handler(struct sys_event *event);
 
@@ -122,6 +122,9 @@ void base_lwl_event_handler(lwl_event_t *e)
     case LWL_EVENT_TYPE_LOW_BATTERY:
         u16 voltage = get_vbat_level();
         log_i("LOW BATTERY EVENT voltage : %d\n", voltage);
+        if (voltage < LOW_BATT_VOLT) {
+            set_led_red_low_power();
+        }
         break;
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         log_i("PRESS RESET KEY\n");
@@ -202,112 +205,86 @@ static void peri_events(void *priv)
     }
 }
 
-// ====== Boot-only OPUS loop playback (no other subsystems) ======
-static volatile u8 g_boot_opus_need_restart = 0;
-#if defined(CONFIG_BOOT_OPUS_ONLY)
-static OS_SEM g_boot_opus_sem;
-static volatile u8 g_boot_opus_thread_started = 0;
-#endif
-
-static void boot_opus_play_end_cb(void *priv)
-{
-    // Audio server end callback context: only set a flag here.
-    (void)priv;
-    g_boot_opus_need_restart = 1;
-#if defined(CONFIG_BOOT_OPUS_ONLY)
-    log_i("[BOOT_OPUS] end_cb -> restart");
-    os_sem_post(&g_boot_opus_sem);
-#endif
-}
-
-static void boot_opus_try_play_once(void)
-{
-    const char *path = CONFIG_CP_VOICE_FILE_PATH "dd_raw.opus";
-
-    log_i("[BOOT_OPUS] play %s", path);
-
-    // NOTE: app_music_play_local_music_with_callback() currently always returns 0,
-    // so we rely on audio server logs to judge success.
-    app_music_play_local_music_with_callback(&g_music_player,
-                                             (void *)path,
-                                             boot_opus_play_end_cb,
-                                             NULL);
-}
-
-#if defined(CONFIG_BOOT_OPUS_ONLY)
-static void boot_opus_loop_thread(void *priv)
-{
-    (void)priv;
-    log_i("[BOOT_OPUS] loop thread start");
-    while (1) {
-        g_boot_opus_need_restart = 0;
-        boot_opus_try_play_once();
-        os_sem_pend(&g_boot_opus_sem, 0);
-        // loop
-    }
-}
-#endif
-
 static void app_cookie_main(void)
 {
-    // Requirement: on boot, try to loop-play doubao.opus (8k) and do nothing else.
-    log_i("[BOOT_OPUS] start");
+    log_i("Hello World2!\r\n");
+    log_i("Version: 12\r\n");
     log_i("%s %s\r\n", __DATE__, __TIME__);
 
+    lwl_app_core_init();
+    
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+
+    lwl_event_handler_add(base_lwl_event_handler);
+
+    // led_breath_init(); // 初始化LED呼吸灯
+    // pthread_t monitor_thread;
+    // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
+    
+    /* 初始化数据通信串口 */
+    uart0_hdl = app_uart_dev_init("uart0");
+    context->uartdev = uart0_hdl;
+
+    // 初始化录音
+    recorder_mode_init(&g_recorder);
+    context->recorder = &g_recorder;
+
+    // 取消静音
+    gpio_direction_output(IO_PORTA_00, 1);                  // 拉高 C 口功放使能脚，恢复扬声器输出
+    gpio_direction_output(IO_PORTB_02, 0);                  // 备用方案：拉高 E 口功放使能
+    uart_response_synch_status(1, MAX_LE_AUDIO_VOLUME);     // 同步初始音量状态给 7016
+    /* 创建网络&提示音解码播放器 */
+    music_player_init(&g_music_player);                     // 初始化音乐播放器，支持本地/网络音频
+    context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
+
+#if defined(CONFIG_BLE_OPUS_STREAM_RX)
+    ble_opus_stream_rx_bind_player(&g_music_player);
+#endif
+
+#if !defined(CONFIG_BOOT_BLE_OPUS_STREAM_RX_ONLY)
+    ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
+
+    /* 创建线程池 */
+    pool = threadpool_create(4, 16);                        // 创建 4 个线程、队列深度 16 的线程池
+    context->threadpool = pool;                             // 保存线程池实例供异步任务复用
+
+    /*wifi manager 所需要的一些初始化*/
+    wifi_manage_init(NULL);                                 // 初始化 WiFi 管理器（STA/BLE 共存配置）
+
+    /* 初始化RSSI测距 */
+    monitor_init();                                         // 可选：初始化 RSSI 测距组件
+
+    /* 开始RSSI测距 */
+    monitor_start();                                        // 可选：启动测距任务
+#else
     /*
-     * DEBUG isolate crash source:
-     * Set to 0 to disable audio decode/playback and verify whether the
-     * axi_rd_inv (FreeRTOS list corruption) still reproduces.
+     * Boot BLE Opus stream RX only:
+     * - Do NOT start BLE client scanning/measuring tasks, to avoid interfering with BLE GATT server streaming.
      */
-#ifndef BOOT_OPUS_ENABLE_PLAYBACK
-#if defined(CONFIG_BOOT_OPUS_ONLY)
-#define BOOT_OPUS_ENABLE_PLAYBACK 1
+    log_i("[BOOT_BLE_OPUS] skip ble_dev_task_scheduler/wifi_manage/monitor");
+#endif
+
+    // 初始化lfs
+    lfs_t *lfs_hdl = app_lfs_init("mnt/sdfile/app/exif");   // 挂载 LittleFS，用于配置和资源读写
+    ASSERT(lfs_hdl);                                        // 确保文件系统初始化成功
+    context->lfs_hdl = lfs_hdl;                             // 保存文件系统句柄
+    //app_lfs_cfgfile_init(context->lfs_hdl);
+    get_flash_app_cfg_data(context->lfs_hdl);               // 从配置区加载设备参数（SN、OTA 等）
+
+
+#if !defined(CONFIG_BOOT_BLE_OPUS_STREAM_RX_ONLY)
+    /* 创建sc7a20 task 陀螺仪 */
+    app_sc7a20_init();                                      // 启动 SC7A20 加速度计任务，支持姿态/震动检测
+
+    lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
+    thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
+#endif
+
+#if !defined(CONFIG_BOOT_BLE_OPUS_STREAM_RX_ONLY)
+    /* APP_MDOE 开始 */
+    thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
 #else
-#define BOOT_OPUS_ENABLE_PLAYBACK 0
-#endif
-#endif
-
-#if !BOOT_OPUS_ENABLE_PLAYBACK
-    log_i("[BOOT_OPUS] playback disabled (debug isolate)");
-    while (1) {
-        msleep(1000);
-    }
-#endif
-
-    // Enable speaker output (keep minimal HW init needed for audio).
-    gpio_direction_output(IO_PORTA_00, 1);
-#if defined(TCFG_DAC_MUTE_ENABLE) && (TCFG_DAC_MUTE_ENABLE)
-    // Unmute DAC output (board_config.h: TCFG_DAC_MUTE_VALUE is the "mute" level).
-    gpio_direction_output(TCFG_DAC_MUTE_PORT, !TCFG_DAC_MUTE_VALUE);
-#endif
-
-    // Initialize audio decoder server and start playback.
-    music_player_init(&g_music_player);
-    set_dec_volume(&g_music_player, INIT_VOLUME_VALUE);
-
-#if defined(CONFIG_BOOT_OPUS_ONLY)
-    // IMPORTANT:
-    // Do NOT block app_core forever here; server events (AUDIO_SERVER_EVENT_END)
-    // are dispatched via the core task, and blocking would prevent end callback,
-    // causing no loop-restart.
-    if (!g_boot_opus_thread_started) {
-        g_boot_opus_thread_started = 1;
-        os_sem_create(&g_boot_opus_sem, 0);
-        thread_fork("boot_opus_loop", 20, 768, 0, NULL, boot_opus_loop_thread, NULL);
-    }
-    return;
-#else
-    g_boot_opus_need_restart = 0;
-    boot_opus_try_play_once();
-
-    // Polling loop: restart when playback finishes.
-    while (1) {
-        if (g_boot_opus_need_restart) {
-            g_boot_opus_need_restart = 0;
-            boot_opus_try_play_once();
-        }
-        msleep(50);
-    }
+    log_i("[BOOT_BLE_OPUS] mode: BLE opus stream RX only (no lwl_app_task)");
 #endif
 
 }
@@ -485,7 +462,6 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("[NET] NET_EVENT_CONNECTED (arg=%s)", event->arg);
-            //set_led_white();; /// Net Succ
             // 播放联网成功提示音
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
@@ -529,10 +505,18 @@ static int app_music_net_event_handler(struct net_event *event)
 
 static int app_cookie_event_handler(struct application *app, struct sys_event *event)
 {
-    // Boot OPUS loop mode: ignore all system events (keys/net/bt/etc).
-    (void)app;
-    (void)event;
-    return false;
+    switch (event->type) {
+    case SYS_KEY_EVENT:
+        return app_cookie_key_event_handler((struct key_event *)event->payload);
+    case SYS_DEVICE_EVENT:
+        return app_cookie_device_event_handler(event);
+    case SYS_NET_EVENT:
+        return app_music_net_event_handler((struct net_event *)event->payload);
+    case SYS_BT_EVENT:
+        return ble_demo_bt_event_handler(event);
+    default:
+        return false;
+    }
 }
 
 // 状态机：管理APP的生命周期和状态转换

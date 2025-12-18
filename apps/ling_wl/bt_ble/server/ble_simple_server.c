@@ -27,6 +27,9 @@
 #include "bt_ble/ble_combined.h"
 
 #include "bt_ble/ble_data.h"
+#include "ble_opus_stream_rx.h"
+// For device SN stored in LittleFS (SN_KEY.bin)
+#include "../../protocol/odm/odm_secure.h"
 
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
@@ -280,6 +283,9 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                         , hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet)
                         , hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
                 server_profile_start(server_con_handle);
+#if defined(CONFIG_BLE_OPUS_STREAM_RX)
+                ble_opus_stream_rx_on_connect(server_con_handle);
+#endif
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_COMPLETE:
@@ -298,6 +304,9 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
                 connection_update_complete_success(server_con_handle, packet + 8);
                 server_profile_start(server_con_handle);
+#if defined(CONFIG_BLE_OPUS_STREAM_RX)
+                ble_opus_stream_rx_on_connect(server_con_handle);
+#endif
                 break;
 
             case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE: {
@@ -335,6 +344,10 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
 
             set_ble_work_state(BLE_ST_DISCONN);
             ble_op_multi_att_send_conn_handle(0, 0, MULTI_ROLE_SERVER);
+
+#if defined(CONFIG_BLE_OPUS_STREAM_RX)
+            ble_opus_stream_rx_on_disconnect(tmp_handle);
+#endif
 
             if( WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL) ) {
                 clear_key_press_time_ms();
@@ -444,8 +457,20 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
     u16 tmp16;
     u16 handle = att_handle;
 
+    /*
+     * NOTE: When streaming Opus over BLE, ATT writes can be very frequent.
+     * Avoid per-packet spam; emit periodic summaries instead (still keep CCC writes visible).
+     */
+#if defined(CONFIG_BLE_OPUS_STREAM_RX)
+    if (handle != ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE) {
+        log_info("write_callback, handle= 0x%04x,size = %d\n", handle, buffer_size);
+    }
+#else
     log_info("write_callback, handle= 0x%04x,size = %d\n", handle, buffer_size);
-    log_info("write_callback, buffer= %s\n",buffer);
+#endif
+#if !defined(CONFIG_BLE_OPUS_STREAM_RX)
+    log_info("write_callback, buffer= %s\n", buffer);
+#endif
 
     switch (handle) {
     case ATT_CHARACTERISTIC_0000fff2_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
@@ -456,6 +481,72 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
         multi_att_set_ccc_config(connection_handle, handle, buffer[0]);
         break;
     case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
+#if defined(CONFIG_BLE_OPUS_STREAM_RX)
+        /*
+         * Opus stream ingress: raw bytes over GATT write (no JSON parsing).
+         *
+         * Critical for audio integrity:
+         * - We MUST NOT silently drop bytes. A single gap will corrupt the Opus byte stream and
+         *   will typically manifest as "later part becomes noise".
+         * - We MUST NOT accept prepared/long writes (transaction/offset semantics) unless we
+         *   properly re-assemble by offset and only commit on EXECUTE.
+         *
+         * Therefore:
+         * - Reject prepared writes (ATT_TRANSACTION_MODE_ACTIVE/EXECUTE/...) to force the sender
+         *   to write <= (MTU-3) chunks using regular writes.
+         * - Reject non-zero offsets.
+         * - If RX queue is full, return an ATT error to provide backpressure to the sender.
+         */
+        if (transaction_mode != ATT_TRANSACTION_MODE_NONE) {
+            // 0x13: Value Not Allowed (standard ATT error)
+            log_info("[BLE_OPUS][ATT] reject prepared write: tm=%u off=%u len=%u (use <=MTU-3 normal writes)",
+                     transaction_mode, offset, buffer_size);
+            return 0x13;
+        }
+        if (offset != 0) {
+            // 0x07: Invalid Offset (standard ATT error)
+            log_info("[BLE_OPUS][ATT] reject non-zero offset: off=%u len=%u", offset, buffer_size);
+            return 0x07;
+        }
+
+        {
+            static u32 s_opus_pkts = 0;
+            static u32 s_opus_bytes = 0;
+            static u32 s_opus_last_ms = 0;
+            static u16 s_last_size = 0;
+            s_opus_pkts++;
+            s_opus_bytes += buffer_size;
+            s_last_size = buffer_size;
+
+            u32 now = timer_get_ms();
+            if (s_opus_last_ms == 0) {
+                s_opus_last_ms = now;
+                log_info("[BLE_OPUS][ATT] first write: conn=%u size=%u offset=%u", connection_handle, buffer_size, offset);
+                if (buffer && buffer_size) {
+                    u16 dump_len = buffer_size > 16 ? 16 : buffer_size;
+                    log_info("[BLE_OPUS][ATT] head16:");
+                    log_info_hexdump(buffer, dump_len);
+                }
+            } else if ((now - s_opus_last_ms) >= 1000) {
+                log_info("[BLE_OPUS][ATT] 1s: conn=%u pkts=%u bytes=%u last_size=%u",
+                         connection_handle, s_opus_pkts, s_opus_bytes, s_last_size);
+                s_opus_pkts = 0;
+                s_opus_bytes = 0;
+                s_opus_last_ms = now;
+            }
+
+            int wret = ble_opus_stream_rx_on_audio_write(buffer, buffer_size);
+            if (wret < 0) {
+                // Provide real backpressure: return ATT error so sender can retry/slow down.
+                // 0x11: Insufficient Resources (standard ATT error)
+                if (wret == -2 /* RINGQUEUE_Is_Full mapped in ble_opus_stream_rx */) {
+                    return 0x11;
+                }
+                // 0x0E: Unlikely Error
+                return 0x0E;
+            }
+        }
+#else
         ret = parse_and_assemble(buffer, buffer_size, json_data);
         if (0 == ret) {
             ret = parse_and_dispatch_json(json_data,return_json_data);
@@ -471,6 +562,7 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
             }
             log_info("return_json_data: %s\n",return_json_data);
         }
+#endif
         break;
     default:
         break;
@@ -530,7 +622,8 @@ static int send_return_json_data(const uint8_t * return_json_data)
 
     // 构建并发送每个分包
     for (size_t i = 0; i < num_packets; ++i) {
-        unsigned char packet[total_packet_size] = {0};
+        // Avoid VLA initialization (some toolchains treat it as an error)
+        unsigned char packet[MAX_PACKET_SIZE] = {0};
 
         // 设置当前分包号，格式化为两位字符（例如：01, 08, 11）
         snprintf((char *)packet, 3, "%02d", (int)(i + 1));
@@ -577,6 +670,30 @@ static int make_set_adv_data(void)
     /* offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x18, 1); */
     /* offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x1A, 1); */
     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x06, 1);
+
+    /*
+     * Put SN into manufacturer specific data (AD type 0xFF) so the mini-program can read it from advertisData.
+     *
+     * Format (matches scanning side in lwl_eend_device.c):
+     *   [0] 0xE3
+     *   [1] 0xFA
+     *   [2] ctrl/state (1 byte, reserved; set to 0 for now)
+     *   [3..18] SN (16 bytes: 15 ASCII chars + '\0')
+     */
+    {
+        char sn[16] = {0};
+        if (get_SN(sn)) {
+            u8 mfg[3 + 16] = {0};
+            mfg[0] = 0xE3;
+            mfg[1] = 0xFA;
+            mfg[2] = 0x00;
+            memcpy(&mfg[3], sn, 16);
+            offset += make_eir_packet_data(&buf[offset], offset,
+                                          HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA,
+                                          mfg, sizeof(mfg));
+        }
+    }
+
     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_16BIT_SERVICE_UUIDS, 0xAF30, 2);
 
     if (offset > ADV_RSP_PACKET_MAX) {

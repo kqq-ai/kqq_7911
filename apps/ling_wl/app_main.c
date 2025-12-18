@@ -217,7 +217,7 @@ void app_main()
     it.action = ACTION_COOKIE_MAIN;
     start_app(&it);  // See: app_cookie.c:548-553 
 
-#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1 && !defined(CONFIG_BOOT_OPUS_ONLY)
+#if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
     extern void bt_ble_module_init(void);
     bt_ble_module_init();
 #endif

@@ -304,13 +304,13 @@ void free_5m_edev_targets(char **targets, int targets_num);
  * @brief Add an event handler callback
  * @param handler Pointer to the handler function to add
  */
-void lwl_event_handler_add(lwl_event_handler_cb_t *handler);
+void lwl_event_handler_add(lwl_event_handler_cb_t handler);
 
 /**
  * @brief Remove an event handler callback
  * @param handler Pointer to the handler function to remove
  */
-void lwl_event_handler_remove(lwl_event_handler_cb_t *handler);
+void lwl_event_handler_remove(lwl_event_handler_cb_t handler);
 
 /**
  * @brief Notify the system of a new event

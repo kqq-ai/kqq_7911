@@ -120,7 +120,7 @@ void cpu_assert_debug()
     cpu_reset();
 }
 
-#ifdef RTOS_STACK_CHECK_ENABLE
+#if defined(RTOS_STACK_CHECK_ENABLE) && (RTOS_STACK_CHECK_ENABLE)
 static void rtos_stack_check_func(void *p)
 {
 #if 0
@@ -146,7 +146,7 @@ static void rtos_stack_check_func(void *p)
 #endif
     /*cpu_effic_calc();*/
 }
-#endif
+#endif /* defined(RTOS_STACK_CHECK_ENABLE) && (RTOS_STACK_CHECK_ENABLE) */
 
 #ifdef MEM_LEAK_CHECK_ENABLE
 #include "mem_leak_test.h"
@@ -169,7 +169,7 @@ static void app_task_handler(void *p)
     sys_timer_init();
     sys_timer_task_init();
 
-#ifdef RTOS_STACK_CHECK_ENABLE
+#if defined(RTOS_STACK_CHECK_ENABLE) && (RTOS_STACK_CHECK_ENABLE)
     /*
      * DEBUG: run much earlier to catch stack/heap stats before early crash (~5s).
      * This is instrumentation only; change back to 60*1000 after root cause found.
@@ -179,7 +179,7 @@ static void app_task_handler(void *p)
 #else
     sys_timer_add(NULL, rtos_stack_check_func, 1000);
 #endif
-#endif
+#endif /* defined(RTOS_STACK_CHECK_ENABLE) && (RTOS_STACK_CHECK_ENABLE) */
 
 #ifdef MEM_LEAK_CHECK_ENABLE
     malloc_debug_start();
