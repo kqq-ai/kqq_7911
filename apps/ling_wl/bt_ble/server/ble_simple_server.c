@@ -577,6 +577,28 @@ static int make_set_adv_data(void)
     /* offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x18, 1); */
     /* offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x1A, 1); */
     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x06, 1);
+    /*
+    * Put SN into manufacturer specific data (AD type 0xFF) so the mini-program can read it from advertisData.
+    *
+    * Format (matches scanning side in lwl_eend_device.c):
+    *   [0] 0xE3
+    *   [1] 0xFA
+    *   [2] ctrl/state (1 byte, reserved; set to 0 for now)
+    *   [3..18] SN (16 bytes: 15 ASCII chars + '\0')
+    */
+    {
+        char sn[16] = {0};
+        if (get_SN(sn)) {
+            u8 mfg[3 + 16] = {0};
+            mfg[0] = 0xE3;
+            mfg[1] = 0xFA;
+            mfg[2] = 0x00;
+            memcpy(&mfg[3], sn, 16);
+            offset += make_eir_packet_data(&buf[offset], offset,
+                                            HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA,
+                                            mfg, sizeof(mfg));
+        }
+    }
     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_16BIT_SERVICE_UUIDS, 0xAF30, 2);
 
     if (offset > ADV_RSP_PACKET_MAX) {
