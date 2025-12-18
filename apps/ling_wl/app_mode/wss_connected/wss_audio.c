@@ -319,6 +319,7 @@ void wss_ble_audio_stop() {
         g_audio_play_ongoing = false; // 停止音频播放
         g_audio_playing = false;
         music_play_stop();
+        set_led_tts_off();
     }
     os_mutex_post(&g_audio_mutex);
 }

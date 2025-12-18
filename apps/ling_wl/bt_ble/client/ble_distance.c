@@ -88,12 +88,13 @@ static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *
             e.distance_change.pdev = p_eend_dev;
             lwl_event_notify(&e);
         }
-    } else {
+    } else if (p_eend_dev->distance_info.distance_type == DISTANCE_0) {
         p_eend_dev->distance_info.test_count++;
-        if (p_eend_dev->distance_info.test_count == 4 && p_eend_dev->distance_info.distance_type == DISTANCE_0) {
+        if (p_eend_dev->distance_info.test_count == 4) { // 连续4次距离类型为DISTANCE_0，触发事件通知
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
             e.distance_change.pdev = p_eend_dev;
+            p_eend_dev->distance_info.test_count = 0;
             lwl_event_notify(&e);
         }
     }
