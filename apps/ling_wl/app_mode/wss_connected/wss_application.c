@@ -161,8 +161,18 @@ static void input_event_handler_cb(lwl_event_t *e)
             if (!wss_request_is_playing()) {
                 if (multi_play_mode) {
                     play_prompt_sound("1to2.mp3");
+                    wss_request_send_event_target(ORMET_PLAY_NEXT);
+                    log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
+                    g_device_state = APP_WAIT;
                 } else {
                     play_prompt_sound("1to1.mp3");
+                    if (wss_device_call()) {
+                        log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
+                        g_device_state = APP_WAIT;
+                    } else {
+                        log_i("[wss_application]STATE: MODE SWITCH no device call -> APP_IDLE");
+                        g_device_state = APP_IDLE;
+                    }
                 }
             } else {
                 wss_application_resume_mic();
@@ -206,7 +216,7 @@ static void wss_app_mode_play_cb(void *priv)
 {
     log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
     play_voice_prompt = 0;
-    wss_application_resume_mic();
+    // wss_application_resume_mic();
     bdo_enable();
 }
 
