@@ -1,6 +1,7 @@
 #include "wss_application.h"
 #include "wss_request.h"
 #include "wss_audio.h"
+#include "wss_mic.h"
 #include "wss_app_util.h"
 #include "../lwl_app_framework.h"
 #include "net_music_play_my.h"

@@ -298,6 +298,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_app_util.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_request.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_audio.c \
+	../../../../apps/ling_wl/app_mode/wss_connected/wss_mic.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_device.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/wss_connected.c \
 	../../../../apps/ling_wl/app_mode/wss_connected/test/eend_battery_live_test.c \

@@ -6,20 +6,10 @@
 void wss_audio_init();
 void wss_audio_uninit();
 
-bool is_recording_uploading();// 录音上传状态
-
-void music_play_stop_in_thread(); // 用线程停止音频播放，避免阻塞主线程
-
 void wss_ble_audio_start(); // request 控制 允许WSS音频数据写入播放器，允许播放
 void wss_ble_audio_stop();  // request 控制 停止数据写入，暂停播放器
 
-void wss_mic_start();       // APP 控制 MIC 录音状态
-void wss_mic_stop();        // APP 控制 MIC 录音状态
-
-void wss_vad_start(uint timestamp); // APP 控制 VAD 及音频上传状态
-
-void wss_asr_start();
-void wss_asr_stop();
+void wss_audio_set_player(u32 delta); // request 控制 音频播放器延时启动
 
 void set_tts_volume(int volume);
 
