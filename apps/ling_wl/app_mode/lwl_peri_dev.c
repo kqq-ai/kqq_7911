@@ -12,8 +12,8 @@
 
 static void set_led_touch_on(void)   { set_rgb_ON(COLOR_PURPLE,10); }
 static void set_led_touch_off(void)  { set_rgb_OFF(COLOR_PURPLE,10); }
-static void set_led_normal_key_on(void)   { set_rgb_ON(COLOR_RED,11); }
-static void set_led_normal_key_off(void)  { set_rgb_OFF(COLOR_RED,11); }
+static void set_led_normal_key_on(void)   { set_rgb_ON(COLOR_YELLOW,11); }
+static void set_led_normal_key_off(void)  { set_rgb_OFF(COLOR_YELLOW,11); }
 
 static uint32_t g_key_scan_timer = 0;
 static uint8_t  g_key_scan_ongoing = 0;

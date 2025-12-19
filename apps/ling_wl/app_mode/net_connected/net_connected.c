@@ -36,7 +36,7 @@
 static u32 init_time = 0;
 
 static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
-static void set_led_connect_error(void)     { set_rgb_color(COLOR_BLUE); }    /* 控制 led : 网络连接失败 红色 */
+static void set_led_connect_error(void)     { set_rgb_color(COLOR_CYAN); }
 
 //=================================================================================================
 // LWL event callback

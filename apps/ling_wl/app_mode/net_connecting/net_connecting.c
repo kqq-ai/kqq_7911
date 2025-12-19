@@ -44,10 +44,10 @@ void clear_key_press_time_ms(){
     key_press_time_ms = 0;
 }
 
-static void set_led_connecting(void)        { set_rgb_color(COLOR_BLUE); }
-static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }
-static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_YELLOW,2); }
-static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_YELLOW,2); }
+static void set_led_connecting(void)        { set_rgb_color(COLOR_CYAN); }
+static void set_led_connected(void)         { set_rgb_color(COLOR_BLUE); }
+static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_GREEN,2); }
+static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_GREEN,2); }
 
 int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
 {
@@ -143,6 +143,7 @@ static void handle_ble_connection_state()
 
     /* BLE连接成功处理 */
     if (!get_ble_app_disconnect_flag() && !ble_connected) {
+        set_led_confirm_off();
         set_led_connected();
         play_system_music("bt_conneted.mp3");
         ble_connected = true;

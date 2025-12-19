@@ -17,10 +17,10 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static OS_MUTEX g_mic_mutex;
 
 
-static void set_led_mic_on(void)    { set_rgb_ON(COLOR_YELLOW,1); }
-static void set_led_mic_off(void)   { set_rgb_OFF(COLOR_YELLOW,1); }
-static void set_led_vad_on(void)    { set_rgb_ON(COLOR_GREEN,2); }
-static void set_led_vad_off(void)   { set_rgb_OFF(COLOR_GREEN,2); }
+static void set_led_mic_on(void)    { set_rgb_ON(COLOR_WHITE,1); }
+static void set_led_mic_off(void)   { set_rgb_OFF(COLOR_WHITE,1); }
+static void set_led_vad_on(void)    { set_rgb_ON(COLOR_YELLOW,2); }
+static void set_led_vad_off(void)   { set_rgb_OFF(COLOR_YELLOW,2); }
 
 /*=================================================================================================
  * Vad timer

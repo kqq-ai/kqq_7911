@@ -32,8 +32,8 @@
 #include "gpio.h"
 #include "LED/LED.h"
 
-static void set_led_connecting_on(void)     { set_rgb_ON(COLOR_RED, 5); }
-static void set_led_connecting_off(void)    { set_rgb_OFF(COLOR_RED,5); }
+static void set_led_connecting_on(void)     { set_rgb_ON(COLOR_CYAN, 5); }
+static void set_led_connecting_off(void)    { set_rgb_OFF(COLOR_CYAN,5); }
 bool play_prompt_flag = 0;
 
 static int wss_connected_init(void)

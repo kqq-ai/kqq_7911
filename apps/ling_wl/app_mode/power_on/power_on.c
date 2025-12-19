@@ -33,7 +33,7 @@
 #define OTA7016_KEY_PRESS_TIME_MS 8000 // 8+2s
 static u32 init_time = 0;
 static bool c_7016_power_on = false;
-static void set_led_power_on(void)         { set_rgb_color(COLOR_WHITE); }
+static void set_led_power_on(void)         { set_rgb_color(COLOR_CYAN); }
 static void set_led_ota_on(void)           { set_rgb_ON(COLOR_PURPLE, 20); }
 static void set_led_ota_off(void)          { set_rgb_OFF(COLOR_PURPLE, 20); }
 
