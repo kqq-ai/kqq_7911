@@ -757,7 +757,7 @@ static void dump_system_reset_reason(void)
     }
     
     if (reset_reason & SYS_RST_LONG_PRESS) {
-        printf("- Long Press Reset\n");
+        printf("--- Long Press Reset\n");
     }
     
     if (reset_reason & SYS_RST_VDDIO_LOW_PWR) {
@@ -815,6 +815,7 @@ static void board_power_init(void)
     dump_system_reset_reason();
     int ret = 0;
     ret = system_wakeup_reset();
+    int reset_reason = system_reset_reason_get(); ///获取复位引脚相关原因
     if (ret == 1)
     {
         ret = system_wakeup_port_get();
@@ -842,8 +843,9 @@ static void board_power_init(void)
             gpio_read(KEY_IO_PORT),     gpio_read(IO_PORTB_01),  gpio_read(PORT_CHG_IO),
             gpio_read(CHARGE_FULL_IO),  gpio_read(GSENSOR_IO),      gpio_read(TOUCH_IO) );
     //判断 仅key和 CHG_IN为0；FULL和RST是 1，则delay 2秒，再执行后续。否则直接执行后续.不检测touch和gSensor，按键时，可能会触摸或震动
-    if( (0 == gpio_read(KEY_IO_PORT)) && (0 == gpio_read(PORT_CHG_IO))
-        && (1 == gpio_read(IO_PORTB_01)) && (1 == gpio_read(CHARGE_FULL_IO))  )
+    // if( (0 == gpio_read(KEY_IO_PORT)) && (0 == gpio_read(PORT_CHG_IO))
+    //     && (1 == gpio_read(IO_PORTB_01)) && (1 == gpio_read(CHARGE_FULL_IO))  )
+    if(ret == 4)
     {
         //2秒后，再次判断，一致，则继续开机，否则关机
         delay_2ms(1000); // 延时2秒，开机
@@ -852,7 +854,7 @@ static void board_power_init(void)
         {
             log_i("key and CHG_IN low, other high,  after delay 2s, condition still meet, continue power on\n");
         }else {
-            log_i("short key , power off !!\n");
+            log_i("short key ,or Noise,  power off !!\n");
             power_set_soft_poweroff(0);
         }
     }else {
