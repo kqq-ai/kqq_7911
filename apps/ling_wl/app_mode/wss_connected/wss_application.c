@@ -71,29 +71,21 @@ bool wss_application_check_power_key()
 //=================================================================================================
 // 麦克风相关
 //=================================================================================================
-void wss_application_resume_mic()
-{
-    log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
-    log_mqtt("🔄🔄🔄 麦克风重启");
-    os_mutex_pend(&g_wss_app_mutex, 0);
-    if (g_on_touch_key) {
-        wss_mic_start();
-    } else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
-        wss_mic_start();
-    } else if (!g_mic_on || g_device_state == APP_AUDIO) {
-        wss_mic_stop();
-    }
-    os_mutex_post(&g_wss_app_mutex);
-}
-
 // 打开麦克风并启动vad录音
 void wss_application_start_mic()
 {
     log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+    log_mqtt("🔄🔄🔄 麦克风重启 touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
+    os_mutex_pend(&g_wss_app_mutex, 0);
     g_device_state = APP_VAD;
     g_mic_on = true;
-    wss_application_resume_mic();
+    if (g_device_state == APP_IDLE || g_device_state == APP_VAD) {
+        wss_mic_start();
+    } else if (g_device_state == APP_AUDIO || g_device_state == APP_WAIT) {
+        wss_mic_stop();
+    }
     wss_vad_start(NO_REQ_TIMEOUT_MS); // 开始录音
+    os_mutex_post(&g_wss_app_mutex);
 }
 
 //=================================================================================================
@@ -170,8 +162,6 @@ static void input_event_handler_cb(lwl_event_t *e)
                         g_device_state = APP_IDLE;
                     }
                 }
-            } else {
-                wss_application_resume_mic();
             }
         }
         break;
@@ -212,7 +202,10 @@ static void wss_app_mode_play_cb(void *priv)
 {
     log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
     play_voice_prompt = 0;
-    // wss_application_resume_mic();
+    if (g_on_touch_key) {
+        log_mqtt("📜📜📜 剧本开始");
+        wss_mic_start();
+    }
     bdo_enable();
 }
 
@@ -456,7 +449,7 @@ bool wss_application_loop()
             wss_mic_stop(); // 停止录音
         } else if (g_mic_on && wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
-            wss_application_start_mic();
+            wss_application_start_mic();//STATE: APP_AUDIO -> APP_IDLE
         } else if (!wss_device_is_calling() || multi_play_mode) {
             if (wss_device_loop()) {
                 log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
@@ -474,7 +467,7 @@ bool wss_application_loop()
                 wss_request_send_event_target(ORMET_PLAY_NEXT);
                 g_device_state = APP_WAIT;
             } else if (wss_device_is_calling() && g_mic_on) {
-                wss_application_start_mic();
+                wss_application_start_mic();//STATE: APP_AUDIO -> APP_IDLE
             } else {
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
                 wss_request_send_event_target(ORMET_PLAY_NEXT);

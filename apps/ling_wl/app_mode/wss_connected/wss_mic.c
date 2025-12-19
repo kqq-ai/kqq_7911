@@ -156,7 +156,7 @@ static int asr_data_to_server(AsrData *asr_data)
  */
 static void start_recorder_upload()
 {
-    log_i("[WSS_MIC]Start wss_mic upload.");
+    log_i("[WSS_MIC]🎙️🎙️🎙️Start wss_mic upload.");
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     g_recording_uploading = true;
@@ -182,11 +182,11 @@ static void start_recorder_upload()
     g_recording_uploading = false;
     recorder_data_upstream(recorder_data_to_ringbuffer);
     if (g_recording_vad == false){/* VAD结束 */
-        log_i("[WSS_MIC]Stop wss_mic_upload because VAD END.");
+        log_i("[WSS_MIC]🎙️🎙️🎙️Stop wss_mic_upload because VAD END.");
     } else if (g_recording_upload == false) {
-        log_i("[WSS_MIC]Stop wss_mic_upload because ASR start.");
+        log_i("[WSS_MIC]🎙️🎙️🎙️Stop wss_mic_upload because ASR start.");
     } else {
-        log_i("[WSS_MIC]Stop wss_mic_upload because wss_mic_stop.");
+        log_i("[WSS_MIC]🎙️🎙️🎙️Stop wss_mic_upload because wss_mic_stop.");
     }
     send_audio_status(OAST_ASR, OASE_END);
 }
@@ -199,7 +199,7 @@ static void start_recorder_upload()
  */
 void wait_vad_task(void *priv)
 {
-    log_i("[WSS_MIC]start VAD until %d\n", vad_stop_time);
+    log_i("[WSS_MIC]🎙️🎙️🎙️start VAD until %d\n", vad_stop_time);
     while (is_mic_on() == false && g_recording_upload) {
         msleep(30);
     }
@@ -223,11 +223,11 @@ void wait_vad_task(void *priv)
         set_led_mic_off();
         recorder_data_upstream(NULL);
         if (!is_mic_on()) {
-            log_i("[WSS_MIC]Stop VAD because wss_mic_stop.");
+            log_i("[WSS_MIC]🎙️🎙️🎙️Stop VAD because wss_mic_stop.");
         } else if (!g_recording_upload) {
-            log_i("[WSS_MIC]Stop VAD because ASR start.");
+            log_i("[WSS_MIC]🎙️🎙️🎙️Stop VAD because ASR start.");
         } else {
-            log_i("[WSS_MIC]Stop VAD timeout at %d > %d.", timer_get_ms(), vad_stop_time);
+            log_i("[WSS_MIC]🎙️🎙️🎙️Stop VAD timeout at %d > %d.", timer_get_ms(), vad_stop_time);
         }
     }
     vad_stop_time = 0;
@@ -246,14 +246,14 @@ void wait_asr_task(void *priv)
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     set_led_mic_on(); // 开启录音时灯光变橙色
     u32 asr_start_time = timer_get_ms();
-    log_i("[WSS_MIC]start ASR task %d\n", asr_start_time);
+    log_i("[WSS_MIC]🎙️🎙️🎙️start ASR task %d\n", asr_start_time);
     while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms() || is_mic_on() == false) && g_recording) {
         msleep(20);
     }
 
     if (g_recording) {
-        log_i("[WSS_MIC]ASR upload started\n");
-        send_audio_status(OAST_SCRIPT, OASE_START);
+        log_i("[WSS_MIC]🎙️🎙️🎙️ASR upload started\n");
+        send_audio_status(OAST_STREAM_AUDIO, OASE_START);
         recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
         g_recording_uploading = true;
     }
@@ -276,9 +276,11 @@ void wait_asr_task(void *priv)
     }
     set_led_mic_off();
 
+    u32 asr_end_time = timer_get_ms();
+    log_i("[WSS_MIC]🎙️🎙️🎙️end ASR task %d, duration %d ms\n", asr_end_time, asr_end_time - asr_start_time);
     if (g_recording_uploading) {
         g_recording_uploading = false;
-        send_audio_status(OAST_SCRIPT, OASE_END);
+        send_audio_status(OAST_STREAM_AUDIO, OASE_END);
         recorder_data_upstream(NULL);
     }
 }
