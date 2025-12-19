@@ -9,7 +9,7 @@ struct app_cookie_hdl {
 };
 void disable_gsensor();
 
-#define LOCAL_VERSION_CODE "v0.0.62" 
+#define LOCAL_VERSION_CODE "v0.0.63" 
 #define LOW_BATT_VOLT 370 
 #define LOW_BATT_VERY_SHUTDOWN 365 
 

@@ -29,8 +29,8 @@
 #include "../lwl_peri_dev.h"
 #include "LED/LED.h"
 
-#define KEY_PRESS_POWER_OFF_TIME_MS 4000 // 4s
-#define WAIT_FOR_POWER_OFF_TIME_MS 8000 // 8s
+#define KEY_PRESS_POWER_OFF_TIME_MS 1000 // 4s
+#define WAIT_FOR_POWER_OFF_TIME_MS 5000 // 8s
 static u32 init_time = 0;
 static void set_led_power_off(void)     { set_rgb_color(COLOR_RED); }   /* 控制 led : 关机红色 */
 static void set_led_bye(void)           { set_rgb_ON(COLOR_BLACK, 20); }
