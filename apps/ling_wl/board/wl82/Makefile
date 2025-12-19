@@ -382,6 +382,7 @@ LFLAGS := \
 	--plugin-opt=-pi32v2-merge-max-offset=4096 \
 	--plugin-opt=-pi32v2-enable-simd=true \
 	--plugin-opt=mcpu=r3 \
+	--plugin-opt=save-temps \
 	--plugin-opt=-global-merge-on-const \
 	--plugin-opt=-inline-threshold=5 \
 	--plugin-opt=-inline-max-allocated-size=32 \
