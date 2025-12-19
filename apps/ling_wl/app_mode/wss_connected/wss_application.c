@@ -74,10 +74,8 @@ bool wss_application_check_power_key()
 // 打开麦克风并启动vad录音
 void wss_application_start_mic()
 {
-    log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
-    log_mqtt("🔄🔄🔄 麦克风重启 touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
+    log_mqtt("🔄🔄🔄 麦克风重启 touch=%d mic_on=%d g_device_state=%d", g_on_touch_key, g_mic_on, g_device_state);
     os_mutex_pend(&g_wss_app_mutex, 0);
-    g_device_state = APP_VAD;
     g_mic_on = true;
     if (g_device_state == APP_IDLE || g_device_state == APP_VAD) {
         wss_mic_start();
@@ -117,8 +115,9 @@ static void wss_application_touch_key(bool press_down)
                 g_device_state = APP_WAIT;
                 wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
                 wss_application_vailed();
-            } else {             // 按键前未在说话
+            } else if (wss_device_is_calling())  { // 按键前未在说话，周围有设备，则打开麦克风
                 log_i("[wss_application]STATE: Touch key -> APP_VAD");
+                g_device_state = APP_VAD;
                 wss_application_start_mic();
             }
         } else {
@@ -204,6 +203,9 @@ static void wss_app_mode_play_cb(void *priv)
     play_voice_prompt = 0;
     if (g_on_touch_key) {
         log_mqtt("📜📜📜 剧本开始");
+        wss_mic_start();
+    } else if (g_device_state == APP_WAIT) {
+        log_mqtt("📜📜📜 剧本结束后的输入环节");
         wss_mic_start();
     }
     bdo_enable();
@@ -449,7 +451,8 @@ bool wss_application_loop()
             wss_mic_stop(); // 停止录音
         } else if (g_mic_on && wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
-            wss_application_start_mic();//STATE: APP_AUDIO -> APP_IDLE
+            g_device_state = APP_VAD;
+            wss_application_start_mic();
         } else if (!wss_device_is_calling() || multi_play_mode) {
             if (wss_device_loop()) {
                 log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
@@ -466,10 +469,13 @@ bool wss_application_loop()
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
                 wss_request_send_event_target(ORMET_PLAY_NEXT);
                 g_device_state = APP_WAIT;
-            } else if (wss_device_is_calling() && g_mic_on) {
-                wss_application_start_mic();//STATE: APP_AUDIO -> APP_IDLE
+            } else if (wss_device_is_calling() && g_mic_on) { // g_mic_on一定为true，在multi_play_mode = false时
+                log_i("[wss_application]STATE: APP_AUDIO -> APP_VAD");
+                g_device_state = APP_VAD;
+                wss_application_start_mic();
             } else {
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_IDLE");
+                // 之前的设备不在线，主动请求切换设备
+                log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
                 wss_request_send_event_target(ORMET_PLAY_NEXT);
                 g_device_state = APP_WAIT;
             }

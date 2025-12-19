@@ -247,8 +247,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 g_mode_script = false;
                 play_prompt_sound("script_ed.mp3");
                 wss_request_update_state(STATE_IDLE, "receive SCRIPT END");
-                wss_application_start_mic();
-                // start vad
+                wss_application_start_mic();// start vad
             }
             g_wss_last_time = g_curr_time;
         }
