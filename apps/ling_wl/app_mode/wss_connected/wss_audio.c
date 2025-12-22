@@ -89,7 +89,6 @@ static int wss_audio_playback_start(void)
     lwl_app_mode_stop_playing();
     stop_prompt();
     set_speaker();
-    bdo_enable();
 
     /* 标记为播放中 */
     audio_req_time = timer_get_ms();
@@ -248,7 +247,14 @@ static void delayed_playback_task(void *priv)
     uint32_t delay_ms = task->delay_ms;
     log_i("[AUDIO]delayed_playback_task: sleeping for %u ms", delay_ms);
     
-    msleep(delay_ms);
+    if (delay_ms <= 500) {
+        bdo_enable();
+        msleep(delay_ms);
+    } else {
+        msleep(delay_ms-500);
+        bdo_enable();
+        msleep(500);
+    }
     
     log_i("[AUDIO]delayed_playback_task: calling wss_audio_playback_start after %u ms delay", delay_ms);
     wss_audio_playback_start();
