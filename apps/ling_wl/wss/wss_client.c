@@ -19,6 +19,8 @@ static struct websocket_struct *g_wss_info = NULL;
 #define WS_PING_FRAME  0x89
 #define WS_PONG_FRAME  0x8A
 
+static int websockets_client_send(struct websocket_struct *websockets_info, u8 *buf, int len, char type);
+
 void wss_recv_callback(u8 *buf, u32 len, u8 type)
 {
     switch (type) {
