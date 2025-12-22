@@ -22,11 +22,11 @@
 #include "power_off.h"
 #include "app_mode/lwl_app_framework.h"
 #include "app_mode/lwl_app_core.h"
+#include "app_mode/lwl_peri_dev.h"
 #include "log.h"
 #include "app_lfs.h"
 #include "app_cookie.h"
 #include "gpio.h"
-#include "../lwl_peri_dev.h"
 #include "LED/LED.h"
 
 #define KEY_PRESS_POWER_OFF_TIME_MS 1000 // 4s
@@ -42,7 +42,6 @@ static void power_off_init(void)
     log_i("Power off mode init\r\n");
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
-    set_led_power_off();
     
     /* 关闭 7016 */
     log_i("7016 OFF\n");
@@ -53,6 +52,7 @@ static void power_off_init(void)
     
     u16 voltage = get_vbat_level();
     if (voltage < LOW_BATT_VOLT) {
+        set_led_power_off();
         log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
         return;
     }
