@@ -32,7 +32,7 @@
 
 #include "protocol/odm/odm_secure.h"
 
-#define MOVE_TIMEOUT_MS 10000 // 10s
+#define MOVE_TIMEOUT_MS 60000 // 60s
 static u32 init_time = 0;
 
 static void set_led_connected(void)         { set_rgb_color(COLOR_WHITE); }  /* 控制 led : 联网成功 白色 */
@@ -82,7 +82,7 @@ static int net_connected_init(void)
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
         play_system_music("NetCfgSucc.mp3");
     } else {
-        log_i("❌ websockets init failed\n");
+        log_mqtt("❌ websockets init failed\n");
         set_led_connect_error();// WSS ERROR
     }
     return 0;
@@ -108,7 +108,7 @@ void app_net_connected_loop()
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
         play_system_music("NetCfgSucc.mp3");
     } else {
-        log_i("websockets init failed\n");
+        log_mqtt("❌❌❌ websockets init failed\n");
         set_led_connect_error();// WSS ERROR
         msleep(1000);
         

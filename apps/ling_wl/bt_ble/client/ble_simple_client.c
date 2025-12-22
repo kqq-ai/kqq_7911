@@ -604,12 +604,6 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 log_info("conn_interval = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_interval(packet));
                 log_info("conn_latency = %d\n", hci_subevent_le_enhanced_connection_complete_get_conn_latency(packet));
                 log_info("conn_timeout = %d\n", hci_subevent_le_enhanced_connection_complete_get_supervision_timeout(packet));
-                
-                // Stop scanning after successful connection to prevent drop adv_report spam
-                if (get_ble_work_state() == BLE_ST_SCAN) {
-                    bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
-                }
-                
                 set_ble_work_state(BLE_ST_CONNECT);
 
                 ble_conn_user_handler(packet);  /* process user handler */
@@ -642,11 +636,6 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
                 connection_update_complete_success(handle, packet + 8);
 
-                // Stop scanning after successful connection to prevent drop adv_report spam
-                if (get_ble_work_state() == BLE_ST_SCAN) {
-                    bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
-                }
-                
                 set_ble_work_state(BLE_ST_CONNECT);
                 
                 ble_conn_user_handler(packet); /* process user handler */
