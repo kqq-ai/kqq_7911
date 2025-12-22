@@ -55,7 +55,10 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_GSENSOR_IDLE:
         break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        u16 voltage = get_vbat_level();
+        if (voltage < LOW_BATT_VERY_SHUTDOWN) {
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        }
         break;
     }
 }

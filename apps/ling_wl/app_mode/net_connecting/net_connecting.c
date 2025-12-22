@@ -19,6 +19,7 @@
  * WSS_CONNECTED 后端服务器连接成功模式
  *     可以进行应用逻辑处理
  */
+#include "app_cookie.h"
 #include "net_connecting.h"
 #include "app_mode/lwl_app_framework.h"
 #include "app_mode/lwl_app_core.h"
@@ -88,7 +89,10 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         }
         break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
-        lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        u16 voltage = get_vbat_level();
+        if (voltage < LOW_BATT_VERY_SHUTDOWN) {
+            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+        }
         break;
     }
 }
