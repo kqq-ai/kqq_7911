@@ -436,8 +436,8 @@ bool wss_application_loop()
     g_curr_time = timer_get_ms();
     if (wss_check_exit()) {
         if (wss_request_is_busy()) {
-            log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
-            wss_get_last_disconnect_reason());
+            // log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
+            // wss_get_last_disconnect_reason());
             wss_request_pause();
             wss_mic_stop();
         }
