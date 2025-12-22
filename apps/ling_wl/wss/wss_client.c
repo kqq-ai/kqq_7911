@@ -11,9 +11,13 @@
 #include <assert.h>
 
 static OS_MUTEX wss_mutex_bin;             //
+static struct websocket_struct *g_wss_info = NULL;
 
 #define WS_TXT_FRAME 0x81
 #define WS_BIN_FRAME 0x82
+#define WS_CLOSE_FRAME 0x88
+#define WS_PING_FRAME  0x89
+#define WS_PONG_FRAME  0x8A
 
 void wss_recv_callback(u8 *buf, u32 len, u8 type)
 {
@@ -27,9 +31,29 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
         // log_i("[wss_client]bin frame len=%u", len);
         odmp_audio_data_handler(buf, len);
         break;
+    case WS_PING_FRAME: // ping frame
+        log_i("[wss_client]recv PING frame len=%u", len);
+        // Reply with a PONG using the same payload if possible
+        if (g_wss_info) {
+            os_mutex_pend(&wss_mutex_bin, 0);
+            int ret = websockets_client_send(g_wss_info, buf, len, WCT_PONG);
+            os_mutex_post(&wss_mutex_bin);
+            log_i("[wss_client]sent PONG ret=%d", ret);
+        } else {
+            log_i("[wss_client]no websocket context to reply PONG");
+        }
+        break;
+    case WS_PONG_FRAME: // pong frame
+        log_i("[wss_client]recv PONG frame len=%u", len);
+        break;
+    case WS_CLOSE_FRAME: // close frame
+        log_i("[wss_client]recv CLOSE frame len=%u", len);
+        // Notify higher layer that the peer requested close
+        odmp_disconnect_handler();
+        break;
     default:
-        // 打印接收到的数据
-        log_i("[wss_client]unknown frame type=0x%x len=%u data=%s", type, len, buf);
+        // Ignore/control frames we don't explicitly handle, avoid noisy logs
+        log_i("[wss_client]unknown frame type=0x%x len=%u", type, len);
         break;
     }
 }
@@ -45,6 +69,7 @@ void wss_exit_callback(struct websocket_struct *websocket_info)
         }
     }
     odmp_disconnect_handler();
+    g_wss_info = NULL;
 }
 
 /*******************************************************************************
@@ -163,6 +188,9 @@ struct websocket_struct *wss_server_connect(char *url)
         goto exit_ws;
     }
 
+    /* store global context for callbacks (used to reply to ping) */
+    g_wss_info = websockets_info;
+
     /* 4 . CreateThread */
     thread_fork("websocket_client_recv", 10, 512, 0,
                 &websockets_info->recv_thread_id,
@@ -178,6 +206,7 @@ exit_ws:
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
+    g_wss_info = NULL;
     os_mutex_post(&wss_mutex_bin); 
     os_mutex_del(&wss_mutex_bin, 0);
 
@@ -194,6 +223,7 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
     thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
     websockets_client_exit(websockets_info);
     free(websockets_info);
+    g_wss_info = NULL;
     os_mutex_post(&wss_mutex_bin);
     os_mutex_del(&wss_mutex_bin, 0);
 }
