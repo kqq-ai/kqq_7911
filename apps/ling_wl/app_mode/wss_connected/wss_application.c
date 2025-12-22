@@ -71,10 +71,24 @@ bool wss_application_check_power_key()
 //=================================================================================================
 // 麦克风相关
 //=================================================================================================
+void wss_application_resume_mic()
+{
+    log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
+    os_mutex_pend(&g_wss_app_mutex, 0);
+    if (g_on_touch_key) {
+        wss_mic_start();
+    } else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
+        wss_mic_start();
+    } else if (!g_mic_on || g_device_state == APP_AUDIO) {
+        wss_mic_stop();
+    }
+    os_mutex_post(&g_wss_app_mutex);
+}
+
 // 打开麦克风并启动vad录音
 void wss_application_start_mic()
 {
-    log_mqtt("🔄🔄🔄 麦克风重启 touch=%d mic_on=%d g_device_state=%d", g_on_touch_key, g_mic_on, g_device_state);
+    log_i("[wss_application]wss_application_start_mic g_device_state: %d", g_device_state);
     os_mutex_pend(&g_wss_app_mutex, 0);
     g_mic_on = true;
     if (g_device_state == APP_IDLE || g_device_state == APP_VAD) {
@@ -139,7 +153,7 @@ static void input_event_handler_cb(lwl_event_t *e)
 
     switch (e->event_type) {
     case LWL_EVENT_TYPE_KEY:
-        log_mqtt("👆👆👆 短按 此时multi_play_mode=%d", multi_play_mode);
+        log_mqtt("👆👆👆 电源键短按 此时multi_play_mode=%d", multi_play_mode);
         if (wss_check_exit()) {
             g_power_key_retry = true;
         } else {
@@ -507,7 +521,6 @@ bool wss_application_loop()
             // 继续等待
         } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");
-            log_mqtt("🧬🧬🧬 等待超时");
             g_device_state = APP_IDLE;
         }
         break;
