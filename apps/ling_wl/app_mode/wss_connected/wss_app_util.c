@@ -174,7 +174,7 @@ bool wss_connect(void) {
     
     wss_url = get_wss_connection_url();
     if (wss_url == NULL) {
-        log_e("[wss_app_util]get_wss_connection_url failed wss_url=NULL");
+        log_e("[wss_app_util]❌❌❌ get_wss_connection_url failed wss_url=NULL");
         os_mutex_post(&g_wss_mutex);
         return false;
     }
@@ -206,7 +206,7 @@ bool wss_connect(void) {
     g_exception_exit = false;
     strncpy(g_last_disconnect_reason, "connected", sizeof(g_last_disconnect_reason) - 1);
     g_last_disconnect_reason[sizeof(g_last_disconnect_reason) - 1] = '\0';
-    log_i("[wss_app_util]websockets init succ url=%s\n", wss_url);
+    log_i("[wss_app_util]✅✅✅ websockets init succ url=%s\n", wss_url);
     get_SN(sn_c_id);
     os_mutex_post(&g_wss_mutex);
     return true;

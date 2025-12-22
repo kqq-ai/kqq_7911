@@ -476,10 +476,6 @@ void odmp_rsp_handler(u8 *buf, u32 len)
     if (nroot == NULL) {
         goto error_ret;
     }
-
-    if (cjson_get_integer_value(nroot, "errno", &pkg.errno)) {
-        // errno not exists
-    }
     // pkg.errmsg = cjson_get_string_value(nroot, "errmsg");
     pkg.event  = cjson_get_string_value(nroot, "event");
     pkg.uuid   = cjson_get_string_value(nroot, "uuid");

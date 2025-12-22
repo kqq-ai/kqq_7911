@@ -97,7 +97,7 @@ void app_wss_connected_mode(void)
                     play_prompt_flag = 1;
                 }
             } else if (play_prompt_flag) {
-                log_i("[wss_connected]play disconnect prompt because application loop requested exit");
+                log_i("[wss_connected]❌❌❌ play disconnect prompt because application loop requested exit");
                 set_led_connecting_on();// WSS ERROR
                 play_prompt_flag = 0;
                 play_system_music("NetDisc.mp3");

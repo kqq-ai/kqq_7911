@@ -149,6 +149,7 @@ const u8 *bt_get_mac_addr(void)
 
     char sn[25];
     get_SN(sn);
+    log_i("🚀🚀🚀 device bt_get_mac_addr SN %s\n", sn);
     if(sn[0] == 0){
         mac_addr[2]  = rand32() & 0xFF;
         mac_addr[3]  = rand32() & 0xFF;

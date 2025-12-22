@@ -27,10 +27,11 @@ void bt_ble_module_init(void)
     extern const u8 *bt_get_mac_addr(void);
     extern void lib_make_ble_address(u8 * ble_address, u8 * edr_address);
     extern int le_controller_set_mac(void *addr);
-    lib_make_ble_address(tmp_ble_addr, (u8 *)bt_get_mac_addr());
+    const u8 *edr_addr = bt_get_mac_addr();
+    lib_make_ble_address(tmp_ble_addr, (u8 *)edr_addr);
     le_controller_set_mac((void *)tmp_ble_addr);
     printf("\n-----edr + ble 's address-----");
-    put_buf((void *)bt_get_mac_addr(), 6);
+    put_buf((void *)edr_addr, 6);
     put_buf((void *)tmp_ble_addr, 6);
 #if BT_NET_CENTRAL_EN || TRANS_MULTI_BLE_MASTER_NUMS
     extern void ble_client_config_init(void);
