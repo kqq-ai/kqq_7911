@@ -205,8 +205,8 @@ static void peri_events(void *priv)
 
 static void app_cookie_main(void)
 {
-    log_i("Hello World2!\r\n");
-    log_i("Version: 12\r\n");
+    log_i("Hello app_cookie world!\r\n");
+    log_i("Version: IO_PORTC_10\r\n");
     log_i("%s %s\r\n", __DATE__, __TIME__);
 
     lwl_app_core_init();
@@ -227,6 +227,7 @@ static void app_cookie_main(void)
     recorder_mode_init(&g_recorder);
     context->recorder = &g_recorder;
 
+    gpio_direction_output(IO_PORTC_10, 1);                  // 拉高 C 口wifi-LDO，输出
     // 取消静音
     gpio_direction_output(IO_PORTA_00, 1);                  // 拉高 C 口功放使能脚，恢复扬声器输出
     gpio_direction_output(IO_PORTB_02, 0);                  // 备用方案：拉高 E 口功放使能
