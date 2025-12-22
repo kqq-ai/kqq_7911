@@ -225,7 +225,6 @@ static void wss_app_mode_play_cb(void *priv)
         log_mqtt("📜📜📜 剧本结束后的输入环节");
         wss_mic_start();
     }
-    bdo_enable();
 }
 
 void wss_app_mode_play() 
@@ -406,7 +405,7 @@ void wss_application_uninit()
     wss_mic_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
-    bdo_disable();
+    // bdo_disable();
 
     os_mutex_post(&g_wss_app_mutex);
 }

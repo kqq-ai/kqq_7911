@@ -476,9 +476,9 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     } else {
         // mdelay(500);
     }
+    bdo_disable();
     memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
     bdo_set_ctrl(0x03);
-    bdo_enable();
 
 #if 0
     log_i("[BDO]Waiting adv state change...");
@@ -510,6 +510,7 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
     }
     
     bdo_set_ctrl(0x00);
+    bdo_enable();
 
     os_sem_set(&g_e_disconnected_sem, 0);
     ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);

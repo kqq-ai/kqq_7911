@@ -89,6 +89,7 @@ static int wss_audio_playback_start(void)
     lwl_app_mode_stop_playing();
     stop_prompt();
     set_speaker();
+    bdo_enable();
 
     /* 标记为播放中 */
     audio_req_time = timer_get_ms();
