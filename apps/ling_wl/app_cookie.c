@@ -245,6 +245,8 @@ static void app_cookie_main(void)
         system_reset(); //restart
     }
 
+    wifi_set_pwr(6);                                     // 设置 WiFi 发射功率为最大
+
     ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
 
     /* 创建线程池 */
