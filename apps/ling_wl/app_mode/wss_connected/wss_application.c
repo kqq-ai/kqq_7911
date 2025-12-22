@@ -128,7 +128,6 @@ static void wss_application_touch_key(bool press_down)
                 log_mqtt("🔄🔄🔄 短按触摸键，打断/切换对话状态");
                 g_device_state = APP_WAIT;
                 wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
-                wss_application_vailed();
             } else if (wss_device_is_calling())  { // 按键前未在说话，周围有设备，则打开麦克风
                 log_i("[wss_application]STATE: Touch key -> APP_VAD");
                 g_device_state = APP_VAD;
@@ -238,7 +237,6 @@ void wss_app_mode_play()
     } else if (g_device_state == APP_AUDIO) {
         wss_ble_audio_stop();
     }
-    // bdo_disable();
     log_i("[wss_application]wss_app_mode_play: %s", music_file);
     wss_mic_stop(); // 停止录音
     gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
@@ -405,7 +403,6 @@ void wss_application_uninit()
     wss_mic_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev
-    // bdo_disable();
 
     os_mutex_post(&g_wss_app_mutex);
 }

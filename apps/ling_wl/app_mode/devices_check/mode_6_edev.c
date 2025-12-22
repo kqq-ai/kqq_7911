@@ -81,7 +81,7 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
     // 设置新的目标设备
     target_pdev = pdev;
     // -- pdev->handshake_info.need_handshake = true;
-    bdo_turn_on(pdev, 9000, 9000, mode6_e_connect_cb, pdev); // E ON~  start_handshake
+    bdo_turn_on(pdev, 500, 500, mode6_e_connect_cb, pdev); // E ON~  start_handshake
     log_i("+-- -+");
     // 参考default_e_turn_on函数中的命令发送方式
 }
@@ -207,6 +207,7 @@ void mode6_init()
 {
     gpio_direction_output(IO_PORTA_00, 1);  // 启用C端扬声器
     ble_simple_client_module_enable(1); // enable BLE client to connect E device
+    ble_dev_task_scheduler_start();
     g_mode6_state = MODE6_PLAY_PROMPT;
     g_mode6_e_index = 0;
     g_mode6_action_in_progress = 0;
@@ -219,8 +220,8 @@ void mode6_init()
         g_mode6_action_in_progress = 1;
         g_mode6_playing_prompt = 1;
     }
-    lwl_peri_dev_7016_on(false);  // 开启 7016
-    msleep(2000);
+    // lwl_peri_dev_7016_on(false);  // 开启 7016
+    // msleep(2000);
     lwl_peri_dev_7016_on(true);  // 开启 7016
     log_i("MODE 6: 串行状态机启动");
 }
