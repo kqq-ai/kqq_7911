@@ -11,6 +11,13 @@
 LOCAL_VERSION_CODE
 ```
 
+
+网络连接配置:
+```sh
+.app_wifi_config = {
+```
+
+
 ## 烧录流程
 
 1. 先按住，进入烧录模式
