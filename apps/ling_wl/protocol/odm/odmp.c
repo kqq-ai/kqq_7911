@@ -362,7 +362,7 @@ static int error_event_handler(const cJSON *nroot, odmp_package_t *pkg)
     if (ndata == NULL) {
         return PARSE_Error;
     }
-    if (cjson_get_integer_value(ndata, "err_code", pkg->error.err_code)) {
+    if (cjson_get_integer_value(ndata, "err_code", &pkg->error.err_code)) {
         return PARSE_Error;
     }
     char *reason = cjson_get_string_value(ndata, "reason");
