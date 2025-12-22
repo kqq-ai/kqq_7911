@@ -80,6 +80,7 @@ typedef enum {
     // LWL_EVENT_TYPE_UART_NOTIFY_GSENSOR_OFF,   /**< Notify GSensor off event */
     
     /* C_V2_02 C_V2_01 */
+    LWL_EVENT_TYPE_RST_KEY,                    /**< Reset key event */
     LWL_EVENT_TYPE_TOUCH_KEY,                  /**< Touch key event */
     LWL_EVENT_TYPE_KEY,                        /**< Key event */
     LWL_EVENT_TYPE_GSENSOR_IDLE,                    /**< GSensor event */

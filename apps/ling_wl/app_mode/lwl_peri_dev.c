@@ -10,10 +10,14 @@
 #include "lwl_peri_dev.h"
 #include "app_mode/lwl_app_core.h"
 
-static void set_led_touch_on(void)   { set_rgb_ON(COLOR_PURPLE,10); }
-static void set_led_touch_off(void)  { set_rgb_OFF(COLOR_PURPLE,10); }
-static void set_led_normal_key_on(void)   { set_rgb_ON(COLOR_YELLOW,11); }
-static void set_led_normal_key_off(void)  { set_rgb_OFF(COLOR_YELLOW,11); }
+static void set_led_touch_on(void)          { set_rgb_ON(COLOR_PURPLE,10);  }
+static void set_led_touch_off(void)         { set_rgb_OFF(COLOR_PURPLE,10); }
+static void set_led_normal_key_on(void)     { set_rgb_ON(COLOR_YELLOW,11);  }
+static void set_led_normal_key_off(void)    { set_rgb_OFF(COLOR_YELLOW,11); }
+static void set_led_rst_key_on(void)        { set_rgb_ON(COLOR_RED,15);     }
+static void set_led_rst_key_off(void)       { set_rgb_OFF(COLOR_RED,15);    }
+
+static uint32_t g_rst_key_scan_timer = 0;
 
 static uint32_t g_key_scan_timer = 0;
 static uint8_t  g_key_scan_ongoing = 0;
@@ -292,6 +296,49 @@ static void key_scan_loop(uint32_t current_time_ms)
         g_key_scan_timer = g_curr_time;
     }
 
+}
+
+static void rst_key_loop(uint32_t current_time_ms)
+{
+    static uint8_t rst_key_latest_state = 1;
+    static uint8_t flip_times_rst_key = 0;
+    if (current_time_ms - g_rst_key_scan_timer > BTN_SCAN_INTERVAL) {
+        g_rst_key_scan_timer = current_time_ms;
+        
+        uint8_t rstbtnCurrState = gpio_read(RST_KEY_PORT);
+        //对rstbtnCurrState去抖动，然后再判断按下和释放
+        
+        uint8_t hasFlip = rst_key_latest_state != rstbtnCurrState;
+        if( hasFlip ) {
+            flip_times_rst_key++;
+            //log_i("[KEY SCAN] flip_times_rst_key \n");
+            if( flip_times_rst_key <= 2 ) {
+                return;
+            }
+        } else {
+            flip_times_rst_key = 0;
+            return;
+        }
+
+        //连续三次，确认状态变化才认为有效
+        flip_times_rst_key = 0; //清零
+        if ( rstbtnCurrState == 0) {
+            set_led_rst_key_on();
+            log_i("[KEY SCAN]RST key pressed\n");
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_RST_KEY;
+            e.key_cmd.key_event_type = 0; // RST key pressed
+            lwl_event_notify(&e);
+        } else {
+            set_led_rst_key_off();
+            log_i("[KEY SCAN]RST key released\n");
+            lwl_event_t e;
+            e.event_type = LWL_EVENT_TYPE_RST_KEY;
+            e.key_cmd.key_event_type = 1; // RST key released
+            lwl_event_notify(&e);
+        }
+        rst_key_latest_state = rstbtnCurrState;
+    }
 }
 
 //==KEY SCAN=========================================================================================
@@ -615,6 +662,12 @@ void lwl_peri_dev_init(void)
     gpio_set_die(KEY_IO_PORT, 1);
     gpio_set_dieh(KEY_IO_PORT, 1);
     key_scan_start();
+
+    gpio_set_direction(RST_KEY_PORT, 1); // 复位按键输入模式
+    gpio_set_pull_down(RST_KEY_PORT, 0);
+    gpio_set_pull_up(RST_KEY_PORT, 1);   // 默认上拉
+    gpio_set_die(RST_KEY_PORT, 1);
+    gpio_set_dieh(RST_KEY_PORT, 1);
     /* 1. 触摸初始化 */
     gpio_set_direction(TOUCH_IO, 1); // 默认输入模式
     gpio_set_pull_down(TOUCH_IO, 0);
@@ -652,6 +705,7 @@ void lwl_peri_dev_loop(uint32_t curr_time)
 {
     // IO按键检测
     key_scan_loop(curr_time);
+    rst_key_loop( curr_time);
     // 加速度传感器检测 sc7a20
     g_sensor_loop(curr_time);
 

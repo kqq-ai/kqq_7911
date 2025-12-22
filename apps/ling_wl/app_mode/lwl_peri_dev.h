@@ -1,6 +1,7 @@
 #ifndef _LWL_PERI_DEV_H_ 
 #define _LWL_PERI_DEV_H_ 
 
+#define RST_KEY_PORT 	IO_PORTB_01
 #define KEY_IO_PORT 	IO_PORTC_09
 #define GSENSOR_IO 		IO_PORTC_00
 #define CHARGE_IN_IO 	IO_PORTH_07
