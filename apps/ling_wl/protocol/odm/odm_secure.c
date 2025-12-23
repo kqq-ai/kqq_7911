@@ -165,7 +165,7 @@ static int http_request_with_body(const char* url, const char* context, http_bod
     }
 
     ctx->url = (char*)url;
-    ctx->timeout_millsec = 1000;
+    ctx->timeout_millsec = 100;
     ctx->priv = http_body_buf;
     ctx->connection = "close";
 

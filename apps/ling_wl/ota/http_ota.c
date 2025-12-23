@@ -171,7 +171,7 @@ int request_ota_info(char **pota_info)
         return OTAERROR_Malloc_Failed;
     }
     ctx->url = "https://kqq.tos-cn-beijing.volces.com/kqq_ota.json";
-    ctx->timeout_millsec = 1000;
+    ctx->timeout_millsec = 100;
     ctx->priv = &http_body_buf;
     ctx->connection = "close";
 
