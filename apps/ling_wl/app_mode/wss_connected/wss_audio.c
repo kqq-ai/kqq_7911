@@ -62,6 +62,7 @@ void app_music_play_end_cb(void *priv)
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
+    g_audio_player_start = false;
     set_led_tts_off();
     os_mutex_post(&g_audio_mutex);
 }
@@ -76,6 +77,7 @@ void app_music_play_end_cb(void *priv)
 static int wss_audio_playback_start(void)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
+    if (g_audio_player_start) return 0;
 
     os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_play_ongoing) {
@@ -94,12 +96,6 @@ static int wss_audio_playback_start(void)
     audio_req_time = timer_get_ms();
     g_audio_play_ongoing = true;
     set_led_tts_on();
-
-    if (g_prebuffer_pos == 0) {
-        log_e("[AUDIO]no prebuffer data to play");
-        os_mutex_post(&g_audio_mutex);
-        return -1;
-    }
 
     log_i("[AUDIO]playback_start: flushing %u bytes from prebuffer", g_prebuffer_pos);
 
@@ -178,7 +174,7 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
 stream_write:
     if (g_audio_player_start == false) {
         log_i("[AUDIO]stream_write: starting music player");
-        app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+        wss_audio_playback_start(); // 尝试启动播放
         g_audio_player_start = true;
     }
     /* 直接写入播放器流（data/len 为需要写入的部分） */

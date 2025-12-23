@@ -13,7 +13,7 @@
 #include "LED/LED.h"
 
 #define WSS_TIMEOUT 10000
-#define WSS_MUSIC_TIMEOUT 1200
+#define WSS_MUSIC_TIMEOUT 870
 
 static u32 g_curr_time = 0;
 static u32 g_wss_last_time = 0;
@@ -98,11 +98,8 @@ void turn_off_Pi() {
             bdo_turn_off(pdev, 500, e_turn_off_cb, NULL);
         } else {
             log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
-            bdo_disable();
         }
         g_edev_connected_sn[0] = 0;
-    } else {
-        bdo_disable();
     }
 }
 
@@ -355,7 +352,6 @@ void wss_request_uninit()
 bool wss_request_loop()
 {
     // 使用 last_message_type 和 last_event 替代 last_audio_status_type、last_audio_status_event、last_tts_bind_received
-
     os_mutex_pend(&g_request_mutex, 0);
     g_curr_time = timer_get_ms();
     switch (g_mode_state) {

@@ -73,6 +73,10 @@ void app_wss_connected_mode(void)
             wss_connected_unint();
             return;
         }
+        lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+        if (ctx->websockets_info) {
+            wss_send_pong(ctx->websockets_info);
+        }
         mdelay(10);
         if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
             dump_all_eend_info();

@@ -57,12 +57,6 @@
  *           len - 数据长度
  *     返回: BLE_BUFFER_FULL / 其他
  *
- * int ble_simple_client_scan_enable(uint8_t enable, uint16_t interval, uint16_t window)
- *     功能: 启用/禁用BLE扫描
- *     参数: enable - 1启用, 0禁用
- *           interval - 扫描间隔(单位: 0.625ms)
- *           window - 扫描窗口(单位: 0.625ms)
- *
  * void ble_conn_event_user_handler_add(ble_callback_t handler, void *param)
  *     功能: 注册BLE连接事件处理器
  *     参数: handler - 事件回调函数指针
@@ -250,12 +244,6 @@
 
 #define BLE_DEV_TASK_SCHEDULER_OP_QUEUE_CAPACITY 100
 
-#define SET_SCAN_INTERVAL   ADV_SCAN_MS(24) // unit: ms
-#define SET_SCAN_WINDOW     ADV_SCAN_MS(8) // unit: ms
-
-#define SET_SCAN_HIGH_DUTY_INTERVAL   ADV_SCAN_MS(24) // unit: ms
-#define SET_SCAN_HIGH_DUTY_WINDOW     ADV_SCAN_MS(16) // unit: ms
-
 #define BLE_DISCONNECT_TIMEOUT 500 // TODO
 
 #define SET_PI_ADV_INTERVAL_MS 30 // unit: ms range: 20 ~ 1000
@@ -315,6 +303,7 @@ void bdo_enable()
 
 void bdo_set_ctrl(uint8_t code)
 {
+    log_i("[BDO]bdo_set_ctrl %d", code);
     ctrl_code = code;
     uart_send_set_ctrl(ctrl_code);
 }
@@ -359,6 +348,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     os_sem_set(&g_conn_sem, 0);
     if (ble_simple_client_create_connection(op->active.address, op->active.address_type) == APP_BLE_OPERATION_ERROR) {
         log_e("[BDO]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
+        ble_simple_client_module_enable(1);
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_BLE_Api_Error);
         return;
@@ -366,7 +356,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     if (os_sem_pend(&g_conn_sem, MS2TICK(op->active.conn_timeout)) == OS_TIMEOUT) {
         ble_simple_client_create_cannel();
         log_e("[BDO]Error ble connection timeout!!!");
-        ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+        ble_simple_client_module_enable(1);
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Connection_Timeout);
         return;
@@ -444,6 +434,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         os_sem_set(&g_e_connected_sem, 0);
         if (ble_simple_client_create_connection(op->turnon.address, op->turnon.address_type) == APP_BLE_OPERATION_ERROR) {
             log_e("[BDO]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
+            ble_simple_client_module_enable(1);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_BLE_Api_Error);
             return;
@@ -451,7 +442,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         if (os_sem_pend(&g_conn_sem, MS2TICK(op->turnon.conn_timeout)) == OS_TIMEOUT) {
             ble_simple_client_create_cannel();
             log_e("[BDO]Error ble connection timeout!!!");
-            ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+            ble_simple_client_module_enable(1);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_Connection_Timeout);
             return;
@@ -482,11 +473,9 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 
 #if 0
     log_i("[BDO]Waiting adv state change...");
-    ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);
     /* - 扫描设备 ADV 状态变化 -> connected */
     if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
         log_e("[BDO]Error scan adv state timeout!!!");
-        ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
         return;
@@ -509,15 +498,13 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         return;
     }
     
-    bdo_set_ctrl(0x00);
     bdo_enable();
+    bdo_set_ctrl(0x00);
 
     os_sem_set(&g_e_disconnected_sem, 0);
-    ble_simple_client_scan_enable(1, SET_SCAN_HIGH_DUTY_INTERVAL, SET_SCAN_HIGH_DUTY_WINDOW);
     /* - 扫描设备 ADV 状态变化 -> off */
     if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnoff.scan_timeout)) == OS_TIMEOUT) {
         log_e("[BDO]Error scan adv state timeout!!! %d", op->turnoff.scan_timeout);
-        ble_simple_client_scan_enable(1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
         dev->op_state &= ~BDO_STATE_TURNNING_OFF;
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
         return;
@@ -643,16 +630,8 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
 int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
     log_i("[MEASDIST]bdo_turn_off %s", dev->sn);
-    if (dev->op_state & BDO_STATE_TURNNING_OFF)
-        return 0;
-    dev->op_state |= BDO_STATE_TURNNING_OFF;
+    memcpy(broadcast_code, &dev->sn[10], sizeof(broadcast_code));
     bdo_set_ctrl(0x00);
-
-    ble_dev_op_t op;
-    op.op_type = BDPDOT_TURNOFF;
-    memcpy(op.sn, dev->sn, sizeof(op.sn));
-    op.turnoff.scan_timeout = timeout;
-    op.cb = cb;
-    op.cb_priv = priv;
-    return my_blocking_queue_push_front(&g_ble_dev_op_queue, &op) == MYERROR_Success;
+    bdo_enable();
+    return 1;
 }

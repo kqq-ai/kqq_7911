@@ -12,12 +12,16 @@
 
 static OS_MUTEX wss_mutex_bin;             //
 static struct websocket_struct *g_wss_info = NULL;
+static u8 ping_payload[2];
+static u32 ping_payload_len = 2;
 
 #define WS_TXT_FRAME 0x81
 #define WS_BIN_FRAME 0x82
 #define WS_CLOSE_FRAME 0x88
 #define WS_PING_FRAME  0x89
 #define WS_PONG_FRAME  0x8A
+
+static bool recved_ping = 0;
 
 static int websockets_client_send(struct websocket_struct *websockets_info, u8 *buf, int len, char type);
 
@@ -35,15 +39,11 @@ void wss_recv_callback(u8 *buf, u32 len, u8 type)
         break;
     case WS_PING_FRAME: // ping frame
         log_i("[wss_client]recv PING frame len=%u", len);
-        // Reply with a PONG using the same payload if possible
-        if (g_wss_info) {
-            os_mutex_pend(&wss_mutex_bin, 0);
-            int ret = websockets_client_send(g_wss_info, buf, len, WCT_PONG);
-            os_mutex_post(&wss_mutex_bin);
-            log_i("[wss_client]sent PONG ret=%d", ret);
-        } else {
-            log_i("[wss_client]no websocket context to reply PONG");
+        // Store ping payload to echo back in pong response
+        if (len == ping_payload_len) {
+            memcpy(ping_payload, buf, len);
         }
+        recved_ping = 1;
         break;
     case WS_PONG_FRAME: // pong frame
         log_i("[wss_client]recv PONG frame len=%u", len);
@@ -150,6 +150,20 @@ int wss_send_bin(struct websocket_struct *websockets_info, u8 *buf, int size)
     int ws_ret =  websockets_client_send(websockets_info, (u8 *)buf, size, WCT_BINDATA);
     os_mutex_post(&wss_mutex_bin);
     return (ws_ret == size); // 修改: 返回实际发送结果
+}
+
+
+int wss_send_pong(struct websocket_struct *websockets_info)
+{
+    if (recved_ping) {
+        os_mutex_pend(&wss_mutex_bin, 0);
+        // Send pong with stored ping payload (echo back the same payload)
+        int ret = websockets_client_send(websockets_info, ping_payload, ping_payload_len, WCT_PONG);
+        recved_ping = 0;
+        os_mutex_post(&wss_mutex_bin);
+        log_i("[wss_client]send PONG ret=%d", ret);
+    }
+    return 0;
 }
 
 struct websocket_struct *wss_server_connect(char *url)
