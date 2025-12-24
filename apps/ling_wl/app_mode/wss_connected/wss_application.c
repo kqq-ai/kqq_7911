@@ -17,7 +17,6 @@
 #include "lwip/stats.h" // 添加头文件
 
 static OS_MUTEX g_wss_app_mutex;
-int play_voice_prompt = 0;
 music_player *player;
 
 #define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 连续10分钟无请求则超时
@@ -204,19 +203,9 @@ static void input_event_handler_cb(lwl_event_t *e)
 //=================================================================================================
 // 播放提示音相关
 //=================================================================================================
-char music_file[128];
-
-void stop_prompt()
-{
-    log_i("stop_prompt %d", play_voice_prompt);
-    music_file[0] = 0;
-    play_voice_prompt = 0;
-}
-
 static void wss_app_mode_play_cb(void *priv)
 {
     log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
-    play_voice_prompt = 0;
     if (g_on_touch_key) {
         log_mqtt("📜📜📜 剧本开始");
         wss_mic_start();
@@ -226,33 +215,13 @@ static void wss_app_mode_play_cb(void *priv)
     }
 }
 
-void wss_app_mode_play() 
-{
-    if (music_file[0] == 0) {
-        return;
-    }
-    lwl_app_mode_stop_playing();
-    if (play_voice_prompt == 1) {
-        play_voice_prompt = 0;
-    } else if (g_device_state == APP_AUDIO) {
-        wss_ble_audio_stop();
-    }
-    log_i("[wss_application]wss_app_mode_play: %s", music_file);
-    wss_mic_stop(); // 停止录音
-    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
-    set_dec_volume(player, INIT_VOLUME_VALUE); // 恢复默认音量
-    int err = app_music_play_local_music_with_callback(player, music_file, wss_app_mode_play_cb, NULL);
-    // int err = app_music_play_mix_file(music_file);
-    if (!err) {
-        play_voice_prompt = 1;
-    }
-    music_file[0] = 0;
-}
-
 void play_prompt(const char *fname) 
 {
-    log_i("[wss_application]prepare to play_prompt: %s", fname);
-    memcpy(music_file, fname, strlen(fname)+1);
+    lwl_app_mode_play(fname, wss_app_mode_play_cb);
+    if (g_device_state == APP_AUDIO) {
+        wss_ble_audio_stop();
+    }
+    wss_mic_stop(); // 停止录音
 }
 
 //=================================================================================================
@@ -353,7 +322,6 @@ void wss_application_init()
     log_mqtt("🤖🤖🤖 初始化WSS应用");
     g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
-    play_voice_prompt = 0;
     player = lwl_app_core_context_get_instance()->music_player;
 
     odmp_register_disconnect_cbk(wss_disconnect_cbk);
@@ -367,8 +335,6 @@ void wss_application_init()
 
     g_mic_on = true;
     multi_play_mode = false;
-    music_file[0] = 0;
-
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
         pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
@@ -413,14 +379,12 @@ void wss_application_reset()
     log_mqtt("🤖🤖🤖 重置WSS应用");
     g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
-    play_voice_prompt = 0;
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
     wss_mic_stop(); // 停止录音
 
     g_mic_on = true;
     multi_play_mode = false;
-    music_file[0] = 0;
 
     /* 重置 */
     g_curr_time = timer_get_ms();
@@ -446,12 +410,9 @@ bool wss_application_loop()
         }
         return true;
     }
-    if (music_file[0] != 0 && play_voice_prompt == 0) {
-        wss_app_mode_play();
-    }
 
     wss_request_loop();
-    if (play_voice_prompt || g_on_touch_key) {
+    if (lwl_app_mode_playing() || g_on_touch_key) {
         return false;
     }
 

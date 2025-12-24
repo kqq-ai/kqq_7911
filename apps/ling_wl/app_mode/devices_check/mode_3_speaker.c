@@ -37,15 +37,8 @@ void mode3_audio_callback(void *priv)
 // 模式3处理函数：先播放提示音，然后循环播放测试音频
 void process_mode_3(void)
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     static u32 last_play_time = 0;
     u32 current_time = timer_get_ms();
-    
-    // 检查context有效性
-    if (!context || !context->music_player) {
-        log_e("MODE 3: Context or music_player is NULL");
-        return;
-    }
     
     // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
     if (!g_mode3_playing_prompt && !g_audio_playing) {
@@ -54,18 +47,10 @@ void process_mode_3(void)
             log_i("MODE 3: Starting loop audio playback");
             
             // 播放循环测试音频，使用回调
-            int err = app_music_play_local_music_with_callback(
-                context->music_player, 
-                CONFIG_CP_VOICE_FILE_PATH"test_1hz5s.mp3", 
-                mode3_audio_callback, NULL);
-                
-            if (err == 0) {
-                g_audio_playing = 1;
-                last_play_time = current_time;
-                log_i("MODE 3: Loop audio started successfully");
-            } else {
-                log_e("MODE 3: Loop audio start failed, error: %d", err);
-            }
+            lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_1hz5s.mp3", mode3_audio_callback);
+            g_audio_playing = 1;
+            last_play_time = current_time;
+            log_i("MODE 3: Loop audio started successfully");
         }
     }
 }
@@ -76,11 +61,7 @@ void mode3_init()
     g_mode3_playing_prompt = 1;  // 标记正在播放提示音
     log_i("MODE 3: Audio loop mode started, C speaker enabled");
     // 播放进入模式3的音频，使用回调    
-    lwl_app_context_t *context3 = lwl_app_core_context_get_instance();
-    app_music_play_local_music_with_callback(
-        context3->music_player,
-        CONFIG_CP_VOICE_FILE_PATH"test_loud.mp3",
-        mode3_audio_callback, NULL);
+    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_loud.mp3", mode3_audio_callback);
     log_i("Playing test_loud.mp3 for MODE 3 with callback");
 }
 
@@ -90,9 +71,4 @@ void mode3_uninit()
     g_audio_playing = 0;
     g_mode3_playing_prompt = 1;
     // 停止当前播放的音频
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context && context->music_player) {
-        // 这里可能需要调用停止音频的函数，但先尝试重置状态
-        // app_music_stop(context->music_player);
-    }
 }

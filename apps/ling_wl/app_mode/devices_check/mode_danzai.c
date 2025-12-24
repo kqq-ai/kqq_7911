@@ -240,10 +240,7 @@ void mode9_init()
     log_i("MODE 9: E-device distance detection mode started, C speaker enabled");
     // 播放进入模式9的提示音，使用回调
     lwl_app_context_t *context8 = lwl_app_core_context_get_instance();
-    app_music_play_local_music_with_callback(
-        context8->music_player,
-        CONFIG_VOICE_PROMPT_FILE_PATH"test_random.mp3",
-        mode9_audio_callback, NULL);
+    lwl_app_mode_play(CONFIG_VOICE_PROMPT_FILE_PATH"test_random.mp3", mode9_audio_callback);
     log_i("Playing test_random.mp3 for MODE 9 with callback");
 }
 

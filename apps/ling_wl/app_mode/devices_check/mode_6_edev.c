@@ -210,16 +210,9 @@ void mode6_init()
     ble_dev_task_scheduler_start();
     g_mode6_state = MODE6_PLAY_PROMPT;
     g_mode6_e_index = 0;
-    g_mode6_action_in_progress = 0;
-    {
-        lwl_app_context_t *context6 = lwl_app_core_context_get_instance();
-        app_music_play_local_music_with_callback(
-            context6->music_player,
-            CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3",
-            mode6_audio_callback, NULL);
-        g_mode6_action_in_progress = 1;
-        g_mode6_playing_prompt = 1;
-    }
+    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3", mode6_audio_callback);
+    g_mode6_action_in_progress = 1;
+    g_mode6_playing_prompt = 1;
     // lwl_peri_dev_7016_on(false);  // 开启 7016
     // msleep(2000);
     lwl_peri_dev_7016_on(true);  // 开启 7016

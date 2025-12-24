@@ -40,7 +40,7 @@ void mode2_init()
     set_led_white();
     log_i("MODE 2: All colors cycling started (0.5s interval), C speaker enabled");
     // 播放进入模式2的音频          LED
-    devices_check_play_music(CONFIG_CP_VOICE_FILE_PATH"test_led.mp3");
+    play_system_music("test_led.mp3");
     log_i("Playing test_led.mp3 for MODE 2");
 }
 

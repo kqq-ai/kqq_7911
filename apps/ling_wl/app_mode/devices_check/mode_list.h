@@ -89,7 +89,6 @@ void process_mode_6(void);
 void process_mode_7(void);
 void process_mode_8(void);
 void process_mode_9(void);
-void devices_check_play_music(const char *fname);
 
 void check_key_status(void);
 

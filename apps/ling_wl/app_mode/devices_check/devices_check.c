@@ -85,32 +85,6 @@ static void remove_pdev_from_list(lwl_eend_dev_t* pdev) {
     }
 }
 
-void devices_check_play_music(const char *fname) 
-{
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    
-    // 检查context有效性
-    if (!context || !context->music_player) {
-        log_e("devices_check_play_music: Context or music_player is NULL");
-        return;
-    }
-    
-    // 检查文件名有效性
-    if (!fname) {
-        log_e("devices_check_play_music: Invalid filename");
-        return;
-    }
-    
-    // g_music_player.play_voice_prompt = 1;
-    log_i("play: %s", fname);
-    int err = app_music_play_local_music_with_callback(context->music_player, fname, NULL, NULL);
-    if (err) {
-        log_e("devices_check_play_music: Failed to play %s, error: %d", fname, err);
-        // key_event_enable();
-        // g_music_player.play_voice_prompt = 0;
-    }
-}
-
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -148,6 +122,8 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         log_i("Button pressed via UART interface");
         log_i("Event timestamp: %d ms", timer_get_ms());
         log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
+
+        lwl_app_mode_stop_playing();
         
         // 按键切换模式逻辑
         work_mode_e next_mode;
@@ -205,6 +181,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             
             log_i("Touch key event type: %d",e->touch_key_cmd.touch_key_event_type);
+            lwl_app_mode_stop_playing();
             
             // 特殊处理模式8的触摸按键检测
             if (g_current_mode == WORK_MODE_8) {
@@ -303,6 +280,7 @@ void app_devices_check_mode(void)
     ///lwl_peri_dev_init();
 
     while (1) {
+        lwl_app_mode_play_loop();
         // 主循环延时
         mdelay(100);
 
@@ -367,7 +345,7 @@ static void mode_0_init(void)
     set_led_green();
     log_i("INIT MODE: Green LED ON, C speaker enabled");
     // 播放进入模式0的音频
-    devices_check_play_music(CONFIG_CP_VOICE_FILE_PATH"test_start.mp3");
+    play_system_music("test_start.mp3");
     log_i("Playing test_start.mp3 for INIT mode");
 }
 

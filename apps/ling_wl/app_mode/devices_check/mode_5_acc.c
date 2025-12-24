@@ -79,11 +79,7 @@ static void mode5_gsensor_init(void)
     }
 
     // 播放进入模式5的音频，使用回调
-    lwl_app_context_t *context5 = lwl_app_core_context_get_instance();
-    app_music_play_local_music_with_callback(
-        context5->music_player,
-        CONFIG_CP_VOICE_FILE_PATH"test_gyro.mp3",  // 使用gyro_test音频文件
-        mode5_audio_callback, NULL);
+    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_gyro.mp3", mode5_audio_callback);
     log_i("Playing test_gyro.mp3 for MODE 5 with callback");
 
     

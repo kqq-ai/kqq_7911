@@ -226,11 +226,7 @@ void mode4_init()
     g_mode4_vad_enabled = 0;  // VAD尚未启用
     log_i("MODE 4: micro VAD detection mode started");
     // 播放进入模式4的音频，使用回调
-    lwl_app_context_t *context4 = lwl_app_core_context_get_instance();
-    app_music_play_local_music_with_callback(
-        context4->music_player,
-        CONFIG_CP_VOICE_FILE_PATH"test_micro.mp3",
-        mode4_audio_callback, NULL);
+    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_micro.mp3", mode4_audio_callback);
     mode4_vad_init();
     log_i("Playing test_micro.mp3 for MODE 4 with callback");
 }

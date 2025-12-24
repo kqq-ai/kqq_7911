@@ -102,31 +102,15 @@ void process_mode_8(void)
             lwl_app_context_t *context = lwl_app_core_context_get_instance();
             if (context && context->music_player) {
                 g_audio_playing = 1;
-                int err = app_music_play_local_music_with_callback(
-                    context->music_player,
-                    CONFIG_CP_VOICE_FILE_PATH"test_sn_s.mp3",
-                    mode8_wrsn_audio_callback, NULL);
-                if (err != 0) {
-                    log_e("MODE 8: Failed to play test_sn_s.mp3, error: %d", err);
-                    g_audio_playing = 0;
-                } else {
-                    log_i("MODE 8: test_sn_s.mp3 started successfully");
-                }
+                lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_sn_s.mp3", mode8_wrsn_audio_callback);
+                log_i("MODE 8: test_sn_s.mp3 started successfully");
             }
         } else {
             log_e("MODE 8: SN/Key write and/or verification failed");
             lwl_app_context_t *context7_failed = lwl_app_core_context_get_instance();
             g_audio_playing = 1;  // 设置音频播放标志
-            int err = app_music_play_local_music_with_callback(
-                context7_failed->music_player,
-                CONFIG_CP_VOICE_FILE_PATH"test_sn_f.mp3",
-                mode8_wrsn_audio_callback, NULL);
-            if (err != 0) {
-                log_e("MODE 8: Failed to play test_sn_f.mp3, error: %d", err);
-                g_audio_playing = 0;  // 播放失败时重置状态
-            } else {
-                log_i("MODE 8: test_sn_f.mp3 started successfully");
-            }
+            lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_sn_f.mp3", mode8_wrsn_audio_callback);
+            log_i("MODE 8: test_sn_f.mp3 started successfully");
         }
 
 
@@ -265,17 +249,9 @@ static void mode8_execute_sn_request(void)
         // 播放获取SN成功的音频
         // lwl_app_context_t *context7_success = lwl_app_core_context_get_instance();
         // g_audio_playing = 1;  // 设置音频播放标志
-        // int err = app_music_play_local_music_with_callback(
-        //     context7_success->music_player,
-        //     CONFIG_CP_VOICE_FILE_PATH"test_getsn.mp3",
-        //     mode8_success_audio_callback, NULL);
-        // if (err != 0) {
-        //     log_e("MODE 8: Failed to play test_getsn.mp3, error: %d", err);
-        //     g_audio_playing = 0;  // 播放失败时重置状态
-        // } else {
-        //     log_i("MODE 8: test_getsn.mp3 started successfully");
-        //     g_mode8_op_running = 1;
-        // }
+        // lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_getsn.mp3", mode8_success_audio_callback);
+        // g_mode8_op_running = 1;
+        // log_i("MODE 8: test_getsn.mp3 started successfully");
     } else {
         log_i("===============================[MODE7] Failed to get SN/Key, process terminated==========");
         log_i("=============================MODE 8: SN/Key fetch failed================================");
@@ -305,16 +281,8 @@ void mode8_audio_callback(void *priv)
         log_i("MODE 8: device has SN: %s, skipping SN request", sn);
         lwl_app_context_t *context7_failed = lwl_app_core_context_get_instance();
         g_audio_playing = 1;  // 设置音频播放标志
-        int err = app_music_play_local_music_with_callback(
-            context7_failed->music_player,
-            CONFIG_CP_VOICE_FILE_PATH"test_sn_f.mp3",
-            mode8_wrsn_audio_callback, NULL);
-        if (err != 0) {
-            log_e("MODE 8: Failed to play test_sn_f.mp3, error: %d", err);
-            g_audio_playing = 0;  // 播放失败时重置状态
-        } else {
-            log_i("MODE 8: test_sn_f.mp3 started successfully");
-        }
+        lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_sn_f.mp3", mode8_wrsn_audio_callback);
+        log_i("MODE 8: test_sn_f.mp3 started successfully");
     }
 }
 
@@ -637,16 +605,8 @@ void mode8_init()
     {
         log_i("MODE 8: Starting SN key retrieval mode");
         lwl_app_context_t *context7 = lwl_app_core_context_get_instance();
-        int err = app_music_play_local_music_with_callback(
-            context7->music_player,
-            CONFIG_CP_VOICE_FILE_PATH"test_snkey.mp3",
-            mode8_audio_callback, NULL);
-        if (err != 0) {
-            log_e("MODE 8: Failed to play test_snkey.mp3, error: %d", err);
-            g_audio_playing = 0;  // 播放失败时重置状态
-        } else {
-            log_i("MODE 8: test_snkey.mp3 started successfully");
-        }
+        lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_snkey.mp3", mode8_audio_callback);
+        log_i("MODE 8: test_snkey.mp3 started successfully");
         log_i("MODE 8: SN key retrieval mode initialized");
     }
 }

@@ -33,22 +33,10 @@ void process_mode_1_touch_key(u8 touch_key_event_type)
             log_i("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
             // 播放 t_key.mp3（仅在未播放时触发）
             if (!t_key_playing && !g_audio_playing) {
-                lwl_app_context_t *context1 = lwl_app_core_context_get_instance();
-                if (context1 && context1->music_player) {
-                    t_key_playing = 1;
-                    g_audio_playing = 1;
-                    int err = app_music_play_local_music_with_callback(
-                        context1->music_player,
-                        CONFIG_CP_VOICE_FILE_PATH"t_key.mp3",
-                        mode1_tkey_audio_end_cb, NULL);
-                    if (err != 0) {
-                        log_e("MODE 1: Failed to play t_key.mp3, error: %d", err);
-                        g_audio_playing = 0;
-                        t_key_playing = 0;
-                    } else {
-                        log_i("MODE 1: t_key.mp3 started successfully");
-                    }
-                }
+                t_key_playing = 1;
+                g_audio_playing = 1;
+                lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"t_key.mp3", mode1_tkey_audio_end_cb);
+                log_i("MODE 1: t_key.mp3 started successfully");
             }
         } else if (touch_key_event_type == 1 && g_mode1_touch_active) {
             g_mode1_touch_active = 0;
@@ -96,12 +84,9 @@ void mode1_init()
     g_mode1_touch_enabled = 0;  // 触摸检测尚未启用
     g_mode1_touch_active = 0;   // 触摸状态为非激活
     log_i("MODE 1: Touch key detection mode started, C speaker enabled");
+
     // 播放进入模式1的音频，使用回调
-    lwl_app_context_t *context1 = lwl_app_core_context_get_instance();
-    app_music_play_local_music_with_callback(
-        context1->music_player,
-        CONFIG_CP_VOICE_FILE_PATH"test_touchk.mp3",
-        mode1_audio_callback, NULL);
+    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_touchk.mp3", mode1_audio_callback);
     log_i("Playing test_touchk.mp3 for MODE 1 with callback");
 }
 

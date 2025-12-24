@@ -138,6 +138,7 @@ void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
+        lwl_app_mode_play_loop();
         power_on_loop();
         if (lwl_app_mode_exitting()) {
             power_on_unint();

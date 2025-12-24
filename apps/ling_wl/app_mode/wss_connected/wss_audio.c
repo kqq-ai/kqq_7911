@@ -89,7 +89,6 @@ static int wss_audio_playback_start(void)
 
     /* 停止其他音频 */
     lwl_app_mode_stop_playing();
-    stop_prompt();
     set_speaker();
 
     /* 标记为播放中 */

@@ -49,17 +49,6 @@ threadpool_t *pool = NULL;
 
 void *uart0_hdl = NULL;
 
-static void simple_play_prompt(const char *fname) 
-{
-    // g_music_player.play_voice_prompt = 1;
-    log_i("play: %s", fname);
-    int err = app_music_play_local_music_with_callback(&g_music_player, fname, NULL, NULL);
-    if (err) {
-        // key_event_enable();
-        // g_music_player.play_voice_prompt = 0;
-    }
-}
-
 static void wifi_monitor_thread(void *priv)
 {
     while (true) {
@@ -238,11 +227,11 @@ static void app_cookie_main(void)
     if(system_reset_reason_get() == 0x80) { // SYS_RST_LONG_PRESS,长按复位清除wifi并再次复位
         log_i("Long press reset detected, clear wifi and  Reset.\n");
         // Reset WiFi SSID
-        app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
+        // app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         //增加音效提示
-        simple_play_prompt("mnt/sdfile/res/audlogo/reset_wifi.mp3");
-        mdelay(3000);
-        system_reset(); //restart
+        // simple_play_prompt("mnt/sdfile/res/audlogo/reset_wifi.mp3");
+        // mdelay(3000);
+        // system_reset(); //restart
     }
 
     wifi_set_pwr(6);                                     // 设置 WiFi 发射功率为最大

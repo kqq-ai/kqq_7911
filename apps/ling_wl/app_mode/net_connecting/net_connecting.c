@@ -69,6 +69,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
+            key_press_time_ms = 0;
             g_sensor_reset_alive_timer();
         } else {
             log_i("Touch key released");
@@ -211,6 +212,7 @@ void app_net_connecting_mode(void)
     net_connecting_init();
 
     while (1) {
+        lwl_app_mode_play_loop();
         if (lwl_app_mode_exitting()) {
             net_connecting_unint();
             return;

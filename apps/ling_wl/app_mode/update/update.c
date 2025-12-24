@@ -92,6 +92,7 @@ void app_update_mode(void)
     update_init();
 
     while (1) {
+        lwl_app_mode_play_loop();
         if (lwl_app_mode_exitting()) {
             update_unint();
             return;
