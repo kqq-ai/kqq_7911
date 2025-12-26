@@ -31,7 +31,7 @@
 
 #define MODE_TIMEOUT_MS 180000 // 180s
 #define MOVE_TIMEOUT_MS 60000 // 60s
-#define MODE_BLE_TIMEOUT_MS 15000 // 15s
+#define MODE_BLE_TIMEOUT_MS 10000 // 10s
 static u32 init_time = 0;
 static u32 key_press_time_ms = 0;
 bool wifi_manager_state = false; // wifi manager 状态
@@ -54,8 +54,25 @@ int app_net_connecting_event_handler(struct application *app, struct sys_event *
 {
     return false;
 }
+
 u32 get_key_times_in_net_connecting(){
     return ble_connecting;
+} 
+
+static void start_ble_net(){
+    if (wifi_manager_state) {
+        key_press_time_ms = timer_get_ms();
+    }
+} 
+static void reset_ble_net(){
+    if (wifi_manager_state) {
+        set_led_confirm_off();
+        key_press_time_ms = 0;
+        ble_simple_server_name_enable(0);
+        ble_connecting = false;
+        ble_connected = false;
+        printf("BLE timeout,restart ble\n");
+    }
 } 
 //=================================================================================================
 // LWL event callback
@@ -69,24 +86,10 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
-            key_press_time_ms = 0;
-            g_sensor_reset_alive_timer();
+            reset_ble_net();
+            lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH "t_key.mp3", start_ble_net);
         } else {
             log_i("Touch key released");
-            if (wifi_manager_state) {
-                // 确认连接小程序
-                log_i("PRESS NORMAL KEY in net_connecting mode");
-                key_press_time_ms = timer_get_ms();
-                play_system_music("t_key.mp3");
-            }
-        }
-        break;
-    case LWL_EVENT_TYPE_KEY:
-        if (wifi_manager_state) {
-            // 确认连接小程序
-            log_i("PRESS NORMAL KEY in net_connecting mode");
-            key_press_time_ms = timer_get_ms();
-            play_system_music("t_key.mp3");
         }
         break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
@@ -129,11 +132,7 @@ static void handle_ble_connection_state()
 {
     /* BLE连接超时处理 */
     if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
-        set_led_confirm_off();
-        key_press_time_ms = 0;
-        ble_simple_server_name_enable(0);
-        ble_connecting = false;
-        ble_connected = false;
+        reset_ble_net();
         printf("BLE timeout,restart ble\n");
         return;
     }
@@ -164,7 +163,7 @@ void app_net_connecting_loop()
     if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == state) {
         ///if( wifi_manager_state )         /// 等待配网的BLE通讯完成
         ///if( !NET_NTP_GET_TIME_SUCC )     /// 等待获取时间，才能https通讯，NET_NTP_GET_TIME_SUCC
-            mdelay(200);
+        mdelay(200);
         printf("Network connection is successful!\n");
         switch_rf_coexistence_config_table(3);
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
@@ -195,6 +194,7 @@ void app_net_connecting_loop()
     /* BLE连接处理 */
     if (wifi_manager_state && key_press_time_ms > 0) {
         handle_ble_connection_state();
+        g_sensor_reset_alive_timer();
     }
 
     /* 超时处理 */
