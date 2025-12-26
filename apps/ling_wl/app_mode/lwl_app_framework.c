@@ -49,6 +49,9 @@ static void lwl_app_mode_play_cb(void *priv)
  */
 void lwl_app_mode_play(const char *fname, void *priv) 
 {
+    while (play_voice_prompt) { // 等待播放结束并回调完成
+        msleep(10);
+    }
     os_mutex_pend(&g_mode_mutex, 0);
     log_i("lwl_app_mode_play: prepare to play %s", fname);
     memcpy(music_file, fname, strlen(fname) + 1);

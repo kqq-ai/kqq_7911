@@ -19,9 +19,6 @@ void mode3_audio_callback(void *priv)
     
     log_i("MODE 3: C端播放音频");
     
-    // 启用C端扬声器，确保音频在本地播放
-    gpio_direction_output(IO_PORTA_00, 1);  // Enable C speaker
-    
     if (g_mode3_playing_prompt) {
         // 提示音播放完成，开始播放循环音频
         log_i("MODE 3: Prompt audio callback - finished, starting loop audio");

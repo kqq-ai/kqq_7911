@@ -156,11 +156,6 @@
  *           flag - 标志位(0x01)
  *     说明: 用于启用/禁用BDO音频广播功能
  *
- * void uart_send_set_ctrl(uint8_t ctrl_code)
- *     功能: 发送BDO控制码
- *     参数: ctrl_code - 控制码(0x00=禁用, 0x03=启用)
- *     说明: 用于控制端点设备的BDO功能状态
- *
  * 【日志接口】(来源: log.h)
  * -------
  * void log_i(const char *fmt, ...)
@@ -266,15 +261,37 @@ static MyBlockingQueue g_ble_dev_op_queue;
 
 #define MS2TICK(ms) ((ms) / 10)
 
+const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+uint8_t broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
 static inline void process_cb(ble_dev_op_t *op, u8 code) {
     if (op->cb) op->cb(code, op->cb_priv);
+}
+
+void bdo_disable()
+{
+    log_i("[BDO]bdo_disable");
+    uart_send_set_ctrl(0x01);
+}
+
+void bdo_enable()
+{
+    log_i("[BDO]bdo_enable %s", broadcast_code);
+    uart_send_set_ctrl(0x03);
+}
+
+void bdo_set_ctrl(uint8_t code)
+{
+    log_i("[BDO]bdo_set_ctrl %d", code);
 }
 
 void bdo_notify_e_conncted(char sn[])
 {
     if (!sn) return;
     log_i("[BDO] Device %s connected", sn);
-    os_sem_post(&g_e_connected_sem);
+    if (strcmp(broadcast_code, &sn[10]) == 0) {
+        os_sem_post(&g_e_connected_sem);
+    }
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
 
@@ -282,31 +299,11 @@ void bdo_notify_e_disconncted(char sn[])
 {
     if (!sn) return;
     log_i("[BDO] Device %s disconnectd", sn);
-    os_sem_post(&g_e_disconnected_sem);
+    if (strcmp(broadcast_code, &sn[10]) == 0) {
+        uart_send_switch_audio_bc(empty_broadcast_code, 0x01);
+        os_sem_post(&g_e_disconnected_sem);
+    }
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
-}
-
-const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-uint8_t broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-uint8_t ctrl_code = 0x00;
-void bdo_disable()
-{
-    log_i("[BDO]bdo_disable");
-    uart_send_switch_audio_bc(empty_broadcast_code, 0x01);
-}
-
-void bdo_enable()
-{
-    log_i("[BDO]bdo_enable %s", broadcast_code);
-    uart_send_switch_audio_bc(broadcast_code, 0x01);
-    uart_send_set_ctrl(ctrl_code);
-}
-
-void bdo_set_ctrl(uint8_t code)
-{
-    log_i("[BDO]bdo_set_ctrl %d", code);
-    ctrl_code = code;
-    uart_send_set_ctrl(ctrl_code);
 }
 
 int max_rssi = -127;
@@ -465,14 +462,17 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
             // return;
         }
         log_i("[BDO]ble disconnected");
-    } else {
-        // mdelay(500);
+    } else if (dev->adv_state == BDPAS_CONNECTED) {
+        log_i("[BDO]Error dev busy!");
+        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        process_cb(op, BDOCode_Dev_Busy);
+        return;
     }
-    bdo_disable();
+    msleep(300);
     memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
-    bdo_set_ctrl(0x03);
+    uart_send_set_ctrl(0x01);
+    uart_send_switch_audio_bc(broadcast_code, 0x01);
 
-#if 0
     log_i("[BDO]Waiting adv state change...");
     /* - 扫描设备 ADV 状态变化 -> connected */
     if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
@@ -481,7 +481,6 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
         return;
     }
-#endif
 
     log_i("[BDO]Turn on end");
     dev->op_state &= ~BDO_STATE_TURNNING_ON;
@@ -498,9 +497,14 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         process_cb(op, BDOCode_Null_Pointer);
         return;
     }
-    
-    bdo_enable();
-    bdo_set_ctrl(0x00);
+    if (dev->adv_state == BDPAS_OFF) {
+        dev->op_state &= ~BDO_STATE_TURNNING_OFF;
+        process_cb(op, BDOCode_Success);
+        return;
+    }
+    if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
+        uart_send_set_ctrl(0x00);
+    }
 
     os_sem_set(&g_e_disconnected_sem, 0);
     /* - 扫描设备 ADV 状态变化 -> off */
@@ -609,7 +613,7 @@ int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *
 
 int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
-    // log_i("[MEASDIST]bdo_turn_on %s", dev->sn);
+    log_i("[MEASDIST]bdo_turn_on %s", dev->sn);
     if (dev->op_state & BDO_STATE_TURNNING_ON)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_ON;
@@ -633,8 +637,8 @@ int bdo_turn_off(lwl_eend_dev_t *dev)
     log_i("[MEASDIST]bdo_turn_off %s", dev->sn);
     // broadcast_code 等于dev->sn的后6位则继续
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
-        bdo_set_ctrl(0x00);
-        bdo_enable();
+        dev->op_state = BDO_STATE_IDLE;
+        uart_send_set_ctrl(0x00);
     }
     return 1;
 }

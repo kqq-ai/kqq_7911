@@ -65,7 +65,6 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
     if (BDOCode_Success == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
         log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-        bdo_enable();
     } else {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针
@@ -80,10 +79,7 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
     
     // 设置新的目标设备
     target_pdev = pdev;
-    // -- pdev->handshake_info.need_handshake = true;
-    bdo_turn_on(pdev, 500, 500, mode6_e_connect_cb, pdev); // E ON~  start_handshake
-    log_i("+-- -+");
-    // 参考default_e_turn_on函数中的命令发送方式
+    bdo_turn_on(pdev, 500, 5000, mode6_e_connect_cb, pdev);
 }
 
 // 音频播放回调
@@ -95,8 +91,6 @@ void mode6_audio_callback(void *priv)
         return;
     }
     set_led_tts_off();
-    
-    gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
 
     if (g_mode6_playing_prompt) {
         // 提示音播放完成，开始播放循环音频
@@ -114,44 +108,10 @@ void mode6_audio_callback(void *priv)
             current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
             log_i("MODE 6: Turn OFF current E device: %s", sn_string);
             uint cmd_id;
-            bdo_turn_off(current_pdev);
-            msleep(1000);
             target_pdev = NULL; // 清空目标设备指针
+            bdo_turn_off(current_pdev);
             current_pdev = NULL; // 清空当前连接设备指针
         }
-    }
-}
-
-static void devices_check_cb(uint8_t code, void *priv)
-{
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    log_i("devices_check_cb  %s\n", pdev->sn);
-
-    switch (code) {
-    case BDOCode_Success:                //!< 操作成功通用返回码
-        log_i("BDOCode_Success");
-        break;
-    case BDOCode_Skip:                   //!< 操作被跳过
-        log_i("BDOCode_Skip");
-        break;
-    case BDOCode_Null_Pointer:           //!< 操作失败，空指针错误
-        log_i("BDOCode_Null_Pointer");
-        break;
-    case BDOCode_BLE_Api_Error:          //!< 操作失败，BLE 接口调用失败
-        log_i("BDOCode_BLE_Api_Error");
-        break;
-    case BDOCode_BLE_Buffer_Full:        //!< 操作失败，BLE 缓冲满了
-        log_i("BDOCode_BLE_Buffer_Full");
-        break;
-    case BDOCode_Connection_Timeout:     //!< 操作失败，连接超时
-        log_i("BDOCode_Connection_Timeout");
-        break;
-    case BDOCode_Scan_Adv_Stat_Timeout:  //!< 操作失败，扫描ADV状态变化超时
-        log_i("BDOCode_Scan_Adv_Stat_Timeout");
-        break;
-    case BDOCode_Unexpected_Error:       //!< 意外错误
-        log_i("BDOCode_Unexpected_Error");
-        break;
     }
 }
 
@@ -166,6 +126,7 @@ void process_mode_6(void)
         
         // 播放循环测试音频，使用回调
         set_dec_volume(context->music_player, 50); // 保护E的电池，需要设置最高默认音量为50
+        bdo_enable();
         int err = 0;
         if((g_mode6_e_index&1) == 0 ){
             err = app_music_play_local_music_with_callback(
@@ -202,17 +163,15 @@ void process_mode_6(void)
 
 void mode6_init()
 {
-    gpio_direction_output(IO_PORTA_00, 1);  // 启用C端扬声器
     ble_simple_client_module_enable(1); // enable BLE client to connect E device
     ble_dev_task_scheduler_start();
+    lwl_peri_dev_7016_on(true);  // 开启 7016
+    // msleep(2000); // 等待7016开机完成，但实际执行到lwl_app_mode_play会等待音频播放结束，超过2s
     g_mode6_state = MODE6_PLAY_PROMPT;
     g_mode6_e_index = 0;
     lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3", mode6_audio_callback);
     g_mode6_action_in_progress = 1;
     g_mode6_playing_prompt = 1;
-    // lwl_peri_dev_7016_on(false);  // 开启 7016
-    // msleep(2000);
-    lwl_peri_dev_7016_on(true);  // 开启 7016
     log_i("MODE 6: 串行状态机启动");
 }
 
@@ -220,7 +179,6 @@ void mode6_uninit()
 {
     log_i("Cleaning up MODE 6 audio functionality");
     ble_simple_client_module_enable(0);
-    bdo_disable();
     lwl_peri_dev_7016_on(false);  // 关闭 7016
     g_audio_playing = 0;
     g_mode6_playing_prompt = 0;

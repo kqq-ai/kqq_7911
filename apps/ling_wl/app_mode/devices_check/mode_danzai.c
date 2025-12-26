@@ -72,7 +72,6 @@ void mode9_random_audio_end_cb(void *priv)
     }
     
     // 如果没有更强信号的设备，重新启用C端扬声器
-    gpio_direction_output(IO_PORTA_00, 1);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
     log_i("MODE 9: No stronger signal device found (current nearest DISTANCE: %.2f), C speaker re-enabled", strongest_distance);
@@ -92,7 +91,6 @@ static void mode9_e_connect_cb(bdo_code_e code, void *priv)
     if (BDOCode_Success == code) {
         // 连接成功，播放随机音频
         log_i("MODE 9: E-device connected successfully, playing random audio");
-        gpio_direction_output(IO_PORTA_00, 0);  // 禁用C端扬声器，使用E端播放
         lwl_app_context_t *context = lwl_app_core_context_get_instance();
         set_dec_volume(context->music_player, 70); // 恢复默认音量
         
