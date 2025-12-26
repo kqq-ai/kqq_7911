@@ -268,6 +268,7 @@ static void app_cookie_main(void)
     context->lfs_hdl = lfs_hdl;                             // 保存文件系统句柄
     //app_lfs_cfgfile_init(context->lfs_hdl);
     get_flash_app_cfg_data(context->lfs_hdl);               // 从配置区加载设备参数（SN、OTA 等）
+    // 长度 0
 
 
     /* 创建sc7a20 task 陀螺仪 */

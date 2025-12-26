@@ -468,8 +468,17 @@ static int mode8_write_sn_key_to_storage(const char* sn, const char* key)
     log_i("MODE 8: Written Key: %s (%d bytes)", key, key_len);
     log_i("MODE 8: File: SN_KEY.bin");
     log_i("MODE 8: ==========================================");
+
     
-    log_i("MODE 8: SN/Key verification passed");
+    //int norflash_eraser_otp(void);int norflash_write_otp(u8 *buf, int len);int norflash_read_otp(u8 *buf, int len);返回0代表成功
+    //这里仅写入操作，先组合sn和key，一次性写入
+    u8 otp_buf[5 + SN_SIZE + KEY_SIZE];
+    memcpy(otp_buf + 5, sn, sn_len);
+    memcpy(otp_buf + 5 + sn_len, keyInVm, KEY_SIZE);
+    ///norflash_eraser_otp();//擦除
+    int ret_otp = norflash_write_otp(otp_buf, 5 + sn_len + KEY_SIZE);//写，读写最大字节：768
+    
+    log_i("MODE 8: SN/Key Written (OTP)(OTP)(OTP) passed. %d \n", ret_otp);
     return 0;  // 成功
 }
 
@@ -559,7 +568,44 @@ static int mode8_verify_written_sn_key(const char* expected_sn, const char* expe
     lfs_file_close(&g_lfs, &file);
     // 释放读锁
     rwlock_release_read(&g_lfs_rwlock);
+    //读取OTP进行对比
+    u8 otp_buf[5 + SN_SIZE + KEY_SIZE] = {0};
+    norflash_read_otp(otp_buf, 5 + SN_SIZE + KEY_SIZE);
+    if (strncmp((char *)(otp_buf + 5), expected_sn, SN_SIZE) != 0) {
+        log_e("MODE 8: OTP SN data mismatch");
+        log_e("MODE 8: Expected: %s", expected_sn);
+        log_e("MODE 8: Read:     %s", otp_buf + 5);
+        ///return -12;
+    }
+    u8 keyInVm[KEY_SIZE] = {0};
+    int key_len = hex2bytes(expected_key, keyInVm);
+    if (memcmp(otp_buf + 5 + SN_SIZE, keyInVm, KEY_SIZE) != 0) {
+        log_e("MODE 8: OTP Key data mismatch");
+        log_e("MODE 8: Expected: %s", expected_key);
+        log_e("MODE 8: Read:     (binary data)");
+        ///return -13;
+    }
+    //log otp_buf完整内容
+    log_i("MODE 8:VERIFICATION VERIFICATION VERIFICATION OTP content:");
+    for (int i = 0; i < 5 + SN_SIZE + KEY_SIZE; i++) {
+        log_i("0x%02X ", otp_buf[i]);
+    }
+    log_i("\n");
+
     
+    printf("norflash_otp test \n");
+
+    u8 buf[32];
+    for (int i = 0; i < 32; i++) {
+        buf[i] = i;
+    }
+    norflash_eraser_otp();//擦除
+    norflash_write_otp(buf, 32);//写，读写最大字节：768
+    memset(buf, 0, 32);
+    norflash_read_otp(buf, 32);//读，读写最大字节：768
+    put_buf(buf, 32);
+    log_i("MODE 8: ========== norflash_read_otp ==========");
+
     log_i("MODE 8: ========== VERIFICATION SUCCESS ==========");
     log_i("MODE 8: SN verification:  PASSED (%s)", expected_sn);
     log_i("MODE 8: Key verification: PASSED (%s)", expected_key);
@@ -627,6 +673,28 @@ void mode8_init()
 
     // 初始化全局LFS读写锁
     rwlock_init(&g_lfs_rwlock);
+    //读取otp，验证是否KC开头，如果不是，则擦除otp；不使用前5个字节
+    char otp_buf[5 + SN_SIZE + KEY_SIZE] = {0};
+    norflash_read_otp(otp_buf, 5 + SN_SIZE + KEY_SIZE);
+    if (strncmp(otp_buf + 5, "KC", 2) != 0) {
+        norflash_eraser_otp();
+        log_i("MODE 8: OTP  not start  'KC', OTP erased erased erased erased erased erased erased erased\n");
+        //log这些字节的十六进制内容
+        log_i("MODE 8: OTP content before erase: ");
+        for (int i = 0; i < SN_SIZE + KEY_SIZE; i++) {
+            log_i("0x%02X  ?", otp_buf[i]);
+        }
+        log_i("\n");
+    }else {
+        log_i("MODE 8: OTP start  'KC' , no need SN  no need SN  no need SN  no need SN  no need SN \n");
+        lwl_app_context_t *context7 = lwl_app_core_context_get_instance();
+        int err = app_music_play_local_music_with_callback(
+            context7->music_player,
+            CONFIG_CP_VOICE_FILE_PATH"test_snkey.mp3",
+            NULL, NULL); //播放完成后不处理, 无callback
+        return;
+    }
+
 
     // 重置模式8状态（无论从哪个模式切换，都重置模式8的SN号获取状态）
     mode8_reset_network_check();

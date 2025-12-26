@@ -136,7 +136,7 @@ static void gen_SN()
 bool get_SN(char* SN){
     if (snInVm[0] == 0) gen_SN();
     if (snInVm[0] == 0 || strlen(snInVm) != SN_SIZE || WRITE_SN_KEY) {
-        log_i("❌get_SN NULL\n");
+        log_i("❌  get_SN NULL\n");
         snInVm[0] = 0;
         SN[0] = 0;
         return false;

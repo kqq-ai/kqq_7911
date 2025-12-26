@@ -848,8 +848,8 @@ static void board_power_init(void)
     if(ret == 4)
     {
         //2秒后，再次判断，一致，则继续开机，否则关机
-        delay_2ms(1000); // 延时2秒，开机
-        if( (0 == gpio_read(KEY_IO_PORT)) && (0 == gpio_read(PORT_CHG_IO))
+        delay_2ms(1000); // 延时2秒，开机 && (0 == gpio_read(PORT_CHG_IO))
+        if( (0 == gpio_read(KEY_IO_PORT))
             && (1 == gpio_read(IO_PORTB_01)) && (1 == gpio_read(CHARGE_FULL_IO))  )
         {
             log_i("key and CHG_IN low, other high,  after delay 2s, condition still meet, continue power on\n");
