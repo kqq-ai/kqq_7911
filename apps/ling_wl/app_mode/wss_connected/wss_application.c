@@ -33,6 +33,10 @@ static bool multi_play_mode = false;
 static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
 
+u32 last_E_found_time = 0;
+u32 last_move_time = 0;
+u32 last_mem_stats_time = 0;
+
 /* Task state */
 typedef enum {
     APP_IDLE,
@@ -49,6 +53,7 @@ AppTaskStepState g_device_state = APP_IDLE;
 void wss_application_vailed()
 {
     last_req_time = g_curr_time;
+    last_move_time = g_curr_time;
     g_sensor_reset_alive_timer();
 }
 
@@ -138,7 +143,7 @@ static void wss_application_touch_key(bool press_down)
             g_device_state = APP_WAIT;
             multi_play_mode = true;
             g_mic_on = false;
-            last_req_time = g_curr_time + 10000;
+            last_req_time = g_curr_time;
         }
     }
     os_mutex_post(&g_wss_app_mutex);
@@ -234,9 +239,9 @@ static bool monitor_thread_running = false;
 void *wss_condition_monitor_thread(void *arg)
 {
     u32 current_time = timer_get_ms();
-    u32 last_E_found_time = current_time;
-    u32 last_move_time = current_time;
-    u32 last_mem_stats_time = current_time; // 新增变量
+    last_E_found_time = current_time;
+    last_move_time = current_time;
+    last_mem_stats_time = current_time; // 新增变量
 
     log_i("[wss_application]Starting WSS condition monitor thread...");
     while (monitor_thread_running && lwl_app_mode_get_current_mode() == APP_WSS_CONNECTED_MODE) {

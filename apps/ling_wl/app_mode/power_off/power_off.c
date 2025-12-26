@@ -72,12 +72,10 @@ static void power_off_unint(void)
 void power_off_loop()
 {
     g_sensor_reset_alive_timer();
-    uint8_t btnCurrState = gpio_read(KEY_IO_PORT);
     if (timer_get_ms() - init_time >= KEY_PRESS_POWER_OFF_TIME_MS) {
         if (!led_off) {
             led_off = 1;
             set_led_bye();
-            log_i("LONG PRESS POWER OFF KEY");
         }
     }
     if (!lwl_app_mode_playing()) {

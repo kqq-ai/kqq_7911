@@ -421,6 +421,8 @@ bool wss_request_loop()
         if (g_curr_time - g_wss_last_time > WSS_TIMEOUT * 2) {
             g_mode_script = 0;
             wss_request_update_state(STATE_IDLE, "WSS_TIMEOUT");
+        } else {
+            wss_application_vailed();
         }
         break;
     }

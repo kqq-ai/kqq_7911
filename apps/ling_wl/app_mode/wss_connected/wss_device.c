@@ -13,14 +13,14 @@
  *
  * 【实现逻辑】
  * 1. 设备集合管理：
- *    - 维护一个大小为16的E端设备集合(edev_set)，存储距离在3.5m以内的设备
+ *    - 维护一个大小为16的E端设备集合(edev_set)，存储距离在2.5m以内的设备
  *    - 设备通过距离分级(DISTANCE_0/1/2/3)自动加入或移除集合
  *    - 使用互斥锁(edev_manager_mutex)保护集合的并发访问
  *
  * 2. 设备选择策略：
  *    - 优先选择距离最近的设备(distance < 2.0m)
  *    - 根据RSSI样本数量验证距离有效性
- *    - 移除距离超过3.5m或RSSI无效的设备(当前使用设备例外)
+ *    - 移除距离超过2.5m或RSSI无效的设备(当前使用设备例外)
  *    - 列表中只保留两个最近的设备以优化选择效率
  *
  * 3. 事件驱动：
@@ -186,7 +186,7 @@
 static u32 g_curr_time = 0;
 static u32 last_dequeue_time = 0;
 #define TTS_BIND_TIMEOUT_MS   (1 * 1000) // 1s
-
+#define MAX_DIS 2.5f
 // #define log_d log_i // Debug log macro
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -291,11 +291,11 @@ static void clear_edev_set()
  */
 static void refresh_and_clean_edev_set(void)
 {
-    /* 第一步：刷新距离，移除无效设备(距离>3.5m或RSSI无效) */
+    /* 第一步：刷新距离，移除无效设备(距离>MAX_DIS或RSSI无效) */
     for (int i = 0; i < edev_set_count; i++) {
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(edev_set[i].sn);
         
-        if (!pdev || pdev->distance_info.distance > 3.5f || 
+        if (!pdev || pdev->distance_info.distance > MAX_DIS || 
             pdev->distance_info.rssi_sample_count == 0) {
             if (edev_last == edev_set[i].edev && pdev->distance_info.rssi_sample_count == 0) {
                 edev_last = NULL;
@@ -570,7 +570,7 @@ bool wss_device_is_calling()
         return false;
     }
 
-    bool in_range = edev_last->distance_info.distance < 2.5f;
+    bool in_range = edev_last->distance_info.distance < MAX_DIS;
     
     if (!in_range) {
         int dist_int = (int)(edev_last->distance_info.distance * 100);
