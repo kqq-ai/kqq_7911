@@ -88,7 +88,7 @@ static void mode9_e_connect_cb(bdo_code_e code, void *priv)
     }
     log_i("MODE 9: bdo_turn_on code %d %s", code, sn_string);
 
-    if (BDOCode_Success == code) {
+    if (BDOCode_Ready_to_Play == code) {
         // 连接成功，播放随机音频
         log_i("MODE 9: E-device connected successfully, playing random audio");
         lwl_app_context_t *context = lwl_app_core_context_get_instance();
@@ -120,7 +120,7 @@ static void mode9_e_connect_cb(bdo_code_e code, void *priv)
                 log_i("MODE 9: Started playing %s on E-device", file_to_play);
             }
         }
-    } else {
+    } else if (BDOCode_Success != code) {
         // 连接失败
         log_i("MODE 9: E-device connection failed");
         if (pdev == g_mode9_current_pdev) {

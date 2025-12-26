@@ -98,7 +98,7 @@ void turn_off_Pi() {
 
 static void e_turn_on_cb(bdo_code_e code, void *priv)
 {
-    if (g_mode_state != STATE_TTS_BIND) return;
+    // if (g_mode_state != STATE_TTS_BIND) return;
     os_mutex_pend(&g_request_mutex, 0);
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     
@@ -122,14 +122,20 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     case BDOCode_Unexpected_Error:
         log_i("[wss_request]Switch PortE Error\n");
         break;
+    case BDOCode_Ready_to_Play:
+        log_i("[wss_request]Switch PortE Ready_to_Play\n");
+        break;
     }
     if (code == BDOCode_Success) { // 连接成功
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
             send_message = ORMET_SWITCH_SUCCESS;
-            wss_audio_set_player(WSS_MUSIC_TIMEOUT);
         } else {
             turn_off_Pi();
+        }
+    } else if (BDOCode_Ready_to_Play == code) {
+        if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
+            wss_audio_playback_start();
         }
     } else {
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的目标E失败
@@ -154,7 +160,7 @@ void turn_on_Pi(const char *pdev_sn) {
     }
     //上传E的电量
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-    bdo_turn_on(pdev, 500, 500, e_turn_on_cb, pdev);
+    bdo_turn_on(pdev, 500, 2000, e_turn_on_cb, pdev);
 }
 
 //=================================================================================================

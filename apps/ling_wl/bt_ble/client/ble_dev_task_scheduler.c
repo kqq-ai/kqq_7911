@@ -468,12 +468,13 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
+    log_i("[BDO]Waiting adv state change...");
+    process_cb(op, BDOCode_Success);
     msleep(300);
     memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
     uart_send_set_ctrl(0x01);
     uart_send_switch_audio_bc(broadcast_code, 0x01);
 
-    log_i("[BDO]Waiting adv state change...");
     /* - 扫描设备 ADV 状态变化 -> connected */
     if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
         log_e("[BDO]Error scan adv state timeout!!!");
@@ -484,7 +485,7 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 
     log_i("[BDO]Turn on end");
     dev->op_state &= ~BDO_STATE_TURNNING_ON;
-    process_cb(op, BDOCode_Success);
+    process_cb(op, BDOCode_Ready_to_Play);
 }
 
 static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)

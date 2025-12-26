@@ -9,7 +9,7 @@ void wss_audio_uninit();
 void wss_ble_audio_start(); // request 控制 允许WSS音频数据写入播放器，允许播放
 void wss_ble_audio_stop();  // request 控制 停止数据写入，暂停播放器
 
-void wss_audio_set_player(u32 delta); // request 控制 音频播放器延时启动
+int wss_audio_playback_start(void);
 
 void set_tts_volume(int volume);
 

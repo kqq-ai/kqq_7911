@@ -15,6 +15,7 @@ typedef enum {
     BDOCode_Scan_Adv_Stat_Timeout,  //!< 操作失败，扫描ADV状态变化超时
     BDOCode_Dev_Busy,               //!< 操作失败，设备繁忙
     BDOCode_Unexpected_Error,       //!< 意外错误
+    BDOCode_Ready_to_Play,          //!< 开始播放
 } bdo_code_e;
 
 /**

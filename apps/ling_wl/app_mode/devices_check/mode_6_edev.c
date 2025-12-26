@@ -62,10 +62,10 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
     }
     log_i("bdo_turn_on code %d %s\n", code, sn_string);
 
-    if (BDOCode_Success == code) {
+    if (BDOCode_Ready_to_Play == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
         log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    } else {
+    } else if (BDOCode_Success != code) {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针
     }

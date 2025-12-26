@@ -74,7 +74,7 @@ void app_music_play_end_cb(void *priv)
  *   启动播放器并将已缓冲的音频数据分片写入。
  * @return 0 成功，-1 失败
  */
-static int wss_audio_playback_start(void)
+int wss_audio_playback_start(void)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
     if (g_audio_player_start) return 0;
@@ -216,75 +216,6 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
     log_i("[AUDIO]odmp_audio_data_cbk len=%u", len);
     wss_audio_stream_write(data, len);
     return 0;
-}
-
-/**
- * @brief 延迟播放任务结构体
- */
-typedef struct {
-    uint32_t delay_ms;
-} DelayedPlaybackTask;
-
-/**
- * @brief 延迟播放任务线程函数
- * @details
- *   等待指定的延迟时间后调用 wss_audio_playback_start()
- * @param priv DelayedPlaybackTask 指针
- */
-static void delayed_playback_task(void *priv)
-{
-    DelayedPlaybackTask *task = (DelayedPlaybackTask *)priv;
-    if (!task) {
-        log_e("[AUDIO]delayed_playback_task: invalid task");
-        return;
-    }
-
-    uint32_t delay_ms = task->delay_ms;
-    log_i("[AUDIO]delayed_playback_task: sleeping for %u ms", delay_ms);
-    
-    if (delay_ms <= 500) {
-        bdo_enable();
-        msleep(delay_ms);
-    } else {
-        msleep(delay_ms-500);
-        bdo_enable();
-        msleep(500);
-    }
-    
-    log_i("[AUDIO]delayed_playback_task: calling wss_audio_playback_start after %u ms delay", delay_ms);
-    wss_audio_playback_start();
-    
-    free(task);
-}
-
-/**
- * @brief 设置播放器延迟启动
- * @details
- *   创建独立线程，延迟 delta 毫秒后启动音频播放。
- *   线程内部负责释放任务结构体内存。
- * @param delta 延迟时间（毫秒）
- */
-void wss_audio_set_player(u32 delta)
-{
-    
-    log_i("[AUDIO]wss_audio_set_player: scheduling playback start after %u ms", delta);
-    
-    /* 分配任务结构体 */
-    DelayedPlaybackTask *task = (DelayedPlaybackTask *)malloc(sizeof(DelayedPlaybackTask));
-    if (!task) {
-        log_e("[AUDIO]wss_audio_set_player: failed to allocate task");
-        return;
-    }
-    
-    task->delay_ms = delta;
-    
-    /* 投递到线程池 */
-    if (g_app_ctx && g_app_ctx->threadpool) {
-        threadpool_add_task(g_app_ctx->threadpool, delayed_playback_task, task);
-    } else {
-        log_e("[AUDIO]wss_audio_set_player: threadpool not available");
-        free(task);
-    }
 }
 
 // 获取当前音频播放状态
