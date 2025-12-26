@@ -98,17 +98,6 @@ void mode6_audio_callback(void *priv)
     
     gpio_direction_output(IO_PORTA_00, 0);  //disable    C speaker
 
-    // 播放结束后，先关闭当前已连接的E端设备（如果有）
-    if (current_pdev) {
-        char sn_string[SN_SIZE+1] = "(NULL)";
-        current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
-        log_i("MODE 6: Turn OFF current E device: %s", sn_string);
-        uint cmd_id;
-        bdo_turn_off(current_pdev);
-        msleep(1000);
-        target_pdev = NULL; // 清空目标设备指针
-        current_pdev = NULL; // 清空当前连接设备指针
-    }
     if (g_mode6_playing_prompt) {
         // 提示音播放完成，开始播放循环音频
         log_i("MODE 6: Prompt audio callback - finished, starting loop audio");
@@ -118,6 +107,18 @@ void mode6_audio_callback(void *priv)
         // 循环音频播放完成，准备重新播放
         log_i("MODE 6: Loop audio callback - finished, will restart");
         g_audio_playing = 0;
+        
+        // 播放结束后，先关闭当前已连接的E端设备（如果有）
+        if (current_pdev) {
+            char sn_string[SN_SIZE+1] = "(NULL)";
+            current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
+            log_i("MODE 6: Turn OFF current E device: %s", sn_string);
+            uint cmd_id;
+            bdo_turn_off(current_pdev);
+            msleep(1000);
+            target_pdev = NULL; // 清空目标设备指针
+            current_pdev = NULL; // 清空当前连接设备指针
+        }
     }
 }
 
