@@ -588,6 +588,33 @@ void ble_dev_task_scheduler_start()
     }
 }
 
+static void ble_dev_task_loop()
+{
+    ble_dev_op_t op;
+    log_i("ble_dev_task_loop");
+
+    dev_task_is_running = 1;
+    my_blocking_queue_dequeue(&g_ble_dev_op_queue, &op);
+    ASSERT(op.op_type < g_op_handler_entries_count);
+
+    if (g_op_handler_entries[op.op_type] != NULL) {
+        g_op_handler_entries[op.op_type](&op);
+    }
+    dev_task_is_running = 0;
+}
+
+void ble_dev_task_epcho()
+{
+    if (dev_task_is_running) {
+        return;
+    }
+    if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
+        max_rssi = -127;
+    } else if (thread_fork("ble_dev_task_loop", 15, 512, 0, 0, ble_dev_task_loop, NULL)) {
+        log_e("Error: Failed to create task ble_dev_task_loop.");
+    }
+}
+
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
     log_i("[MEASDIST]Active %s, %d", dev->sn, dev->max_rssi);

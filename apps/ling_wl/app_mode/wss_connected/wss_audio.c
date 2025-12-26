@@ -50,6 +50,7 @@ void set_speaker() {
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
+    bdo_enable();
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -78,13 +79,13 @@ int wss_audio_playback_start(void)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
     if (g_audio_player_start) return 0;
-
-    os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_play_ongoing) {
         log_w("[AUDIO]playback already started, ignoring");
-        os_mutex_post(&g_audio_mutex);
         return 0;
     }
+
+    os_mutex_pend(&g_audio_mutex, 0);
+    
     log_i("[AUDIO]starting music player");
 
     /* 停止其他音频 */

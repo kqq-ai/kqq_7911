@@ -41,7 +41,7 @@ static int wss_connected_init(void)
     log_i("[wss_connected]enter mode");
     /* 开始RSSI测距 */
     wss_application_init();
-    ble_dev_task_scheduler_start();
+    // ble_dev_task_scheduler_start();
     play_prompt_flag = 1;
     return 0;
 }

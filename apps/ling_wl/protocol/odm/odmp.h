@@ -17,6 +17,7 @@ enum odmp_req_msg_event_type_e{
     ORMET_BUTTON_TRIGGER        = 31,
     // 播放状态
     ORMET_PLAY_STOP             = 50,
+    ORMET_PLAY_START            = 54,
     ORMET_PLAY_END              = 55,
     ORMET_PLAY_NEXT             = 56,
 };

@@ -506,20 +506,28 @@ lwl_eend_dev_t *wss_device_loop()
 {
     g_curr_time = timer_get_ms();
 
+    if (!edev_set_count) {
+        ble_dev_task_epcho();
+        return NULL;
+    }
     if (g_curr_time - last_dequeue_time < TTS_BIND_TIMEOUT_MS) {
+        ble_dev_task_epcho();
         return NULL;
     }
 
     lwl_eend_dev_t *pdev = get_edev();
     if (!pdev) {
+        ble_dev_task_epcho();
         return NULL;
     }
 
     if (pdev == edev_last) {
+        ble_dev_task_epcho();
         return NULL;
     }
 
     if (pdev->distance_info.distance >= 2.0f) {
+        ble_dev_task_epcho();
         return NULL;
     }
 
@@ -543,6 +551,7 @@ lwl_eend_dev_t *wss_device_call()
     lwl_eend_dev_t *pdev = get_edev();
     if (!pdev) {
         log_i("[wss_device_call] No available device");
+        ble_dev_task_epcho();
         return NULL;
     }
 
