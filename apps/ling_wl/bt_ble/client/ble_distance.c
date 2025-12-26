@@ -574,15 +574,11 @@ static void scan_adv_process_task(void *priv)
 
         if (adv_state_latest != BDPAS_CONNECTED && dev->adv_state == BDPAS_CONNECTED)
         {
-            extern void notify_e_conncted();
-            notify_e_conncted();
-            log_i("[MEASDIST] Device %s connected", sn);
+            bdo_notify_e_conncted(sn);
         }
         if (adv_state_latest != BDPAS_OFF && dev->adv_state == BDPAS_OFF)
         {
-            extern void notify_e_disconncted();
-            notify_e_disconncted();
-            log_i("[MEASDIST] Device %s disconnectd", sn);
+            bdo_notify_e_disconncted(sn);
         }
         os_mutex_pend(&dev->distance_info.mutex, 0);
         // Store the RSSI value and timestamp with safety checks

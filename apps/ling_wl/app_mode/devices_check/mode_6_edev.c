@@ -86,12 +86,6 @@ static void switch_to_e_target(lwl_eend_dev_t* pdev)
     // 参考default_e_turn_on函数中的命令发送方式
 }
 
-static void test_turn_off_callback(uint8_t code, void *priv)
-{
-    log_i("turn off result code: %d", code);
-    current_pdev = NULL; // 清空当前连接设备指针
-}
-
 // 音频播放回调
 void mode6_audio_callback(void *priv)
 {
@@ -110,8 +104,10 @@ void mode6_audio_callback(void *priv)
         current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 6: Turn OFF current E device: %s", sn_string);
         uint cmd_id;
-        bdo_turn_off(current_pdev, 1000, test_turn_off_callback, current_pdev);
+        bdo_turn_off(current_pdev);
+        msleep(1000);
         target_pdev = NULL; // 清空目标设备指针
+        current_pdev = NULL; // 清空当前连接设备指针
     }
     if (g_mode6_playing_prompt) {
         // 提示音播放完成，开始播放循环音频

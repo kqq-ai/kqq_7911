@@ -83,19 +83,12 @@ static void wss_request_update_state(AppRequestState mode_state, char* tag)
 //=================================================================================================
 // Pi设备切换 callback
 //=================================================================================================
-static void e_turn_off_cb(uint8_t code, void *priv)
-{
-    log_i("turn off result code: %d", code);
-    // lwl_peri_dev_7016_on(false);  // 关闭 7016
-    // log_i("[wss_request]lwl_peri_dev_7016_on false\n");
-}
-
 void turn_off_Pi() {
     if (g_edev_connected_sn[0] != 0) {
         
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
         if (pdev) {
-            bdo_turn_off(pdev, 500, e_turn_off_cb, NULL);
+            bdo_turn_off(pdev);
         } else {
             log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
         }

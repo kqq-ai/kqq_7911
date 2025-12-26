@@ -53,7 +53,7 @@ void mode9_random_audio_end_cb(void *priv)
         log_i("MODE 9: Disconnecting E-device after playback: %s (DISTANCE: %.2f)", sn_string, previous_distance);
         
         uint cmd_id;
-        bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
+        bdo_turn_off(g_mode9_current_pdev);
         g_mode9_current_pdev = NULL;
     }
     
@@ -197,7 +197,7 @@ void process_mode_9(void)
                         g_mode9_current_pdev->get_string(g_mode9_current_pdev, current_sn, sizeof(current_sn));
                         log_i("MODE 9: Disconnecting current device: %s (DISTANCE: %.2f)", current_sn, current_distance);
                         uint cmd_id;
-                        bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
+                        bdo_turn_off(g_mode9_current_pdev);
                         g_mode9_current_pdev = NULL;
                     }
                     
@@ -256,7 +256,7 @@ void mode9_uninit()
         g_mode9_current_pdev->get_string(g_mode9_current_pdev, sn_string, sizeof(sn_string));
         log_i("MODE 9: Disconnecting E-device during cleanup: %s", sn_string);
         uint cmd_id;
-        bdo_turn_off(g_mode9_current_pdev, 1000, NULL, NULL);
+        bdo_turn_off(g_mode9_current_pdev);
         g_mode9_current_pdev = NULL;
     }
     log_i("MODE 9: All state variables reset");

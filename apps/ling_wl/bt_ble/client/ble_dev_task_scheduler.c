@@ -198,13 +198,10 @@
  *     返回: 1成功加入队列, 0操作已在进行
  *     说明: 如果设备处于OFF状态则建立连接，然后启用音频广播功能
  *
- * int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
+ * int bdo_turn_off(lwl_eend_dev_t *dev)
  *     功能: 异步关闭(禁用)BLE设备
  *     参数: dev - 目标设备指针
- *           timeout - 广播扫描超时(毫秒)
- *           cb - 完成回调函数
- *           priv - 回调私有数据
- *     返回: 1成功加入队列, 0操作已在进行
+ *     返回: 1成功
  *     说明: 禁用音频广播，等待设备进入OFF状态
  *
  * void bdo_enable(void)
@@ -219,10 +216,10 @@
  *     功能: 设置BDO控制码
  *     参数: code - 控制码值(0x00/0x03)
  *
- * void notify_e_conncted(void)
+ * void bdo_notify_e_conncted(void)
  *     功能: 通知端点设备已连接/启用(供外部事件回调调用)
  *
- * void notify_e_disconncted(void)
+ * void bdo_notify_e_disconncted(void)
  *     功能: 通知端点设备已断连/禁用(供外部事件回调调用)
  *
  * ============================================================================
@@ -273,14 +270,18 @@ static inline void process_cb(ble_dev_op_t *op, u8 code) {
     if (op->cb) op->cb(code, op->cb_priv);
 }
 
-void notify_e_conncted()
+void bdo_notify_e_conncted(char sn[])
 {
+    if (!sn) return;
+    log_i("[BDO] Device %s connected", sn);
     os_sem_post(&g_e_connected_sem);
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
 
-void notify_e_disconncted()
+void bdo_notify_e_disconncted(char sn[])
 {
+    if (!sn) return;
+    log_i("[BDO] Device %s disconnectd", sn);
     os_sem_post(&g_e_disconnected_sem);
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
@@ -627,11 +628,13 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
     return my_blocking_queue_push_front(&g_ble_dev_op_queue, &op) == MYERROR_Success;
 }
 
-int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
+int bdo_turn_off(lwl_eend_dev_t *dev)
 {
     log_i("[MEASDIST]bdo_turn_off %s", dev->sn);
-    memcpy(broadcast_code, &dev->sn[10], sizeof(broadcast_code));
-    bdo_set_ctrl(0x00);
-    bdo_enable();
+    // broadcast_code 等于dev->sn的后6位则继续
+    if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
+        bdo_set_ctrl(0x00);
+        bdo_enable();
+    }
     return 1;
 }

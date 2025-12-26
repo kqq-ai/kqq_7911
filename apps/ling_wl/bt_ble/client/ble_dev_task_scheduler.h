@@ -69,7 +69,11 @@ void bdo_disable();
 void bdo_enable();
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv);
 int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev_op_cb_func_t cb, void *priv);
-int bdo_turn_off(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv);
+int bdo_turn_off(lwl_eend_dev_t *dev);
+
+void bdo_notify_e_conncted(char sn[]);
+
+void bdo_notify_e_disconncted(char sn[]);
 
 void ble_dev_task_scheduler_init();
 
