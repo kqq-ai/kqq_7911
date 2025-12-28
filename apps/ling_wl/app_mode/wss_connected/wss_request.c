@@ -133,6 +133,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
             send_message = ORMET_SWITCH_SUCCESS;
+            log_i("[wss_request]send_message = %d", send_message);
         } else {
             turn_off_Pi();
         }

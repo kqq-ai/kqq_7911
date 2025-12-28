@@ -79,7 +79,6 @@ void app_wss_connected_mode(void)
             dump_all_eend_info();
             g_heat_timer = timer_get_ms();
         }
-        if (lwl_app_mode_playing()) continue;
         // 应用代码
         if (wss_application_loop()) {
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {

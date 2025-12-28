@@ -114,6 +114,14 @@ static int net_connecting_init(void)
     key_press_time_ms = 0;
     ble_simple_server_init();
 
+    
+    while (lwl_app_mode_playing()) {
+        msleep(10);
+        if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == wifi_get_sta_connect_state()) {
+            break;
+        }
+    }
+
     return 0;
 }
 
@@ -169,7 +177,6 @@ void app_net_connecting_loop()
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
     }
-    if (lwl_app_mode_playing()) return;
 
     /* 网络连接失败处理 */
     bool is_connection_failed = (
