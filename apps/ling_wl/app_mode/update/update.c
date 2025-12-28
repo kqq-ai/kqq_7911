@@ -17,31 +17,11 @@ static void set_led_OTA_40(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 
 static void set_led_OTA_70(void)       { set_rgb_color(COLOR_GREEN); } /* 控制 led : 正在升级 绿色 */
 static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
-//=================================================================================================
-// LWL event callback
-//=================================================================================================
-static void update_event_handler_cb(lwl_event_t *e)
-{
-    static int en = 1;
-    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-
-    switch (e->event_type) {
-    case LWL_EVENT_TYPE_TOUCH_KEY:
-        // play 提示音
-        break;
-    case LWL_EVENT_TYPE_KEY:
-        break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        // TODO STOP THE OTA
-        break;
-    }
-}
 static int update_init(void)
 {
     init_time = timer_get_ms();
     g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
-    lwl_event_handler_add(update_event_handler_cb);
     set_led_OTA_on();
     led_color = 0;
     play_system_music("OtaInUpdate.mp3");
@@ -56,7 +36,6 @@ static int update_init(void)
 static int update_unint(void)
 {
     system_reset(); //restart
-    lwl_event_handler_remove(update_event_handler_cb);
     return 0;
 }
 void update_loop()

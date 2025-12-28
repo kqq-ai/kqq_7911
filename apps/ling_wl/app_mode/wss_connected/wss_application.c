@@ -24,6 +24,8 @@ music_player *player;
 #define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 触发超时，5分钟内无移动则关机
 #define DEV_CALL_TIMEOUT_MS     (3 * 1000)       // 等待后端发送tts_bind，超过3s则回到靠近触发
 
+#define INPUT_EVENT_QUEUE_SIZE  32
+
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
 
@@ -46,6 +48,59 @@ typedef enum {
 } AppTaskStepState;
 
 AppTaskStepState g_device_state = APP_IDLE;
+
+/* 输入事件队列 */
+typedef struct {
+    LWL_EVENT_TYPE event_type;
+    union {
+        struct {
+            bool press_down;
+        } key_event;
+        struct {
+            bool is_press_down;
+        } touch_key_event;
+    } data;
+} input_event_t;
+
+static input_event_t g_event_queue[INPUT_EVENT_QUEUE_SIZE];
+static int g_event_queue_head = 0;
+static int g_event_queue_tail = 0;
+
+//=================================================================================================
+// 事件队列操作
+//=================================================================================================
+static bool input_event_queue_is_empty(void)
+{
+    return g_event_queue_head == g_event_queue_tail;
+}
+
+static bool input_event_queue_is_full(void)
+{
+    return (g_event_queue_tail + 1) % INPUT_EVENT_QUEUE_SIZE == g_event_queue_head;
+}
+
+static bool input_event_queue_push(const input_event_t *event)
+{
+    if (input_event_queue_is_full()) {
+        log_w("[wss_application]Event queue is full, drop event %d", event->event_type);
+        return false;
+    }
+    
+    g_event_queue[g_event_queue_tail] = *event;
+    g_event_queue_tail = (g_event_queue_tail + 1) % INPUT_EVENT_QUEUE_SIZE;
+    return true;
+}
+
+static bool input_event_queue_pop(input_event_t *event)
+{
+    if (input_event_queue_is_empty()) {
+        return false;
+    }
+    
+    *event = g_event_queue[g_event_queue_head];
+    g_event_queue_head = (g_event_queue_head + 1) % INPUT_EVENT_QUEUE_SIZE;
+    return true;
+}
 
 //=================================================================================================
 // 联网有效工作状态维护
@@ -108,8 +163,39 @@ void wss_application_start_mic()
 // 按键相关
 //=================================================================================================
 
-// 设置退出标志
-static void wss_application_touch_key(bool press_down)
+//=================================================================================================
+// 按键事件处理函数
+//=================================================================================================
+static void wss_handle_key_event(void)
+{
+    log_mqtt("👆👆👆 电源键短按 此时multi_play_mode=%d", multi_play_mode);
+    if (wss_check_exit()) {
+        g_power_key_retry = true;
+    } else {
+        multi_play_mode = !multi_play_mode;
+        g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
+        if (!wss_request_is_playing()) {
+            if (multi_play_mode) {
+                play_prompt_sound("1to2.mp3");
+                wss_request_send_event_target(ORMET_PLAY_NEXT);
+                log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
+                g_device_state = APP_WAIT;
+            } else {
+                play_prompt_sound("1to1.mp3");
+                if (wss_device_call()) {
+                    log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
+                    g_device_state = APP_WAIT;
+                } else {
+                    log_i("[wss_application]STATE: MODE SWITCH no device call -> APP_IDLE");
+                    g_device_state = APP_IDLE;
+                }
+            }
+        }
+    }
+}
+
+// 处理触摸按键事件（按下/释放）
+static void wss_handle_touch_key_event(bool press_down)
 {
 #if TOUCH_KEY_AVAILABLE == 0
     return;
@@ -149,58 +235,47 @@ static void wss_application_touch_key(bool press_down)
     os_mutex_post(&g_wss_app_mutex);
 }
 
+static void wss_handle_touch_key_press(void)
+{
+    log_mqtt("👆👆 触摸键按下");
+    g_on_touch_key = true;
+    wss_handle_touch_key_event(true);
+    wss_application_vailed();
+}
+
+static void wss_handle_touch_key_release(void)
+{
+    log_mqtt("👇👇 触摸键释放");
+    wss_handle_touch_key_event(false);
+    g_on_touch_key = false;
+    wss_application_vailed();
+}
+
+// 事件回调：仅记录事件到队列，避免在回调中调用加锁函数
 static void input_event_handler_cb(lwl_event_t *e)
 {
-    static int en = 1;
-    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-
+    input_event_t event = {0};
+    
     switch (e->event_type) {
     case LWL_EVENT_TYPE_KEY:
-        log_mqtt("👆👆👆 电源键短按 此时multi_play_mode=%d", multi_play_mode);
-        if (wss_check_exit()) {
-            g_power_key_retry = true;
-        } else {
-            multi_play_mode = !multi_play_mode;
-            g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-            if (!wss_request_is_playing()) {
-                if (multi_play_mode) {
-                    play_prompt_sound("1to2.mp3");
-                    wss_request_send_event_target(ORMET_PLAY_NEXT);
-                    log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
-                    g_device_state = APP_WAIT;
-                } else {
-                    play_prompt_sound("1to1.mp3");
-                    if (wss_device_call()) {
-                        log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
-                        g_device_state = APP_WAIT;
-                    } else {
-                        log_i("[wss_application]STATE: MODE SWITCH no device call -> APP_IDLE");
-                        g_device_state = APP_IDLE;
-                    }
-                }
-            }
-        }
+        event.event_type = LWL_EVENT_TYPE_KEY;
+        input_event_queue_push(&event);
         break;
+        
     case LWL_EVENT_TYPE_TOUCH_KEY:
-        if (e->touch_key_cmd.touch_key_event_type == 0) {
-            log_mqtt("👆👆 触摸键按下");
-            g_on_touch_key = true;
-            wss_application_touch_key(true);
-        } else {
-            log_mqtt("👇👇 触摸键释放");
-            wss_application_touch_key(false);
-            g_on_touch_key = false;
-        }
-        wss_application_vailed();
+        event.event_type = LWL_EVENT_TYPE_TOUCH_KEY;
+        event.data.touch_key_event.is_press_down = (e->touch_key_cmd.touch_key_event_type == 0);
+        input_event_queue_push(&event);
         break;
-    case LWL_EVENT_TYPE_GSENSOR_IDLE:
-        // g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
-        break;
+        
     case LWL_EVENT_TYPE_LOW_BATTERY:
-        u16 voltage = get_vbat_level();
+        int voltage = get_vbat_level();
         if (voltage < LOW_BATT_VERY_SHUTDOWN) {
             lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         }
+        break;
+        
+    default:
         break;
     }
 }
@@ -368,6 +443,10 @@ void wss_application_uninit()
     os_mutex_pend(&g_wss_app_mutex, 0);
     g_mic_on = false;
     multi_play_mode = false;
+    
+    /* 清空事件队列 */
+    g_event_queue_head = 0;
+    g_event_queue_tail = 0;
 
     wss_request_uninit();
     wss_audio_uninit();
@@ -390,18 +469,45 @@ void wss_application_reset()
 
     g_mic_on = true;
     multi_play_mode = false;
+    
+    /* 清空事件队列 */
+    g_event_queue_head = 0;
+    g_event_queue_tail = 0;
 
     /* 重置 */
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
-
-    /* 注册lwl事件处理回调 */
-    lwl_event_handler_add(input_event_handler_cb);
 }
 
 bool wss_application_loop()
 {
     g_curr_time = timer_get_ms();
+
+    // 处理队列中的输入事件
+    input_event_t event;
+    while (input_event_queue_pop(&event)) {
+        os_mutex_pend(&g_wss_app_mutex, 0);
+        
+        switch (event.event_type) {
+        case LWL_EVENT_TYPE_KEY:
+            wss_handle_key_event();
+            break;
+            
+        case LWL_EVENT_TYPE_TOUCH_KEY:
+            if (event.data.touch_key_event.is_press_down) {
+                wss_handle_touch_key_press();
+            } else {
+                wss_handle_touch_key_release();
+            }
+            break;
+            
+        default:
+            break;
+        }
+        
+        os_mutex_post(&g_wss_app_mutex);
+    }
+
     if (wss_check_exit()) {
         if (wss_request_is_busy()) {
             // log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",

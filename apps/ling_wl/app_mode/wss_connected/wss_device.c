@@ -102,7 +102,6 @@
  * app_cookie.h
  *   接口：
  *     - add_target_sn(char* sn) - 将设备SN加入目标监控列表
- *     - remove_target_sn(char* sn) - 将设备SN从监控列表移除
  *     - clear_target_sn_set() - 清空目标SN集合
  *     - find_eend_dev_by_sn(char* sn) - 根据SN查找E端设备结构体指针
  *   功能：设备SN和E端设备的查询/管理
@@ -237,7 +236,6 @@ static void add_edev(lwl_eend_dev_t *pdev)
     edev_set[edev_set_count].edev = pdev;
     edev_set_count++;
     
-    add_target_sn(pdev->sn);
     log_i("[add_edev] Add new sn=%s dist=%.2f cnt=%d", pdev->sn, pdev->distance_info.distance, edev_set_count);
 }
 
@@ -265,8 +263,6 @@ static void remove_edev(lwl_eend_dev_t *pdev)
             edev_set[i] = edev_set[edev_set_count - 1];
             edev_set[edev_set_count - 1].edev = NULL;
             edev_set_count--;
-            
-            remove_target_sn(pdev->sn);
             return;
         }
     }
@@ -301,7 +297,6 @@ static void refresh_and_clean_edev_set(void)
                 edev_last = NULL;
             }
             
-            remove_target_sn(edev_set[i].sn);
             edev_set[i] = edev_set[edev_set_count - 1];
             edev_set[edev_set_count - 1].edev = NULL;
             edev_set_count--;
@@ -457,7 +452,6 @@ void wss_device_init()
     clear_edev_set();
     log_i("[wss_device_init] Clear edev_set");
 
-    clear_target_sn_set();
     log_i("[wss_device_init] Clear target_sn_set");
 
     ble_simple_client_module_enable(1);
@@ -485,7 +479,6 @@ void wss_device_uninit()
     ble_simple_client_module_enable(0);
     log_i("[wss_device_uninit] Disable BLE module");
 
-    clear_target_sn_set();
     log_i("[wss_device_uninit] Clear target_sn_set");
 
     clear_edev_set();

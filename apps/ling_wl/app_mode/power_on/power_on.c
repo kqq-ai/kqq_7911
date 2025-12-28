@@ -47,22 +47,6 @@ bool has_saved_wifi()
 // TODO
     return true;
 }
-//=================================================================================================
-// LWL event callback
-//=================================================================================================
-static void power_on_input_event_handler_cb(lwl_event_t *e)
-{
-    static int en = 1;
-    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-
-    switch (e->event_type) {
-    case LWL_EVENT_TYPE_TOUCH_KEY:
-        // play 提示音
-        break;
-    case LWL_EVENT_TYPE_KEY:
-        break;
-    }
-}
 
 static int power_on_init(void)
 {
@@ -80,14 +64,11 @@ static int power_on_init(void)
     if (voltage > LOW_BATT_VOLT) {
         play_system_music("poweron.mp3");
     }
-    /* 注册lwl事件处理回调 */
-    lwl_event_handler_add(power_on_input_event_handler_cb);
     return 0;
 }
 
 static int power_on_unint(void)
 {
-    lwl_event_handler_remove(power_on_input_event_handler_cb);
     return 0;
 }
 
