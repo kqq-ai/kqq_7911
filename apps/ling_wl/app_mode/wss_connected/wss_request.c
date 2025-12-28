@@ -259,6 +259,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         if (pkg->error.err_code == 1001) {
             g_mode_script = false;
             play_prompt_sound("script_err.mp3");
+            wss_handle_key_event();
         }
         break;
     case OR_MESSAGE_TEXT:
@@ -395,8 +396,6 @@ bool wss_request_loop()
                 wss_ble_audio_start();
             }
             last_event = 0;
-        } else if (last_message_type == OAST_TTS && last_event == OASE_END){
-            wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
         }
         if (!is_audio_playing()) {
             if ((g_curr_time & 7) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
@@ -406,6 +405,9 @@ bool wss_request_loop()
             }
         } else {
             g_wss_last_time = g_curr_time;
+            if (last_message_type == OAST_TTS && last_event == OASE_END){
+                wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
+            }
         }
         break;
 

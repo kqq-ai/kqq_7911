@@ -167,7 +167,7 @@ void wss_application_start_mic()
 //=================================================================================================
 // 按键事件处理函数
 //=================================================================================================
-static void wss_handle_key_event(void)
+void wss_handle_key_event(void)
 {
     log_mqtt("👆👆👆 电源键短按 此时multi_play_mode=%d", multi_play_mode);
     if (g_exit) {

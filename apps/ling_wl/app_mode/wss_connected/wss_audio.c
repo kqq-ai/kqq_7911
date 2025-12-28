@@ -50,7 +50,7 @@ void set_speaker() {
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
-    bdo_enable();
+    // bdo_enable();
     os_mutex_post(&g_audio_mutex);
 }
 

@@ -371,6 +371,7 @@ void wss_asr_start() {
 void wss_asr_stop() {
     os_mutex_pend(&g_mic_mutex, 0);
     g_recording = false;
+    set_led_vad_off();
     os_mutex_post(&g_mic_mutex);
 }
 
