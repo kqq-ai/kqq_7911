@@ -10,6 +10,7 @@
 #define MOVE_TIMEOUT_MS 120000 // 2 minutes
 static u32 init_time = 0;
 int led_color = 0;
+int progress = 0;
 
 static void set_led_OTA_on(void)       { set_rgb_color(COLOR_RED); } /* 控制 led : 正在升级 红色 */
 static void set_led_OTA_10(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
@@ -24,12 +25,8 @@ static int update_init(void)
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     set_led_OTA_on();
     led_color = 0;
+    progress = -1;
     play_system_music("OtaInUpdate.mp3");
-    
-    while (lwl_app_mode_playing()) {
-        msleep(10);
-    }
-    do_OTA();
     return 0;
 }
 
@@ -48,7 +45,13 @@ void update_loop()
         play_system_music("NetCfgFail.mp3");
         return;
     }
-    int progress = get_download_progress();
+    if (timer_get_ms() - init_time < 3000 || lwl_app_mode_playing()) {
+        return;
+    }
+    if (progress == -1) {
+        do_OTA();
+    }
+    progress = get_download_progress();
     log_i("update_loop downloading >> %d%%\n", progress);
     if (progress > 10 && progress < 40 && led_color < 1) {
         set_led_OTA_10();// OTA IN PROGRESS
