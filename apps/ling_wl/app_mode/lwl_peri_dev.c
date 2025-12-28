@@ -9,6 +9,7 @@
 
 #include "lwl_peri_dev.h"
 #include "app_mode/lwl_app_core.h"
+#include "asm/power_interface.h"
 
 static void set_led_touch_on(void)          { set_rgb_ON(COLOR_PURPLE,10);  }
 static void set_led_touch_off(void)         { set_rgb_OFF(COLOR_PURPLE,10); }
@@ -240,9 +241,12 @@ static void key_scan_loop(uint32_t current_time_ms)
                     // e.key_cmd.key_event_type = KEY_EVENT_TYPE_LONG_PRESS;
                     e.event_type = LWL_EVENT_TYPE_SHUTDOWN;
                     lwl_event_notify(&e);
-                    // on_key_long_press();
                     g_key_action_start = false;     // 结束
                 }
+            }
+
+            if (g_curr_time - g_key_press_start_time > BTN_PRPESS_TIME * 3) {
+                on_key_long_press();
             }
         } else {    // if (btnCurrState == 1)
             if (g_key_action_start) {
