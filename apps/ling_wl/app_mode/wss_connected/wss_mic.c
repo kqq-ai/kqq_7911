@@ -408,6 +408,7 @@ void wss_mic_uninit()
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
 
     wss_mic_stop(); // 停止录音
+    wss_asr_stop();
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);

@@ -34,6 +34,7 @@ static bool multi_play_mode = false;
 
 static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
+static bool g_exit = false;
 
 u32 last_E_found_time = 0;
 u32 last_move_time = 0;
@@ -169,7 +170,7 @@ void wss_application_start_mic()
 static void wss_handle_key_event(void)
 {
     log_mqtt("👆👆👆 电源键短按 此时multi_play_mode=%d", multi_play_mode);
-    if (wss_check_exit()) {
+    if (g_exit) {
         g_power_key_retry = true;
     } else {
         multi_play_mode = !multi_play_mode;
@@ -412,8 +413,10 @@ void wss_application_init()
     wss_device_init();//设备初始化，包含设备队列等
     wss_mic_stop(); // 停止录音
 
+    g_exit = false;
     g_mic_on = true;
     multi_play_mode = false;
+    g_device_state = APP_IDLE;
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
         pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
@@ -440,6 +443,7 @@ void wss_application_uninit()
     lwl_event_handler_remove(input_event_handler_cb);
 
     os_mutex_pend(&g_wss_app_mutex, 0);
+    g_exit = false;
     g_mic_on = false;
     multi_play_mode = false;
     
@@ -460,14 +464,21 @@ void wss_application_reset()
 {
     log_i("[wss_application]Reset WSS application\n");
     log_mqtt("🤖🤖🤖 重置WSS应用");
+    os_mutex_pend(&g_wss_app_mutex, 0);
     g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
+
+    
+    wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
+    wss_mic_init();
     wss_mic_stop(); // 停止录音
 
+    g_exit = false;
     g_mic_on = true;
     multi_play_mode = false;
+    g_device_state = APP_IDLE;
     
     /* 清空事件队列 */
     g_event_queue_head = 0;
@@ -476,6 +487,7 @@ void wss_application_reset()
     /* 重置 */
     g_curr_time = timer_get_ms();
     last_req_time = g_curr_time - DEV_CALL_TIMEOUT_MS; // 初始化为3秒前，避免刚启动就超时
+    os_mutex_post(&g_wss_app_mutex);
 }
 
 bool wss_application_loop()
@@ -508,15 +520,14 @@ bool wss_application_loop()
     }
 
     if (wss_check_exit()) {
-        if (wss_request_is_busy()) {
-            // log_i("[wss_application]Exception exit detected (reason=%s), stopping busy request",
-            // wss_get_last_disconnect_reason());
-            wss_request_pause();
-            wss_mic_stop();
-        }
-        if (g_device_state != APP_IDLE) {
+        if (g_exit == false) {
             log_i("[wss_application]STATE: wss_check_exit -> APP_IDLE");
             g_device_state = APP_IDLE;
+            wss_request_uninit();
+            wss_audio_uninit();
+            wss_mic_uninit();
+            wss_device_uninit();
+            g_exit = true;
         }
         return true;
     }
