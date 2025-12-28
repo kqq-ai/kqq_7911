@@ -72,7 +72,6 @@ static int net_connected_init(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     lwl_event_handler_add(net_connected_event_handler_cb);
     set_led_connected();
-    context->websockets_info = NULL;
     // OTA check version
 
     msleep(200);

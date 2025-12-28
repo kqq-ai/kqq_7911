@@ -53,6 +53,7 @@ static void init_app_context(lwl_app_context_t* context)
     log_i_buf(s_app_context->mac, 6);
 
     g_event_scheduler_exit = 0;
+    context->websockets_info = NULL;
 
     s_app_context->dev_map = map_create();
     os_mutex_create(&s_app_context->dev_map_mutex);

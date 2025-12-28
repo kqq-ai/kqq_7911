@@ -96,15 +96,20 @@ bool wss_check_exit()
         return true;
     }
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    struct websocket_struct *websockets_info = context->websockets_info;
-    if (!websockets_info) {
-        wss_exception_exit();
-        log_i("websockets_info is NULL");
-    } else {
-        if (websockets_info->recv_thread_id == 0) {
+    if (context->websockets_info) {
+        wss_send_pong(context->websockets_info); // 如果收到Ping 回复Pong
+        // TODO 检查收到的wss消息的时效性，超过10s发送ping
+        // if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
+        //     send_ping();
+        //     g_wss_last_time = g_curr_time;
+        // }
+        if (context->websockets_info->recv_thread_id == 0) {
             wss_exception_exit();
             log_i("websocket_client_heart have exited!!!");
         }
+    } else {
+        wss_exception_exit();
+        log_i("websockets_info is NULL");
     }
     return g_exception_exit;
 }
