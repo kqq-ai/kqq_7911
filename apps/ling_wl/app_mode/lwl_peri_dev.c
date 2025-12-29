@@ -44,6 +44,9 @@ static uint32_t charge_timer = 0;
 static void *pwm_dev_handle = NULL;
 static void *pwm_dev_handle_g = NULL;
 
+
+uint8_t g_disable_turn_off = 1;
+
 //==KEY SCAN=========================================================================================
 /**
  * @brief 清除按键扫描状态
@@ -213,6 +216,7 @@ static void key_scan_loop(uint32_t current_time_ms)
             } else {
                 // on_key_up();
                 set_led_normal_key_off();
+                g_disable_turn_off = 0;
             }  
         }
         
@@ -246,7 +250,7 @@ static void key_scan_loop(uint32_t current_time_ms)
             }
 
             if (g_curr_time - g_key_press_start_time > BTN_PRPESS_TIME * 3) {
-                on_key_long_press();
+                if (!g_disable_turn_off) on_key_long_press();
             }
         } else {    // if (btnCurrState == 1)
             if (g_key_action_start) {
@@ -332,6 +336,7 @@ static void rst_key_loop(uint32_t current_time_ms)
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_RST_KEY;
             e.key_cmd.key_event_type = 0; // RST key pressed
+            if (g_disable_turn_off==1) g_disable_turn_off = 2;//短按进入设备管理或7016OTA，只适用于开机8s内阶段
             lwl_event_notify(&e);
         } else {
             set_led_rst_key_off();
