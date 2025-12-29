@@ -398,7 +398,7 @@ bool wss_request_loop()
             last_event = 0;
         }
         if (!is_audio_playing()) {
-            if ((g_curr_time & 7) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
+            if ((g_curr_time & 63) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
             if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
                 wss_request_stop();
                 play_prompt_sound("SwFailed.mp3");

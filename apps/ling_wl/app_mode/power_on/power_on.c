@@ -57,6 +57,19 @@ static int power_on_init(void)
 
     u16 voltage = get_vbat_level();
     c_7016_power_on = 0;
+
+    
+    if(system_reset_reason_get() == 0x80) { // SYS_RST_LONG_PRESS,长按复位清除wifi并再次复位
+        log_i("Long press reset detected, clear wifi and  Reset.\n");
+        // Reset WiFi SSID
+        app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
+        //增加音效提示
+        play_system_music("reset_wifi.mp3");
+        lwl_app_mode_play_loop();
+        mdelay(3000);
+        system_reset(); //restart
+        return 0;
+    }
     
     int charge_in = gpio_read(CHARGE_IN_IO);
     int charge_full = gpio_read(CHARGE_FULL_IO);
@@ -93,8 +106,8 @@ void power_on_loop()
             set_led_ota_off();
         }
         g_sensor_reset_alive_timer();
-        return;
     }
+    if (btnCurrState == 0) return;
     // 7016在6s内已经开机（亮紫灯），但未到8s进入device check模式，此时保持紫灯，进行7016C的OTA
     if (c_7016_power_on) {
         log_i("RELEASE OTA7016 KEY TO ENTER DEVICE CHECK MODE");

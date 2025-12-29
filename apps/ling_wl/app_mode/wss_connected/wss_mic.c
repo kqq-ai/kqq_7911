@@ -410,6 +410,9 @@ void wss_mic_uninit()
 
     wss_mic_stop(); // 停止录音
     wss_asr_stop();
+    
+    g_recording_upload = false;
+    g_recording = false;
 
     my_blocking_queue_destroy_static(&g_asr_data_queue);
     my_ring_buffer_destroy_static(&g_asr_ringbuffer);

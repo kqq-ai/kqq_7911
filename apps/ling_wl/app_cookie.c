@@ -224,15 +224,6 @@ static void app_cookie_main(void)
     /* 创建网络&提示音解码播放器 */
     music_player_init(&g_music_player);                     // 初始化音乐播放器，支持本地/网络音频
     context->music_player = &g_music_player;                // 记录播放器指针以便模式和提示音调用
-    if(system_reset_reason_get() == 0x80) { // SYS_RST_LONG_PRESS,长按复位清除wifi并再次复位
-        log_i("Long press reset detected, clear wifi and  Reset.\n");
-        // Reset WiFi SSID
-        app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
-        //增加音效提示
-        simple_play_prompt("mnt/sdfile/res/audlogo/reset_wifi.mp3");
-        mdelay(3000);
-        system_reset(); //restart
-    }
 
     wifi_set_pwr(6);                                     // 设置 WiFi 发射功率为最大
 
