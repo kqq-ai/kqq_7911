@@ -170,9 +170,9 @@ struct websocket_struct *wss_server_connect(char *url)
 {
     int err;
     const char *origin_str = "http://localhost";
-    
-    if (os_mutex_valid(&wss_mutex_bin)) return NULL;
-    os_mutex_create(&wss_mutex_bin);
+    if (!os_mutex_valid(&wss_mutex_bin)) {
+        os_mutex_create(&wss_mutex_bin);
+    }
     os_mutex_pend(&wss_mutex_bin, 0);
     
     log_i("[wss_client]connecting to %s", url);
@@ -224,7 +224,6 @@ exit_ws:
     free(websockets_info);
     g_wss_info = NULL;
     os_mutex_post(&wss_mutex_bin); 
-    os_mutex_del(&wss_mutex_bin, 0);
 
     return NULL;
 }
@@ -241,5 +240,4 @@ void wss_server_disconnect(struct websocket_struct *websockets_info)
     free(websockets_info);
     g_wss_info = NULL;
     os_mutex_post(&wss_mutex_bin);
-    os_mutex_del(&wss_mutex_bin, 0);
 }

@@ -95,6 +95,7 @@ bool wss_check_exit()
     if (g_exception_exit) {
         return true;
     }
+    os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     if (context->websockets_info) {
         wss_send_pong(context->websockets_info); // 如果收到Ping 回复Pong
@@ -111,6 +112,7 @@ bool wss_check_exit()
         wss_exception_exit();
         log_i("websockets_info is NULL");
     }
+    os_mutex_post(&g_wss_mutex);
     return g_exception_exit;
 }
 
