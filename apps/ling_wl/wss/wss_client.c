@@ -230,12 +230,16 @@ exit_ws:
 
 void wss_server_disconnect(struct websocket_struct *websockets_info)
 {
+    if (!websockets_info) return;
     os_mutex_pend(&wss_mutex_bin, 0);
     log_i("[wss_client]server_disconnect threads(ping=%d recv=%d)",
           websockets_info ? websockets_info->ping_thread_id : -1,
           websockets_info ? websockets_info->recv_thread_id : -1);
     // thread_kill(&websockets_info->ping_thread_id, KILL_REQ); // 注释掉
-    thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
+
+    if (websockets_info->recv_thread_id) {
+        thread_kill(&websockets_info->recv_thread_id, KILL_REQ);
+    }
     websockets_client_exit(websockets_info);
     free(websockets_info);
     g_wss_info = NULL;

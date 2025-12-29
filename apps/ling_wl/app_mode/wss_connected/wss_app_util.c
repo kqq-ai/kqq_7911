@@ -88,6 +88,12 @@ int is_target_sn_in_set(const char* sn) {
 void wss_exception_exit()
 {
     g_exception_exit = true;
+        
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
+    if (context->websockets_info != NULL) {
+        wss_server_disconnect(context->websockets_info);
+        context->websockets_info = NULL;
+    }
 }
 
 bool wss_check_exit()
@@ -146,14 +152,12 @@ bool wss_connect() {
 
 void wss_disconnect() {
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context->websockets_info != NULL) {
-        wss_server_disconnect(context->websockets_info);
-        context->websockets_info = NULL;
+    
+    wss_exception_exit();
+    if (wss_url) {
         free(wss_url);
         wss_url = NULL;
     }
-    g_exception_exit = true;
     log_mqtt_stop();
     os_mutex_post(&g_wss_mutex);
 }
@@ -163,12 +167,7 @@ bool wss_reconnect() {
         os_mutex_create(&g_wss_mutex);
     }
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context->websockets_info != NULL) {
-        log_i("websockets disconnect by wss_reconnect");
-        wss_server_disconnect(context->websockets_info);
-        context->websockets_info = NULL;
-    }
+    wss_exception_exit();
     if (wss_url == NULL) {
         char* wss_url = get_wss_connection_url();
     } else {
@@ -180,6 +179,7 @@ bool wss_reconnect() {
         os_mutex_post(&g_wss_mutex);
         return false;
     }
+    lwl_app_context_t *context = lwl_app_core_context_get_instance();
     context->websockets_info = wss_server_connect(wss_url);
     if (context->websockets_info == NULL) {
         os_mutex_post(&g_wss_mutex);
@@ -196,7 +196,6 @@ int send_audio_status(int type, int event)
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL) {
-        wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
@@ -207,11 +206,6 @@ int send_audio_status(int type, int event)
         log_e("Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
-        
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
         wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -227,7 +221,6 @@ int send_audio_format(int type)
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL) {
-        wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
@@ -238,11 +231,6 @@ int send_audio_format(int type)
         log_e("Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
-        
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
         wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -258,7 +246,6 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL) {
-        wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
@@ -273,11 +260,6 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         log_e("Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
-
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
         wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -292,18 +274,12 @@ int send_bin_data(uint8_t *data, uint32_t len)
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL) {
-        wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
     if (FALSE == wss_send_bin(ctx->websockets_info, data, len)) {
         log_e("Error %s %d.", __FILE__, __LINE__);
-        
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
         wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -320,7 +296,6 @@ int send_ping()
     os_mutex_pend(&g_wss_mutex, 0);
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
     if (ctx->websockets_info == NULL) {
-        wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
@@ -340,11 +315,6 @@ int send_ping()
         log_e("Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
-
-        if (ctx->websockets_info != NULL) {
-            wss_server_disconnect(ctx->websockets_info);
-            ctx->websockets_info = NULL;
-        }
         wss_exception_exit();
         os_mutex_post(&g_wss_mutex);
         return -1;
