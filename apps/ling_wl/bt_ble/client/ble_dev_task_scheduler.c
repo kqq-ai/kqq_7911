@@ -422,6 +422,16 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
+    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+    if (dev->adv_state == BDPAS_CONNECTED) {
+        os_sem_set(&g_e_disconnected_sem, 0);
+        if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
+            log_e("[BDO]Error dev busy! %d", op->turnon.scan_timeout);
+            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+            return;
+        }
+    }
     // lwl_peri_dev_7016_on(true);  // 开启 7016
     // log_i("[BDO]ble_dev_op_handler_turn_on lwl_peri_dev_7016_on true");
     if (dev->adv_state == BDPAS_OFF) {
@@ -471,7 +481,6 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     log_i("[BDO]Waiting adv state change...");
     process_cb(op, BDOCode_Success);
     msleep(300);
-    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
     uart_send_set_ctrl(0x01);
     uart_send_switch_audio_bc(broadcast_code, 0x01);
 
