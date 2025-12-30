@@ -32,8 +32,6 @@
 #include "gpio.h"
 #include "LED/LED.h"
 
-static void set_led_connecting_on(void)     { set_rgb_ON(COLOR_CYAN, 5); }
-static void set_led_connecting_off(void)    { set_rgb_OFF(COLOR_CYAN,5); }
 bool play_prompt_flag = 0;
 
 static int wss_connected_init(void)
@@ -51,7 +49,6 @@ static int wss_connected_unint(void)
     log_i("[wss_connected]leave mode");
     wss_application_uninit();//clear all pdev
     if (play_prompt_flag == 0) {
-        set_led_connecting_off();
         play_prompt_flag = 1;
     }
 
@@ -92,13 +89,11 @@ void app_wss_connected_mode(void)
                     log_i("[wss_connected]reconnect failed, fallback to NET_CONNECTED");
                     lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
                 } else {
-                    set_led_connecting_off();
                     wss_application_reset();
                     play_prompt_flag = 1;
                 }
             } else if (play_prompt_flag) {
                 log_i("[wss_connected]❌❌❌ play disconnect prompt because application loop requested exit");
-                set_led_connecting_on();// WSS ERROR
                 play_prompt_flag = 0;
                 play_system_music("NetDisc.mp3");
             }
