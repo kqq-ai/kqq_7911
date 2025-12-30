@@ -4,8 +4,12 @@
 #include "app_lfs.h"
 #include "lwip.h"
 #include "le/att.h"
-#include "stdlib.h" // 包含 qsort 所需的头文件
+#include "stdlib.h" // 包含 qsort 和 abs 所需的头文件
 #include "syscfg/syscfg_id.h"
+#include "sys_time.h" // 用于 timer_get_ms()
+#include <stdint.h> // 用于 uint32_t
+#include <stdbool.h> // 用于 bool 类型
+
 
 /*-------------------------------------------------本文件的 变量及其 所有函数的定义-----------------------------------*/
 static OS_SEM g_disconnect_sem;                                                     // 断连函数(阻塞方式)所用到的sem
@@ -21,6 +25,87 @@ static WIFI_CMD_STATUES g_wifi_cmd_state = WIFI_CMD_DEFAULT;          // 当前�
 
 static struct wifi_scan_ssid_info g_all_wifi_info[STORE_WIFI_NUM_MAX] = {0};
 static int g_all_wifi_info_num = 0;
+
+/*-------------------------------------------------哈希表相关定义和函数-----------------------------------*/
+// 哈希表节点结构（链式哈希）
+typedef struct hash_node {
+    int index;  // 在 g_all_wifi_info 数组中的索引
+    struct hash_node *next;
+} hash_node_t;
+
+#define HASH_TABLE_SIZE 53  // 素数，接近50的2倍，减少冲突
+static hash_node_t *wifi_hash_table[HASH_TABLE_SIZE] = {0};
+static hash_node_t hash_nodes[STORE_WIFI_NUM_MAX];  // 节点池
+static int hash_nodes_used = 0;
+
+// 字符串哈希函数（djb2哈希算法）
+static uint32_t hash_ssid(const char *ssid)
+{
+    uint32_t hash = 5381;
+    const char *p = ssid;
+    while (*p) {
+        hash = ((hash << 5) + hash) + *p;  // hash * 33 + *p
+        p++;
+    }
+    return hash % HASH_TABLE_SIZE;
+}
+
+// 初始化哈希表
+static void init_wifi_hash_table(void)
+{
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        wifi_hash_table[i] = NULL;
+    }
+    hash_nodes_used = 0;
+}
+
+// 清理哈希表
+static void clear_wifi_hash_table(void)
+{
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        wifi_hash_table[i] = NULL;
+    }
+    hash_nodes_used = 0;
+}
+
+// 在哈希表中查找SSID，返回数组索引，未找到返回-1
+static int hash_table_find(const char *ssid)
+{
+    uint32_t hash_val = hash_ssid(ssid);
+    hash_node_t *node = wifi_hash_table[hash_val];
+    
+    while (node != NULL) {
+        if (strcmp(g_all_wifi_info[node->index].ssid, ssid) == 0) {
+            return node->index;
+        }
+        node = node->next;
+    }
+    return -1;
+}
+
+// 在哈希表中添加SSID索引
+static void hash_table_add(int index, const char *ssid)
+{
+    if (hash_nodes_used >= STORE_WIFI_NUM_MAX) {
+        printf("[blee] Warning: hash nodes pool exhausted\n");
+        return;
+    }
+    
+    uint32_t hash_val = hash_ssid(ssid);
+    hash_node_t *new_node = &hash_nodes[hash_nodes_used++];
+    new_node->index = index;
+    new_node->next = wifi_hash_table[hash_val];
+    wifi_hash_table[hash_val] = new_node;
+}
+
+// 重建哈希表（在排序后调用，因为索引可能变化）
+static void rebuild_wifi_hash_table(void)
+{
+    clear_wifi_hash_table();
+    for (int i = 0; i < g_all_wifi_info_num; i++) {
+        hash_table_add(i, g_all_wifi_info[i].ssid);
+    }
+}
 
 static struct netif_info g_netip_info = {0};
 static char *g_wifi_ip[WIFI_IP_LEN] = {0};
@@ -281,42 +366,109 @@ int store_wifi_scan_result(void *pri)
 {
     int ret = 0;
     struct wifi_scan_ssid_info *temp_all_wifi_info = NULL;
+    
+    // 记录更新前的WiFi数量，用于检测变化
+    int prev_count = g_all_wifi_info_num;
+    bool has_update = false;  // 标记是否有WiFi信息被更新（RSSI变化等）
+    bool has_new = false;     // 标记是否有新WiFi被添加
+    
+    printf("[blee] store_wifi_scan_result called, prev_count=%d\n", prev_count);
+    
+    // 如果哈希表为空（首次调用或清理后），初始化哈希表
+    // 如果 prev_count > 0 但哈希表未同步，也需要重建
+    if (prev_count == 0 || hash_nodes_used == 0) {
+        init_wifi_hash_table();
+        // 如果有已有数据，重建哈希表
+        if (prev_count > 0) {
+            rebuild_wifi_hash_table();
+        }
+    }
+    
     ret = get_wifi_scan_ssid_info(&temp_all_wifi_info);
+    printf("[blee] get_wifi_scan_ssid_info returned %d WiFi networks\n", ret);
 
     /*
         将temp_all_wifi_info 拷贝到g_all_wifi_info
-        并更新，如果temp_all_wifi_info有g_all_wifi_info没有的ssid，则添加到g_all_wifi_info
+        并使用哈希表快速查找，如果temp_all_wifi_info有g_all_wifi_info没有的ssid，则添加到g_all_wifi_info
     */
     for (int i = 0; i < ret; i++)
     {
-        bool found = false;
-        for (int j = 0; j < g_all_wifi_info_num; j++)
+        // 使用哈希表查找SSID（O(1)平均复杂度）
+        int found_index = hash_table_find(temp_all_wifi_info[i].ssid);
+        
+        if (found_index >= 0)
         {
-            if (strcmp(temp_all_wifi_info[i].ssid, g_all_wifi_info[j].ssid) == 0)
+            // SSID已存在，检查是否有变化（RSSI变化或信道变化）
+            int rssi_old = (int)g_all_wifi_info[found_index].rssi;
+            int rssi_new = (int)temp_all_wifi_info[i].rssi;
+            bool channel_changed = (temp_all_wifi_info[i].channel_number != g_all_wifi_info[found_index].channel_number);
+            
+            // 只要有RSSI变化或信道变化，就标记为更新
+            if (rssi_new != rssi_old || channel_changed)
             {
-                // 如果ssid已经存在，更新信息
-                memcpy(&g_all_wifi_info[j], &temp_all_wifi_info[i], sizeof(struct wifi_scan_ssid_info));
-                found = true;
-                break;
+                has_update = true;
+                printf("[blee] WiFi %s updated: rssi %d->%d, channel changed=%d\n", 
+                       temp_all_wifi_info[i].ssid, rssi_old, rssi_new, channel_changed ? 1 : 0);
             }
+            // 更新信息
+            memcpy(&g_all_wifi_info[found_index], &temp_all_wifi_info[i], sizeof(struct wifi_scan_ssid_info));
         }
-        if (!found)
+        else
         {
             // 如果ssid不存在且数组未满，添加到g_all_wifi_info
+            // 注意：不立即添加到哈希表，等排序后统一重建，避免索引变化问题
             if (g_all_wifi_info_num < STORE_WIFI_NUM_MAX)
             {
                 memcpy(&g_all_wifi_info[g_all_wifi_info_num], &temp_all_wifi_info[i], sizeof(struct wifi_scan_ssid_info));
                 g_all_wifi_info_num++; // 只增加新添加的SSID数量
+                has_new = true;
+                printf("[blee] New WiFi added: %s\n", temp_all_wifi_info[i].ssid);
             }
             else
             {
                 // 处理数组已满的情况
-                printf("Warning: g_all_wifi_info is full, cannot add new SSID: %s\n", temp_all_wifi_info[i].ssid);
+                printf("[blee] Warning: g_all_wifi_info is full, cannot add new SSID: %s\n", temp_all_wifi_info[i].ssid);
             }
         }
     }
     // 对 g_all_wifi_info 数组按照 RSSI 值进行排序
     qsort(g_all_wifi_info, g_all_wifi_info_num, sizeof(struct wifi_scan_ssid_info), compare_wifi_scan_ssid_info);
+    // 排序后重建哈希表（因为索引可能变化，包括新增项的索引）
+    rebuild_wifi_hash_table();
+    
+    // 检测是否有变化：数量变化或内容更新
+    bool has_changed = (prev_count != g_all_wifi_info_num) || has_update || has_new;
+    printf("[blee] After processing: prev_count=%d, curr_count=%d, has_update=%d, has_new=%d, has_changed=%d\n", 
+           prev_count, g_all_wifi_info_num, has_update, has_new, has_changed);
+    
+    // 如果列表有变化且正在扫描中，主动推送WiFi列表
+    if (has_changed)
+    {
+        // 检查是否在扫描状态（同时检查命令状态和扫描状态）
+        WIFI_CMD_STATUES cmd_status = get_wifi_cmd_status(NULL);
+        WIFI_SCAN_STATUES scan_status = get_wifi_scan_status(NULL);
+        printf("[blee] Checking cmd_status: %d (WIFI_CMD_SCANNING=%d), scan_status: %d (WIFI_SCAN_RUNNING=%d)\n", 
+               cmd_status, WIFI_CMD_SCANNING, scan_status, WIFI_SCAN_RUNNING);
+        
+        // 如果命令状态是扫描中，或者扫描状态是运行中，都发送通知
+        if (cmd_status == WIFI_CMD_SCANNING || scan_status == WIFI_SCAN_RUNNING)
+        {
+            extern int notify_app_wifi_list_update(void *pri);
+            int notify_ret = notify_app_wifi_list_update(NULL);
+            printf("[blee] WiFi list changed (prev:%d, curr:%d, update:%d, new:%d), notified app, notify_ret=%d\n", 
+                   prev_count, g_all_wifi_info_num, has_update, has_new, notify_ret);
+        }
+        else
+        {
+            printf("[blee] WiFi list changed but not in scanning state (cmd=%d, scan=%d), skip notification\n", 
+                   cmd_status, scan_status);
+        }
+    }
+    else
+    {
+        printf("[blee] WiFi list not changed, skip notification\n");
+    }
+    
     ret = g_all_wifi_info_num;
     return ret;
 }
@@ -326,7 +478,8 @@ int clean_wifi_scan_result(void *pri)
 {
     memset(g_all_wifi_info, 0, sizeof(g_all_wifi_info));
     g_all_wifi_info_num = 0;
-    printf("WiFi scan result cleared.\r\n"); /* 清除 计数器*/
+    clear_wifi_hash_table();  // 清理哈希表
+    printf("[blee] WiFi scan result cleared.\r\n"); /* 清除 计数器*/
     return 0;
 }
 
@@ -381,10 +534,6 @@ int wifi_manage_init(void *pri)
 
 /*-------------------------------------------------wifi 交给线程池相关的task start----------------------------------*/
 
-void wifi_scan_task(void *arg)
-{
-    wifi_scan_start();
-}
 void wifi_connect_task(void *arg)
 {
     wifi_connect_params_t *params = (wifi_connect_params_t *)arg;

@@ -33,4 +33,7 @@ int notify_app_wifi_ip_succ(void *pri);
 
 int notify_app_wifi_mqtt_succ(void *pri);
 
+int notify_app_wifi_list_update(void *pri);
+int notify_app_wifi_list_update_force(void *pri);  // 强制推送，跳过扫描状态检查（用于连接后立即推送）
+
 #endif

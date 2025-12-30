@@ -24,6 +24,10 @@
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_app_framework.h"
+#include "system/sys_time.h"
+#include "driver/device/ioctl_cmds.h"
+#include "driver/device/device.h"
+#include "generic/jiffies.h"
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
@@ -44,16 +48,11 @@ void register_wifi_connect_fail_func(wifi_connect_fail_cb callback, void *pri)
     }
 }
 
-int func_param = 0;
-wifi_scan_timeout_clallback func_ptr = NULL;
-
-void register_wifi_scan_func(wifi_scan_timeout_clallback callback, int timeout_s)
+/* 包装函数：将 notify_app_wifi_ip_succ 适配为线程池需要的函数签名 */
+static void notify_app_wifi_ip_succ_wrapper(void *pri)
 {
-    if (callback != NULL)
-    {
-        func_ptr = callback;
-        func_param = timeout_s;
-    }
+    extern int notify_app_wifi_ip_succ(void *pri);
+    notify_app_wifi_ip_succ(pri);
 }
 
 static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
@@ -164,11 +163,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_SCAN_COMPLETED:
         puts("|network_user_callback->WIFI_STA_SCAN_COMPLETED\n");
         store_wifi_scan_result(NULL);
-        // 处理cmd发过来的scan
-        if (func_ptr != NULL)
-        {
-            func_ptr(func_param);
-        }
         break;
 
     case WIFI_EVENT_STA_CONNECT_SUCC:
@@ -272,7 +266,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
         /* 通知 APP(小程序) 我已经获取到 IP */
-        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ, NULL))
+        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ_wrapper, NULL))
         {
             printf("Failed to add the notify_app_wifi_ip_succ task !\r\n");
         }

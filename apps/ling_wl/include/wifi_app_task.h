@@ -1,11 +1,6 @@
 #ifndef __WIFI_APP_TASK_H__
 #define __WIFI_APP_TASK_H__
 
-
-typedef void(*wifi_scan_timeout_clallback)(int);
-void register_wifi_scan_func(wifi_scan_timeout_clallback callback,int timeout_s);
-
-
 typedef void(*wifi_connect_succ_cb)(void *);
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback,void * pri);   //连接成功
 

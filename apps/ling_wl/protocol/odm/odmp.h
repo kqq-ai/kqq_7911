@@ -17,7 +17,6 @@ enum odmp_req_msg_event_type_e{
     ORMET_BUTTON_TRIGGER        = 31,
     // 播放状态
     ORMET_PLAY_STOP             = 50,
-    ORMET_PLAY_START            = 54,
     ORMET_PLAY_END              = 55,
     ORMET_PLAY_NEXT             = 56,
 };
@@ -32,6 +31,13 @@ enum odmp_audio_status_type_e{
 enum odmp_audio_status_event_e{
     OASE_START                  = 1,
     OASE_END                    = 2,
+};
+
+enum odmp_device_status_e {
+    DEVICE_STATUS_IDLE              = 0,  // 在线
+    DEVICE_STATUS_AUDIO_PLAYING     = 1,  // 正在播放...
+    DEVICE_STATUS_RECORDING         = 2,  // 正在录音...
+    DEVICE_STATUS_BLE_AUDIO_STOP    = 3,  // 播放结束
 };
 
 enum odmp_event_type_e {
@@ -137,6 +143,7 @@ char *odmp_req_message(const char **targets, int targets_num, const char *c_id, 
 char *odmp_audio_status(const char *c_id, int oast, int oase);
 
 char *odmp_set_audio_format(const char *c_id, int type);
+char *odmp_device_status(int status);
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk);
 void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);

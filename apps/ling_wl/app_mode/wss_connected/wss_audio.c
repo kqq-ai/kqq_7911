@@ -1,5 +1,6 @@
 #include "wss_audio.h"
 #include "wss_app_util.h"
+#include "protocol/odm/odmp.h"
 
 #include "bt_ble/client/ble_distance.h"
 #include "app_mode/lwl_app_core.h"
@@ -208,6 +209,7 @@ stream_write:
     if (g_audio_playing == false && app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
         g_audio_playing = true;
         log_i("[AUDIO]stream playing...");
+        send_device_status(DEVICE_STATUS_AUDIO_PLAYING); // 正在播放
     }
     os_mutex_post(&g_audio_mutex);
 
@@ -258,6 +260,7 @@ void wss_ble_audio_stop() {
         }
     }
     os_mutex_post(&g_audio_mutex);
+    send_device_status(DEVICE_STATUS_BLE_AUDIO_STOP);
 }
 
 // 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器

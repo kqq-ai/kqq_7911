@@ -173,7 +173,6 @@ typedef struct {
 } wifi_connect_params_t;
 
 
-void wifi_scan_task(void *arg);
 void wifi_connect_task(void *arg);
 void wifi_disconnect_task(void *arg);
 

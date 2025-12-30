@@ -278,22 +278,23 @@ static void upload_all_logs(void) {
             if (my_blocking_queue_push_front(&log_queue, temp) != MYERROR_Success) {
                 log_i("【MQTT】放回队列失败，日志丢失: %s\n", temp);
             }
-            uint32_t end_time = timer_get_ms();
+            int send_bytes = strlen(json_build_buf);
             // 发送当前批次
             int result = log_mqtt_send_message("h-log", json_build_buf);
             if (result == 0) {
-                int send_bytes = strlen(json_build_buf);
+                uint32_t end_time = timer_get_ms();
                 log_i("【MQTT】批量发送完成（超限）- %d字节, 耗时 %u ms\n", send_bytes, end_time - start_time);
                 os_mutex_post(&g_log_mqtt_mutex);
                 return;
             }
-            log_i("【MQTT】批量日志发送失败, error code: %d\n", result);
             result = log_mqtt_send_message("h-log", json_build_buf);
             if (result != 0) {
                 log_i("【MQTT】❌❌❌ 批量日志发送失败, error code: %d\n", result);
                 os_mutex_post(&g_log_mqtt_mutex);
                 return;
             }
+            uint32_t end_time = timer_get_ms();
+            log_i("【MQTT】超限批量日志发送完成(重试) - %d字节, 耗时 %u ms\n", send_bytes, end_time - start_time);
             os_mutex_post(&g_log_mqtt_mutex);
             return;
         }
@@ -323,8 +324,10 @@ static void upload_all_logs(void) {
         if (result != 0) {
             log_i("【MQTT】❌❌❌ 批量日志发送失败, error code: %d\n", result);
         }
+        uint32_t end_time = timer_get_ms();
+        log_i("【MQTT】批量日志发送完成(重试) - %d字节, 耗时 %u ms\n", send_bytes, end_time - start_time);
     } else {
-        log_i("【MQTT】队列中的日志全部超限被丢弃，无数据发送\n");
+        log_i("【MQTT】无数据发送\n");
     }
     
     os_mutex_post(&g_log_mqtt_mutex);

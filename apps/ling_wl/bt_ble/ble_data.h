@@ -13,6 +13,10 @@
 #define MAX_SSID_LEN 33
 #define MAX_PWD_LEN 33
 
+// 定义 details 的含义
+#define DETAILS_BASIC 0 /* 仅显示 SSID 和 RSSI*/
+#define DETAILS_FULL 1  /* 显示更多详细信息，信道 ch 和加密方式 encrytion */
+
 
 void set_current_connected_ssid(char *ssid);
 
@@ -38,7 +42,6 @@ int parse_and_assemble(const uint8_t *data, uint16_t data_length, char *assemble
 
 
 // 声明处理不同命令的函数
-int handle_wifi_scan(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_list_ready(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_get_list(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_stop_scan(const char *cmd, cJSON *args, char * return_json_data);
@@ -50,5 +53,8 @@ int handle_wifi_info(const char *cmd, cJSON *args, char * return_json_data);
 
 // 主解析函数
 int parse_and_dispatch_json(const char *json_data, char * return_json_data);
+
+// 构建WiFi列表JSON的公共函数
+int build_wifi_list_json(cJSON *root, int details, int *is_empty);
 
 #endif

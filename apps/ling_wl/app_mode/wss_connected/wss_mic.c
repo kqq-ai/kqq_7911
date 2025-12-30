@@ -160,6 +160,7 @@ static void start_recorder_upload()
     my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
     g_recording_uploading = true;
+    send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
 
     while (is_mic_on() && g_recording_vad && g_recording_upload) {
         int ret = 0;
@@ -256,6 +257,7 @@ void wait_asr_task(void *priv)
         send_audio_status(OAST_STREAM_AUDIO, OASE_START);
         recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
         g_recording_uploading = true;
+        send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
     }
 
     while (is_mic_on() && g_recording) {

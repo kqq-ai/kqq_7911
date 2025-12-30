@@ -288,10 +288,8 @@ static void wss_app_mode_play_cb(void *priv)
 {
     log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
     if (g_on_touch_key) {
-        log_mqtt("📜📜📜 剧本开始");
         wss_mic_start();
     } else if (g_device_state == APP_WAIT) {
-        log_mqtt("📜📜📜 剧本结束后的输入环节");
         wss_mic_start();
     }
 }
@@ -433,6 +431,9 @@ void wss_application_init()
 
     /* 注册lwl事件处理回调 */
     lwl_event_handler_add(input_event_handler_cb);
+    
+    /* 初始化完成后发送空闲状态 */
+    send_device_status(DEVICE_STATUS_IDLE); // 在线
 }
 
 void wss_application_uninit()

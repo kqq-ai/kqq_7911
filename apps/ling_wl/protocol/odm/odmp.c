@@ -6,6 +6,10 @@
 #include "util/cjson_util.h"
 #include "sys_time.h"
 #include "system/timer.h"
+#include "system/sys_time.h"
+#include "driver/device/ioctl_cmds.h"
+#include "driver/device/device.h"
+#include "generic/jiffies.h"
 
 enum ParseErrorCode {
     PARSE_Success,
@@ -260,6 +264,27 @@ char *odmp_set_audio_format(const char *c_id, int type)
     }
 
     return json_str;
+}
+
+char *odmp_device_status(int status)
+{
+    /*
+{
+"event":"device_status",
+"data":{
+    "status":0
+    }
+}
+    */
+    char *send_data = (char *)malloc(1024);
+    if (send_data == NULL) {
+        return NULL;
+    }
+    
+    snprintf(send_data, 1024, "{ \"event\": \"device_status\", \"data\": { \"status\": %d } }", 
+                 status);
+
+    return send_data;
 }
 
 static int initial_setup_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)

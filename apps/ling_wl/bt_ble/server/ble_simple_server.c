@@ -27,12 +27,13 @@
 #include "bt_ble/ble_combined.h"
 
 #include "bt_ble/ble_data.h"
+#include "bt_ble/app_wifi_manage.h"  // 添加这行以访问 get_wifi_scan_status
 
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
 extern void printf_buf(u8 *buf, u32 len);
-#define log_info          printf
-#define log_info_hexdump  printf_buf
+#define log_info(...)          printf("[blee] " __VA_ARGS__)
+#define log_info_hexdump       printf_buf
 #else
 #define log_info(...)
 #define log_info_hexdump(...)
@@ -66,6 +67,8 @@ static const char ble_ext_idle[] = "(t)";
 static const uint8_t connection_update_enable = 1; ///0--disable, 1--enable
 //当前请求的参数表index
 static uint8_t connection_update_cnt = 0; //
+// 标志：是否已推送初始WiFi列表（防止重复推送）
+static bool initial_wifi_list_pushed = false;
 //参数表
 static const struct conn_update_param_t connection_param_table[] = {
     {16, 24, 10, 600},//11
@@ -166,7 +169,7 @@ static ble_state_e get_ble_work_state(void)
 static void can_send_now_wakeup(void)
 {
     /* putchar('E'); */
-    log_d("-------------------------now can send datas -----------------------------\r\n");
+    log_d("[blee] -------------------------now can send datas -----------------------------\r\n");
     if (ble_resume_send_wakeup) {
         ble_resume_send_wakeup();
     }
@@ -273,6 +276,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 }
                 server_con_handle = hci_subevent_le_enhanced_connection_complete_get_connection_handle(packet);
                 log_info("HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE : %0x\n", server_con_handle);
+                log_info("[blee-ble] BLE connection successful, handle: 0x%04x\n", server_con_handle);
 
                 connection_update_cnt = 0;
                 ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
@@ -293,6 +297,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 }
                 server_con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
                 log_info("HCI_SUBEVENT_LE_CONNECTION_COMPLETE: %0x\n", server_con_handle);
+                log_info("[blee-ble] BLE connection successful, handle: 0x%04x\n", server_con_handle);
 
                 connection_update_cnt = 0;
                 ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
@@ -332,6 +337,8 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
             multi_att_clear_ccc_config(tmp_handle);
             server_con_handle = INVALID_HANDLE;
+            // 重置初始列表推送标志，下次连接时可以再次推送
+            initial_wifi_list_pushed = false;
 
             set_ble_work_state(BLE_ST_DISCONN);
             ble_op_multi_att_send_conn_handle(0, 0, MULTI_ROLE_SERVER);
@@ -348,7 +355,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
             u16 tmp_handle = att_event_mtu_exchange_complete_get_handle(packet);
             if (tmp_handle == server_con_handle) {
                 mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
-                log_d("ATT MTU = %u\n", mtu);
+                log_d("[blee] ATT MTU = %u\n", mtu);
                 ble_op_multi_att_set_send_mtu(tmp_handle, mtu);
                 /* set_connection_data_length(251, 2120); */
             }
@@ -454,6 +461,17 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
     
         log_info("\n------write ccc:%04x,%02x\n", handle, buffer[0]);
         multi_att_set_ccc_config(connection_handle, handle, buffer[0]);
+        
+        // 当CCC被启用时（buffer[0] != 0），立即推送当前WiFi缓冲列表
+        // 这是连接后首次推送，让小程序获取初始列表
+        if (buffer[0] != 0 && !initial_wifi_list_pushed)
+        {
+            log_info("CCC enabled, pushing initial WiFi list to app\n");
+            initial_wifi_list_pushed = true;
+            // 延迟一小段时间确保通知已完全启用
+            os_time_dly(1);  // 延迟约10ms
+            notify_app_wifi_list_update_force(NULL);
+        }
         break;
     case ATT_CHARACTERISTIC_0000fff1_0000_1000_8000_00805f9b34fb_01_VALUE_HANDLE:
         ret = parse_and_assemble(buffer, buffer_size, json_data);
@@ -992,4 +1010,125 @@ int notify_app_wifi_mqtt_succ(void *pri)
     server_disconnect();
 cleanup:
     return ret;
+}
+
+// 内部实现函数，支持强制推送参数
+static int notify_app_wifi_list_update_internal(void *pri, bool force_push);
+
+int notify_app_wifi_list_update(void *pri)
+{
+    return notify_app_wifi_list_update_internal(pri, false);
+}
+
+// 内部实现函数，支持强制推送参数
+static int notify_app_wifi_list_update_internal(void *pri, bool force_push)
+{
+    int ret = 0;
+    char cmd_name[32] = {0};
+    char return_errstr[32] = {0};
+    char return_json_data[BUFFER_SIZE] = {0};
+
+    log_info("notify_app_wifi_list_update called (force_push=%d)\n", force_push ? 1 : 0);
+
+    // 检查BLE连接状态
+    int disconnect_flag = get_ble_app_disconnect_flag();
+    log_info("BLE disconnect flag=%d\n", disconnect_flag);
+    if (disconnect_flag != 0)
+    {
+        log_info("BLE not connected, skip wifi list update notification\n");
+        return -1;
+    }
+
+    // 如果不是强制推送，检查是否在扫描状态（同时检查命令状态和扫描状态）
+    if (!force_push)
+    {
+        WIFI_CMD_STATUES cmd_status = get_wifi_cmd_status(NULL);
+        WIFI_SCAN_STATUES scan_status = get_wifi_scan_status(NULL);
+        log_info("WiFi cmd_status=%d (WIFI_CMD_SCANNING=%d), scan_status=%d (WIFI_SCAN_RUNNING=%d)\n", 
+                 cmd_status, WIFI_CMD_SCANNING, scan_status, WIFI_SCAN_RUNNING);
+        
+        // 如果命令状态是扫描中，或者扫描状态是运行中，都发送通知
+        if (cmd_status != WIFI_CMD_SCANNING && scan_status != WIFI_SCAN_RUNNING)
+        {
+            log_info("WiFi not scanning (cmd=%d, scan=%d), skip wifi list update notification\n", 
+                     cmd_status, scan_status);
+            return -1;
+        }
+    }
+    else
+    {
+        log_info("Force push mode: skipping scan status check\n");
+    }
+
+    log_info("All checks passed, sending wifi_list_update notification\n");
+
+    memcpy(cmd_name, "wifi_list_update", strlen("wifi_list_update"));
+
+    // 封装return_json_data
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL)
+    {
+        ret = 1;
+        log_info("Error: Failed to create cJSON object\n");
+        goto cleanup;
+    }
+
+    cJSON_AddStringToObject(root, "cmd_name", cmd_name);
+
+    // 使用公共函数构建WiFi列表（使用DETAILS_FULL获取完整信息）
+    int is_empty = 0;
+    ret = build_wifi_list_json(root, DETAILS_FULL, &is_empty);
+    if (ret != 0)
+    {
+        log_info("Error: Failed to build wifi list json\n");
+        cJSON_Delete(root);
+        ret = 1;
+        goto cleanup;
+    }
+
+    // 根据列表是否为空设置错误码
+    if (is_empty)
+    {
+        memcpy(return_errstr, "WIFI_LIST_UPDATE_CODE_EMPTY", strlen("WIFI_LIST_UPDATE_CODE_EMPTY"));
+    }
+    else
+    {
+        memcpy(return_errstr, "WIFI_LIST_UPDATE_CODE_SUCCESS", strlen("WIFI_LIST_UPDATE_CODE_SUCCESS"));
+    }
+
+    cJSON_AddNumberToObject(root, "return_code", ret);
+    cJSON_AddStringToObject(root, "return_errstr", return_errstr);
+
+    char *return_json_str = cJSON_PrintUnformatted(root);
+    if (return_json_str == NULL)
+    {
+        ret = 1;
+        log_info("Error: Failed to print cJSON object\n");
+        cJSON_Delete(root);
+        goto cleanup;
+    }
+
+    memcpy(return_json_data, return_json_str, strlen(return_json_str));
+    int send_ret = send_return_json_data(return_json_data);
+    if (send_ret != 0) {
+        ret = send_ret;
+        log_info("Error: Failed to send wifi list update notification\n");
+    }
+
+    free(return_json_str);
+    log_info("notify app wifi list update ---- return_json_str:%s\r\n", return_json_data);
+    
+    // 如果是强制推送（首次推送）且成功，记录日志
+    if (force_push && ret == 0) {
+        log_info("[blee-ble] Initial WiFi list push successful\n");
+    }
+
+cleanup:
+    return ret;
+}
+
+// 强制推送WiFi列表（连接后立即推送，跳过扫描状态检查）
+int notify_app_wifi_list_update_force(void *pri)
+{
+    return notify_app_wifi_list_update_internal(pri, true);
 }

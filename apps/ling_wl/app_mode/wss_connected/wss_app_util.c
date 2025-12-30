@@ -4,6 +4,7 @@
 #include "protocol/odm/odmp.h"
 #include "app_mode/lwl_app_core.h"
 #include "wss/wss_client.h"
+#include "wss/wss_client_custom.h"
 
 #include "system/includes.h"
 #include "app_cookie.h"
@@ -12,6 +13,9 @@
 #include <stdlib.h>
 
 #define MAX_TARGET_SN_SET 16
+#define WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD (32 * 1024)
+
+static ws_client_t g_ws_client_custom = NULL;
 
 char sn_c_id[25];
 static int g_exception_exit = true;
@@ -268,7 +272,54 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     os_mutex_post(&g_wss_mutex);
     return 0;
 }
+int send_device_status(int status)
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        log_e("[wss_app_util]send_device_status: ws_client is NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
 
+    char *send_data = odmp_device_status(status);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_device_status: odmp_device_status returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_device_status: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    if (ret < 0) {
+        log_e("[wss_app_utils]Error send_device_status %s %d. status=%d ret=%d", __FILE__, __LINE__, status, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    //根据status打印不同的日志
+    switch (status) {
+        case 0:
+            log_i("🚺️➡️➡️➡️【DEVICE_STATUS】cid=%s status=在线", sn_c_id);
+            break;
+        case 1:
+            log_i("🚺️➡️➡️➡️【DEVICE_STATUS】cid=%s status=正在播放", sn_c_id);
+            break;
+        case 2:
+            log_i("🚺️➡️➡️➡️【DEVICE_STATUS】cid=%s status=正在录音", sn_c_id);
+            break;
+        case 3:
+            log_i("🚺️➡️➡️➡️【DEVICE_STATUS】cid=%s status=播放结束", sn_c_id);
+            break;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
 int send_bin_data(uint8_t *data, uint32_t len)
 {
     os_mutex_pend(&g_wss_mutex, 0);
