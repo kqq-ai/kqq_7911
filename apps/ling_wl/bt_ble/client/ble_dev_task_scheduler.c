@@ -561,6 +561,7 @@ void ble_dev_task_scheduler_init()
     ble_disconn_event_user_handler_add(ble_disconn_event_handler, NULL);
 }
 
+int dev_task_is_on = 0;
 int dev_task_is_running = 0;
 
 static void ble_dev_task_scheduler()
@@ -572,7 +573,7 @@ static void ble_dev_task_scheduler()
 
     dev_task_is_running = 1;
 
-    while (dev_task_is_running) {
+    while (dev_task_is_on) {
         if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
             max_rssi = -127;
         }
@@ -584,6 +585,7 @@ static void ble_dev_task_scheduler()
             need_active = false;
         }
     }
+    dev_task_is_running = 0;
     my_blocking_queue_clear(&g_ble_dev_op_queue);
 }
 
@@ -592,11 +594,17 @@ void ble_dev_task_scheduler_start()
     if (dev_task_is_running) {
         return;
     }
+    dev_task_is_on = true;
     max_rssi = -127;
     log_i("ble_dev_task_scheduler_start");
     if (thread_fork("ble_dev_task_scheduler", 15, 512, 0, 0, ble_dev_task_scheduler, NULL)) {
         log_e("Error: Failed to create task ble_dev_task_scheduler.");
     }
+}
+
+void ble_dev_task_scheduler_stop()
+{
+    dev_task_is_on = false;
 }
 
 void ble_dev_task_enable()

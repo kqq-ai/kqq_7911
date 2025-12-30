@@ -335,7 +335,7 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-    // log_i("wbs send msg : %d", len);
+    log_i("wbs send msg : %d", len);
     os_mutex_post(&g_wss_mutex);
     return 0;
 }
