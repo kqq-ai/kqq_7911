@@ -142,7 +142,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     } else if (BDOCode_Ready_to_Play == code) {
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
             ready_to_play = true;
-            log_i("[wss_request]send_message = %d", send_message);
         }
     } else {
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的目标E失败
@@ -380,7 +379,7 @@ bool wss_request_loop()
                 wss_ble_audio_start();
                 wss_request_send_event_target(send_message);
             }
-            if (send_message == ORMET_SWITCH_SUCCESS) send_message = 0; // 重置发送消息标志
+            send_message = 0; // 重置发送消息标志
         } else if (send_message == ORMET_SWITCH_FAILED) {
             wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
             wss_request_send_event_target(send_message);

@@ -67,6 +67,7 @@ void app_music_play_end_cb(void *priv)
     set_led_tts_off();
 }
 
+static void wss_audio_playback_start(void);
 // 允许网络音频开始播放
 void wss_audio_allow_playback()
 {
@@ -86,6 +87,9 @@ void wss_audio_allow_playback()
     audio_req_time = timer_get_ms();
     g_audio_play_ongoing = true;
     set_led_tts_on();
+
+    
+    wss_audio_playback_start();
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -100,13 +104,13 @@ static void wss_audio_playback_start(void)
 {
     const uint32_t MAX_CHUNK_SIZE = 16000;
     if (g_audio_player_start) return;
+    g_audio_player_start = true;
 
     log_i("[AUDIO]playback_start: flushing %u bytes from prebuffer", g_prebuffer_pos);
 
     os_mutex_pend(&g_audio_mutex, 0);
     /* 启动播放器 */
     app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
-    g_audio_player_start = true;
     
 
     if (g_prebuffer_pos == 0) {
@@ -180,7 +184,6 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
         /* 预缓冲已满或未分配，但尚未启动播放 => 丢弃或缓存溢出 */
         log_w("[AUDIO]prebuffer full/unavailable but playback not started, dropping %u bytes", len);
         wss_audio_allow_playback();
-        wss_audio_playback_start(); // 尝试启动播放
         goto stream_write;
     }
 
