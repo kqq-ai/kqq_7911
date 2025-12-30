@@ -10,6 +10,8 @@ void wss_ble_audio_start(); // request 控制 允许WSS音频数据写入播放�
 void wss_ble_audio_stop();  // request 控制 停止数据写入，暂停播放器
 
 void wss_audio_allow_playback();
+void wss_audio_set_stream_end();
+bool wss_audio_is_stream_end();
 
 void set_tts_volume(int volume);
 

@@ -233,11 +233,11 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
+                g_mode_last_time = g_curr_time;
                 set_tts_volume(pkg->audio_status.volume);
             } else if (pkg->audio_status.event == OASE_END && g_curr_time - g_mode_last_time > 100) {
                 log_i("AUDIO_STATUS: OASE_END\n");
-                last_message_type = OAST_TTS;
-                last_event = OASE_END;
+                wss_audio_set_stream_end(); // 标记音频流结束
             }
             g_wss_last_time = g_curr_time;
         } else if (pkg->audio_status.type == OAST_SCRIPT) {
@@ -395,9 +395,6 @@ bool wss_request_loop()
 
     case STATE_DOWNLOAD: // until receive AUDIO END
         // 下载结束，继续播放
-        if (last_message_type == OAST_TTS && last_event == OASE_START) {
-            last_event = 0;
-        }
         if (!is_audio_playing()) {
             if ((g_curr_time & 63) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
             if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
@@ -406,7 +403,7 @@ bool wss_request_loop()
             }
         } else {
             g_wss_last_time = g_curr_time;
-            if (last_message_type == OAST_TTS && last_event == OASE_END){
+            if (wss_audio_is_stream_end()){ // 音频下载缓存已结束
                 wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
             }
         }

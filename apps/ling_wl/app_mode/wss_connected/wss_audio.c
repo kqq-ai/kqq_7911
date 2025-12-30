@@ -33,6 +33,7 @@ static int g_audio_player_start = false; // 音频播放中标志（播放器状
 
 static uint8_t g_prebuffer[PREBUFFER_SIZE];
 static uint32_t g_prebuffer_pos = 0;
+static bool g_stream_end = false; // 音频流结束标志
 
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 
@@ -276,8 +277,28 @@ void wss_ble_audio_start() {
     /* reset prebuffer */
     total_written = 0;
     g_prebuffer_pos = 0;
+    g_stream_end = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
+}
+
+void wss_audio_set_stream_end() {
+    log_i("[AUDIO]wss_audio_set_stream_end");
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (total_written > 0) {
+        log_i("[AUDIO]total_written=%u marking stream end", total_written);
+        g_stream_end = true;
+        odmp_register_audio_data_cbk(NULL); 
+    }
+    os_mutex_post(&g_audio_mutex);
+}
+
+bool wss_audio_is_stream_end() {
+    bool ended;
+    os_mutex_pend(&g_audio_mutex, 0);
+    ended = g_stream_end;
+    os_mutex_post(&g_audio_mutex);
+    return ended;
 }
 
 void wss_audio_init()
