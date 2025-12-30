@@ -612,10 +612,13 @@ static void ble_dev_task_loop()
     dev_task_is_running = 0;
 }
 
-void ble_dev_task_epcho()
+void ble_dev_task_epcho(bool is_turn_on)
 {
-    if (dev_task_is_running) {
+    if (dev_task_is_running && !is_turn_on) {
         return;
+    }
+    while (dev_task_is_running) {
+        msleep(10);
     }
     if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
         max_rssi = -127;
