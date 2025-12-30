@@ -566,6 +566,7 @@ bool wss_application_loop()
                 g_device_state = APP_WAIT;
             } else if (wss_device_is_calling() && g_mic_on) { // g_mic_on一定为true，在multi_play_mode = false时
                 log_i("[wss_application]STATE: APP_AUDIO -> APP_VAD");
+                wss_request_send_event_target(ORMET_PLAY_END);
                 g_device_state = APP_VAD;
                 wss_application_start_mic();
             } else {

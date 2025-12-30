@@ -33,14 +33,12 @@ u8 lwl_app_mode_get_current_mode()
 
 static void lwl_app_mode_play_cb(void *priv)
 {
-    os_mutex_pend(&g_mode_mutex, 0);
     g_sensor_reset_alive_timer();
     play_voice_prompt = 0;
     if (prompt_cb_priv) {
         prompt_cb_priv();
     }
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-    os_mutex_post(&g_mode_mutex);
 }
 
 /**
@@ -96,12 +94,12 @@ void lwl_app_mode_stop_playing()
 {
     os_mutex_pend(&g_mode_mutex, 0);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (app_music_play_get_status(context->music_player) == AUDIO_DEC_START) {
+    if (play_voice_prompt) {
         log_i("music_play_stop");
         app_music_play_stop(context->music_player);
+        play_voice_prompt = 0;
     }
     music_file[0] = 0;
-    play_voice_prompt = 0;
     os_mutex_post(&g_mode_mutex);
 }
 
