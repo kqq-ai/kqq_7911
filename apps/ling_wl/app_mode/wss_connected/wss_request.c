@@ -168,7 +168,6 @@ void turn_on_Pi(const char *pdev_sn) {
     //上传E的电量
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
     bdo_turn_on(pdev, 1000, 5000, e_turn_on_cb, pdev);
-    ble_dev_task_epcho(true);
 }
 
 //=================================================================================================
@@ -422,7 +421,7 @@ bool wss_request_loop()
                 turn_off_Pi();
             }
         } else {
-            ble_dev_task_epcho(false);
+            ble_dev_task_enable(); // 允许一次BLE设备任务激活
         }
         break;
 

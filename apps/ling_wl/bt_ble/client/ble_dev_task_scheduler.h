@@ -78,6 +78,6 @@ void bdo_notify_e_disconncted(char sn[]);
 
 void ble_dev_task_scheduler_init();
 void ble_dev_task_scheduler_start();
-void ble_dev_task_epcho(bool is_turn_on);
+void ble_dev_task_enable(); // 允许一次BLE设备任务激活
 
 #endif // __BLE_DEV_TASK_SCHEDULER_H__

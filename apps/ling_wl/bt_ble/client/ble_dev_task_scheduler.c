@@ -306,7 +306,8 @@ void bdo_notify_e_disconncted(char sn[])
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
 
-int max_rssi = -127;
+static int max_rssi = -127;
+static bool need_active = true;
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
 {
@@ -318,13 +319,13 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         return;
     }
     for (int i=0;i<10;i++) {
-        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
+        mdelay(50);
+        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue) || need_active == false) {
             log_i("[BDO]There are other pending tasks, skip this activation!");
             dev->op_state &= ~BDO_STATE_ACTIVATING;
             process_cb(op, BDOCode_Skip);
             return;
         }
-        mdelay(50);
     }
     if (dev->max_rssi < max_rssi) {
         log_i("[BDO]not the closest dev, ignore!");
@@ -580,6 +581,7 @@ static void ble_dev_task_scheduler()
 
         if (g_op_handler_entries[op.op_type] != NULL) {
             g_op_handler_entries[op.op_type](&op);
+            need_active = false;
         }
     }
     my_blocking_queue_clear(&g_ble_dev_op_queue);
@@ -597,34 +599,9 @@ void ble_dev_task_scheduler_start()
     }
 }
 
-static void ble_dev_task_loop()
+void ble_dev_task_enable()
 {
-    ble_dev_op_t op;
-    log_i("ble_dev_task_loop");
-
-    dev_task_is_running = 1;
-    my_blocking_queue_dequeue(&g_ble_dev_op_queue, &op);
-    ASSERT(op.op_type < g_op_handler_entries_count);
-
-    if (g_op_handler_entries[op.op_type] != NULL) {
-        g_op_handler_entries[op.op_type](&op);
-    }
-    dev_task_is_running = 0;
-}
-
-void ble_dev_task_epcho(bool is_turn_on)
-{
-    if (dev_task_is_running && !is_turn_on) {
-        return;
-    }
-    while (dev_task_is_running) {
-        msleep(10);
-    }
-    if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
-        max_rssi = -127;
-    } else if (thread_fork("ble_dev_task_loop", 15, 512, 0, 0, ble_dev_task_loop, NULL)) {
-        log_e("Error: Failed to create task ble_dev_task_loop.");
-    }
+    need_active = true;
 }
 
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
