@@ -29,6 +29,7 @@ static int last_message_type = 0;
 static int last_event = 0;
 
 static int send_message = 0;
+static bool ready_to_play = false;
 
 static bool g_mode_script = 0; // 如果true则不播放切换提示音
 
@@ -133,13 +134,14 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
             send_message = ORMET_SWITCH_SUCCESS;
+            ready_to_play = false;
             log_i("[wss_request]send_message = %d", send_message);
         } else {
             turn_off_Pi();
         }
     } else if (BDOCode_Ready_to_Play == code) {
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
-            send_message = ORMET_PLAY_START;
+            ready_to_play = true;
             log_i("[wss_request]send_message = %d", send_message);
         }
     } else {
@@ -152,6 +154,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
 
 void turn_on_Pi(const char *pdev_sn) {
     send_message = 0; // 重置发送消息标志
+    ready_to_play = false;
     log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
 // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
     if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
@@ -198,7 +201,8 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             //continue
         } else if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
             wss_ble_audio_stop();
-            send_message = ORMET_PLAY_START;
+            send_message = ORMET_SWITCH_SUCCESS;
+            ready_to_play = true;
             log_i("[wss_request]send_message = %d", send_message);
         } else if (g_mode_state == STATE_IDLE || g_mode_state == STATE_WAITING) {
             turn_on_Pi(g_edev_target_sn);
@@ -370,14 +374,11 @@ bool wss_request_loop()
         break;
     case STATE_TTS_BIND: // until send_message == ORMET_SWITCH_SUCCESS or ORMET_SWITCH_FAILED
         // TTS下载流程
-        if (send_message == ORMET_SWITCH_SUCCESS || send_message == ORMET_PLAY_START) {
+        if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("[wss_request]Switch success, send ORMET_SWITCH_SUCCESS");
             if (g_edev_connected_sn[0] != 0) {
                 wss_ble_audio_start();
                 wss_request_send_event_target(send_message);
-                wss_request_update_state(STATE_DOWNLOAD, "send ORMET_SWITCH_SUCCESS");
-            } else {
-                wss_request_update_state(STATE_IDLE, "g_edev_connected_sn == NULL");
             }
             if (send_message == ORMET_SWITCH_SUCCESS) send_message = 0; // 重置发送消息标志
         } else if (send_message == ORMET_SWITCH_FAILED) {
@@ -386,6 +387,9 @@ bool wss_request_loop()
             // g_edev_target_sn[0] = 0;
             send_message = 0; // 重置发送消息标志
             play_prompt_sound("SwFailed.mp3");
+        } else if (ready_to_play) {
+            wss_audio_allow_playback();
+            wss_request_update_state(STATE_DOWNLOAD, "Switch success ready_to_play");
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
             send_message = ORMET_SWITCH_FAILED;
         }
@@ -393,11 +397,7 @@ bool wss_request_loop()
 
     case STATE_DOWNLOAD: // until receive AUDIO END
         // 下载结束，继续播放
-        if (send_message == ORMET_PLAY_START) {
-            wss_audio_allow_playback();
-            log_i("[wss_request]Switch success, starting audio");
-            send_message = 0; // 重置发送消息标志
-        } else if (last_message_type == OAST_TTS && last_event == OASE_START) {
+        if (last_message_type == OAST_TTS && last_event == OASE_START) {
             last_event = 0;
         }
         if (!is_audio_playing()) {
