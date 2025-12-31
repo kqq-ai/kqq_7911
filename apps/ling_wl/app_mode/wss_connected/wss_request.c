@@ -365,10 +365,6 @@ bool wss_request_loop()
     g_curr_time = timer_get_ms();
     switch (g_mode_state) {
     case STATE_IDLE: // until receive TTS_BIND
-        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-            send_ping();
-            g_wss_last_time = g_curr_time;
-        }
         break;
     case STATE_TTS_BIND: // until send_message == ORMET_SWITCH_SUCCESS or ORMET_SWITCH_FAILED
         // TTS下载流程
