@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define WSS_SEND_TIMEOUT_MS    (7000)
 #define MAX_TARGET_SN_SET 16
 #define WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD (32 * 1024)
 
@@ -22,6 +23,7 @@ static int g_exception_exit = true;
 static OS_MUTEX g_wss_mutex;
 static char* target_sn_set[MAX_TARGET_SN_SET] = {0};
 static int target_sn_count = 0;
+static u32 wss_send_time = 0;
 
 // 添加SN到集合
 void add_target_sn(const char* sn) {
@@ -105,24 +107,9 @@ bool wss_check_exit()
     if (g_exception_exit) {
         return true;
     }
-    os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (context->websockets_info) {
-        wss_send_pong(context->websockets_info); // 如果收到Ping 回复Pong
-        // TODO 检查收到的wss消息的时效性，超过10s发送ping
-        // if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-        //     send_ping();
-        //     g_wss_last_time = g_curr_time;
-        // }
-        if (context->websockets_info->recv_thread_id == 0) {
-            wss_exception_exit();
-            log_i("websocket_client_heart have exited!!!");
-        }
-    } else {
-        wss_exception_exit();
-        log_i("websockets_info is NULL");
+    if (timer_get_ms() - wss_send_time > WSS_SEND_TIMEOUT_MS) {
+        send_ping();
     }
-    os_mutex_post(&g_wss_mutex);
     return g_exception_exit;
 }
 
@@ -214,6 +201,7 @@ int send_audio_status(int type, int event)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    wss_send_time = timer_get_ms();
     log_i("wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
@@ -239,6 +227,7 @@ int send_audio_format(int type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    wss_send_time = timer_get_ms();
     log_i("wbs send msg : %s", send_data);
     free(send_data);
     os_mutex_post(&g_wss_mutex);
@@ -268,6 +257,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    wss_send_time = timer_get_ms();
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -301,6 +291,7 @@ int send_device_status(int status)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    wss_send_time = timer_get_ms();
     //根据status打印不同的日志
     switch (status) {
         case 0:
@@ -335,6 +326,7 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    wss_send_time = timer_get_ms();
     log_i("wbs send msg : %d", len);
     os_mutex_post(&g_wss_mutex);
     return 0;
@@ -370,6 +362,7 @@ int send_ping()
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
+    wss_send_time = timer_get_ms();
     free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
