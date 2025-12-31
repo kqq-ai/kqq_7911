@@ -35,6 +35,7 @@ static bool multi_play_mode = false;
 static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
 static bool g_exit = false;
+static bool g_reconnect = false;
 
 u32 last_E_found_time = 0;
 u32 last_move_time = 0;
@@ -116,8 +117,8 @@ void wss_application_vailed()
 void wss_disconnect_cbk(void)
 {
     log_i("[wss_application]odmp disconnect!!!");
-    // os_time_dly(100);      // 修正：延时 1000ms (假设 1 tick = 10ms)
-    // wss_exception_exit();
+    g_reconnect = true;
+
 }
 
 // 查询退出标志
@@ -173,25 +174,26 @@ void wss_handle_key_event(void)
     if (g_exit) {
         g_power_key_retry = true;
     } else {
-        multi_play_mode = !multi_play_mode;
-        g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-        if (!wss_request_is_playing()) {
-            if (multi_play_mode) {
-                play_prompt_sound("1to2.mp3");
-                wss_request_send_event_target(ORMET_PLAY_NEXT);
-                log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
-                g_device_state = APP_WAIT;
-            } else {
-                play_prompt_sound("1to1.mp3");
-                if (wss_device_call()) {
-                    log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
-                    g_device_state = APP_WAIT;
-                } else {
-                    log_i("[wss_application]STATE: MODE SWITCH no device call -> APP_IDLE");
-                    g_device_state = APP_IDLE;
-                }
-            }
-        }
+        g_reconnect = true;
+        // multi_play_mode = !multi_play_mode;
+        // g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
+        // if (!wss_request_is_playing()) {
+        //     if (multi_play_mode) {
+        //         play_prompt_sound("1to2.mp3");
+        //         wss_request_send_event_target(ORMET_PLAY_NEXT);
+        //         log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
+        //         g_device_state = APP_WAIT;
+        //     } else {
+        //         play_prompt_sound("1to1.mp3");
+        //         if (wss_device_call()) {
+        //             log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
+        //             g_device_state = APP_WAIT;
+        //         } else {
+        //             log_i("[wss_application]STATE: MODE SWITCH no device call -> APP_IDLE");
+        //             g_device_state = APP_IDLE;
+        //         }
+        //     }
+        // }
     }
 }
 
@@ -518,6 +520,16 @@ bool wss_application_loop()
         }
         
         os_mutex_post(&g_wss_app_mutex);
+    }
+    
+    if (g_reconnect) {
+        log_i("[wss_application]Reconnecting due to disconnect...");
+        if (wss_reconnect()) {
+            log_i("[wss_application]Reconnected successfully.");
+            g_reconnect = false;
+        } else {
+            log_e("[wss_application]Reconnection failed, will retry later.");
+        }
     }
 
     if (wss_check_exit()) {
