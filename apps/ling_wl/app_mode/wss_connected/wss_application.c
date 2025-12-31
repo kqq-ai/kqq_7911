@@ -117,7 +117,6 @@ void wss_disconnect_cbk(void)
 {
     log_i("[wss_application]odmp disconnect!!!");
     // os_time_dly(100);      // 修正：延时 1000ms (假设 1 tick = 10ms)
-    // wss_exception_exit();
 }
 
 // 查询退出标志
