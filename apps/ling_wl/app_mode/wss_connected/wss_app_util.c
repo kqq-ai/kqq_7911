@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define WSS_SEND_TIMEOUT_MS    (7000)
 #define MAX_TARGET_SN_SET 16
 // 自定义 WebSocket 实现的临时帧构建缓冲区是 16KB（见 ws_client_custom.c 的 temp_send_buf）
 // 为避免超大 JSON 帧导致构建失败或潜在内存问题，这里对文本 payload 做一个保守上限。
@@ -27,6 +28,7 @@ static char g_last_disconnect_reason[64] = "boot";
 static OS_MUTEX g_wss_mutex;
 static char* target_sn_set[MAX_TARGET_SN_SET] = {0};
 static int target_sn_count = 0;
+static u32 wss_send_time = 0;
 
 // 添加SN到集合
 void add_target_sn(const char* sn) {
@@ -119,22 +121,11 @@ bool wss_check_exit(void)
         log_e("[wss_app_util]websocket state=%d", state);
         return true;
     }
-    // os_mutex_pend(&g_wss_mutex, 0);
-    // lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    // if (context->websockets_info) {
-    //     wss_send_pong(context->websockets_info); // 如果收到Ping 回复Pong
-    //     // TODO 检查收到的wss消息的时效性，超过10s发送ping
-    //     // if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-    //     //     send_ping();
-    //     //     g_wss_last_time = g_curr_time;
-    //     // }
-    //     if (context->websockets_info->recv_thread_id == 0) {
-    //         log_i("websocket_client_heart have exited!!!");
-    //     }
-    // } else {
-    //     log_i("websockets_info is NULL");
-    // }
-    // os_mutex_post(&g_wss_mutex);
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (timer_get_ms() - wss_send_time > WSS_SEND_TIMEOUT_MS) {
+        send_ping();
+    }
+    os_mutex_post(&g_wss_mutex);
     return g_exception_exit;
 }
 
@@ -311,6 +302,7 @@ int send_audio_status(int type, int event)
         return -1;
     }
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
     
     if (ret < 0) {
         log_e("⚠️ [wss_app_utils]Error %s %d. type=%d event=%d ret=%d", __FILE__, __LINE__, type, event, ret);
@@ -348,6 +340,7 @@ int send_audio_format(int type)
         return -1;
     }
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
 
     if (ret < 0) {
         log_e("[wss_app_utils]Error %s %d. type=%d ret=%d", __FILE__, __LINE__, type, ret);
@@ -393,6 +386,7 @@ int send_req_message(const char *send_id, bool is_play, int event_type)
     log_i("[wss_app_util]wbs send msg : %s", send_data);
 
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
     if (ret < 0) {
         log_e("[wss_app_utils]Error send_req_message %s %d. event_type=%d ret=%d", __FILE__, __LINE__, event_type, ret);
         free(send_data);
@@ -427,6 +421,7 @@ int send_device_status(int status)
         return -1;
     }
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
     if (ret < 0) {
         log_e("[wss_app_utils]Error send_device_status %s %d. status=%d ret=%d", __FILE__, __LINE__, status, ret);
         free(send_data);
@@ -472,6 +467,7 @@ int send_bin_data(uint8_t *data, uint32_t len)
 
     // 发送二进制数据
     int ret = ws_client_send_binary(g_ws_client_custom, data, len);
+    wss_send_time = timer_get_ms();
     if (ret < 0) {
         // 当队列满时，丢弃也会返回-1，所以不处理
         log_e("[wss_app_util]Error %s %d. len=%u ret=%d", __FILE__, __LINE__, len, ret);
@@ -512,6 +508,7 @@ int send_ping()
     log_i("[wss_app_util]wbs send msg : %s", send_data);
 
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
     if (ret < 0) {
         log_e("[wss_app_utils]Error %s %d. event_type=ping ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
