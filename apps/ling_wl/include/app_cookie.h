@@ -16,7 +16,7 @@ void disable_gsensor();
 #define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 #define TOUCH_KEY_AVAILABLE 1// 设置触摸按键功能可用
 
-// #define TEST_LOCOL_SERVER "junye"// 设置为1连接本地调试服务器
+#define TEST_LOCOL_SERVER "zy"// 设置为1连接本地调试服务器
 
 #define SERVER_DOMAIN  "test.coolqq.com"
 // #define SERVER_DOMAIN  "pre.coolqq.com"

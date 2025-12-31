@@ -37,7 +37,7 @@ static bool g_stream_end = false; // 音频流结束标志
 
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 
-#define G_MAX_VOLUME 100
+#define G_MAX_VOLUME 50
 int g_volume = G_MAX_VOLUME;
 // 设置播放器音量(1~70)
 void set_tts_volume(int volume) {

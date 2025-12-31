@@ -19,9 +19,9 @@
 static OS_MUTEX g_wss_app_mutex;
 music_player *player;
 
-#define NO_REQ_TIMEOUT_MS       (10 * 60 * 1000) // 连续10分钟无请求则超时
-#define NO_E_TIMEOUT_MS         (5 * 60 * 1000)  // 触发超时，5分钟内无Pi则关机
-#define NO_MOVE_TIMEOUT_MS      (5 * 60 * 1000)  // 触发超时，5分钟内无移动则关机
+#define NO_REQ_TIMEOUT_MS       (1000 * 60 * 1000) // 连续10分钟无请求则超时
+#define NO_E_TIMEOUT_MS         (1000 * 60 * 1000)  // 触发超时，5分钟内无Pi则关机
+#define NO_MOVE_TIMEOUT_MS      (1000 * 60 * 1000)  // 触发超时，5分钟内无移动则关机
 #define DEV_CALL_TIMEOUT_MS     (3 * 1000)       // 等待后端发送tts_bind，超过3s则回到靠近触发
 
 #define INPUT_EVENT_QUEUE_SIZE  32
