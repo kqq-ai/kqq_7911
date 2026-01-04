@@ -203,7 +203,7 @@
  *     功能: 启用BDO(Broadcast Device Operation)功能
  *     说明: 向UART发送启用命令和当前广播码
  *
- * void bdo_disable(void)
+ * void bdo_disable(bool soft_disable)
  *     功能: 禁用BDO功能
  *     说明: 向UART发送禁用命令(使用全0广播码)
  *
@@ -268,10 +268,10 @@ static inline void process_cb(ble_dev_op_t *op, u8 code) {
     if (op->cb) op->cb(code, op->cb_priv);
 }
 
-void bdo_disable()
+void bdo_disable(bool soft_disable)
 {
     log_i("[BDO]bdo_disable");
-    uart_send_set_ctrl(0x01);
+    uart_send_set_ctrl(soft_disable ? 0x01 : 0x00);
 }
 
 void bdo_enable()

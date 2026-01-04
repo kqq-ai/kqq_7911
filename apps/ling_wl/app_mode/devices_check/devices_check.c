@@ -190,7 +190,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
                 ///process_mode_6_touch_key(e->touch_key_cmd.touch_key_event_type);
-                bdo_disable(); // 发送暂停uart指令
+                bdo_disable(1); // 发送暂停uart指令
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {

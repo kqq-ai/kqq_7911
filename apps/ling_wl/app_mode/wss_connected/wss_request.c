@@ -294,6 +294,7 @@ void wss_request_stop()
         turn_off_Pi();
     }
     wss_request_send_event_target(ORMET_PLAY_STOP);
+    bdo_disable(0);
 
     // 重置状态到IDLE
     wss_request_update_state(STATE_IDLE, "wss_request_stop");
@@ -381,6 +382,7 @@ bool wss_request_loop()
             // g_edev_target_sn[0] = 0;
             send_message = 0; // 重置发送消息标志
             play_prompt_sound("SwFailed.mp3");
+            bdo_disable(0);
         } else if (ready_to_play) {
             wss_audio_allow_playback();
             wss_request_update_state(STATE_DOWNLOAD, "Switch success ready_to_play");
@@ -396,6 +398,7 @@ bool wss_request_loop()
             if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
                 wss_request_stop();
                 play_prompt_sound("SwFailed.mp3");
+                bdo_disable(0);
             }
         } else {
             g_wss_last_time = g_curr_time;
