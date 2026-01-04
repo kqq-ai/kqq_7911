@@ -181,11 +181,16 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             
             log_i("Touch key event type: %d",e->touch_key_cmd.touch_key_event_type);
-            lwl_app_mode_stop_playing();
+            ///lwl_app_mode_stop_playing();
             
             // 特殊处理模式8的触摸按键检测
             if (g_current_mode == WORK_MODE_8) {
                 process_mode_8_touch_key(e->touch_key_cmd.touch_key_event_type);
+            }
+            // 特殊处理模式6的触摸按键检测
+            if (g_current_mode == WORK_MODE_6) {
+                ///process_mode_6_touch_key(e->touch_key_cmd.touch_key_event_type);
+                bdo_disable(); // 发送暂停uart指令
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {
@@ -203,6 +208,11 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
                 process_mode_1_touch_key(1);
             } else {
                 log_i("Touch key released in mode %s", mode_names[g_current_mode]);
+            }
+            // 特殊处理模式6的触摸按键检测
+            if (g_current_mode == WORK_MODE_6) {
+                ///process_mode_6_touch_key(e->touch_key_cmd.touch_key_event_type);
+                bdo_enable(); // 发送暂停uart指令
             }
         }
         break;
