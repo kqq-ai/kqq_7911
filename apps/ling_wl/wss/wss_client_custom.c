@@ -1337,14 +1337,14 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     }
     
     // 发送帧 -> 写入 RingBuffer
-    log_i("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
+    log_d("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
     if (len > 0 && len < 128) { // 只打印短数据的内容
         char dump_buf[256] = {0};
         int dump_len = len > 128 ? 128 : len;
         for (int i = 0; i < dump_len; i++) {
             sprintf(dump_buf + i * 2, "%02x", data[i]);
         }
-        log_i("[ws_custom]Data: %s", dump_buf);
+        log_d("[ws_custom]Data: %s", dump_buf);
         if (frame_type == WS_FRAME_TEXT) {
             log_i("[ws_custom]Text: %.*s", dump_len, data);
         }

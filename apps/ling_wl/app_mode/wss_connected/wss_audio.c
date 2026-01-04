@@ -163,7 +163,7 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
         return 0;
     }
 
-    log_i("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
+    // log_i("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
 
     os_mutex_pend(&g_audio_mutex, 0);
 
@@ -216,7 +216,7 @@ stream_write:
     }
     os_mutex_post(&g_audio_mutex);
 
-    log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
+    // log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
     return 0;
 }
 
