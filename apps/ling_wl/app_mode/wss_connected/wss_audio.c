@@ -163,7 +163,7 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
         return 0;
     }
 
-    log_d("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
+    log_i("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
 
     os_mutex_pend(&g_audio_mutex, 0);
 
@@ -289,6 +289,7 @@ void wss_audio_set_stream_start() {
 void wss_audio_set_stream_end() {
     log_i("[AUDIO]wss_audio_set_stream_end");
     odmp_register_audio_data_cbk(NULL); 
+    g_audio_play_ongoing = false;
     if (total_written > 0) {
         log_i("[AUDIO]total_written=%u marking stream end", total_written);
         g_stream_end = true;

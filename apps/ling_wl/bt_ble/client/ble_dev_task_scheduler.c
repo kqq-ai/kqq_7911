@@ -421,13 +421,13 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
-    
+
     if (dev->adv_state == BDPAS_CONNECTED) {
         os_sem_set(&g_e_disconnected_sem, 0);
         if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
             log_e("[BDO]Error dev busy! %d", op->turnon.scan_timeout);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
-            process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+            process_cb(op, BDOCode_Dev_Busy);
             return;
         }
     }
