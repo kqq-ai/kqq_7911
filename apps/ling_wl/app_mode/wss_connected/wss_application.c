@@ -409,7 +409,7 @@ void wss_application_init()
     wss_mic_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    wss_mic_stop(); // 停止录音
+    wss_asr_start(); // 停止录音
 
     g_exit = false;
     g_mic_on = true;
@@ -532,6 +532,7 @@ bool wss_application_loop()
         }
         return true;
     }
+    return false;
 
     wss_request_loop();
     if (lwl_app_mode_playing() || g_on_touch_key) {
