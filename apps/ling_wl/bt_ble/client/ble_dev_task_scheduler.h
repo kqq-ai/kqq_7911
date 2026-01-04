@@ -66,7 +66,7 @@ typedef struct {
     ble_dev_op_handler_func_t handler;  //!< 操作具体处理函数
 } ble_dev_op_handler_entry;
 
-void bdo_disable(bool soft_disable);
+void bdo_disable(bool mute);
 void bdo_enable();
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv);
 int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev_op_cb_func_t cb, void *priv);

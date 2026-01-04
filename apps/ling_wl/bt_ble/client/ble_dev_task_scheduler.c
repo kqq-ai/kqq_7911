@@ -203,13 +203,9 @@
  *     功能: 启用BDO(Broadcast Device Operation)功能
  *     说明: 向UART发送启用命令和当前广播码
  *
- * void bdo_disable(bool soft_disable)
+ * void bdo_disable(bool mute)
  *     功能: 禁用BDO功能
  *     说明: 向UART发送禁用命令(使用全0广播码)
- *
- * void bdo_set_ctrl(uint8_t code)
- *     功能: 设置BDO控制码
- *     参数: code - 控制码值(0x00/0x03)
  *
  * void bdo_notify_e_conncted(void)
  *     功能: 通知端点设备已连接/启用(供外部事件回调调用)
@@ -268,21 +264,16 @@ static inline void process_cb(ble_dev_op_t *op, u8 code) {
     if (op->cb) op->cb(code, op->cb_priv);
 }
 
-void bdo_disable(bool soft_disable)
+void bdo_disable(bool mute)
 {
     log_i("[BDO]bdo_disable");
-    uart_send_set_ctrl(soft_disable ? 0x01 : 0x00);
+    uart_send_set_ctrl(mute ? 0x01 : 0x00);
 }
 
 void bdo_enable()
 {
     log_i("[BDO]bdo_enable %s", broadcast_code);
     uart_send_set_ctrl(0x03);
-}
-
-void bdo_set_ctrl(uint8_t code)
-{
-    log_i("[BDO]bdo_set_ctrl %d", code);
 }
 
 void bdo_notify_e_conncted(char sn[])
@@ -300,7 +291,9 @@ void bdo_notify_e_disconncted(char sn[])
     if (!sn) return;
     log_i("[BDO] Device %s disconnectd", sn);
     if (strcmp(broadcast_code, &sn[10]) == 0) {
+        log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", sn, empty_broadcast_code);
         uart_send_switch_audio_bc(empty_broadcast_code, 0x01);
+        uart_send_set_ctrl(0x01); // soft disable
         os_sem_post(&g_e_disconnected_sem);
     }
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
@@ -423,7 +416,6 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
-    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
     if (dev->adv_state == BDPAS_CONNECTED) {
         os_sem_set(&g_e_disconnected_sem, 0);
         if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
@@ -483,7 +475,9 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     process_cb(op, BDOCode_Success);
     msleep(300);
     uart_send_set_ctrl(0x01);
+    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
     uart_send_switch_audio_bc(broadcast_code, 0x01);
+    uart_send_set_ctrl(0x01);
 
     /* - 扫描设备 ADV 状态变化 -> connected */
     if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {

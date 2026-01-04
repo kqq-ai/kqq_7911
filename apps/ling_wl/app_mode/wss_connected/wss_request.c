@@ -235,6 +235,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 last_event = OASE_START;
                 g_mode_last_time = g_curr_time;
                 set_tts_volume(pkg->audio_status.volume);
+                wss_audio_set_stream_start(); // 允许音频流开始
             } else if (pkg->audio_status.event == OASE_END && g_curr_time - g_mode_last_time > 100) {
                 log_i("AUDIO_STATUS: OASE_END\n");
                 wss_audio_set_stream_end(); // 标记音频流结束

@@ -251,9 +251,9 @@ bool is_audio_playing(){
 void wss_ble_audio_stop() {
     log_i("[AUDIO]wss_ble_audio_stop %d %d", g_audio_play_ongoing, g_audio_player_start);
     log_mqtt("💔💔💔 停止蓝牙音频播放");
+    odmp_register_audio_data_cbk(NULL); 
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = true;
-    odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
         set_led_tts_off();
         g_audio_play_ongoing = false; // 停止音频播放
@@ -278,17 +278,24 @@ void wss_ble_audio_start() {
     total_written = 0;
     g_prebuffer_pos = 0;
     g_stream_end = false;
+    os_mutex_post(&g_audio_mutex);
+}
+
+void wss_audio_set_stream_start() {
+    log_i("[AUDIO]wss_audio_set_stream_start");
+    os_mutex_pend(&g_audio_mutex, 0);
+    g_stream_end = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
     os_mutex_post(&g_audio_mutex);
 }
 
 void wss_audio_set_stream_end() {
     log_i("[AUDIO]wss_audio_set_stream_end");
+    odmp_register_audio_data_cbk(NULL); 
     os_mutex_pend(&g_audio_mutex, 0);
     if (total_written > 0) {
         log_i("[AUDIO]total_written=%u marking stream end", total_written);
         g_stream_end = true;
-        odmp_register_audio_data_cbk(NULL); 
     }
     os_mutex_post(&g_audio_mutex);
 }
