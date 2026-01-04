@@ -9,8 +9,8 @@
 // #define CONFIG_STORE_VOLUME
 #define VOLUME_STEP 5                  /**< Volume adjustment step size */
 #define MIN_VOLUME_VALUE	5          /**< Minimum volume value */
-#define MAX_VOLUME_VALUE	100        /**< Maximum volume value */
-#define INIT_VOLUME_VALUE   100         /**< Initial volume value */
+#define MAX_VOLUME_VALUE	70        /**< Maximum volume value */
+#define INIT_VOLUME_VALUE   70         /**< Initial volume value */
 
 #define DEC_BUF_LEN      2 * 1024     /**< Decoder buffer length (4KB) */
 #define STREAM_BUF_LEN   200 * 1024    /**< Stream buffer length (200KB) */

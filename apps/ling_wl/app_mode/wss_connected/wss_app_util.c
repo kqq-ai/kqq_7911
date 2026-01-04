@@ -378,12 +378,11 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
     // 发送二进制数据
     int ret = ws_client_send_binary(g_ws_client_custom, data, len);
     if (ret < 0) {
         // 当队列满时，丢弃也会返回-1，所以不处理
-        log_e("[wss_app_util]Error %s %d. len=%u ret=%d", __FILE__, __LINE__, len, ret);
+        // log_e("[wss_app_util]Error %s %d. len=%u ret=%d", __FILE__, __LINE__, len, ret);
         // ws_client_disconnect(g_ws_client_custom);
         // ws_client_destroy(g_ws_client_custom);
         // g_ws_client_custom = NULL;

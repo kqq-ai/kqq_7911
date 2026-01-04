@@ -426,33 +426,17 @@ void wait_asr_task(void *priv)
     set_led_mic_on(); // 开启录音时灯光变橙色
     u32 asr_start_time = get_time_stamp();
     log_i("[AUDIO]start ASR task %d\n", asr_start_time);
-    while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > get_time_stamp() || is_mic_on() == false) && g_recording) {
-        msleep(20);
+    while (MYRBERROR_Success != my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
+        msleep(10);
     }
 
-    if (g_recording) {
-        log_i("[AUDIO]ASR upload started\n");
-        send_audio_status(OAST_STREAM_AUDIO, OASE_START);
-        set_led_asr_upload(); /* 音频上传时灯光变绿色 */
-        wss_app_recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-        g_recording_uploading = true;
-    }
-
-    while (is_mic_on() && g_recording) {
-        int ret = 0;
-        /* 从ASR缓冲取数据发送给服务器，先将ringbuffer中的数据上传，再处理上传data queue中的数据 */
-        if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
-            ret = wss_asr_data_to_server(&asr_data_frame);
-        } else if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
-            ret = wss_asr_data_to_server(&asr_data_frame);
-        }
-        
+    while (1) {
+        int ret = wss_asr_data_to_server(&asr_data_frame);
         // 修改: 如果发送失败，退出循环
         if (ret != 0) {
             log_i("[AUDIO]ASR Upload failed, break loop.");
             break;
         }
-        msleep(10);
     }
 
     if (g_recording_uploading) {

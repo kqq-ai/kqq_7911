@@ -8,7 +8,7 @@ struct app_cookie_hdl {
 };
 void do_shutdown();
 
-#define LOCAL_VERSION_CODE "v0.0.58" 
+#define LOCAL_VERSION_CODE "v0.0.100" 
 
 #define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 #define TOUCH_KEY_AVAILABLE 1// 设置触摸按键功能可用

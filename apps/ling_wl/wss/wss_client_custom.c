@@ -1335,7 +1335,7 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     }
     
     // 发送帧 -> 写入 RingBuffer
-    log_i("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
+    // log_i("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
     if (len > 0 && len < 128) { // 只打印短数据的内容
         char dump_buf[256] = {0};
         int dump_len = len > 128 ? 128 : len;
@@ -1352,8 +1352,8 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     // 检查缓冲区占用率，如果超过50%，则丢弃非关键帧（这里假设所有通过此接口发送的都是可以丢弃的）
     // WS_SEND_BUF_SIZE = 64KB, 50% = 32KB
     if (rb_available(&client->send_rb) > (client->send_rb.capacity / 2)) {
-        log_w("[ws_custom]Warning: Send buffer > 50%% full (%d/%d). Dropping frame len=%d to prevent bloat.", 
-              rb_available(&client->send_rb), client->send_rb.capacity, frame_len);
+        // log_w("[ws_custom]Warning: Send buffer > 50%% full (%d/%d). Dropping frame len=%d to prevent bloat.", 
+            //   rb_available(&client->send_rb), client->send_rb.capacity, frame_len);
         os_mutex_post(&client->mutex);
         return -1; // 模拟发送失败，上层应用应该忽略此错误
     }

@@ -324,8 +324,8 @@ void wss_application_init()
     wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    wss_mic_stop(); // 停止录音
-
+    wss_asr_start();
+    
     g_mic_on = true;
     multi_play_mode = false;
     music_file[0] = 0;
@@ -389,6 +389,7 @@ bool wss_application_loop()
     if (music_file[0] != 0 && play_voice_prompt == 0) {
         wss_app_mode_play();
     }
+    return false;
 
     wss_request_loop();
     if (play_voice_prompt || g_on_touch_key) {
