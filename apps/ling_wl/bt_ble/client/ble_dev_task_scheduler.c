@@ -410,12 +410,18 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Null_Pointer);
         return;
     }
-    if (dev->distance_info.rssi_sample_count < 1) {
+    
+    for (int i=0;i<10;i++) {
+        if (dev->distance_info.rssi_sample_count > 0)  break;
+        mdelay(50);
+    }
+    if (dev->distance_info.rssi_sample_count == 0) {
         log_i("[BDO]Error dev lost!");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
+    
     if (dev->adv_state == BDPAS_CONNECTED) {
         os_sem_set(&g_e_disconnected_sem, 0);
         if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {

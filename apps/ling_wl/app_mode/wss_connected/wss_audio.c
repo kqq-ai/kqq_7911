@@ -62,7 +62,6 @@ void set_speaker() {
 void app_music_play_end_cb(void *priv)
 {
     log_i("[AUDIO]app_music_play_end_cb");
-    g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
     g_audio_player_start = false;
     set_led_tts_off();
@@ -283,21 +282,17 @@ void wss_ble_audio_start() {
 
 void wss_audio_set_stream_start() {
     log_i("[AUDIO]wss_audio_set_stream_start");
-    os_mutex_pend(&g_audio_mutex, 0);
     g_stream_end = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
-    os_mutex_post(&g_audio_mutex);
 }
 
 void wss_audio_set_stream_end() {
     log_i("[AUDIO]wss_audio_set_stream_end");
     odmp_register_audio_data_cbk(NULL); 
-    os_mutex_pend(&g_audio_mutex, 0);
     if (total_written > 0) {
         log_i("[AUDIO]total_written=%u marking stream end", total_written);
         g_stream_end = true;
     }
-    os_mutex_post(&g_audio_mutex);
 }
 
 bool wss_audio_is_stream_end() {
