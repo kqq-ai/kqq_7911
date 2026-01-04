@@ -374,3 +374,41 @@ int send_ping()
     os_mutex_post(&g_wss_mutex);
     return 0;
 }
+
+/**
+ * @brief 发送nearby_update消息
+ * @param devices 设备指针数组
+ * @param device_count 设备数量
+ * @return 0成功,-1失败
+ */
+int send_nearby_update(void **devices, int device_count)
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成nearby_update消息
+    char *send_data = odmp_nearby_update(devices, device_count, sn_c_id);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_nearby_update: odmp_nearby_update returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[nearby_update] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[nearby_update] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}

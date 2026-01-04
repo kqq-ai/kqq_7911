@@ -14,6 +14,7 @@ int send_audio_status(int type, int event);
 int send_audio_format(int type) ;
 int send_req_message(const char *send_id, bool is_play, int event_type);
 int send_device_status(int status);
+int send_nearby_update(void **devices, int device_count);
 
 void wss_exception_exit(void);
 bool wss_check_exit(void);

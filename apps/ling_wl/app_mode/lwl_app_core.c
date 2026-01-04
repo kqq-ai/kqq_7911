@@ -402,7 +402,7 @@ void free_5m_edev_targets(char **targets, int targets_num)
  * 
  * @param [in] handler 回调函数引用
  */
-void lwl_event_handler_add(lwl_event_handler_cb_t *handler) 
+void lwl_event_handler_add(lwl_event_handler_cb_t handler) 
 {
     ASSERT(s_app_context != NULL);
 
@@ -426,7 +426,7 @@ void lwl_event_handler_add(lwl_event_handler_cb_t *handler)
  * 
  * @param [in] handler 回调函数引用
  */
-void lwl_event_handler_remove(lwl_event_handler_cb_t *handler)
+void lwl_event_handler_remove(lwl_event_handler_cb_t handler)
 {
     ASSERT(s_app_context != NULL);
 
@@ -492,4 +492,39 @@ void lwl_rtc_timer_update()
     timeinfo.tm_isdst = -1;  // -1 表示不确定是否夏令时
     // 转换为 Unix 时间戳
     rtc_time_delta = mktime(&timeinfo) - 28800;
+}
+
+/**
+ * @brief 获取ISO8601格式的时间字符串
+ * @param buffer 输出缓冲区
+ * @param buffer_size 缓冲区大小
+ * @note 格式: YYYY-MM-DDTHH:MM:SS.mmmZ
+ */
+void lwl_rtc_get_iso8601_time(char *buffer, int buffer_size)
+{
+    if (buffer == NULL || buffer_size < 25) {
+        return;
+    }
+    
+    // 获取RTC时间
+    struct sys_time t;
+    void *dev = dev_open("rtc", NULL);
+    if (dev) {
+        dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
+        dev_close(dev);
+    } else {
+        // 如果无法打开RTC设备,使用默认值
+        memset(&t, 0, sizeof(t));
+        t.year = 2025;
+        t.month = 1;
+        t.day = 1;
+    }
+    
+    // 获取毫秒部分(使用jiffies_half_msec)
+    uint32_t half_ms = jiffies_half_msec();
+    uint32_t milliseconds = (half_ms / 2) % 1000;
+    
+    // 格式化为ISO8601格式: YYYY-MM-DDTHH:MM:SS.mmmZ
+    snprintf(buffer, buffer_size, "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
+             t.year, t.month, t.day, t.hour, t.min, t.sec, milliseconds);
 }

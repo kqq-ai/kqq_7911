@@ -15,6 +15,7 @@
 #include "math.h"
 #define APP_STATUS (1)
 #define step_max_change (0.3) // m/s
+#define NOTIFY_APP_TIME 500  // 改为500ms触发nearby_update事件
 
 // 消息类型······························
 enum
@@ -79,25 +80,8 @@ static void blue_distance_notify_self_process(lwl_eend_dev_t *p_eend_dev, void *
         p_eend_dev->distance_info.distance_type = DISTANCE_2;
     }
 
-    if (p_eend_dev->distance_info.distance_type != distance_type_last)
-    {
-        p_eend_dev->distance_info.test_count=0;
-        if (p_eend_dev->distance_info.distance_type != DISTANCE_0) {
-            lwl_event_t e;
-            e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
-            e.distance_change.pdev = p_eend_dev;
-            lwl_event_notify(&e);
-        }
-    } else if (p_eend_dev->distance_info.distance_type == DISTANCE_0) {
-        p_eend_dev->distance_info.test_count++;
-        if (p_eend_dev->distance_info.test_count == 4) { // 连续4次距离类型为DISTANCE_0，触发事件通知
-            lwl_event_t e;
-            e.event_type = LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE;
-            e.distance_change.pdev = p_eend_dev;
-            p_eend_dev->distance_info.test_count = 0;
-            lwl_event_notify(&e);
-        }
-    }
+    // 移除基于距离类型变化的事件触发逻辑
+    // 现在使用nearby_update事件,每500ms统一触发
 }
 
 // RSSI打印
@@ -374,7 +358,11 @@ static void distance_main(void *priv)
                 // 首先清理过期数据
                 remove_all_dev_expired_rssi_samples();
 
-                blue_distance_notify_app();
+                // 移除blue_distance_notify_app(),改为触发nearby_update事件
+                // 每500ms触发nearby_update事件
+                lwl_event_t e;
+                e.event_type = LWL_EVENT_TYPE_NEARBY_UPDATE;
+                lwl_event_notify(&e);
 
                 clean_expired_eend();
             }
@@ -641,6 +629,8 @@ static void scan_adv_process_task(void *priv)
                 // log_i("[Predict]: sn: %s max_sample : %d, max_2_sample : %d, median : %d, sample_count : %d, possible : %f\n", sn, max_sample, max_2_sample, median, samples_count, possible);
                 soomth_distance(dev, possible);
                 
+                // 移除blue_distance_notify_self_process调用
+                // 距离类型判断保留在函数内,但不再触发事件
                 blue_distance_notify_self_process(dev, NULL);
             }
         }

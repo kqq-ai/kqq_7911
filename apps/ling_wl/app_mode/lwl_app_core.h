@@ -72,6 +72,7 @@ typedef enum {
     LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE,   /**< EEND device distance change event */
     LWL_EVENT_TYPE_EEND_DEV_CLOSEST_CHANGE,    /**< Closest EEND device change event */
     LWL_EVENT_TYPE_EEND_DEV_NEW_IN,            /**< New EEND device in */
+    LWL_EVENT_TYPE_NEARBY_UPDATE,              /**< 附近设备更新事件(每500ms触发) */
 
     LWL_EVENT_TYPE_NET_DISCONNECTED,           /**< Network disconnected event */
     LWL_EVENT_TYPE_BACKEND_DISCONNECTED,       /**< Backend service disconnected event */
@@ -170,6 +171,13 @@ typedef struct {
 } lwl_event_eend_dev_new_in_t;
 
 /**
+ * @brief 附近设备更新事件数据结构
+ */
+typedef struct {
+    // 不需要额外数据,触发时会遍历所有设备
+} lwl_event_nearby_update_t;
+
+/**
  * @brief Generic LWL event structure
  */
 typedef struct {
@@ -182,6 +190,7 @@ typedef struct {
         lwl_event_eend_dev_distance_change_t distance_change;   /**< EEND device distance change data */
         lwl_event_charge_cmd_t charge_cmd;
         lwl_event_eend_dev_new_in_t new_in;
+        lwl_event_nearby_update_t nearby_update; /**< 附近设备更新事件数据 */
     };
 } lwl_event_t;
 
@@ -303,15 +312,15 @@ void free_5m_edev_targets(char **targets, int targets_num);
 
 /**
  * @brief Add an event handler callback
- * @param handler Pointer to the handler function to add
+ * @param handler The handler function to add
  */
-void lwl_event_handler_add(lwl_event_handler_cb_t *handler);
+void lwl_event_handler_add(lwl_event_handler_cb_t handler);
 
 /**
  * @brief Remove an event handler callback
- * @param handler Pointer to the handler function to remove
+ * @param handler The handler function to remove
  */
-void lwl_event_handler_remove(lwl_event_handler_cb_t *handler);
+void lwl_event_handler_remove(lwl_event_handler_cb_t handler);
 
 /**
  * @brief Notify the system of a new event
@@ -335,5 +344,13 @@ void clear_all_eend_dev(void);
 u32 lwl_rtc_timer_get_sec();
 
 void lwl_rtc_timer_update();
+
+/**
+ * @brief 获取ISO8601格式的时间字符串
+ * @param buffer 输出缓冲区
+ * @param buffer_size 缓冲区大小
+ * @note 格式: YYYY-MM-DDTHH:MM:SS.mmmZ
+ */
+void lwl_rtc_get_iso8601_time(char *buffer, int buffer_size);
 
 #endif

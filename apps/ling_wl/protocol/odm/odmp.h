@@ -45,6 +45,7 @@ enum odmp_event_type_e {
     OET_REQ_MESSAGE             = 1,
     OET_AUDIO_STATUS            = 2,
     OET_SET_AUDIO_FORMAT        = 3,
+    OET_NEARBY_UPDATE           = 4,  // nearby_update事件
 };
 
 
@@ -144,6 +145,7 @@ char *odmp_audio_status(const char *c_id, int oast, int oase);
 
 char *odmp_set_audio_format(const char *c_id, int type);
 char *odmp_device_status(int status);
+char *odmp_nearby_update(void **devices, int device_count, const char *c_id);
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk);
 void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);

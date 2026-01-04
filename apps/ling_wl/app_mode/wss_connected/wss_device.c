@@ -208,7 +208,9 @@ static OS_MUTEX edev_manager_mutex;
  * 添加E端设备到集合(已持有互斥锁)
  * 参数：pdev - 待添加的E端设备指针
  * 行为：设备已存在则更新，不存在则新增；集合满时丢弃
+ * 注意：此函数已废弃,不再使用edev_set集合机制
  */
+/*
 static void add_edev(lwl_eend_dev_t *pdev)
 {
     if (!pdev) {
@@ -238,12 +240,15 @@ static void add_edev(lwl_eend_dev_t *pdev)
     
     log_i("[add_edev] Add new sn=%s dist=%.2f cnt=%d", pdev->sn, pdev->distance_info.distance, edev_set_count);
 }
+*/
 
 /**
  * 从集合中删除E端设备(已持有互斥锁)
  * 参数：pdev - 待删除的E端设备指针
  * 行为：使用数组紧凑方式移除
+ * 注意：此函数已废弃,不再使用edev_set集合机制
  */
+/*
 static void remove_edev(lwl_eend_dev_t *pdev)
 {
     if (!pdev) {
@@ -269,6 +274,7 @@ static void remove_edev(lwl_eend_dev_t *pdev)
     
     log_i("[remove_edev] Device sn=%s not found", pdev->sn);
 }
+*/
 
 /**
  * 清空E端设备集合
@@ -388,7 +394,9 @@ bool update_edev_time(char* sn)
 /**
  * BLE距离变化事件处理回调
  * 功能：DISTANCE_0/1→加入集合，DISTANCE_2/3→移除集合
+ * 注意：此函数已废弃,不再使用。现在使用nearby_update事件机制
  */
+/*
 static void device_event_handler_cb(lwl_event_t *e)
 {
     if (!e) {
@@ -430,6 +438,7 @@ static void device_event_handler_cb(lwl_event_t *e)
     
     os_mutex_post(&edev_manager_mutex);
 }
+*/
 
 /**
  * 初始化WSS设备管理模块
@@ -457,8 +466,9 @@ void wss_device_init()
     ble_simple_client_module_enable(1);
     log_i("[wss_device_init] Enable BLE module");
 
-    lwl_event_handler_add(device_event_handler_cb);
-    log_i("[wss_device_init] Register event handler");
+    // 移除device_event_handler_cb注册,不再使用基于距离类型的事件处理
+    // lwl_event_handler_add(device_event_handler_cb);
+    // log_i("[wss_device_init] Register event handler");
 
     edev_last = NULL;
 
@@ -473,8 +483,9 @@ void wss_device_uninit()
 {
     log_i("[wss_device_uninit] Uninitializing...");
 
-    lwl_event_handler_remove(device_event_handler_cb);
-    log_i("[wss_device_uninit] Unregister event handler");
+    // 移除device_event_handler_cb注销,不再使用基于距离类型的事件处理
+    // lwl_event_handler_remove(device_event_handler_cb);
+    // log_i("[wss_device_uninit] Unregister event handler");
 
     ble_simple_client_module_enable(0);
     log_i("[wss_device_uninit] Disable BLE module");

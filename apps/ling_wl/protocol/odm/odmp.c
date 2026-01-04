@@ -1,6 +1,7 @@
 #include "odmp.h"
 
 #include <string.h>
+#include <math.h>
 #include "cpu.h"
 #include "cJSON_common/cJSON.h"
 #include "util/cjson_util.h"
@@ -10,6 +11,8 @@
 #include "driver/device/ioctl_cmds.h"
 #include "driver/device/device.h"
 #include "generic/jiffies.h"
+#include "app_mode/lwl_eend_device.h"
+#include "app_mode/lwl_app_core.h"
 
 enum ParseErrorCode {
     PARSE_Success,
@@ -35,6 +38,7 @@ static const char *odmp_et_str[] = {
     [OET_REQ_MESSAGE]           = "req_message",
     [OET_AUDIO_STATUS]          = "audio_status",
     [OET_SET_AUDIO_FORMAT]      = "set_audio_format",
+    [OET_NEARBY_UPDATE]         = "nearby_update",
 };
 
 static const char *odmp_ast_str[] = {
@@ -285,6 +289,99 @@ char *odmp_device_status(int status)
                  status);
 
     return send_data;
+}
+
+/**
+ * @brief 生成nearby_update消息
+ * @param devices 设备指针数组
+ * @param device_count 设备数量
+ * @param c_id C端设备ID
+ * @return JSON字符串,需要调用者释放
+ */
+char *odmp_nearby_update(void **devices, int device_count, const char *c_id)
+{
+    /*
+    nearby_update
+    {
+      "msg_id": "c:WL-C8K2512000891:nbu_20251225165803472",
+      "event": "nearby_update",
+      "data": {
+        "scan_time": "2025-12-25T16:58:02.819Z",
+        "devices": [
+          {
+            "sn": "E9K2512003147",
+            "rssi": -49,
+            "distance_cm": 45,
+            "battery": 88,
+          }
+        ]
+      }
+    }
+    */
+    
+    // 生成msg_id: c:{c_id}:nbu_{timestamp}
+    char msg_id[128];
+    u32 timestamp_ms = timer_get_ms();
+    snprintf(msg_id, sizeof(msg_id), "c:%s:nbu_%u", c_id, timestamp_ms);
+    
+    // 获取ISO8601格式的扫描时间
+    char scan_time[32];
+    lwl_rtc_get_iso8601_time(scan_time, sizeof(scan_time));
+    
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "msg_id", msg_id);
+    cJSON_AddStringToObject(nroot, "event", "nearby_update");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    cJSON_AddStringToObject(nroot_data, "scan_time", scan_time);
+    
+    // 创建devices数组
+    cJSON *devices_array = cJSON_CreateArray();
+    cJSON_AddItemToObject(nroot_data, "devices", devices_array);
+    
+    // 遍历所有设备,添加到数组中
+    for (int i = 0; i < device_count; i++) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)devices[i];
+        if (dev == NULL) {
+            continue;
+        }
+        
+        // 只添加有RSSI样本的设备
+        if (dev->distance_info.rssi_sample_count <= 0) {
+            continue;
+        }
+        
+        cJSON *device_obj = cJSON_CreateObject();
+        
+        // sn: 设备序列号
+        cJSON_AddStringToObject(device_obj, "sn", (char *)dev->sn);
+        
+        // rssi: 最新RSSI值(取rssi_samples数组最后一个)
+        int rssi_idx = dev->distance_info.rssi_sample_count - 1;
+        s8 rssi = dev->distance_info.rssi_samples[rssi_idx];
+        cJSON_AddNumberToObject(device_obj, "rssi", rssi);
+        
+        // distance_cm: 距离(米转厘米,四舍五入)
+        int distance_cm = (int)round(dev->distance_info.distance * 100.0);
+        cJSON_AddNumberToObject(device_obj, "distance_cm", distance_cm);
+        
+        // battery: 电量百分比(bat_level * 100 / 15)
+        int battery = (dev->bat_level * 100) / 15;
+        cJSON_AddNumberToObject(device_obj, "battery", battery);
+        
+        cJSON_AddItemToArray(devices_array, device_obj);
+    }
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
 }
 
 static int initial_setup_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)

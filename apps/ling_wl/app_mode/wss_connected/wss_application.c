@@ -13,6 +13,7 @@
 #include "log/log_mqtt.h"
 #include "../../SC7A20/sc7a20.h"
 #include <string.h>
+#include <stdlib.h>
 
 #include "lwip/stats.h" // 添加头文件
 
@@ -101,6 +102,111 @@ static bool input_event_queue_pop(input_event_t *event)
     *event = g_event_queue[g_event_queue_head];
     g_event_queue_head = (g_event_queue_head + 1) % INPUT_EVENT_QUEUE_SIZE;
     return true;
+}
+
+//=================================================================================================
+// nearby_update事件处理（每500ms发送一次附近设备信息）
+//=================================================================================================
+/**
+ * @brief nearby_update事件处理回调函数
+ * @param e 事件指针
+ * @note 每500ms触发一次,收集所有扫描到的E端设备信息并通过WebSocket发送
+ */
+static void nearby_update_event_handler(lwl_event_t *e)
+{
+    if (!e) {
+        log_e("[nearby_update] ERROR: event is NULL");
+        return;
+    }
+
+    // 检查事件类型
+    if (e->event_type != LWL_EVENT_TYPE_NEARBY_UPDATE) {
+        return;
+    }
+
+    log_d("[nearby_update] Event triggered, collecting device info...");
+
+    // 获取应用上下文
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (!ctx || !ctx->dev_map) {
+        log_e("[nearby_update] ERROR: context or dev_map is NULL");
+        return;
+    }
+
+    // 第一次遍历:统计有效设备数量(有RSSI样本的设备)
+    int valid_device_count = 0;
+    MapIterator it = map_begin(ctx->dev_map);
+    MapIterator end = map_end(ctx->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+        if (dev && dev->distance_info.rssi_sample_count > 0) {
+            valid_device_count++;
+        }
+    }
+    map_iterator_unlock(it);
+
+    log_i("[nearby_update] Found %d valid devices", valid_device_count);
+
+    // 如果没有有效设备,仍然发送空列表
+    if (valid_device_count == 0) {
+        log_i("[nearby_update] No valid devices, sending empty list");
+        send_nearby_update(NULL, 0);
+        return;
+    }
+
+    // 分配设备指针数组
+    void **devices = (void **)malloc(valid_device_count * sizeof(void *));
+    if (!devices) {
+        log_e("[nearby_update] ERROR: malloc failed for device array");
+        return;
+    }
+
+    // 第二次遍历:收集有效设备
+    int idx = 0;
+    it = map_begin(ctx->dev_map);
+    end = map_end(ctx->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+        if (dev && dev->distance_info.rssi_sample_count > 0) {
+            if (idx < valid_device_count) {
+                devices[idx++] = (void *)dev;
+            }
+        }
+    }
+    map_iterator_unlock(it);
+
+    // 发送nearby_update消息
+    int ret = send_nearby_update(devices, idx);
+    if (ret != 0) {
+        log_e("[nearby_update] Failed to send nearby_update message");
+    } else {
+        log_i("[nearby_update] Successfully sent nearby_update with %d devices", idx);
+    }
+
+    // 释放设备指针数组
+    free(devices);
+}
+
+/**
+ * @brief 初始化nearby_update事件处理器
+ */
+void nearby_update_handler_init(void)
+{
+    log_i("[nearby_update] Initializing nearby_update handler...");
+    lwl_event_handler_add(nearby_update_event_handler);
+    log_i("[nearby_update] Handler registered");
+}
+
+/**
+ * @brief 反初始化nearby_update事件处理器
+ */
+void nearby_update_handler_uninit(void)
+{
+    log_i("[nearby_update] Uninitializing nearby_update handler...");
+    lwl_event_handler_remove(nearby_update_event_handler);
+    log_i("[nearby_update] Handler unregistered");
 }
 
 //=================================================================================================
@@ -404,11 +510,12 @@ void wss_application_init()
 
     odmp_register_disconnect_cbk(wss_disconnect_cbk);
     
-    monitor_start();
+    // monitor_start(); // 已在app_cookie.c中调用，无需重复调用
     wss_audio_init();
     wss_mic_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
+    nearby_update_handler_init(); // 初始化nearby_update事件处理器
     wss_mic_stop(); // 停止录音
 
     g_exit = false;
@@ -455,6 +562,7 @@ void wss_application_uninit()
     wss_request_uninit();
     wss_audio_uninit();
     wss_mic_uninit();
+    nearby_update_handler_uninit(); // 反初始化nearby_update事件处理器
     wss_device_uninit();
     monitor_stop();//free all pdev
 
@@ -473,6 +581,7 @@ void wss_application_reset()
     wss_audio_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
+    nearby_update_handler_init(); // 初始化nearby_update事件处理器
     wss_mic_init();
     wss_mic_stop(); // 停止录音
 
@@ -527,6 +636,7 @@ bool wss_application_loop()
             wss_request_uninit();
             wss_audio_uninit();
             wss_mic_uninit();
+            nearby_update_handler_uninit(); // 反初始化nearby_update事件处理器
             wss_device_uninit();
             g_exit = true;
         }
