@@ -243,6 +243,8 @@ bool is_audio_playing(){
             log_i("[AUDIO]is_audio_playing: stream ended but player started, marking playing");
         }
     }
+    log_d("[AUDIO]is_audio_playing g_stream_end=%d g_audio_playing=%d g_audio_play_ongoing=%d total_written=%u time last %u", 
+        g_stream_end, g_audio_playing, g_audio_play_ongoing, total_written, timer_get_ms()-audio_req_time);
     bool playing = g_audio_playing || (g_audio_play_ongoing && 
         (total_written >> 2) + 1000 > timer_get_ms()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
     if (!g_audio_playing && playing) {

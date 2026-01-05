@@ -291,8 +291,7 @@ static void refresh_and_clean_edev_set(void)
     for (int i = 0; i < edev_set_count; i++) {
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(edev_set[i].sn);
         
-        if (!pdev || pdev->distance_info.distance > MAX_DIS || 
-            pdev->distance_info.rssi_sample_count == 0) {
+        if (!pdev || pdev->distance_info.distance > MAX_DIS) {
             if (edev_last == edev_set[i].edev && pdev->distance_info.rssi_sample_count == 0) {
                 edev_last = NULL;
             }
