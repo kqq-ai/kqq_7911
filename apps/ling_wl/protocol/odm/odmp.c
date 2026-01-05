@@ -422,6 +422,8 @@ static struct odmp_rsp_cb_entry_t g_rsp_cb_table[] = {
     {"audio_status", OR_AUDIO_STATUS, audio_status_event_handler, NULL},
     {"tts_bind", OR_TTS_BIND, tts_bind_event_handler, NULL},
     {"initial_setup_response", OR_INITIAL_SETUP_RESPONSE, initial_setup_response_event_handler, NULL}, 
+    // 服务端有时会直接发 event=initial_setup（日志已验证），这里兼容一下避免被当作“未知事件”
+    {"initial_setup", OR_INITIAL_SETUP_RESPONSE, initial_setup_response_event_handler, NULL},
     {"device_switch_response", OR_DEVICE_SWITCH_RESPONSE, device_switch_response_event_handler, NULL}, 
     {"message_text", OR_MESSAGE_TEXT, message_text_event_handler, NULL}, 
     {"execution_time", OR_EXECUTION_TIME, execution_time_event_handler, NULL},
@@ -434,7 +436,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
     odmp_package_t pkg;
     memset(&pkg, 0, sizeof(odmp_package_t));
 
-    const cJSON *nroot = cjson_parse(buf);
+    const cJSON *nroot = cjson_parse_len(buf, len);
     if (nroot == NULL) {
         goto error_ret;
     }

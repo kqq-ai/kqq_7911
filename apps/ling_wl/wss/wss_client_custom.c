@@ -23,6 +23,20 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+static const char *ws_mbedtls_errstr(int err, char *buf, size_t buflen)
+{
+    if (buf == NULL || buflen == 0) {
+        return "";
+    }
+    buf[0] = '\0';
+#if defined(MBEDTLS_ERROR_C)
+    mbedtls_strerror(err, buf, buflen);
+#else
+    snprintf(buf, buflen, "mbedTLS error (enable MBEDTLS_ERROR_C for details)");
+#endif
+    return buf;
+}
+
 // 声明random32函数（在lwIP中定义）
 extern unsigned int random32(int type);
 
@@ -271,16 +285,29 @@ static int generate_handshake_request(const char *host, int port, const char *pa
     simple_base64_encode(key_bytes, 16, key, 32);
     
     // 生成握手请求
+    // 注意：
+    // - 公网域名/WSS 常在反向代理/CDN 后面，Origin/Host 不规范可能导致对端主动断开（常见表现：客户端 TLS fatal alert、服务端 WS 1006 unexpected EOF）
+    char host_line[300];
+    if (port == 80 || port == 443) {
+        snprintf(host_line, sizeof(host_line), "Host: %s\r\n", host);
+    } else {
+        snprintf(host_line, sizeof(host_line), "Host: %s:%d\r\n", host, port);
+    }
+
     int len = snprintf(request, request_size,
         "GET %s HTTP/1.1\r\n"
-        "Host: %s:%d\r\n"
+        "%s"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Key: %s\r\n"
         "Sec-WebSocket-Version: 13\r\n"
-        "Origin: http://localhost\r\n"
+        // 不要使用 localhost；对于 wss 服务器，通常期望 https Origin（若服务端不校验 Origin，也不会受影响）
+        "Origin: https://%s\r\n"
         "\r\n",
-        path, host, port, key);
+        path,
+        host_line,
+        key,
+        host);
     
     if (len < 0 || len >= request_size) {
         log_e("[ws_custom]Handshake request too long");
@@ -643,7 +670,9 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     ret = mbedtls_ctr_drbg_seed(&client->ctr_drbg, mbedtls_entropy_func, &client->entropy,
                                 (const unsigned char *)pers, strlen(pers));
     if (ret != 0) {
-        log_e("[ws_custom]mbedtls_ctr_drbg_seed failed: -0x%04x", -ret);
+        char ebuf[128];
+        log_e("[ws_custom]mbedtls_ctr_drbg_seed failed: -0x%04x (%s)", -ret,
+              ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
         goto cleanup;
     }
     
@@ -653,7 +682,9 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
                                       MBEDTLS_SSL_TRANSPORT_STREAM,
                                       MBEDTLS_SSL_PRESET_DEFAULT);
     if (ret != 0) {
-        log_e("[ws_custom]mbedtls_ssl_config_defaults failed: -0x%04x", -ret);
+        char ebuf[128];
+        log_e("[ws_custom]mbedtls_ssl_config_defaults failed: -0x%04x (%s)", -ret,
+              ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
         goto cleanup;
     }
     
@@ -666,14 +697,18 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     // 设置主机名
     ret = mbedtls_ssl_set_hostname(&client->ssl, host);
     if (ret != 0) {
-        log_e("[ws_custom]mbedtls_ssl_set_hostname failed: -0x%04x", -ret);
+        char ebuf[128];
+        log_e("[ws_custom]mbedtls_ssl_set_hostname failed: -0x%04x (%s)", -ret,
+              ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
         goto cleanup;
     }
     
     // 初始化SSL上下文
     ret = mbedtls_ssl_setup(&client->ssl, &client->ssl_conf);
     if (ret != 0) {
-        log_e("[ws_custom]mbedtls_ssl_setup failed: -0x%04x", -ret);
+        char ebuf[128];
+        log_e("[ws_custom]mbedtls_ssl_setup failed: -0x%04x (%s)", -ret,
+              ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
         goto cleanup;
     }
     
@@ -692,7 +727,9 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     // 执行SSL握手
     while ((ret = mbedtls_ssl_handshake(&client->ssl)) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-            log_e("[ws_custom]mbedtls_ssl_handshake failed: -0x%04x", -ret);
+            char ebuf[128];
+            log_e("[ws_custom]mbedtls_ssl_handshake failed: -0x%04x (%s)", -ret,
+                  ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
             goto cleanup;
         }
     }
@@ -714,7 +751,9 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
         ret = mbedtls_ssl_write(&client->ssl, (unsigned char *)handshake_req + sent, req_len - sent);
         if (ret <= 0) {
             if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-                log_e("[ws_custom]mbedtls_ssl_write failed: -0x%04x", -ret);
+                char ebuf[128];
+                log_e("[ws_custom]mbedtls_ssl_write failed: -0x%04x (%s)", -ret,
+                      ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
                 goto cleanup;
             }
             continue;
@@ -731,7 +770,11 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
             if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
                 continue;
             }
-            log_e("[ws_custom]mbedtls_ssl_read failed: -0x%04x", -ret);
+            {
+                char ebuf[128];
+                log_e("[ws_custom]mbedtls_ssl_read failed: -0x%04x (%s)", -ret,
+                      ws_mbedtls_errstr(ret, ebuf, sizeof(ebuf)));
+            }
             goto cleanup;
         }
         resp_len += ret;
@@ -1004,10 +1047,15 @@ static void ws_recv_thread(void *param)
     
     // 临时缓冲区用于构建自动响应 (PING/CLOSE)
     u8 *resp_buf = malloc(1024);
+
+    // 退出原因（传给上层，便于判断是服务端 CLOSE / EOF / 错误）
+    char exit_reason[96] = "io_thread_exit";
     
     if (!frame_buf || !resp_buf) {
         log_e("[ws_custom]Failed to allocate buffers");
         client->thread_running = false;
+        strncpy(exit_reason, "alloc_failed", sizeof(exit_reason) - 1);
+        exit_reason[sizeof(exit_reason) - 1] = '\0';
         if (frame_buf) free(frame_buf);
         if (resp_buf) free(resp_buf);
         return;
@@ -1043,6 +1091,7 @@ static void ws_recv_thread(void *param)
         
         if (ret < 0) {
             log_e("[ws_custom]Select error: %d", errno);
+            snprintf(exit_reason, sizeof(exit_reason), "select_error errno=%d", errno);
             break;
         }
         
@@ -1098,9 +1147,18 @@ static void ws_recv_thread(void *param)
                                     WS_RECV_BUF_SIZE - client->recv_buf_len);
                 if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
                     n = 0; // 忽略
+                } else if (n == 0) {
+                    // mbedTLS: 0 表示底层连接 EOF（对端可能直接断开，未必发送 close_notify）
+                    log_i("[ws_custom]SSL connection closed by peer (EOF)");
+                    strncpy(exit_reason, "ssl_eof", sizeof(exit_reason) - 1);
+                    exit_reason[sizeof(exit_reason) - 1] = '\0';
+                    break;
                 } else if (n <= 0) {
                     if (n != MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY && n != 0) {
-                         log_e("[ws_custom]SSL read error: -0x%04x", -n);
+                        char ebuf[128];
+                        log_e("[ws_custom]SSL read error: -0x%04x (%s)", -n,
+                              ws_mbedtls_errstr(n, ebuf, sizeof(ebuf)));
+                        snprintf(exit_reason, sizeof(exit_reason), "ssl_read_error=-0x%04x", -n);
                     }
                     if (n != 0) break; // 真正错误或关闭
                 }
@@ -1112,10 +1170,13 @@ static void ws_recv_thread(void *param)
                         if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
                         else {
                             log_e("[ws_custom]TCP recv error: %d", errno);
+                            snprintf(exit_reason, sizeof(exit_reason), "tcp_recv_error errno=%d", errno);
                             break;
                         }
                     } else if (n == 0) {
                         log_i("[ws_custom]Connection closed by peer");
+                        strncpy(exit_reason, "tcp_eof", sizeof(exit_reason) - 1);
+                        exit_reason[sizeof(exit_reason) - 1] = '\0';
                         break;
                     }
                 }
@@ -1153,6 +1214,14 @@ static void ws_recv_thread(void *param)
                             
                         case WS_FRAME_CLOSE:
                             log_i("[ws_custom]Received CLOSE frame");
+                            // 尝试解析 close code
+                            if (payload_len >= 2) {
+                                u16 code = ((u16)payload[0] << 8) | payload[1];
+                                snprintf(exit_reason, sizeof(exit_reason), "ws_close code=%u", code);
+                            } else {
+                                strncpy(exit_reason, "ws_close", sizeof(exit_reason) - 1);
+                                exit_reason[sizeof(exit_reason) - 1] = '\0';
+                            }
                             // 写入 CLOSE 响应到 RingBuffer
                             os_mutex_pend(&client->mutex, 0);
                             int close_len = build_ws_frame(resp_buf, 1024, NULL, 0, WS_FRAME_CLOSE, true);
@@ -1161,7 +1230,8 @@ static void ws_recv_thread(void *param)
                             }
                             os_mutex_post(&client->mutex);
                             client->thread_running = false;
-                            break;
+                            // 直接退出线程，避免继续处理后续数据
+                            goto thread_exit;
                             
                         case WS_FRAME_PING:
                             log_i("[ws_custom]Received PING frame");
@@ -1195,15 +1265,33 @@ static void ws_recv_thread(void *param)
     }
     
     log_i("[ws_custom]IO thread exited");
+thread_exit:
     free(frame_buf);
     free(resp_buf);
     
     if (client->disconnect_cb) {
-        client->disconnect_cb("IO thread exited");
+        client->disconnect_cb(exit_reason);
     }
-    
+
     client->thread_running = false;
-    client->state = WS_STATE_DISCONNECTED;
+
+    // 统一在 IO 线程退出时做清理，避免外部 kill 导致 socket 直接被硬断（服务端常见 1006 unexpected EOF）
+    os_mutex_pend(&client->mutex, 0);
+    if (client->state != WS_STATE_DISCONNECTED) {
+        if (client->sock_fd >= 0) {
+            if (client->use_ssl) {
+                (void)mbedtls_ssl_close_notify(&client->ssl);
+                mbedtls_ssl_free(&client->ssl);
+                mbedtls_ssl_config_free(&client->ssl_conf);
+                mbedtls_ctr_drbg_free(&client->ctr_drbg);
+                mbedtls_entropy_free(&client->entropy);
+            }
+            close(client->sock_fd);
+            client->sock_fd = -1;
+        }
+        client->state = WS_STATE_DISCONNECTED;
+    }
+    os_mutex_post(&client->mutex);
 }
 
 // API实现
@@ -1289,7 +1377,45 @@ int ws_client_connect(ws_client_t client, const char *url,
 
 int ws_client_send_text(ws_client_t client, const u8 *data, u32 len)
 {
-    return ws_client_send_binary(client, data, len); // 文本和二进制使用相同的发送逻辑
+    // 实验A：文本帧与二进制帧必须严格区分，不能根据 payload 内容猜测帧类型。
+    // 之前用 data[0] < 128 判断会把大量二进制误发成 TEXT，服务端/网关可能直接 CLOSE。
+    if (!client || !data || len == 0) {
+        return -1;
+    }
+
+    os_mutex_pend(&client->mutex, 0);
+
+    if (client->state != WS_STATE_CONNECTED) {
+        os_mutex_post(&client->mutex);
+        return -1;
+    }
+
+    // 构建 WebSocket TEXT 帧（客户端必须 mask）
+    int frame_len = build_ws_frame(client->temp_send_buf, 16 * 1024,
+                                   data, len, WS_FRAME_TEXT, true);
+    if (frame_len < 0) {
+        log_e("[ws_custom]ERROR: build_ws_frame(TEXT) failed, frame_len=%d", frame_len);
+        os_mutex_post(&client->mutex);
+        return -1;
+    }
+    if (validate_ws_frame_header(client->temp_send_buf, frame_len) < 0) {
+        log_e("[ws_custom]ERROR: Frame validation failed before send in ws_client_send_text");
+        os_mutex_post(&client->mutex);
+        return -1;
+    }
+    if (rb_available(&client->send_rb) > (client->send_rb.capacity / 2)) {
+        os_mutex_post(&client->mutex);
+        return -1;
+    }
+    if (rb_space(&client->send_rb) < frame_len) {
+        log_e("[ws_custom]ERROR: Send buffer full! Dropping frame. space=%d, need=%d",
+              rb_space(&client->send_rb), frame_len);
+        os_mutex_post(&client->mutex);
+        return -1;
+    }
+    rb_write(&client->send_rb, client->temp_send_buf, frame_len);
+    os_mutex_post(&client->mutex);
+    return 0;
 }
 
 int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
@@ -1305,15 +1431,8 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
         return -1;
     }
     
-    // 构建WebSocket帧（客户端必须mask）
-    ws_frame_type_t frame_type = (data[0] < 128) ? WS_FRAME_TEXT : WS_FRAME_BINARY;
-    
-    // 验证frame_type的有效性
-    if (frame_type != WS_FRAME_TEXT && frame_type != WS_FRAME_BINARY) {
-        log_e("[ws_custom]ERROR: Invalid frame_type 0x%02x in ws_client_send_binary", (u8)frame_type);
-        os_mutex_post(&client->mutex);
-        return -1;
-    }
+    // 实验A：二进制发送必须固定使用 BINARY 帧，不能根据 payload 内容猜测帧类型。
+    ws_frame_type_t frame_type = WS_FRAME_BINARY;
     
     // 使用临时缓冲区构建帧，避免长时间占用锁
     // 注意：WS_SEND_BUF_SIZE 现在是 RingBuffer 的总大小，不能用来做单帧构建
@@ -1336,12 +1455,16 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     
     // 发送帧 -> 写入 RingBuffer
     // log_i("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
+    // 注意：这里绝不能用 sprintf 循环拼 hex（会反复写 '\0'，极易越界导致栈被踩，最终触发 PC 跑飞/axi_rd_inv）
     if (len > 0 && len < 128) { // 只打印短数据的内容
-        char dump_buf[256] = {0};
-        int dump_len = len > 128 ? 128 : len;
+        static const char hex[] = "0123456789abcdef";
+        char dump_buf[256];
+        int dump_len = (len > 127) ? 127 : (int)len; // 确保 2*dump_len + 1 <= 255
         for (int i = 0; i < dump_len; i++) {
-            sprintf(dump_buf + i * 2, "%02x", data[i]);
+            dump_buf[i * 2]     = hex[(data[i] >> 4) & 0xF];
+            dump_buf[i * 2 + 1] = hex[data[i] & 0xF];
         }
+        dump_buf[dump_len * 2] = '\0';
         log_i("[ws_custom]Data: %s", dump_buf);
         if (frame_type == WS_FRAME_TEXT) {
             log_i("[ws_custom]Text: %.*s", dump_len, data);
