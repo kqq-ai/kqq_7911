@@ -85,7 +85,7 @@ void wss_audio_allow_playback()
 
     /* 标记为播放中 */
     audio_req_time = timer_get_ms();
-    g_audio_play_ongoing = true;
+    if (g_stream_end == false) g_audio_play_ongoing = true;
     set_led_tts_on();
 
     
@@ -194,7 +194,7 @@ stream_write:
         g_audio_player_start = true;
     }
     /* 直接写入播放器流（data/len 为需要写入的部分） */
-    while (len > 0 && !g_audio_off) {
+    while (len > idx && !g_audio_off) {
         uint32_t chunk_size = (len > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len;
         uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, data + idx, chunk_size);
         if (written == 0) {
@@ -204,9 +204,9 @@ stream_write:
         idx += written;
         total_written += written;
         log_d("[AUDIO]stream_write chunk: %u bytes (total: %u / %u)", written, idx, total_written);
-        if (idx == len || g_audio_off) break;
         msleep(10);
     }
+    os_mutex_post(&g_audio_mutex);
 
     /* update playing flag if started */
     if (g_audio_playing == false && app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
@@ -214,8 +214,6 @@ stream_write:
         log_i("[AUDIO]stream playing...");
         send_device_status(DEVICE_STATUS_AUDIO_PLAYING); // 正在播放
     }
-    os_mutex_post(&g_audio_mutex);
-
     // log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
     return 0;
 }
@@ -238,6 +236,14 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 
 // 获取当前音频播放状态
 bool is_audio_playing(){
+
+    if (g_audio_playing == false && g_stream_end) {
+        if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+            g_audio_playing = true;
+            log_i("[AUDIO]is_audio_playing: stream ended but player started, marking playing");
+        }
+    }
+
     bool playing = g_audio_playing || (g_audio_play_ongoing && 
         (total_written >> 2) + 1000 > timer_get_ms()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
     if (!g_audio_playing && playing) {
