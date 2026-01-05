@@ -1338,16 +1338,12 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     
     // 发送帧 -> 写入 RingBuffer
     log_d("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
-    // 注意：绝不能用 sprintf 循环拼 hex（会反复写 '\0'，且 i*2 步进会导致越界风险）
     if (len > 0 && len < 128) { // 只打印短数据的内容
-        static const char hex[] = "0123456789abcdef";
-        char dump_buf[256];
-        int dump_len = (len > 127) ? 127 : (int)len; // 确保 2*dump_len + 1 <= 255
+        char dump_buf[256] = {0};
+        int dump_len = len > 128 ? 128 : len;
         for (int i = 0; i < dump_len; i++) {
-            dump_buf[i * 2]     = hex[(data[i] >> 4) & 0xF];
-            dump_buf[i * 2 + 1] = hex[data[i] & 0xF];
+            sprintf(dump_buf + i * 2, "%02x", data[i]);
         }
-        dump_buf[dump_len * 2] = '\0';
         log_d("[ws_custom]Data: %s", dump_buf);
         if (frame_type == WS_FRAME_TEXT) {
             log_i("[ws_custom]Text: %.*s", dump_len, data);

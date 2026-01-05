@@ -5,7 +5,6 @@
 #include "cJSON_common/cJSON.h"
 
 const cJSON *cjson_parse(u8 *buf);
-const cJSON *cjson_parse_len(const u8 *buf, u32 len);
 cJSON *cjson_get_object(cJSON *object, const char *string);
 cJSON *cjson_get_array(cJSON *object, const char *string);
 char *cjson_get_string_value(cJSON *object, const char *string);
