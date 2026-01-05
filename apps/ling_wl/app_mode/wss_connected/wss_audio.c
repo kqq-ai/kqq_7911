@@ -243,7 +243,6 @@ bool is_audio_playing(){
             log_i("[AUDIO]is_audio_playing: stream ended but player started, marking playing");
         }
     }
-
     bool playing = g_audio_playing || (g_audio_play_ongoing && 
         (total_written >> 2) + 1000 > timer_get_ms()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
     if (!g_audio_playing && playing) {
@@ -294,11 +293,11 @@ void wss_audio_set_stream_start() {
 
 void wss_audio_set_stream_end() {
     log_i("[AUDIO]wss_audio_set_stream_end");
-    odmp_register_audio_data_cbk(NULL); 
-    g_audio_play_ongoing = false;
     if (total_written > 0) {
+        odmp_register_audio_data_cbk(NULL); 
         log_i("[AUDIO]total_written=%u marking stream end", total_written);
         g_stream_end = true;
+        g_audio_play_ongoing = false;
     }
 }
 
