@@ -7,7 +7,7 @@
 #include "../LED/LED.h"
 #include "asm/pwm.h"
 
-#include "lwl_peri_dev.h"
+#include "app_mode/lwl_peri_dev.h"
 #include "app_mode/lwl_app_core.h"
 #include "asm/power_interface.h"
 

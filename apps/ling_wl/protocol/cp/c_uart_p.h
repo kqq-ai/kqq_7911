@@ -80,9 +80,6 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len);
 /* 1. 获取设备状态 的响应函数 */
 int uart_response_synch_status(uint8_t busy_status, uint8_t volume);
 
-/* 2. 设置设备SN 的发送函数 */
-int uart_send_set_sn(char *sn);
-
 /* 3. 使能移动检测 的发送函数 */
 int uart_send_move_detect_en(uint8_t en);
 

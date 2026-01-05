@@ -122,6 +122,8 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         log_i("Button pressed via UART interface");
         log_i("Event timestamp: %d ms", timer_get_ms());
         log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
+        log_i("key type : %d", e->key_cmd.key_event_type);
+        
 
         lwl_app_mode_stop_playing();
         
@@ -157,7 +159,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         case WORK_MODE_8:
             next_mode = WORK_MODE_INIT;
             break;
-        case WORK_MODE_9:
         default:
             next_mode = WORK_MODE_INIT; // 模式8后回到初始模式，形成循环
             break;
@@ -166,22 +167,27 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         g_new_mode = next_mode;
         os_mutex_post(&g_mode_mutex);
 
-    }   break;
+        break;
+    }
     case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
         // return to WORK_MODE_1
         os_mutex_pend(&g_mode_mutex, 0);
         g_new_mode = WORK_MODE_INIT;
         os_mutex_post(&g_mode_mutex);
         break;
+    case LWL_EVENT_TYPE_GSENSOR_IDLE:
+            log_i("GSENSOR_EVENT -> set alive timeout");
+        break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
-        log_i("=== UART TOUCH KEY DOWN DETECTED ===");
-        if (e->touch_key_cmd.touch_key_event_type == 0) {
+    {
+        log_i("=== TOUCH KEY ===");
+        if (e->touch_key_cmd.touch_key_event_type == 0)
+        { /* 按下 */
             log_i("Touch key pressed down");
             log_i("Event timestamp: %d ms", timer_get_ms());
             log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
             
             log_i("Touch key event type: %d",e->touch_key_cmd.touch_key_event_type);
-            ///lwl_app_mode_stop_playing();
             
             // 特殊处理模式8的触摸按键检测
             if (g_current_mode == WORK_MODE_8) {
@@ -189,11 +195,11 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
-                ///process_mode_6_touch_key(e->touch_key_cmd.touch_key_event_type);
                 bdo_disable(1); // 发送暂停uart指令
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {
+                lwl_app_mode_stop_playing();
                 process_mode_1_touch_key(e->touch_key_cmd.touch_key_event_type);
             }
         } else {
@@ -211,15 +217,20 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
-                ///process_mode_6_touch_key(e->touch_key_cmd.touch_key_event_type);
                 bdo_enable(); // 发送暂停uart指令
             }
         }
         break;
-    case LWL_EVENT_TYPE_LOW_BATTERY:
-        u16 voltage = get_vbat_level();
-        if (voltage < LOW_BATT_VERY_SHUTDOWN) {
-            lwl_app_mode_switch_to(APP_DEFAULT_MODE);
+    }
+    case LWL_EVENT_TYPE_CHARGE:
+        log_i("LWL_EVENT_TYPE_CHARGE");
+        log_i("Charging: %d", e->charge_cmd.charge_event_type);
+        if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_IN) {
+            log_i("Charging started");
+        } else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_OUT) {
+            log_i("Charging stopped");
+        } else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_FULL) {
+            log_i("Charging full");
         }
         break;
     }
@@ -255,7 +266,7 @@ static void devices_check_init(void)
     // 初始化模式系统，进入初始模式（红灯常亮）
     switch_to_mode(WORK_MODE_INIT);
 
-    wifi_and_network_off();
+    // wifi_and_network_off();
     os_mutex_post(&g_mode_mutex);
     
     log_i("=== MODE SYSTEM INITIALIZED ===");
@@ -287,7 +298,6 @@ void app_devices_check_mode(void)
 
     log_i("=== ENTERING MAIN LOOP ===");
     log_i("Multi-mode system active");
-    ///lwl_peri_dev_init();
 
     while (1) {
         lwl_app_mode_play_loop();
@@ -305,11 +315,7 @@ void app_devices_check_mode(void)
         }
         
         // 检测按键状态（保留原有的GPIO按键检测功能）
-        //check_key_status();
         u32 g_curr_time = timer_get_ms();
-
-        // C_V2_01 测试
-        /// lwl_peri_dev_loop(g_curr_time);   peri_events
 
         // 定期输出设备信息（减少频率以避免日志过多）
         if (g_curr_time - g_heat_timer >= HEAT_TIMEOUT * 3) { // 每3秒输出一次
@@ -411,9 +417,6 @@ static void switch_to_mode(work_mode_e new_mode)
     case WORK_MODE_8:
         mode8_uninit();
         break;
-    case WORK_MODE_9:
-        mode9_uninit();
-        break;
     default:
         break;
     }
@@ -450,9 +453,6 @@ static void switch_to_mode(work_mode_e new_mode)
         break;
     case WORK_MODE_8:
         mode8_init();
-        break;
-    case WORK_MODE_9:
-        mode9_init();
         break;
     default:
         break;

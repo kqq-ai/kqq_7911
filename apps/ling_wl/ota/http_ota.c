@@ -15,7 +15,7 @@
 #include "net_music_play_my.h"
 #include "LED/LED.h"
 
-#define DEFAULT_RECV_BUF_SIZE   (4*1024)   //数据缓存BUF大小
+#define DEFAULT_RECV_BUF_SIZE   (256*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
 
 
@@ -94,6 +94,7 @@ _reconnect_:
         if (hdl->download_len >= hdl->file_size) {
             goto _finish_;
         }
+        mdelay(1);
     }
 
 _finish_:
@@ -148,7 +149,7 @@ int http_create_download_task(char *url)
     hdl->ctx.connection = "close";
 
     //创建下载线程
-    return thread_fork("download_task", 5,  2 * 1024, 0, NULL, download_task, hdl);
+    return thread_fork("download_task", 20,  2 * 1024, 0, NULL, download_task, hdl);
 }
 
 int request_ota_info(char **pota_info)
@@ -426,6 +427,15 @@ int get_download_progress()
 {
     if (ota_hdl != NULL && ota_hdl->file_size > 0) {
         return (ota_hdl->download_len * 100) / ota_hdl->file_size;
+    } else {
+        return 0;
+    }
+}
+
+u32 get_reconnect_cnt()
+{
+    if (ota_hdl != NULL && ota_hdl->file_size > 0) {
+        return ota_hdl->reconnect_cnt;
     } else {
         return 0;
     }

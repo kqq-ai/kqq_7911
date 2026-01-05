@@ -44,22 +44,22 @@ void handle_packet(uint8_t cmd, uint8_t *payload, uint16_t len)
         log_i("the UART_CMD_SET_BLESN !\r\n");
         // ignore
     }   break;
-    case UART_CMD_MOVE_DETECT_EN:{ // 使能移动检测
-        log_i("the UART_CMD_MOVE_DETECT_EN !\r\n");
-        // ignore
-    }   break;
+    // case UART_CMD_MOVE_DETECT_EN:{ // 使能移动检测
+    //     log_i("the UART_CMD_MOVE_DETECT_EN !\r\n");
+    //     // ignore
+    // }   break;
     // case UART_CMD_MOVE_OVER_A_METER:{ // 通知检测距离大于一米
     //     log_i("the UART_CMD_MOVE_OVER_A_METER !\r\n");
     //     lwl_event_t e;
     //     e.event_type = LWL_EVENT_TYPE_UART_MOVE_MORE_THAN_ONE_METER;
     //     lwl_event_notify(&e);
     // }   break;
-    case UART_CMD_CLEAR_WIFI_SSID:{ // 清除WIFI SSID
-        log_i("the UART_CMD_CLEAR_WIFI_SSID !\r\n");
-        lwl_event_t e;
-        e.event_type = LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID;
-        lwl_event_notify(&e);
-    }   break;
+    // case UART_CMD_CLEAR_WIFI_SSID:{ // 清除WIFI SSID
+    //     log_i("the UART_CMD_CLEAR_WIFI_SSID !\r\n");
+    //     lwl_event_t e;
+    //     e.event_type = LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID;
+    //     lwl_event_notify(&e);
+    // }   break;
     // case UART_CMD_NOTIFY_GSENSOR_OFF:{ // Gsensor 关闭
     //     log_i("the UART_CMD_NOTIFY_GSENSOR_OFF !\r\n");
     //     lwl_event_t e;
@@ -128,7 +128,7 @@ int uart_send_response(uint8_t cmd, uint8_t code, uint8_t *payload, uint16_t len
     resp_packet[7 + len] = PACKET_TRAILER_RESP;                // TRAILER
 
     log_d("uart_send_response: \r\n");
-    log_d_buf(resp_packet, 8 + len);
+    // log_d_buf(resp_packet, 8 + len);
     // 发送响应包
     return dev_write(g_dev_uart_hdl, resp_packet, 8 + len);
 }
@@ -175,24 +175,12 @@ int uart_send_inquiry(uint8_t *payload, uint16_t len)
     send_packet[5 + len] = PACKET_TRAILER_CMD;
 
     log_d("uart_send_inquiry: \r\n");
-    log_d_buf(send_packet, 6 + len);
+    // log_d_buf(send_packet, 6 + len);
 
     if (g_dev_uart_hdl == NULL) 
         return -1;
     // 发送响应包
     return dev_write(g_dev_uart_hdl, send_packet, 6 + len);
-}
-
-int uart_send_set_sn(char *sn)
-{
-    uint8_t busy_status_payload[1 + SN_SIZE +1] = {0};
-    busy_status_payload[0] = UART_CMD_SET_BLESN;
-    if (strcmp(sn, "WECNC4H06CPLJE7") == 0) {
-        memcpy(busy_status_payload + 1, "WCCN24H28FEEEFA", SN_SIZE+1);
-    } else {
-        memcpy(busy_status_payload + 1, sn, SN_SIZE+1);
-    }
-    return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
 }
 
 int uart_send_move_detect_en(uint8_t en)
@@ -203,24 +191,6 @@ int uart_send_move_detect_en(uint8_t en)
     send_payload[1] = en;
     return uart_send_inquiry(send_payload, 2);
 }
-
-/* 4. 设置LED颜色 的发送函数 */
-// int set_rgb_color(uint16_t r, uint16_t g, uint16_t b)
-// {
-//     set_rgb_color(10000 - r, 10000 - g, 10000 - b); // 本地也设置LED颜色
-//     // uint8_t send_led_payload[7];
-//     // memset(send_led_payload, 0, sizeof(send_led_payload));
-//     // send_led_payload[0] = UART_CMD_SET_LED_COLOR;   
-//     // /* 小端序 */
-//     // send_led_payload[1] = r & 0xFF;        // r 低字节
-//     // send_led_payload[2] = (r >> 8) & 0xFF; // r 高字节
-//     // send_led_payload[3] = g & 0xFF;        // g 低字节
-//     // send_led_payload[4] = (g >> 8) & 0xFF; // g 高字节
-//     // send_led_payload[5] = b & 0xFF;        // b 低字节
-//     // send_led_payload[6] = (b >> 8) & 0xFF; // b 高字节
-
-//     // return uart_send_inquiry(send_led_payload, sizeof(send_led_payload));
-// }
 
 /* 5. 7911申请软关机 发送函数 */
 int uart_send_apply_soft_poweroff(void)
@@ -262,6 +232,7 @@ int uart_send_set_ctrl(uint8_t ctrl)
     return uart_send_inquiry(busy_status_payload, sizeof(busy_status_payload));
 }
 
+
 /* 6. 通知7016进入 播放模式 的发送函数 */
 int uart_send_audio_dev_play(void)
 {
@@ -280,6 +251,7 @@ int uart_send_audio_dev_ota(void)
     return uart_send_inquiry(payload, sizeof(payload));
 }
 
+
 /* 8. 通知7016进入 关闭模式 的发送函数 */
 int uart_send_audio_dev_close(void)
 {
@@ -288,3 +260,4 @@ int uart_send_audio_dev_close(void)
     payload[1] = 0x00;
     return uart_send_inquiry(payload, sizeof(payload));
 }
+
