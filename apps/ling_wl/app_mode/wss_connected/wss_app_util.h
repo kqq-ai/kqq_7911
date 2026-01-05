@@ -20,5 +20,6 @@ bool wss_connect(void);
 void wss_disconnect(void);
 bool wss_reconnect(void);
 const char *wss_get_last_disconnect_reason(void);
+void wss_note_disconnect_reason(const char *reason);
 
 #endif

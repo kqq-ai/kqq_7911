@@ -104,6 +104,17 @@ static void wss_mark_exception(const char *reason)
     g_exception_exit = true;
 }
 
+const char *wss_get_last_disconnect_reason(void)
+{
+    return g_last_disconnect_reason;
+}
+
+void wss_note_disconnect_reason(const char *reason)
+{
+    // 复用异常标志/原因，确保上层能拿到准确的断开原因
+    wss_mark_exception(reason ? reason : "disconnect");
+}
+
 bool wss_check_exit(void)
 {
     if (g_exception_exit) {
