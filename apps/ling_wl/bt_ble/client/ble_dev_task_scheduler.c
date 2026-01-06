@@ -482,24 +482,30 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     log_i("[BDO]Waiting adv state change...");
     process_cb(op, BDOCode_Success);
     msleep(300);
-    log_i("[BDO]bdo_enable %s", broadcast_code);
-    log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
-    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
-    uart_send_set_ctrl(0x01);
-    uart_send_switch_audio_bc(broadcast_code, 0x01);
-    uart_send_set_ctrl(0x01);
+    if (dev->op_state & BDO_STATE_TURNNING_ON) {
+        log_i("[BDO]Continue turn on...");
+        log_i("[BDO]bdo_enable %s", broadcast_code);
+        log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
+        memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+        uart_send_set_ctrl(0x01);
+        uart_send_switch_audio_bc(broadcast_code, 0x01);
+        uart_send_set_ctrl(0x01);
 
-    /* - 扫描设备 ADV 状态变化 -> connected */
-    if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
-        log_e("[BDO]Error scan adv state timeout!!!");
+        /* - 扫描设备 ADV 状态变化 -> connected */
+        if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
+            log_e("[BDO]Error scan adv state timeout!!!");
+            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+            return;
+        }
+
+        log_i("[BDO]Turn on end");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
-        process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
-        return;
+        process_cb(op, BDOCode_Ready_to_Play);
+    } else {
+        log_i("[BDO]Turn on cancelled!");
+        process_cb(op, BDOCode_Skip);
     }
-
-    log_i("[BDO]Turn on end");
-    dev->op_state &= ~BDO_STATE_TURNNING_ON;
-    process_cb(op, BDOCode_Ready_to_Play);
 }
 
 static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
@@ -665,9 +671,9 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
 int bdo_turn_off(lwl_eend_dev_t *dev)
 {
     log_i("[MEASDIST]bdo_turn_off %s", dev->sn);
+    dev->op_state = BDO_STATE_IDLE;
     // broadcast_code 等于dev->sn的后6位则继续
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
-        dev->op_state = BDO_STATE_IDLE;
         log_i("[BDO] switch_audio_bc %s ctrl(0x00)", broadcast_code);
         uart_send_set_ctrl(0x00);
     }

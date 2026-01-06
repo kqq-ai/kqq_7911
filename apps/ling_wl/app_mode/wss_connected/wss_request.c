@@ -315,6 +315,7 @@ void wss_request_pause()
         wss_request_send_event_target(ORMET_PLAY_STOP);
         turn_off_Pi();
     }
+    bdo_disable(0);
 
     // 重置状态到IDLE
     wss_request_update_state(STATE_IDLE, "wss_request_pause");
