@@ -407,6 +407,7 @@ void wss_application_init()
     
     monitor_start();
     wss_audio_init();
+    wss_stream_init();
     wss_mic_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
@@ -455,6 +456,7 @@ void wss_application_uninit()
 
     wss_request_uninit();
     wss_audio_uninit();
+    wss_stream_uninit();
     wss_mic_uninit();
     wss_device_uninit();
     monitor_stop();//free all pdev

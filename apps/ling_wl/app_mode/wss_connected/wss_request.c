@@ -20,7 +20,6 @@ static u32 g_wss_last_time = 0;
 static u32 g_mode_last_time = 0;
 static OS_MUTEX g_request_mutex;
 
-static lwl_app_context_t *g_app_ctx = NULL;
 /*=================================================================================================
  * 请求状态
  *=================================================================================================*/
@@ -234,10 +233,10 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 last_message_type = OAST_TTS;
                 last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
-                wss_audio_set_stream_start(); // 允许音频流开始
+                wss_stream_start(); // 允许音频流开始
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
-                wss_audio_set_stream_end(); // 标记音频流结束
+                wss_stream_stop(); // 标记音频流结束
             }
             g_wss_last_time = g_curr_time;
         } else if (pkg->audio_status.type == OAST_SCRIPT) {
@@ -336,7 +335,6 @@ void wss_request_resume()
 void wss_request_init()
 {
     log_i("[wss_request]Init WSS request\n");
-    g_app_ctx = lwl_app_core_context_get_instance();
     /* 注册odmp事件回调 */
     g_edev_target_sn[0] = 0;
 
@@ -373,7 +371,6 @@ bool wss_request_loop()
         if (send_message == ORMET_SWITCH_SUCCESS) {
             log_i("[wss_request]Switch success, send ORMET_SWITCH_SUCCESS");
             if (g_edev_connected_sn[0] != 0) {
-                wss_ble_audio_start();
                 wss_request_send_event_target(send_message);
             }
             send_message = 0; // 重置发送消息标志
@@ -384,7 +381,6 @@ bool wss_request_loop()
             play_prompt_sound("SwFailed.mp3");
             bdo_disable(0);
         } else if (ready_to_play) {
-            wss_audio_allow_playback();
             wss_request_update_state(STATE_DOWNLOAD, "Switch success ready_to_play");
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
             send_message = ORMET_SWITCH_FAILED;
@@ -393,15 +389,15 @@ bool wss_request_loop()
 
     case STATE_DOWNLOAD: // until receive AUDIO END
         // 下载结束，继续播放
-        if (wss_audio_is_stream_end()){ // 音频下载缓存已结束
+        if (wss_stream_on()){ // 音频下载开始
+            wss_ble_audio_start();
             wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
-        } else if (!is_audio_playing()) {
-            if ((g_curr_time & 63) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
+        } else {
+            if ((g_curr_time & 63) == 0) log_i("[wss_request]wait for stream start timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
             if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
                 wss_request_stop();
-                log_i("[wss_request]Download timeout, send ORMET_SWITCH_FAILED");
+                log_i("[wss_request]Download timeout");
                 // play_prompt_sound("SwFailed.mp3");
-                bdo_disable(0);
             }
         }
         break;
