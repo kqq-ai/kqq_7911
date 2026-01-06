@@ -28,9 +28,6 @@ static int wait_time = 0;
 static int last_message_type = 0;
 static int last_event = 0;
 
-static int send_message = 0;
-static bool ready_to_play = false;
-
 static char g_edev_target_sn[SN_SIZE+1]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE+1]; // E 已连接
 static char g_stream_id[64]; // 保存 stream_id
@@ -82,25 +79,61 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         log_i("[wss_request]Switch PortE Ready_to_Play\n");
         break;
     }
+    
     if (code == BDOCode_Success) { // 连接成功
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
-        if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
-            send_message = ORMET_SWITCH_SUCCESS;
-            ready_to_play = false;
-            log_i("[wss_request]send_message = %d", send_message);
+        if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的是目标E
+            log_mqtt("❤️❤️❤️ 切换设备成功，开始播放音频");
+            log_i("【dg】[e_turn_on_cb]ORMET_SWITCH_SUCCESS: g_edev_connected_sn=%s, g_stream_id=%s", 
+                  g_edev_connected_sn, g_stream_id);
+            
+            // 检查所有必要条件
+            if (g_edev_connected_sn[0] == 0) {
+                log_e("[e_turn_on_cb]ERROR: g_edev_connected_sn is empty, cannot start audio");
+                os_mutex_post(&g_request_mutex);
+                return;
+            }
+            
+            if (g_stream_id[0] == '\0') {
+                log_e("[e_turn_on_cb]ERROR: g_stream_id is empty, cannot start audio");
+                os_mutex_post(&g_request_mutex);
+                return;
+            }
+            
+            // 启动音频并发送 bind_result 消息
+            wss_ble_audio_start(g_stream_id);
+            send_bind_result(g_edev_connected_sn, true, "connected", g_stream_id);
         } else {
+            // 连接的不是目标设备，关闭连接
             turn_off_Pi();
         }
     } else if (BDOCode_Ready_to_Play == code) {
-        if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的是目标E
-            ready_to_play = true;
-            log_i("[wss_request]send_message = %d", send_message);
+        // Ready_to_Play 状态，不做处理
+        if (strcmp(sn_string, g_edev_target_sn) == 0) {
+            log_i("[e_turn_on_cb]Ready to play for target device %s", sn_string);
         }
     } else {
-        if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的目标E失败
-            send_message = ORMET_SWITCH_FAILED;
-            log_i("【dg】[e_turn_on_cb]Connection failed for target device %s, code=%d, send_message=%d", 
-                  sn_string, code, send_message);
+        // 连接失败
+        if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的目标E失败
+            log_mqtt("💔💔💔 切换设备失败");
+            log_i("【dg】[e_turn_on_cb]ORMET_SWITCH_FAILED: g_edev_target_sn=%s, g_stream_id=%s, code=%d", 
+                  g_edev_target_sn, g_stream_id, code);
+            
+            // 连接失败，发送失败消息给服务器
+            if (g_stream_id[0] != '\0' && g_edev_target_sn[0] != 0) {
+                send_bind_result(g_edev_target_sn, false, "connection_failed", g_stream_id);
+            } else {
+                log_e("[e_turn_on_cb]ERROR: cannot send bind_result, g_edev_target_sn or g_stream_id is empty");
+            }
+            play_prompt_sound("SwFailed.mp3");
+            
+            // 清理状态
+            g_edev_target_sn[0] = 0;
+            g_edev_connected_sn[0] = 0;
+            g_stream_id[0] = '\0';
+            
+            // 关闭可能已连接的设备
+            turn_off_Pi();
         } else {
             log_i("【dg】[e_turn_on_cb]Connection failed for non-target device %s (target=%s), code=%d", 
                   sn_string, g_edev_target_sn, code);
@@ -110,17 +143,27 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
 }
 
 void turn_on_Pi(const char *pdev_sn) {
-    send_message = 0; // 重置发送消息标志
-    ready_to_play = false;
     log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
-// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
+    // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
     if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
         turn_off_Pi();
     }
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
         log_i("[wss_request]turn_on_Pi find_eend_dev_by_sn %s NULL\n", pdev_sn);
-        send_message = ORMET_SWITCH_FAILED;
+        // 设备不存在，在回调中处理失败逻辑
+        // 需要模拟一个失败的回调，但这里没有回调上下文
+        // 实际上如果设备不存在，应该立即处理失败逻辑
+        os_mutex_pend(&g_request_mutex, 0);
+        if (g_stream_id[0] != '\0' && g_edev_target_sn[0] != 0) {
+            send_bind_result(g_edev_target_sn, false, "device_not_found", g_stream_id);
+        }
+        play_prompt_sound("SwFailed.mp3");
+        // 清理状态
+        g_edev_target_sn[0] = 0;
+        g_edev_connected_sn[0] = 0;
+        g_stream_id[0] = '\0';
+        os_mutex_post(&g_request_mutex);
         return;
     }
     //上传E的电量
@@ -159,11 +202,9 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         memcpy(g_edev_target_sn, pkg->tts_bind.sn, SN_SIZE+1);
         turn_on_Pi(g_edev_target_sn);
         play_prompt_sound("TTSBind.mp3");
-    }   break;
-
-    case OR_PONG:
-        // log_i("LR_PONG\n");
         break;
+    } 
+
     }
     os_mutex_post(&g_request_mutex);
 }
@@ -252,60 +293,6 @@ void wss_request_uninit()
     wss_request_stop();
 }
 
-bool wss_request_loop()
-{
-    // 只做一件事：turn_on_Pi 切换成功之后马上发送切换成功消息
-    os_mutex_pend(&g_request_mutex, 0);
-    
-    if (send_message == ORMET_SWITCH_SUCCESS) {
-        log_mqtt("💔💔💔 切换设备成功，开始播放音频");
-        log_i("【dg】[wss_request_loop]ORMET_SWITCH_SUCCESS: g_edev_connected_sn=%s, g_stream_id=%s", 
-              g_edev_connected_sn, g_stream_id);
-        
-        // 检查所有必要条件
-        if (g_edev_connected_sn[0] == 0) {
-            log_e("[wss_request_loop]ERROR: g_edev_connected_sn is empty, cannot start audio");
-            send_message = 0;
-            os_mutex_post(&g_request_mutex);
-            return false;
-        }
-        
-        if (g_stream_id[0] == '\0') {
-            log_e("[wss_request_loop]ERROR: g_stream_id is empty, cannot start audio");
-            send_message = 0;
-            os_mutex_post(&g_request_mutex);
-            return false;
-        }
-        
-        wss_ble_audio_start(g_stream_id);
-        // 发送 bind_result 消息
-        send_bind_result(g_edev_connected_sn, true, "connected", g_stream_id);
-        send_message = 0; // 重置发送消息标志
-    } else if (send_message == ORMET_SWITCH_FAILED) {
-        log_mqtt("💔💔💔 切换设备失败");
-        log_i("【dg】[wss_request_loop]ORMET_SWITCH_FAILED: g_edev_target_sn=%s, g_stream_id=%s", 
-              g_edev_target_sn, g_stream_id);
-        
-        // 连接失败，发送失败消息给服务器
-        if (g_stream_id[0] != '\0' && g_edev_target_sn[0] != 0) {
-            send_bind_result(g_edev_target_sn, false, "connection_failed", g_stream_id);
-        } else {
-            log_e("[wss_request_loop]ERROR: cannot send bind_result, g_edev_target_sn or g_stream_id is empty");
-        }
-       play_prompt_sound("SwFailed.mp3");
-        // 清理状态
-        g_edev_target_sn[0] = 0;
-        g_edev_connected_sn[0] = 0;
-        g_stream_id[0] = '\0';
-        send_message = 0; // 重置发送消息标志
-        
-        // 关闭可能已连接的设备
-        turn_off_Pi();
-    }
-    
-    os_mutex_post(&g_request_mutex);
-    return false;
-}
 
 void wss_request_send_event(char *sn, int msg_event)
 {

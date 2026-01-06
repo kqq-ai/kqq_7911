@@ -196,55 +196,6 @@ bool wss_reconnect() {
     return true;
 }
 
-int send_audio_status(int type, int event) 
-{
-    os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-
-    char *send_data = odmp_audio_status(sn_c_id, type, event);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("Error %s %d.", __FILE__, __LINE__);
-
-        free(send_data);
-        wss_exception_exit();
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    log_i("wbs send msg : %s", send_data);
-    free(send_data);
-    os_mutex_post(&g_wss_mutex);
-    return 0;
-}
-
-int send_audio_format(int type) 
-{
-    os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-
-    char *send_data = odmp_set_audio_format(sn_c_id, type);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("Error %s %d.", __FILE__, __LINE__);
-
-        free(send_data);
-        wss_exception_exit();
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    log_i("wbs send msg : %s", send_data);
-    free(send_data);
-    os_mutex_post(&g_wss_mutex);
-    return 0;
-}
 
 int send_req_message(const char *send_id, bool is_play, int event_type) 
 {
@@ -399,7 +350,7 @@ int send_nearby_update(void **devices, int device_count)
         return -1;
     }
 
-    log_i("[nearby_update] wbs send msg : %s", send_data);
+    // log_i("[nearby_update] wbs send msg : %s", send_data);
 
     if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("[nearby_update] Error %s %d.", __FILE__, __LINE__);
@@ -621,6 +572,44 @@ int send_audio_play_finished(const char *stream_id, const char *status)
 
     if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("[audio_play_finished] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送btn_tap消息
+ * @param type 按键类型
+ * @param duration 持续时间（毫秒）
+ * @return 0成功,-1失败
+ */
+int send_btn_tap(int type, int duration)
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成btn_tap消息
+    char *send_data = odmp_btn_tap(type, duration);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_btn_tap: odmp_btn_tap returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[btn_tap] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[btn_tap] Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
         wss_exception_exit();

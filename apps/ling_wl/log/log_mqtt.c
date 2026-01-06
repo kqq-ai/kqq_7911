@@ -99,6 +99,13 @@ static int init_mqtt_network(void) {
         //表示在网络连接端口层面就失败了
         log_i("【MQTT】❌❌❌ 网络连接端口失败: %s:%d, error code: %d\n", 
                g_mqtt_config.server, g_mqtt_config.port, rc);
+        
+        // 重要：连接失败时，需要断开网络连接，释放socket资源
+        // ConnectNetwork失败时可能已经创建了socket，需要清理
+        if (mqtt_network.my_socket != NULL) {
+            mqtt_network.disconnect(&mqtt_network);
+        }
+        
         return rc;
     }
     

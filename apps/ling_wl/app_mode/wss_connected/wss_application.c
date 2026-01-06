@@ -3,6 +3,7 @@
 #include "wss_audio.h"
 #include "wss_mic.h"
 #include "wss_app_util.h"
+#include "wss_device.h"
 #include "../lwl_app_framework.h"
 #include "net_music_play_my.h"
 #include "app_cookie.h"
@@ -16,6 +17,7 @@
 #include <stdlib.h>
 
 #include "lwip/stats.h" // 添加头文件
+#include "system/timer.h" // 定时器API
 
 static OS_MUTEX g_wss_app_mutex;
 music_player *player;
@@ -36,7 +38,12 @@ static bool g_exit = false;
 
 static u32 g_touch_key_press_time = 0;
 static bool g_long_press_mic_started = false;  // 标记是否已经因为长按而开启了麦克风
+static u16 g_long_press_timer_id = 0;  // 长按定时器ID
 #define LONG_PRESS_THRESHOLD_MS 300  // 长按阈值300ms
+
+// 按钮点击事件类型
+#define BTN_TAP_TYPE_PRESS    1  // 按下
+#define BTN_TAP_TYPE_RELEASE  0  // 释放
 
 u32 last_E_found_time = 0;
 u32 last_move_time = 0;
@@ -95,110 +102,6 @@ static bool input_event_queue_pop(input_event_t *event)
     return true;
 }
 
-//=================================================================================================
-// nearby_update事件处理（每500ms发送一次附近设备信息）
-//=================================================================================================
-/**
- * @brief nearby_update事件处理回调函数
- * @param e 事件指针
- * @note 每500ms触发一次,收集所有扫描到的E端设备信息并通过WebSocket发送
- */
-static void nearby_update_event_handler(lwl_event_t *e)
-{
-    if (!e) {
-        log_e("[nearby_update] ERROR: event is NULL");
-        return;
-    }
-
-    // 检查事件类型
-    if (e->event_type != LWL_EVENT_TYPE_NEARBY_UPDATE) {
-        return;
-    }
-
-    log_d("[nearby_update] Event triggered, collecting device info...");
-
-    // 获取应用上下文
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (!ctx || !ctx->dev_map) {
-        log_e("[nearby_update] ERROR: context or dev_map is NULL");
-        return;
-    }
-
-    // 第一次遍历:统计有效设备数量(有RSSI样本的设备)
-    int valid_device_count = 0;
-    MapIterator it = map_begin(ctx->dev_map);
-    MapIterator end = map_end(ctx->dev_map);
-
-    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
-        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (dev && dev->distance_info.rssi_sample_count > 0) {
-            valid_device_count++;
-        }
-    }
-    map_iterator_unlock(it);
-
-    log_i("[nearby_update] Found %d valid devices", valid_device_count);
-
-    // 如果没有有效设备,仍然发送空列表
-    if (valid_device_count == 0) {
-        log_i("[nearby_update] No valid devices, sending empty list");
-        send_nearby_update(NULL, 0);
-        return;
-    }
-
-    // 分配设备指针数组
-    void **devices = (void **)malloc(valid_device_count * sizeof(void *));
-    if (!devices) {
-        log_e("[nearby_update] ERROR: malloc failed for device array");
-        return;
-    }
-
-    // 第二次遍历:收集有效设备
-    int idx = 0;
-    it = map_begin(ctx->dev_map);
-    end = map_end(ctx->dev_map);
-
-    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
-        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (dev && dev->distance_info.rssi_sample_count > 0) {
-            if (idx < valid_device_count) {
-                devices[idx++] = (void *)dev;
-            }
-        }
-    }
-    map_iterator_unlock(it);
-
-    // 发送nearby_update消息
-    int ret = send_nearby_update(devices, idx);
-    if (ret != 0) {
-        log_e("[nearby_update] Failed to send nearby_update message");
-    } else {
-        log_i("[nearby_update] Successfully sent nearby_update with %d devices", idx);
-    }
-
-    // 释放设备指针数组
-    free(devices);
-}
-
-/**
- * @brief 初始化nearby_update事件处理器
- */
-void nearby_update_handler_init(void)
-{
-    log_i("[nearby_update] Initializing nearby_update handler...");
-    lwl_event_handler_add(nearby_update_event_handler);
-    log_i("[nearby_update] Handler registered");
-}
-
-/**
- * @brief 反初始化nearby_update事件处理器
- */
-void nearby_update_handler_uninit(void)
-{
-    log_i("[nearby_update] Uninitializing nearby_update handler...");
-    lwl_event_handler_remove(nearby_update_event_handler);
-    log_i("[nearby_update] Handler unregistered");
-}
 
 //=================================================================================================
 // 联网有效工作状态维护
@@ -232,9 +135,35 @@ bool wss_application_check_power_key()
 //=================================================================================================
 // 触摸按键事件处理函数（长按/短按）
 //=================================================================================================
+
+// 长按超时回调函数：当达到长按阈值时触发
+static void long_press_timeout_callback(void *priv)
+{
+    os_mutex_pend(&g_wss_app_mutex, 0);
+    
+    // 检查按键是否仍然按下且未开启麦克风
+    if (g_on_touch_key && !g_long_press_mic_started) {
+        // 达到长按阈值，开启麦克风
+        log_mqtt("【butt】🔄🔄🔄 检测到长按，开启麦克风");
+        log_i("【butt】🔄🔄🔄 检测到长按，开启麦克风");
+        const char *stream_id = wss_request_get_stream_id();
+        if (stream_id != NULL && stream_id[0] != '\0') {
+            wss_mic_start(stream_id);
+            g_long_press_mic_started = true;  // 标记已经开启，避免重复开启
+        } else {
+            log_e("[wss_application]stream_id is empty, cannot start mic");
+        }
+    }
+    
+    // 定时器是一次性的，会自动删除，这里清空ID
+    g_long_press_timer_id = 0;
+    
+    os_mutex_post(&g_wss_app_mutex);
+}
+
 static void handle_long_press_end(void)
 {
-    log_mqtt("【butt】🔄🔄🔄 长按触摸键释放 - 关闭麦克风");
+    log_i("【butt】🔄🔄🔄 长按触摸键释放 - 关闭麦克风");
     // 1. 停止麦克风录音和音频上传
     wss_mic_stop();
     send_audio_stream_end(wss_request_get_stream_id(), "user_interrupted");
@@ -242,12 +171,9 @@ static void handle_long_press_end(void)
 
 static void handle_short_press(void)
 {
-    log_mqtt("【butt】🔄🔄🔄 短按触摸键释放 - 中断音频播放");
-    
-    
+    log_i("【butt】🔄🔄🔄 短按触摸键释放 - 中断音频播放");
     //  停止麦克风（确保状态清理）
     wss_mic_stop();
-    wss_asr_stop();
     
     // 状态由全局标志决定，不需要手动设置
 }
@@ -273,10 +199,21 @@ static void wss_handle_touch_key_event(bool press_down)
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
         // ========== 触摸键按下事件 ==========
-        log_mqtt("【butt】👆👆 触摸键按下");
+        log_i("【butt】👆👆 触摸键按下");
+        send_btn_tap(BTN_TAP_TYPE_PRESS, 0);
         g_on_touch_key = true;
         g_touch_key_press_time = timer_get_ms();
         g_long_press_mic_started = false;  // 重置长按麦克风开启标志
+        
+        // 停止之前的定时器（如果存在）
+        if (g_long_press_timer_id != 0) {
+            sys_timeout_del(g_long_press_timer_id);
+            g_long_press_timer_id = 0;
+        }
+        
+        // 启动长按定时器，300ms后触发
+        g_long_press_timer_id = sys_timeout_add_to_task("app_core", NULL, long_press_timeout_callback, LONG_PRESS_THRESHOLD_MS);
+        
         // 1. 暂停音频播放
         wss_request_stop_audio();
         // 2. 停止麦克风
@@ -284,13 +221,21 @@ static void wss_handle_touch_key_event(bool press_down)
         
     } else {
         // ========== 触摸键释放事件 ==========
-        log_mqtt("【butt】👇👇 触摸键释放");
-        g_on_touch_key = false;
-        g_long_press_mic_started = false;  // 重置长按麦克风开启标志
+        log_i("【butt】👇👇 触摸键释放");
+        u32 duration = timer_get_ms() - g_touch_key_press_time;
+        send_btn_tap(BTN_TAP_TYPE_RELEASE, duration);
         
-        // 判断长按/短按
-        u32 press_duration = timer_get_ms() - g_touch_key_press_time;
-        bool is_long_press = (press_duration >= LONG_PRESS_THRESHOLD_MS);
+        // 停止长按定时器（如果还在运行）
+        if (g_long_press_timer_id != 0) {
+            sys_timeout_del(g_long_press_timer_id);
+            g_long_press_timer_id = 0;
+        }
+        
+        g_on_touch_key = false;
+        
+        // 判断长按/短按（基于是否已经开启了麦克风）
+        bool is_long_press = g_long_press_mic_started;
+        g_long_press_mic_started = false;  // 重置长按麦克风开启标志
         
         if (is_long_press) {
             // ========== 长按结束事件 ==========
@@ -504,6 +449,13 @@ void wss_application_uninit()
     lwl_event_handler_remove(input_event_handler_cb);
 
     os_mutex_pend(&g_wss_app_mutex, 0);
+    
+    // 停止长按定时器（如果还在运行）
+    if (g_long_press_timer_id != 0) {
+        sys_timeout_del(g_long_press_timer_id);
+        g_long_press_timer_id = 0;
+    }
+    
     g_exit = false;
     
     /* 清空事件队列 */
@@ -548,10 +500,10 @@ void wss_application_reset()
     os_mutex_post(&g_wss_app_mutex);
 }
 
+// 应用循环
 bool wss_application_loop()
 {
     g_curr_time = timer_get_ms();
-
     // 处理队列中的输入事件
     input_event_t event;
     while (input_event_queue_pop(&event)) {
@@ -564,9 +516,13 @@ bool wss_application_loop()
             
         case LWL_EVENT_TYPE_TOUCH_KEY:
             if (event.data.touch_key_event.is_press_down) {
-                wss_handle_touch_key_press();
+                // 触摸键按下，
+                wss_handle_touch_key_event(true);
+                wss_application_vailed();
             } else {
-                wss_handle_touch_key_release();
+                // 触摸键释放
+                wss_handle_touch_key_event(false);
+                wss_application_vailed();
             }
             break;
             
@@ -588,31 +544,10 @@ bool wss_application_loop()
         }
         return true;
     }
-
-    wss_request_loop();
     
     if (lwl_app_mode_playing()) {
         return false;
     }
-    // 长按检测：在按下期间检测到阈值时开启麦克风
-    if (g_on_touch_key && g_touch_key_press_time > 0 && !g_long_press_mic_started) {
-        u32 press_duration = g_curr_time - g_touch_key_press_time;
-        if (press_duration >= LONG_PRESS_THRESHOLD_MS && !is_recording_uploading()) {
-            // 达到长按阈值，开启麦克风
-            log_mqtt("【butt】🔄🔄🔄 检测到长按，开启麦克风");
-            const char *stream_id = wss_request_get_stream_id();
-            if (stream_id != NULL && stream_id[0] != '\0') {
-                wss_mic_start(stream_id);
-            } else {
-                log_e("[wss_application]stream_id is empty, cannot start mic");
-            }
-
-            g_long_press_mic_started = true;  // 标记已经开启，避免重复开启
-        }
-    }
-    
-
-    // 状态机处理逻辑已移除，状态由全局标志实时决定
 
     return false;
 }

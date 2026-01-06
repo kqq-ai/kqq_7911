@@ -512,6 +512,42 @@ char *odmp_audio_play_finished(const char *stream_id, const char *status)
 }
 
 /**
+ * @brief 生成btn_tap消息
+ * @param type 按键类型
+ * @param duration 持续时间（毫秒）
+ * @return JSON字符串,需要调用者释放
+ * @note 消息格式:
+ * {
+ *   "event": "btn_tap",
+ *   "data": {
+ *     "type": 0,
+ *     "duration": 240
+ *   }
+ * }
+ */
+char *odmp_btn_tap(int type, int duration)
+{
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "event", "btn_tap");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    // 添加data字段
+    cJSON_AddNumberToObject(nroot_data, "type", type);
+    cJSON_AddNumberToObject(nroot_data, "duration", duration);
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
+}
+
+/**
  * @brief 生成nearby_update消息
  * @param devices 设备指针数组
  * @param device_count 设备数量
@@ -657,30 +693,7 @@ static int pong_event_handler(const cJSON *nroot, odmp_package_t *pkg)
     return PARSE_Success;
 }
 
-static int audio_status_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    return PARSE_Success;
-}
 
-static int initial_setup_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    return PARSE_Success;
-}
-
-static int device_switch_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    return PARSE_Success;
-}
-
-static int error_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    return PARSE_Success;
-}
-
-static int execution_time_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    return PARSE_Success;
-}
 
 static int audio_stream_start_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 {
@@ -827,13 +840,8 @@ struct odmp_rsp_cb_entry_t {
 };
 
 static struct odmp_rsp_cb_entry_t g_rsp_cb_table[] = {
-    {"audio_status", OR_AUDIO_STATUS, audio_status_event_handler, NULL},
     {"tts_bind", OR_TTS_BIND, tts_bind_event_handler, NULL},
-    {"initial_setup_response", OR_INITIAL_SETUP_RESPONSE, initial_setup_response_event_handler, NULL}, 
-    {"device_switch_response", OR_DEVICE_SWITCH_RESPONSE, device_switch_response_event_handler, NULL}, 
-    {"event_error", OR_ERROR_EVENT, error_event_handler, NULL}, 
     {"message_text", OR_MESSAGE_TEXT, message_text_event_handler, NULL}, 
-    {"execution_time", OR_EXECUTION_TIME, execution_time_event_handler, NULL},
     {"pong", OR_PONG, pong_event_handler, NULL},
     {"audio_stream_start", OR_AUDIO_STREAM_START, audio_stream_start_event_handler, NULL},
     {"audio_stream_end", OR_AUDIO_STREAM_END, audio_stream_end_event_handler, NULL},

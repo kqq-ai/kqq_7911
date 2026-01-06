@@ -34,8 +34,6 @@ u32 vad_stop_time = 0;  // 0表示未设置，超时停止VAD
 static int g_recording = false;             // ASR强制上传标志忽略VAD，优先级更高
 static int g_recording_vad = false;         // VAD状态标志（根据麦克风数据判断），发送ASR结束（1，2）
 static int g_recording_upload = false;      // VAD开关录音上传状态标志（WSS 状态），发送ASR异常（1，3）
-static int g_recording_uploading = false;   // 录音上传状态标志（WSS 状态）
-
 /**
  * @name app_recorder_en
  * @brief 开启/停止 录音编码器
@@ -144,14 +142,6 @@ static int asr_data_to_server(AsrData *asr_data)
 
 
 
-// 获取当前音频上传状态
-bool is_recording_uploading() {
-    os_mutex_pend(&g_mic_mutex, 0);
-    bool uploading = (g_recording_uploading == true);
-    os_mutex_post(&g_mic_mutex);
-    return uploading;
-}
-
 // 停止麦克风录音，可选择是否上传剩余音频数据
 void wss_mic_stop() {
     log_mqtt("💧💧💧 停止麦克风录音");
@@ -192,18 +182,12 @@ void wss_mic_init()
     /* 确保上传标志为false */
     g_recording_upload = false;
     g_recording = false;
-    g_recording_uploading = false;
     g_recording_vad = false;
 
     /* 清除录音数据写入回调，默认不上传 */
     recorder_data_upstream(NULL);
 }
 
-void wss_asr_stop()
-{
-    log_mqtt("💧💧💧 停止ASR");
-    wss_mic_stop();
-}
 
 void wss_mic_uninit()
 {

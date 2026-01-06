@@ -154,6 +154,7 @@ char *odmp_audio_stream_end(const char *stream_id, const char *status);
 char *odmp_bind_result(const char *sn, bool success, const char *status, const char *stream_id);
 char *odmp_audio_play_started(const char *stream_id, const char *status, const char *play_mode);
 char *odmp_audio_play_finished(const char *stream_id, const char *status);
+char *odmp_btn_tap(int type, int duration);
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk);
 void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);

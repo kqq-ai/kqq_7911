@@ -9,14 +9,14 @@ struct app_cookie_hdl {
 };
 void disable_gsensor();
 
-#define LOCAL_VERSION_CODE "v0.0.67" 
+#define LOCAL_VERSION_CODE "v0.0.99" 
 #define LOW_BATT_VOLT 370 
 #define LOW_BATT_VERY_SHUTDOWN 365 
 
 #define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 #define TOUCH_KEY_AVAILABLE 1// 设置触摸按键功能可用
 
-// #define TEST_LOCOL_SERVER "junye"// 设置为1连接本地调试服务器
+#define TEST_LOCOL_SERVER "junye"// 设置为1连接本地调试服务器
 
 #define SERVER_DOMAIN  "test.coolqq.com"
 // #define SERVER_DOMAIN  "pre.coolqq.com"
