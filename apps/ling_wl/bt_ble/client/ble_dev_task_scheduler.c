@@ -294,7 +294,8 @@ void bdo_notify_e_disconncted(char sn[])
     log_i("[BDO] Device %s disconnectd(%s)", sn, broadcast_code);
     if (strcmp(broadcast_code, &sn[10]) == 0) {
         log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", sn, empty_broadcast_code);
-        uart_send_switch_audio_bc(empty_broadcast_code, 0x01);
+        memcpy(broadcast_code, empty_broadcast_code, sizeof(broadcast_code));
+        uart_send_switch_audio_bc(broadcast_code, 0x01);
         uart_send_set_ctrl(0x01); // soft disable
         os_sem_post(&g_e_disconnected_sem);
     }
@@ -484,7 +485,6 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     msleep(300);
     if (dev->op_state & BDO_STATE_TURNNING_ON) {
         log_i("[BDO]Continue turn on...");
-        log_i("[BDO]bdo_enable %s", broadcast_code);
         log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
         memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
         uart_send_set_ctrl(0x01);
@@ -502,9 +502,6 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         log_i("[BDO]Turn on end");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Ready_to_Play);
-    } else {
-        log_i("[BDO]Turn on cancelled!");
-        process_cb(op, BDOCode_Skip);
     }
 }
 

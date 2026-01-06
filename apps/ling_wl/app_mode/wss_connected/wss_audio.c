@@ -214,7 +214,7 @@ stream_write:
         log_i("[AUDIO]stream playing...");
         send_device_status(DEVICE_STATUS_AUDIO_PLAYING); // 正在播放
     }
-    // log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
+    log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
     return 0;
 }
 
@@ -243,14 +243,7 @@ bool is_audio_playing(){
             log_i("[AUDIO]is_audio_playing: stream ended but player started, marking playing");
         }
     }
-    log_d("[AUDIO]is_audio_playing g_stream_end=%d g_audio_playing=%d g_audio_play_ongoing=%d total_written=%u time last %u", 
-        g_stream_end, g_audio_playing, g_audio_play_ongoing, total_written, timer_get_ms()-audio_req_time);
-    bool playing = g_audio_playing || (g_audio_play_ongoing && 
-        (total_written >> 2) + 1000 > timer_get_ms()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
-    if (!g_audio_playing && playing) {
-        log_d("[AUDIO]is_audio_playing total_written=%u time last %u", total_written, timer_get_ms()-audio_req_time);
-    }
-    return playing;
+    return g_audio_playing;
 }
 
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源

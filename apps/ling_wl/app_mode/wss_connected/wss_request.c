@@ -115,19 +115,19 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         log_i("[wss_request]Switch PortE %s OK\n", sn_string);
         break;
     case BDOCode_Connection_Timeout:
-        log_i("[wss_request]Switch PortE BDOCode_Connection_Timeout\n");
+        log_i("[wss_request]Switch PortE %s BDOCode_Connection_Timeout\n", sn_string);
         break;
     case BDOCode_Disconnect_Timeout:
-        log_i("[wss_request]Switch PortE BDOCode_Disconnect_Timeout\n");
+        log_i("[wss_request]Switch PortE %s BDOCode_Disconnect_Timeout\n", sn_string);
         break;
     case BDOCode_Scan_Adv_Stat_Timeout:
-        log_i("[wss_request]Switch PortE BDOCode_Scan_Adv_Stat_Timeout\n");
+        log_i("[wss_request]Switch PortE %s BDOCode_Scan_Adv_Stat_Timeout\n", sn_string);
         break;
     case BDOCode_Unexpected_Error:
-        log_i("[wss_request]Switch PortE Error\n");
+        log_i("[wss_request]Switch PortE %s Error\n", sn_string);
         break;
     case BDOCode_Ready_to_Play:
-        log_i("[wss_request]Switch PortE Ready_to_Play\n");
+        log_i("[wss_request]Switch PortE %s Ready_to_Play\n", sn_string);
         break;
     }
     if (code == BDOCode_Success) { // 连接成功
