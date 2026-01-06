@@ -268,11 +268,13 @@ void bdo_disable(bool mute)
 {
     log_i("[BDO]bdo_disable");
     uart_send_set_ctrl(mute ? 0x01 : 0x00);
+    log_i("[BDO] switch_audio_bc %s ctrl(0x0%d)", broadcast_code, mute);
 }
 
 void bdo_enable()
 {
     log_i("[BDO]bdo_enable %s", broadcast_code);
+    log_i("[BDO] switch_audio_bc %s ctrl(0x03)", broadcast_code);
     uart_send_set_ctrl(0x03);
 }
 
@@ -289,7 +291,7 @@ void bdo_notify_e_conncted(char sn[])
 void bdo_notify_e_disconncted(char sn[])
 {
     if (!sn) return;
-    log_i("[BDO] Device %s disconnectd", sn);
+    log_i("[BDO] Device %s disconnectd(%s)", sn, broadcast_code);
     if (strcmp(broadcast_code, &sn[10]) == 0) {
         log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", sn, empty_broadcast_code);
         uart_send_switch_audio_bc(empty_broadcast_code, 0x01);
@@ -480,8 +482,10 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     log_i("[BDO]Waiting adv state change...");
     process_cb(op, BDOCode_Success);
     msleep(300);
-    uart_send_set_ctrl(0x01);
+    log_i("[BDO]bdo_enable %s", broadcast_code);
+    log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
     memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+    uart_send_set_ctrl(0x01);
     uart_send_switch_audio_bc(broadcast_code, 0x01);
     uart_send_set_ctrl(0x01);
 
@@ -514,6 +518,7 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         return;
     }
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
+        log_i("[BDO] switch_audio_bc %s ctrl(0x00)", broadcast_code);
         uart_send_set_ctrl(0x00);
     }
 
@@ -663,6 +668,7 @@ int bdo_turn_off(lwl_eend_dev_t *dev)
     // broadcast_code 等于dev->sn的后6位则继续
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
         dev->op_state = BDO_STATE_IDLE;
+        log_i("[BDO] switch_audio_bc %s ctrl(0x00)", broadcast_code);
         uart_send_set_ctrl(0x00);
     }
     return 1;
