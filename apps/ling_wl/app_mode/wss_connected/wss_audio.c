@@ -115,12 +115,15 @@ static void wss_audio_playback_thread(void *priv)
                     break;
                 }
             }
-            msleep(20);
+            msleep(50);
         }
     }
 
     if (g_audio_on) {
         app_music_play_stop(g_app_ctx->music_player);
+        g_audio_playing = false;
+        g_audio_on = false;
+        set_led_tts_off();
         log_i("[AUDIO]audio playback stopped");
     }
     g_audio_thread_running = false;

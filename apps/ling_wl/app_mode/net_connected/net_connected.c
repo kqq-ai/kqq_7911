@@ -94,6 +94,7 @@ static int net_connected_init(void)
 static int net_connected_unint(void)
 {
     lwl_event_handler_remove(net_connected_event_handler_cb);
+    set_led_connected();
     return 0;
 }
 
