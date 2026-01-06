@@ -203,6 +203,7 @@ static void wss_handle_touch_key_event(bool press_down)
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
         wss_request_pause();
+        lwl_app_mode_stop_playing();
         wss_mic_stop();
         wss_asr_start();
         play_prompt_sound("t_key.mp3");
