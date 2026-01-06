@@ -52,38 +52,6 @@ static u8 g_mode6_action_in_progress = 0;
 static void set_led_tts_on(void)    { set_rgb_ON(COLOR_BLUE,3); }
 static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 
-// ========== 模式6回调函数声明 ===========
-static void mode6_e_connect_cb(bdo_code_e code, void *priv)
-{
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    char sn_string[SN_SIZE+1] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    }
-    log_i("bdo_turn_on code %d %s\n", code, sn_string);
-
-    if (BDOCode_Ready_to_Play == code) {
-        current_pdev = pdev; // 设置当前连接的E端设备指针
-        log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    } else if (BDOCode_Success == code) {
-        bdo_enable();
-    } else if (BDOCode_Success != code) {
-        if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
-        current_pdev = NULL; // 设置当前连接的E端设备指针
-    }
-}
-static void switch_to_e_target(lwl_eend_dev_t* pdev)
-{
-    if (pdev == NULL) return;
-    char sn_string[SN_SIZE+1] = "(NULL)";
-    pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    log_i("Switching to target: %s", sn_string);
-    
-    // 设置新的目标设备
-    target_pdev = pdev;
-    bdo_turn_on(pdev, 500, 5000, mode6_e_connect_cb, pdev);
-}
-
 // 音频播放回调
 void mode6_audio_callback(void *priv)
 {
@@ -115,6 +83,40 @@ void mode6_audio_callback(void *priv)
             current_pdev = NULL; // 清空当前连接设备指针
         }
     }
+}
+
+// ========== 模式6回调函数声明 ===========
+static void mode6_e_connect_cb(bdo_code_e code, void *priv)
+{
+    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    char sn_string[SN_SIZE+1] = "(NULL)";
+    if (pdev) {
+        pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    }
+    log_i("bdo_turn_on code %d %s\n", code, sn_string);
+
+    if (BDOCode_Ready_to_Play == code) {
+        current_pdev = pdev; // 设置当前连接的E端设备指针
+        log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
+    } else if (BDOCode_Success == code) {
+        bdo_enable();
+    } else if (BDOCode_Success != code) {
+        if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
+        current_pdev = NULL; // 设置当前连接的E端设备指针
+        g_mode6_playing_prompt = 1;
+        lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"SwFailed.mp3", mode6_audio_callback);
+    }
+}
+static void switch_to_e_target(lwl_eend_dev_t* pdev)
+{
+    if (pdev == NULL) return;
+    char sn_string[SN_SIZE+1] = "(NULL)";
+    pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    log_i("Switching to target: %s", sn_string);
+    
+    // 设置新的目标设备
+    target_pdev = pdev;
+    bdo_turn_on(pdev, 500, 5000, mode6_e_connect_cb, pdev);
 }
 
 // 模式6处理函数
