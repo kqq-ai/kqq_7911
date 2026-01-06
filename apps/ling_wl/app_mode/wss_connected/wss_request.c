@@ -24,8 +24,6 @@ static OS_MUTEX g_request_mutex;
  * 请求状态
  *=================================================================================================*/
 static int wait_time = 0;
-static int last_message_type = 0;
-static int last_event = 0;
 static int tts_bind_state = 0;
 
 static bool g_mode_script = 0; // 如果true则不播放切换提示音
@@ -81,8 +79,6 @@ static void wss_request_update_state(AppRequestState mode_state, char* tag)
     g_mode_state = mode_state;
     if (STATE_IDLE == g_mode_state && g_mode_script) g_mode_state = STATE_WAITING;
     g_mode_last_time = g_curr_time;
-    last_message_type = 0;
-    last_event = 0;
 }
 
 //=================================================================================================
@@ -90,7 +86,6 @@ static void wss_request_update_state(AppRequestState mode_state, char* tag)
 //=================================================================================================
 void turn_off_Pi() {
     if (g_edev_connected_sn[0] != 0) {
-        
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
         if (pdev) {
             bdo_turn_off(pdev);
@@ -152,7 +147,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
 
 void turn_on_Pi(const char *pdev_sn) {
     log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
-// 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
+    // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
     if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
         turn_off_Pi();
     }
@@ -162,10 +157,9 @@ void turn_on_Pi(const char *pdev_sn) {
         tts_bind_state = -1;
         return;
     }
-    //上传E的电量
-    log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
-    bdo_turn_on(pdev, 1000, 5000, e_turn_on_cb, pdev);
     tts_bind_state = 1;
+    bdo_turn_on(pdev, 1000, 5000, e_turn_on_cb, pdev);
+    log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10); //上传E的电量
     memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE+1);
 }
 
@@ -176,12 +170,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
     os_mutex_pend(&g_request_mutex, 0);
     switch (type) {
-    case OR_INITIAL_SETUP_RESPONSE:
-        log_i("INITIAL_SETUP_RESPONSE\n");
-        break;
-    case OR_DEVICE_SWITCH_RESPONSE:
-        log_i("DEVICE_SWITCH_RESPONSE\n");
-        break;
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");
         log_i("c_id: %s\n", pkg->tts_bind.c_id);
@@ -216,19 +204,17 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         log_i("sample_rate: %d\n", pkg->audio_status.audio_param.sample_rate);
         
         if (pkg->audio_status.type == OAST_ASR) {
-            // if (pkg->audio_status.event == OASE_START) {
-            //     last_message_type = OAST_ASR;
-            //     last_event = OASE_START;
-            // }
-            // if (pkg->audio_status.event == OASE_END) {
-            //     last_message_type = OAST_ASR;
-            //     last_event = OASE_END;
-            // }
+            if (pkg->audio_status.event == OASE_START) {
+                log_i("AUDIO_STATUS: OASE_START\n");
+                // wss_asr_start(); // 允许ASR开始
+            } else if (pkg->audio_status.event == OASE_END) {
+                log_i("AUDIO_STATUS: OASE_END\n");
+                // wss_asr_stop(); // 标记ASR结束
+            }
+            g_wss_last_time = g_curr_time;
         } else if (pkg->audio_status.type == OAST_TTS) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
-                last_message_type = OAST_TTS;
-                last_event = OASE_START;
                 set_tts_volume(pkg->audio_status.volume);
                 wss_stream_start(); // 允许音频流开始
             } else if (pkg->audio_status.event == OASE_END) {
@@ -261,18 +247,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             wss_handle_key_event();
         }
         break;
-    case OR_MESSAGE_TEXT:
-        // if (pkg->message_text.type == 1)
-        //     log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
-        // if (pkg->message_text.type == 2)
-        //     log_i("TTS_TEXT %d %s\n", pkg->message_text.c_id, pkg->message_text.text);
-        break;
-    case OR_EXECUTION_TIME:
-        // log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
-        break;
-    case OR_PONG:
-        // log_i("LR_PONG\n");
-        break;
     }
     os_mutex_post(&g_request_mutex);
 }
@@ -282,27 +256,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 //=================================================================================================
 void wss_request_stop()
 {
-    log_i("[wss_request]Stop WSS request\n");
-    os_mutex_pend(&g_request_mutex, 0);
-
-    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND || g_mode_state == STATE_LE_AUDIO) {
-        wss_ble_audio_stop();
-        turn_off_Pi();
-    }
-    wss_request_send_event_target(ORMET_PLAY_STOP);
-    bdo_disable(0);
-
-    // 重置状态到IDLE
-    wss_request_update_state(STATE_IDLE, "wss_request_stop");
-    last_message_type = 0;
-    last_event = 0;
-    g_mode_script = false;
-    os_mutex_post(&g_request_mutex);
-}
-
-void wss_request_pause()
-{
-    log_i("[wss_request]Stop WSS pause\n");
     os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
 
@@ -314,14 +267,12 @@ void wss_request_pause()
     bdo_disable(0);
 
     // 重置状态到IDLE
-    wss_request_update_state(STATE_IDLE, "wss_request_pause");
-    last_message_type = 0;
-    last_event = 0;
+    wss_request_update_state(STATE_IDLE, "wss_request_stop");
     g_mode_script = false;
     os_mutex_post(&g_request_mutex);
 }
 
-void wss_request_resume()
+void wss_request_start()
 {
     odmp_register_rsp_cbk(wss_rsp_cbk);
 }
@@ -344,20 +295,18 @@ void wss_request_init()
     if (!os_mutex_valid(&g_request_mutex)) {
         os_mutex_create(&g_request_mutex);
     }
-    odmp_register_rsp_cbk(wss_rsp_cbk);
+    wss_request_start();
 }
 
 void wss_request_uninit()
 {
     log_i("[wss_request]Uninit WSS request\n");
     /* 取消注册loswssp事件回调 */
-    odmp_register_rsp_cbk(NULL);
     wss_request_stop();
 }
 
 bool wss_request_loop()
 {
-    // 使用 last_message_type 和 last_event 替代 last_audio_status_type、last_audio_status_event、last_tts_bind_received
     os_mutex_pend(&g_request_mutex, 0);
     g_curr_time = timer_get_ms();
     switch (g_mode_state) {
@@ -392,14 +341,15 @@ bool wss_request_loop()
         }
         break;
 
-    case STATE_DOWNLOAD: // until receive AUDIO END
+    case STATE_DOWNLOAD: // until receive AUDIO START
         // 下载结束，继续播放
         if (wss_stream_on()){ // 音频下载开始
             wss_ble_audio_start();
             wss_request_update_state(STATE_PLAYING, "receive AUDIO START");
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-            wss_request_stop();
-            log_w("[wss_request]Download timeout");
+            wss_request_update_state(STATE_IDLE, "Download timeout");
+            wss_ble_audio_stop();
+            turn_off_Pi();
         }
         break;
 

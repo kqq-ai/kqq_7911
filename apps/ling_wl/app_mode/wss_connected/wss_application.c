@@ -202,14 +202,14 @@ static void wss_handle_touch_key_event(bool press_down)
 #endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
-        wss_request_pause();
+        wss_request_stop();
         lwl_app_mode_stop_playing();
         wss_mic_stop();
         wss_asr_start();
         play_prompt_sound("t_key.mp3");
     } else {
         bool is_short_press = !is_recording_uploading(); //未上传音频，是短按
-        wss_request_resume();
+        wss_request_start();
         wss_mic_stop();
         wss_asr_stop();
         if (is_short_press) {
