@@ -163,7 +163,6 @@ void process_mode_6(void)
             log_i("MODE 6: No devices in pdev_list, cannot set target");
         }
     }
-    ble_dev_task_enable();
 }
 
 void mode6_init()

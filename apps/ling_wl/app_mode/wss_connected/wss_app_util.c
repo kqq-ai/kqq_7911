@@ -460,25 +460,28 @@ int send_ping()
 int send_nearby_update(void **devices, int device_count)
 {
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成nearby_update消息
     char *send_data = odmp_nearby_update(devices, device_count, sn_c_id);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_nearby_update: odmp_nearby_update returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
-    // log_i("[nearby_update] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[nearby_update] Error %s %d.", __FILE__, __LINE__);
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_nearby_update: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[nearby_update] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -502,25 +505,29 @@ int send_audio_stream_start(const char *stream_id, const char *stream_type)
     }
 
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成audio_stream_start消息
     char *send_data = odmp_audio_stream_start(stream_id, stream_type);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_audio_stream_start: odmp_audio_stream_start returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_stream_start: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[audio_stream_start] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[audio_stream_start] Error %s %d.", __FILE__, __LINE__);
-
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_stream_start] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -544,25 +551,29 @@ int send_audio_stream_end(const char *stream_id, const char *status)
     }
 
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成audio_stream_end消息
     char *send_data = odmp_audio_stream_end(stream_id, status);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_audio_stream_end: odmp_audio_stream_end returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_stream_end: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[audio_stream_end] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[audio_stream_end] Error %s %d.", __FILE__, __LINE__);
-
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_stream_end] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -588,25 +599,29 @@ int send_bind_result(const char *sn, bool success, const char *status, const cha
     }
 
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成bind_result消息
     char *send_data = odmp_bind_result(sn, success, status, stream_id);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_bind_result: odmp_bind_result returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_bind_result: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[bind_result] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[bind_result] Error %s %d.", __FILE__, __LINE__);
-
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[bind_result] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -631,25 +646,29 @@ int send_audio_play_started(const char *stream_id, const char *status, const cha
     }
 
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成audio_play_started消息
     char *send_data = odmp_audio_play_started(stream_id, status, play_mode);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_audio_play_started: odmp_audio_play_started returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_play_started: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[audio_play_started] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[audio_play_started] Error %s %d.", __FILE__, __LINE__);
-
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_play_started] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -673,25 +692,29 @@ int send_audio_play_finished(const char *stream_id, const char *status)
     }
 
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成audio_play_finished消息
     char *send_data = odmp_audio_play_finished(stream_id, status);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_audio_play_finished: odmp_audio_play_finished returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_play_finished: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[audio_play_finished] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[audio_play_finished] Error %s %d.", __FILE__, __LINE__);
-
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_play_finished] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;
@@ -710,25 +733,29 @@ int send_audio_play_finished(const char *stream_id, const char *status)
 int send_btn_tap(int type, int duration)
 {
     os_mutex_pend(&g_wss_mutex, 0);
-    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-    if (ctx->websockets_info == NULL) {
+    if (g_ws_client_custom == NULL) {
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
-    // 生成btn_tap消息
     char *send_data = odmp_btn_tap(type, duration);
     if (send_data == NULL) {
         log_e("[wss_app_util]send_btn_tap: odmp_btn_tap returned NULL");
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_btn_tap: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
     log_i("[btn_tap] wbs send msg : %s", send_data);
-
-    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
-        log_e("[btn_tap] Error %s %d.", __FILE__, __LINE__);
-
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[btn_tap] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
         os_mutex_post(&g_wss_mutex);
         return -1;

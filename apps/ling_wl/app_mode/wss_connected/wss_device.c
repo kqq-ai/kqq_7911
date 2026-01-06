@@ -172,6 +172,13 @@ static void nearby_update_event_handler(lwl_event_t *e)
         if (dev && dev->distance_info.rssi_sample_count > 0) {
             if (idx < valid_device_count) {
                 devices[idx++] = (void *)dev;
+                // TODO : 简单选择排序保持devices[0]为最近设备
+                if (((lwl_eend_dev_t *)devices[0])->distance_info.distance > dev->distance_info.distance) {
+                    // 保持devices[0]为最近设备
+                    void *temp = devices[0];
+                    devices[0] = (void *)dev;
+                    devices[idx - 1] = temp;
+                }
             }
         }
     }

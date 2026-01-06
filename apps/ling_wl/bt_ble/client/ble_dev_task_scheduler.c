@@ -303,7 +303,6 @@ void bdo_notify_e_disconncted(char sn[])
 }
 
 static int max_rssi = -127;
-static bool need_active = true;
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
 {
@@ -316,7 +315,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     }
     for (int i=0;i<10;i++) {
         mdelay(50);
-        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue) || need_active == false) {
+        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
             log_i("[BDO]There are other pending tasks, skip this activation!");
             dev->op_state &= ~BDO_STATE_ACTIVATING;
             process_cb(op, BDOCode_Skip);
@@ -593,7 +592,6 @@ static void ble_dev_task_scheduler()
 
         if (g_op_handler_entries[op.op_type] != NULL) {
             g_op_handler_entries[op.op_type](&op);
-            need_active = false;
         }
     }
     dev_task_is_running = 0;
@@ -616,11 +614,6 @@ void ble_dev_task_scheduler_start()
 void ble_dev_task_scheduler_stop()
 {
     dev_task_is_on = false;
-}
-
-void ble_dev_task_enable()
-{
-    need_active = true;
 }
 
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)

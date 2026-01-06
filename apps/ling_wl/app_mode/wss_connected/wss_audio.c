@@ -9,8 +9,9 @@
 #include "util/threadpool_tasks.h"
 
 #include "LED/LED.h"
-
 #include "os/os_api.h"
+
+#define TIMEOUT_MS 5000 // 5秒超时
 
 static lwl_app_context_t *g_app_ctx = NULL;
 static OS_MUTEX g_audio_mutex;
@@ -18,25 +19,12 @@ static OS_MUTEX g_audio_mutex;
 static void set_led_tts_on(void)    { set_rgb_ON(COLOR_BLUE,3); }
 static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 
-u32 audio_req_time = 0;
-uint32_t total_written = 0;
-
 /*=================================================================================================
  * Audio dec app context
  *=================================================================================================*/
-static int g_audio_off = true; // 音频播放结束标志（外部请求状态）
-static int g_audio_play_ongoing = false; // 音频启动中标志（播放器状态）
-static int g_audio_playing = false; // 音频播放中标志（播放器状态）
-static int g_audio_player_start = false; // 音频播放中标志（播放器状态）
-
-#define PREBUFFER_SIZE        (100 * 1024) /* 100KB */
-#define PREBUFFER_TIMEOUT_MS  1000         /* 最长等待时间，超时仍开始播放 */
-
-static uint8_t g_prebuffer[PREBUFFER_SIZE];
-static uint32_t g_prebuffer_pos = 0;
-static bool g_stream_end = false; // 音频流结束标志
-
-static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
+static int g_audio_on = false; // 音频播放结束标志（外部请求状态）
+static int g_audio_playing = false; // 音频播放中标志（播放线程状态）
+static int g_audio_thread_running = false; // 播放线程运行标志
 
 #define G_MAX_VOLUME 100
 int g_volume = G_MAX_VOLUME;
@@ -50,6 +38,7 @@ void set_tts_volume(int volume) {
 void set_speaker() {
     log_i("[AUDIO]set_speaker Pi: %d", g_volume);
     os_mutex_pend(&g_audio_mutex, 0);
+    lwl_app_mode_stop_playing();
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
@@ -64,307 +53,157 @@ void app_music_play_end_cb(void *priv)
 {
     log_i("[AUDIO]app_music_play_end_cb");
     g_audio_playing = false;
-    g_audio_player_start = false;
+    g_audio_on = false;
     set_led_tts_off();
     const char *stream_id = wss_request_get_stream_id();
     // 播放器实际播放结束，传入 true 表示实际播放完成
-    wss_ble_audio_stop(stream_id, true);
-}
-
-static void wss_audio_playback_start(void);
-// 允许网络音频开始播放
-void wss_audio_allow_playback()
-{
-    log_i("[AUDIO]starting music player %d %d", g_audio_play_ongoing, g_audio_player_start);
-    log_i("【dg】[AUDIO]wss_audio_allow_playback: before, g_audio_play_ongoing=%d", g_audio_play_ongoing);
-    os_mutex_pend(&g_audio_mutex, 0);
-    if (g_audio_play_ongoing) {
-        log_w("[AUDIO]playback already started, ignoring");
-        os_mutex_post(&g_audio_mutex);
-        return;
-    }
-
-    /* 停止其他音频 */
-    lwl_app_mode_stop_playing();
-    set_speaker();
-
-    /* 标记为播放中 */
-    audio_req_time = timer_get_ms();
-    if (g_stream_end == false) g_audio_play_ongoing = true;
-    set_led_tts_on();
-    log_i("【dg】[AUDIO]wss_audio_allow_playback: after, g_audio_play_ongoing=%d, audio_req_time=%u", 
-          g_audio_play_ongoing, audio_req_time);
-    os_mutex_post(&g_audio_mutex);
 }
 
 /**
- * @brief 启动音频播放并将预缓冲数据刷入播放器
+ * @brief 音频播放线程函数
  * @details
- *   由外部（如tts_bind回调或应用层）显式调用，无内部计时逻辑。
- *   启动播放器并将已缓冲的音频数据分片写入。
- * @return 0 成功，-1 失败
+ *   循环从stream缓冲队列中获取数据并写入播放器，直到stream结束且队列为空。
+ *   如果5秒内没有收到音频数据则自动退出。
  */
-static void wss_audio_playback_start(void)
+const uint32_t MAX_CHUNK_SIZE = 16000;
+uint8_t buffer[MAX_CHUNK_SIZE];
+static void wss_audio_playback_thread(void *priv)
 {
-    const uint32_t MAX_CHUNK_SIZE = 16000;
-    if (g_audio_player_start) {
-        log_i("【dg】[AUDIO]playback_start: already started, returning");
-        return;
-    }
-
-    log_i("[AUDIO]playback_start: flushing %u bytes from prebuffer", g_prebuffer_pos);
-    log_i("【dg】[AUDIO]playback_start: before start, g_audio_play_ongoing=%d, g_audio_player_start=%d", 
-          g_audio_play_ongoing, g_audio_player_start);
-
-    os_mutex_pend(&g_audio_mutex, 0);
-    /* 启动播放器 */
-    app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
-    g_audio_player_start = true;
+    uint32_t last_data_time = timer_get_ms();
     
-    /* 发送音频播放开始事件 */
-    const char *stream_id = wss_request_get_stream_id();
-    if (stream_id != NULL && stream_id[0] != '\0') {
-        send_audio_play_started(stream_id, "normal_start", "normal");
-    }else{
-        log_mqtt("stream_id 为空，无法发送音频播放开始事件");
-    }
-    
-    int player_status = app_music_play_get_status(g_app_ctx->music_player);
-    log_i("【dg】[AUDIO]playback_start: after start, player_status=%d, g_audio_player_start=%d", 
-          player_status, g_audio_player_start);
+    log_i("[AUDIO]playback thread started");
 
-    if (g_prebuffer_pos == 0) {
-        log_w("[AUDIO]no prebuffered data to flush");
-        os_mutex_post(&g_audio_mutex);
-        return;
-    }
-
-    /* 把预缓冲的数据分片写入播放器 */
-    uint32_t written_all = 0;
-    while (written_all < g_prebuffer_pos) {
-        uint32_t chunk = (g_prebuffer_pos - written_all > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : (g_prebuffer_pos - written_all);
-        uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, g_prebuffer + written_all, chunk);
-        if (written == 0) {
-            log_e("[AUDIO]failed to write prebuffer chunk at offset %u", written_all);
-            break;
-        }
-        written_all += written;
-        log_d("[AUDIO]flushed prebuffer chunk %u/%u", written_all, g_prebuffer_pos);
+    while (wss_stream_on() == false && g_audio_thread_running) {
         msleep(10);
     }
-
-    /* reset prebuffer */
-    g_prebuffer_pos = 0;
-    os_mutex_post(&g_audio_mutex);
-
-    log_i("[AUDIO]playback_start completed, flushed %u bytes", written_all);
-    return;
-}
-
-/**
- * @brief 音频数据流写入（不包含播放启动逻辑）
- * @details
- *   接收音频数据并写入预缓冲或直接流入播放器（如果已启动）。
- *   无内部计时逻辑，仅负责数据缓冲/转发。
- * @param data 音频数据指针
- * @param len  音频数据长度
- * @return 0 成功，-1 失败
- */
-static int wss_audio_stream_write(uint8_t *data, uint32_t len)
-{
-    const uint32_t MAX_CHUNK_SIZE = 16000;
-    uint32_t idx = 0;
-
-    if (!data || len == 0) {
-        return 0;
-    }
-
-    if (g_audio_off) {
-        return 0;
-    }
-
-    // log_i("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
-
-    os_mutex_pend(&g_audio_mutex, 0);
-
-    /* 如果已启动播放，直接写入流 */
-    if (g_audio_play_ongoing) {
-        goto stream_write;
-    }
-
-    /* 未启动播放：写入预缓冲 */
-    if (g_prebuffer && g_prebuffer_pos +len < PREBUFFER_SIZE) {
-        memcpy(g_prebuffer + g_prebuffer_pos, data, len);
-        g_prebuffer_pos += len;
-        total_written += len;
-        log_d("[AUDIO]prebuffered %u/%u bytes", g_prebuffer_pos, PREBUFFER_SIZE);
-        os_mutex_post(&g_audio_mutex);
-        return 0;
-    } else {
-        /* 预缓冲已满或未分配，但尚未启动播放 => 丢弃或缓存溢出 */
-        log_w("[AUDIO]prebuffer full/unavailable but playback not started, dropping %u bytes", len);
-        wss_audio_allow_playback();
-        goto stream_write;
-    }
-
-stream_write:
-    if (g_audio_player_start == false) {
-        log_i("[AUDIO]stream_write: starting music player");
-        log_i("【dg】[AUDIO]stream_write: before start, g_audio_play_ongoing=%d", g_audio_play_ongoing);
-        wss_audio_playback_start(); // 尝试启动播放
-        g_audio_player_start = true;
-    }
-    /* 直接写入播放器流（data/len 为需要写入的部分） */
-    while (len > idx && !g_audio_off) {
-        uint32_t chunk_size = (len > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len;
-        uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, data + idx, chunk_size);
-        if (written == 0) {
-            log_e("[AUDIO]failed to write stream chunk");
-            log_i("【dg】[AUDIO]stream_write: write failed, idx=%u, len=%u, chunk_size=%u", idx, len, chunk_size);
-            break;
-        }
-        idx += written;
-        total_written += written;
-        log_d("[AUDIO]stream_write chunk: %u bytes (total: %u / %u)", written, idx, total_written);
-        msleep(10);
-    }
-    os_mutex_post(&g_audio_mutex);
-
-    /* update playing flag if started */
-    int player_status = app_music_play_get_status(g_app_ctx->music_player);
-    log_i("【dg】[AUDIO]stream_write: after write, player_status=%d, g_audio_playing=%d, AUDIO_DEC_START=%d, idx=%u", 
-          player_status, g_audio_playing, AUDIO_DEC_START, idx);
     
-    // 如果播放器已启动且数据已写入，即使状态不是 START，也应该标记为播放中
-    // 因为流式播放器可能需要等待足够数据才会进入 START 状态
-    if (g_audio_playing == false && g_audio_player_start && idx > 0) {
-        // 如果状态是 START，立即设置标志
-        if (player_status == AUDIO_DEC_START) {
-            g_audio_playing = true;
-            log_i("[AUDIO]stream playing...");
-            send_device_status(DEVICE_STATUS_AUDIO_PLAYING); // 正在播放
-            log_i("【dg】[AUDIO]stream_write: playing flag set to true (status=START)");
-        } else if (player_status != AUDIO_DEC_STOP) {
-            // 如果状态不是 STOP（可能是 PAUSE 或其他状态），也设置标志
-            g_audio_playing = true;
-            log_i("[AUDIO]stream playing...");
-            send_device_status(DEVICE_STATUS_AUDIO_PLAYING); // 正在播放
-            log_i("【dg】[AUDIO]stream_write: playing flag set to true (status=%d, not STOP)", player_status);
-        } else {
-            // 状态是 STOP，但数据已写入，可能是缓冲中，也设置标志
-            g_audio_playing = true;
-            log_i("[AUDIO]stream playing...");
-            send_device_status(DEVICE_STATUS_AUDIO_PLAYING); // 正在播放
-            log_i("【dg】[AUDIO]stream_write: playing flag set to true (status=STOP but data written)");
+    log_i("[AUDIO]stream is on, starting playback loop");
+    
+    while (g_audio_thread_running) {
+        
+        /* 从stream获取数据 */
+        uint32_t read_len = wss_stream_get_data(buffer, MAX_CHUNK_SIZE);
+        
+        if (read_len > 0) {
+            /* 有数据，写入播放器 */
+            last_data_time = timer_get_ms(); // 更新最后数据时间
+            os_mutex_pend(&g_audio_mutex, 0);
+            
+            if (!g_audio_on) {
+                /* 第一次播放，启动播放器 */
+                set_speaker();
+                app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
+                g_audio_on = true;
+                set_led_tts_on();
+                log_i("[AUDIO]playback started");
+            }
+            
+            uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, buffer, read_len);
+            if (written > 0) {
+                log_d("[AUDIO]stream_write %u bytes", written);
+            } else {
+                log_e("[AUDIO]failed to write stream");
+            }
+            
+            os_mutex_post(&g_audio_mutex);
+        } else if (!g_audio_on) {
+            /* 无数据，检查是否stream已结束或超时 */
+            if (wss_stream_is_empty()) {
+                log_i("[AUDIO]stream finish");
+                // send_audio_play_finished(stream_id, "playback_complete");
+                break;
+            }
+            msleep(20);
+        } else if (!g_audio_playing) {
+            /* 检查超时 */
+            if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+                g_audio_playing = true;
+            } else {
+                uint32_t elapsed = timer_get_ms() - last_data_time;
+                if (elapsed > TIMEOUT_MS) {
+                    log_w("[AUDIO]timeout: no data for %u ms, exiting", elapsed);
+                    break;
+                }
+            }
+            msleep(50);
         }
-    } else if (g_audio_playing == false) {
-        log_i("【dg】[AUDIO]stream_write: playing flag NOT set, player_status=%d, g_audio_player_start=%d, idx=%u", 
-              player_status, g_audio_player_start, idx);
     }
-    log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
-    return 0;
-}
 
-/**
- * @brief 音频数据流回调（供ODM协议层注册）
- * @details
- *   此函数作为回调被协议层调用，负责将音频数据转发给 wss_audio_stream_write。
- *   保持向后兼容，但将实际逻辑委托给拆分后的函数。
- * @param data 音频数据指针
- * @param len  音频数据长度
- * @return 0 成功
- */
-static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
-{
-    log_i("[AUDIO]odmp_audio_data_cbk len=%u", len);
-    log_i("【dg】[AUDIO]odmp_audio_data_cbk: len=%u, g_audio_off=%d, g_audio_play_ongoing=%d", 
-          len, g_audio_off, g_audio_play_ongoing);
-    wss_audio_stream_write(data, len);
-    return 0;
+    if (g_audio_on) {
+        app_music_play_stop(g_app_ctx->music_player);
+        g_audio_playing = false;
+        g_audio_on = false;
+        set_led_tts_off();
+        log_i("[AUDIO]audio playback stopped");
+    }
+    g_audio_thread_running = false;
+    
+    log_i("[AUDIO]playback thread exited");
 }
 
 // 获取当前音频播放状态
-bool is_audio_playing(){
+bool is_audio_playing()
+{
+    return g_audio_thread_running || g_audio_on;
+}
 
-    if (g_audio_playing == false && g_stream_end) {
-        if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
-            g_audio_playing = true;
-            log_i("[AUDIO]is_audio_playing: stream ended but player started, marking playing");
-        }
+/**
+ * @brief 启动音频播放线程
+ * @details
+ *   初始化播放线程，该线程会循环调用wss_stream_get_data获取音频数据并写入播放器。
+ */
+static void wss_audio_playback_start(void)
+{
+    if (g_audio_thread_running) {
+        log_w("[AUDIO]playback thread already running");
+        return;
     }
-    return g_audio_playing;
+    
+    log_i("[AUDIO]starting playback thread");
+    g_audio_thread_running = true;
+    
+    /* 启动播放线程 */
+    threadpool_add_task(g_app_ctx->threadpool, wss_audio_playback_thread, NULL);
 }
 
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
-void wss_ble_audio_stop(const char *stream_id, bool finish) {
-    log_i("[AUDIO]wss_ble_audio_stop %d %d", g_audio_play_ongoing, g_audio_player_start);
+void wss_ble_audio_stop() {
+    log_i("[AUDIO]wss_ble_audio_stop");
     log_mqtt("💔💔💔 停止蓝牙音频播放");
     
-    /* 只有在实际播放结束时才发送音频播放完成事件 */
-    if (finish) {
-        if (stream_id != NULL && stream_id[0] != '\0') {
-            send_audio_play_finished(stream_id, "playback_complete");
-        } else {
-            log_mqtt("stream_id 为空，无法发送音频播放完成事件");
-        }
-    }
+    wss_stream_reset();
+    os_mutex_pend(&g_audio_mutex, 0);
+    g_audio_on = false;
+    g_audio_thread_running = false;
+    os_mutex_post(&g_audio_mutex);
+    
+    /* 等待播放线程退出 */
+    msleep(100);
     
     os_mutex_pend(&g_audio_mutex, 0);
-    g_audio_off = true;
-    if (g_audio_play_ongoing) {
+    if (g_audio_on) {
         set_led_tts_off();
-        g_audio_play_ongoing = false; // 停止音频播放
-        g_audio_playing = false;
-        if (g_audio_player_start) {
-            app_music_play_stop(g_app_ctx->music_player);
-            g_audio_player_start = false;
-        }
+        g_audio_on = false;
+        app_music_play_stop(g_app_ctx->music_player);
+        log_i("[AUDIO]audio playback stopped");
     }
     os_mutex_post(&g_audio_mutex);
+    
     send_device_status(DEVICE_STATUS_BLE_AUDIO_STOP);
 }
 
-// 开始蓝牙音频，设置音频数据回调，有数据时会启动播放器
-void wss_ble_audio_start(const char *stream_id) {
+// 开始蓝牙音频，启动播放线程，循环获取stream数据进行播放
+void wss_ble_audio_start() {
+    log_i("[AUDIO]wss_ble_audio_start");
     log_mqtt("❤️‍🔥❤️‍🔥❤️‍🔥 开始蓝牙音频播放");
-    log_i("【dg】[AUDIO]wss_ble_audio_start: stream_id=%s, g_audio_off=%d, g_audio_play_ongoing=%d", 
-          stream_id ? stream_id : "NULL", g_audio_off, g_audio_play_ongoing);
-    // send_audio_stream_start(stream_id, "downlink");
+    
     os_mutex_pend(&g_audio_mutex, 0);
-    g_audio_off = false;
-    g_audio_player_start = false;
-    /* reset prebuffer */
-    total_written = 0;
-    g_prebuffer_pos = 0;
-    g_stream_end = false;
-    os_mutex_post(&g_audio_mutex);
-}
-
-void wss_audio_set_stream_start() {
-    log_i("[AUDIO]wss_audio_set_stream_start");
-    g_stream_end = false;
-    odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
-}
-
-void wss_audio_set_stream_end() {
-    log_i("[AUDIO]wss_audio_set_stream_end");
-    if (total_written > 0) {
-        odmp_register_audio_data_cbk(NULL); 
-        log_i("[AUDIO]total_written=%u marking stream end", total_written);
-        g_stream_end = true;
-        g_audio_play_ongoing = false;
-    }
-}
-
-bool wss_audio_is_stream_end() {
-    bool ended;
-    os_mutex_pend(&g_audio_mutex, 0);
-    ended = g_stream_end;
+    g_audio_on = false;
+    g_audio_playing = false;
     os_mutex_post(&g_audio_mutex);
     
-    // 主动允许播放，不要等待预缓冲满
-    wss_audio_allow_playback();
-    log_i("【dg】[AUDIO]wss_ble_audio_start: after allow_playback, g_audio_play_ongoing=%d", g_audio_play_ongoing);
+    /* 启动播放线程 */
+    wss_audio_playback_start();
 }
 
 void wss_audio_init()
@@ -376,23 +215,15 @@ void wss_audio_init()
 
     g_app_ctx = lwl_app_core_context_get_instance();
     lwl_peri_dev_7016_on(true);  // 开启 7016
-
-    /* UART指令开启C端le audio，并指定监听的 mac 地址*/
-    uart_send_open_le_audio(g_app_ctx->mac);
 }
 
 void wss_audio_uninit()
 {
     log_i("[AUDIO]Uninit WSS audio\n");
-    os_mutex_pend(&g_audio_mutex, 0);
     
+    wss_ble_audio_stop(); // 停止音频播放
+    
+    os_mutex_pend(&g_audio_mutex, 0);
     lwl_peri_dev_7016_on(false);  // 关闭 7016
-    const char *stream_id = wss_request_get_stream_id();
-    if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop(stream_id, false);
-    } else {
-        log_e("[wss_audio]stream_id is empty, cannot stop audio");
-    }
-
     os_mutex_post(&g_audio_mutex);
 }

@@ -302,7 +302,7 @@ void play_prompt(const char *fname)
     /* 停止蓝牙音频播放 */
     const char *stream_id = wss_request_get_stream_id();
     if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop(stream_id, false);
+        wss_ble_audio_stop();
     } else {
         log_e("[wss_application]stream_id is empty, cannot stop audio");
     }
@@ -413,6 +413,7 @@ void wss_application_init()
     
     // monitor_start(); // 已在app_cookie.c中调用，无需重复调用
     wss_audio_init();
+    wss_stream_init();
     wss_mic_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
@@ -464,6 +465,7 @@ void wss_application_uninit()
 
     wss_request_uninit();
     wss_audio_uninit();
+    wss_stream_uninit();
     wss_mic_uninit();
     nearby_update_handler_uninit(); // 反初始化nearby_update事件处理器
     wss_device_uninit();

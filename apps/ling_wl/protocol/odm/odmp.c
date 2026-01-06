@@ -598,6 +598,7 @@ char *odmp_nearby_update(void **devices, int device_count, const char *c_id)
     cJSON *devices_array = cJSON_CreateArray();
     cJSON_AddItemToObject(nroot_data, "devices", devices_array);
     
+    if (device_count > 1) device_count = 1; // TODO 仅支持单设备
     // 遍历所有设备,添加到数组中
     for (int i = 0; i < device_count; i++) {
         lwl_eend_dev_t *dev = (lwl_eend_dev_t *)devices[i];
@@ -887,6 +888,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
             if (ret == PARSE_Success) {
                 if (g_odmp_cbk != NULL) {
                     log_i("odmp_rsp_handler: event %s, type %d", pkg.event, entry->type);
+                    log_i("odmp_rsp_handler: %s", buf);
                     g_odmp_cbk(entry->type, &pkg);
                 } else {
                     log_e("【dg】[odmp_rsp_handler] event %s g_odmp_cbk is NULL, cannot process event", pkg.event);

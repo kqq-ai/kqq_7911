@@ -3,16 +3,45 @@
 
 #include "cpu.h"
 
+/**
+ * @brief 初始化WSS音频模块
+ * @details
+ *   初始化互斥锁、stream缓冲、播放器等资源。
+ */
 void wss_audio_init();
+
+/**
+ * @brief 反初始化WSS音频模块
+ * @details
+ *   停止音频播放线程，释放所有资源。
+ */
 void wss_audio_uninit();
 
-void wss_ble_audio_start(const char *stream_id); // request 控制 允许WSS音频数据写入播放器，允许播放
-void wss_ble_audio_stop(const char *stream_id, bool finish);  // request 控制 停止数据写入，暂停播放器，finish=true表示实际播放完成
+/**
+ * @brief 开始蓝牙音频播放
+ * @details
+ *   启动音频播放线程，注册stream数据回调。
+ *   线程会循环调用wss_stream_get_data()获取数据并写入播放器。
+ */
+void wss_ble_audio_start();
 
-void wss_audio_allow_playback();
-void wss_audio_set_stream_end();
-bool wss_audio_is_stream_end();
+/**
+ * @brief 停止蓝牙音频播放
+ * @details
+ *   停止播放线程，停止播放器，清空stream缓冲队列。
+ */
+void wss_ble_audio_stop();
 
+/**
+ * @brief 获取当前音频播放状态
+ * @return true 正在播放，false 未播放或已停止
+ */
+bool is_audio_playing();
+
+/**
+ * @brief 设置播放器音量
+ * @param volume 音量值(1~100)
+ */
 void set_tts_volume(int volume);
 
 #endif

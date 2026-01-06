@@ -31,6 +31,7 @@ static int last_event = 0;
 static char g_edev_target_sn[SN_SIZE+1]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE+1]; // E 已连接
 static char g_stream_id[64]; // 保存 stream_id
+static int g_stream_id_len; // 保存 stream_id
 
 
 //=================================================================================================
@@ -101,7 +102,6 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             }
             
             // 启动音频并发送 bind_result 消息
-            wss_ble_audio_start(g_stream_id);
             send_bind_result(g_edev_connected_sn, true, "connected", g_stream_id);
         } else {
             // 连接的不是目标设备，关闭连接
@@ -111,6 +111,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         // Ready_to_Play 状态，不做处理
         if (strcmp(sn_string, g_edev_target_sn) == 0) {
             log_i("[e_turn_on_cb]Ready to play for target device %s", sn_string);
+            wss_ble_audio_start();
         }
     } else {
         // 连接失败
@@ -133,7 +134,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             g_stream_id[0] = '\0';
             
             // 关闭可能已连接的设备
-            turn_off_Pi();
+            bdo_disable(0);
         } else {
             log_i("【dg】[e_turn_on_cb]Connection failed for non-target device %s (target=%s), code=%d", 
                   sn_string, g_edev_target_sn, code);
@@ -169,7 +170,6 @@ void turn_on_Pi(const char *pdev_sn) {
     //上传E的电量
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
     bdo_turn_on(pdev, 1000, 5000, e_turn_on_cb, pdev);
-    memcpy(g_edev_connected_sn, pdev_sn, SN_SIZE+1);
 }
 
 //=================================================================================================
@@ -178,32 +178,34 @@ void turn_on_Pi(const char *pdev_sn) {
 static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
     os_mutex_pend(&g_request_mutex, 0);
+    log_i("[wss_request]Received WSS response type=%d\n", type);
+    if (type == OR_TTS_BIND) {
+        g_stream_id_len = strlen(pkg->tts_bind.stream_id);
+        strncpy(g_stream_id, pkg->tts_bind.stream_id, g_stream_id_len);
+        wss_request_stop();
+    }
     switch (type) {
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");
         log_i("sn: %s (%s)\n", pkg->tts_bind.sn, g_edev_target_sn);
         log_i("stream_id: %s\n", pkg->tts_bind.stream_id);
         log_i("role_volume: %d\n", pkg->tts_bind.role_volume);
-        
-        // 保存 stream_id 到全局变量
-        if (pkg->tts_bind.stream_id != NULL) {
-            strncpy(g_stream_id, pkg->tts_bind.stream_id, sizeof(g_stream_id) - 1);
-            g_stream_id[sizeof(g_stream_id) - 1] = '\0';
-        } else {
-            g_stream_id[0] = '\0';
-        }
         if (pkg->tts_bind.sn == NULL || strlen(pkg->tts_bind.sn) != SN_SIZE) break;
-        // const char *stream_id = wss_request_get_stream_id();
-        // if (stream_id != NULL && stream_id[0] != '\0') {
-        //     wss_ble_audio_stop(stream_id);
-        // } else {
-        //     log_e("[wss_request]stream_id is empty, cannot stop audio");
-        // }
+        
         memcpy(g_edev_target_sn, pkg->tts_bind.sn, SN_SIZE+1);
         turn_on_Pi(g_edev_target_sn);
         play_prompt_sound("TTSBind.mp3");
         break;
     } 
+    case OR_AUDIO_STREAM_START: {
+        log_i("AUDIO_STREAM_START\n");
+        wss_stream_start();
+    } break;
+    case OR_AUDIO_STREAM_END: {
+        log_i("AUDIO_STREAM_END\n");
+        wss_stream_stop();
+    } break;
+
 
     }
     os_mutex_post(&g_request_mutex);
@@ -219,7 +221,7 @@ void wss_request_stop()
 
     const char *stream_id = wss_request_get_stream_id();
     if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop(stream_id, false);
+        wss_ble_audio_stop();
     } else {
         log_e("[wss_request]stream_id is empty, cannot stop audio");
     }
@@ -240,7 +242,7 @@ void wss_request_pause()
 
     const char *stream_id = wss_request_get_stream_id();
     if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop(stream_id, false);
+        wss_ble_audio_stop();
     } else {
         log_e("[wss_request]stream_id is empty, cannot stop audio");
     }
@@ -256,7 +258,7 @@ void wss_request_stop_audio()
     os_mutex_pend(&g_request_mutex, 0);
     const char *stream_id = wss_request_get_stream_id();
     if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop(stream_id, false);
+        wss_ble_audio_stop();
     }
     turn_off_Pi();
     os_mutex_post(&g_request_mutex);
