@@ -3,7 +3,6 @@
 #include "app_mode/lwl_app_framework.h"
 #include "app_mode/lwl_app_core.h"
 #include "log.h"
-#include "app_lfs.h"
 #include "bt_ble/app_wifi_manage.h"
 #include "LED/LED.h"
 

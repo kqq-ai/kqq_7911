@@ -82,7 +82,6 @@ static void parse_uart_packet(uint8_t *data, uint16_t len)
         log_d("cmd : %02x\r\n", cmd);
         // uint8_t temppayload_len = data[2];
         log_d("the payload data : \r\n");
-        log_d_buf(data + 3, payload_len);
 
         if (packet_handler)
         {
@@ -158,7 +157,6 @@ static int app_uart_task(void *arg)
         // int len = dev_read(g_dev_uart_hdl, g_recv_buf, UART_RECV_BUF_SIZE);
         int len = dev_read(g_dev_uart_hdl, g_recv_buf, 256);
         log_d("========uart recv len: %p %d =========\n", g_dev_uart_hdl, len);
-        log_d_buf(g_recv_buf, len);
         if (len > 0)
         {
             // 数据拼接到缓存
@@ -192,7 +190,6 @@ static int app_uart_task(void *arg)
                         /* 把要传入去解析的数据先重新存储 */
                         static u8 temp_packet_buf[MAX_PAYLOAD_LEN] = {0};
                         memcpy(temp_packet_buf, packet_buf + i, packet_len);
-                        log_d_buf(temp_packet_buf, packet_len);
                         parse_uart_packet(temp_packet_buf, packet_len);
 
                         // 移除已处理数据
@@ -216,7 +213,6 @@ static int app_uart_task(void *arg)
                         /* 把要传入去解析的数据先重新存储 */
                         static u8 temp_resp_packet_buf[MAX_PAYLOAD_LEN] = {0};
                         memcpy(temp_resp_packet_buf, packet_buf + i, resp_packt_len);
-                        log_d_buf(temp_resp_packet_buf, resp_packt_len);
                         parse_uart_packet(temp_resp_packet_buf, resp_packt_len);
 
                         // 移除已处理数据

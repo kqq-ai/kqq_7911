@@ -42,7 +42,6 @@ typedef enum {
     WORK_MODE_6,            // 模式6（循环播放音频 - E端播放）
     WORK_MODE_7,            // 模式7（联网测试）
     WORK_MODE_8,            // 模式8（获取SN号，进入时播放test_snkey.mp3）
-    WORK_MODE_9,
     WORK_MODE_MAX           // 模式总数
 } work_mode_e;
 
@@ -67,7 +66,6 @@ void mode5_init();
 void mode6_init();
 void mode7_init();
 void mode8_init();
-void mode9_init();
 
 void mode1_uninit();
 void mode2_uninit();
@@ -77,7 +75,6 @@ void mode5_uninit();
 void mode6_uninit();
 void mode7_uninit();
 void mode8_uninit();
-void mode9_uninit();
 
 void process_mode_init(void);
 void process_mode_1(void);
@@ -88,7 +85,6 @@ void process_mode_5(void);
 void process_mode_6(void);
 void process_mode_7(void);
 void process_mode_8(void);
-void process_mode_9(void);
 
 void check_key_status(void);
 
@@ -107,7 +103,6 @@ static void (*mode_process_functions[])(void) = {
     process_mode_6,
     process_mode_7,
     process_mode_8,
-    process_mode_9
 };
 
 // 模式名称数组（用于日志）
@@ -121,7 +116,6 @@ static const char *mode_names[] = {
     "MODE_6_AUDIO_LOOP_E",
     "MODE_7_WIFI_CONNECT",
     "MODE_8_SNKEY",
-    "MODE_9_RANDOM_AUDIO"
 };
 
 #endif

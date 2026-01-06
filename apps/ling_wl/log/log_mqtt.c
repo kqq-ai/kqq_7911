@@ -173,7 +173,7 @@ int log_mqtt_connect(void) {
 
 /* MQTT重连函数，持续重连直到成功 */
 static void log_mqtt_reconnect_until_success(void) {
-    while (!log_mqtt_is_connected()) {
+    while (!log_mqtt_is_connected() && g_monitor_thread_running) {
         log_i("【MQTT】尝试连接......\n");
         int ret = log_mqtt_connect();
         if (ret == 0) {
@@ -357,6 +357,9 @@ static void log_monitor_thread(void* arg) {
         if (!log_mqtt_is_connected()) {
             log_mqtt_reconnect_until_success();
         }
+        if (!log_mqtt_is_connected()) {
+            break;  // 无法连接则退出循环
+        }
         
         // 定期调用 MQTTYield 处理心跳和接收消息
         if (g_mqtt_client != NULL && log_mqtt_is_connected()) {
@@ -390,6 +393,12 @@ static void log_monitor_thread(void* arg) {
         // 休眠100ms，避免CPU空转（可根据需求调整）
         msleep(150);
     }
+    
+    my_blocking_queue_destroy_static(&log_queue);// 释放队列资源
+
+    log_mqtt_disconnect();// 断开MQTT连接
+
+    g_mqtt_start = false;
     
     log_i("【MQTT】上传线程退出 Log monitor thread exited\n");
 }
@@ -550,7 +559,7 @@ void log_mqtt_stop(void) {
     // 停止监控线程
     g_monitor_thread_running = false;
     
-    log_i("MQTT pthread_join\n");
+    log_i("MQTT pthread_join %d\n", monitor_thread_pid);
     if (monitor_thread_pid) {
         thread_kill(&monitor_thread_pid, KILL_WAIT);  // 等待线程退出
         log_i("MQTT monitor thread killed\n");
@@ -558,11 +567,5 @@ void log_mqtt_stop(void) {
     }
 
     // 确保最后的消息都发送出去
-    upload_all_logs();
-    
-    my_blocking_queue_destroy_static(&log_queue);// 释放队列资源
-
-    log_mqtt_disconnect();// 断开MQTT连接
-
-    g_mqtt_start = false;
+    // upload_all_logs();
 }

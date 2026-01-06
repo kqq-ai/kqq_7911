@@ -50,10 +50,10 @@ static u8 g_mode8_op_running = 0;
 static rwlock_t g_lfs_rwlock;
 
 // 模式8存储从服务器获取的SN和Key
-#define MODE7_SN_SIZE 32
-#define MODE7_KEY_SIZE 64
-static char g_mode8_obtained_sn[MODE7_SN_SIZE] = {0};   // 从服务器获取的SN
-static char g_mode8_obtained_key[MODE7_KEY_SIZE] = {0}; // 从服务器获取的Key
+#define MODE8_SN_SIZE 32
+#define MODE8_KEY_SIZE 64
+static char g_mode8_obtained_sn[MODE8_SN_SIZE] = {0};   // 从服务器获取的SN
+static char g_mode8_obtained_key[MODE8_KEY_SIZE] = {0}; // 从服务器获取的Key
 
 // 模式8重置函数
 static void mode8_reset_network_check(void)
@@ -64,8 +64,8 @@ static void mode8_reset_network_check(void)
     g_mode8_write_pending = 0;
     g_mode8_op_running = 0;
     // 清空存储的SN和Key
-    memset(g_mode8_obtained_sn, 0, MODE7_SN_SIZE);
-    memset(g_mode8_obtained_key, 0, MODE7_KEY_SIZE);
+    memset(g_mode8_obtained_sn, 0, MODE8_SN_SIZE);
+    memset(g_mode8_obtained_key, 0, MODE8_KEY_SIZE);
     log_i("MODE 8: Network check state reset");
 }
 
@@ -159,14 +159,18 @@ static void mode8_execute_sn_request(void)
     log_i("================================2Entering mode 8================================");
 
     // Check WIFI connection status
+
+    /* 网络连接成功处理 */
     WIFI_connect_STATUES wifi_status = get_wifi_connect_status(NULL);
-    log_i("==============================[MODE7] wifi_status: %d================================", wifi_status);
-    if (wifi_status != WIFI_CONNECT_SUCC && wifi_status != WIFI_CONNECT_DHCP_SUCC) {
+    enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
+    log_i("==============================[MODE8] wifi_status: %d %d================================", state, wifi_status);
+    if (wifi_status != WIFI_CONNECT_SUCC && wifi_status != WIFI_CONNECT_DHCP_SUCC &&
+        state != WIFI_STA_NETWORK_STACK_DHCP_SUCC && state != WIFI_STA_CONNECT_SUCC) {
         log_i("===============:WIFI disconnected===============");
-        log_i("[MODE7] WIFI not connected, cannot request SN, process terminated");
+        log_i("[MODE8] WIFI not connected, cannot request SN, process terminated");
         return;
     }
-    log_i("========================================== [MODE7] WIFI connected================================");
+    log_i("========================================== [MODE8] WIFI connected================================");
 
     // Build POST request to https://test.coolqq.com/api/sn
     const char *url = "https://test.coolqq.com/api/sn";
@@ -174,7 +178,7 @@ static void mode8_execute_sn_request(void)
     cJSON_AddStringToObject(root, "type", "C");
     char *post_data = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
-    log_i("==========================================[MODE7]POST:%s================================", post_data);
+    log_i("==========================================[MODE8]POST:%s %s================================", url, post_data);
 
     http_body_obj http_body_buf;
     httpcli_ctx ctx;
@@ -187,7 +191,7 @@ static void mode8_execute_sn_request(void)
     http_body_buf.p = (char *)malloc(http_body_buf.buf_len * http_body_buf.buf_count);
     if (!http_body_buf.p) {
         log_i("===========================================");
-        log_i("[MODE7] Memory allocation failed, process terminated");
+        log_i("[MODE8] Memory allocation failed, process terminated");
         free(post_data);
         return;
     }
@@ -202,22 +206,22 @@ static void mode8_execute_sn_request(void)
 
     log_i("========================Sending httpcli_post...=============");
     int ret = httpcli_post(&ctx);
-    log_i("=======================[MODE7] httpcli_post return: %d, length: %d===========", ret, http_body_buf.recv_len);
+    log_i("=======================[MODE8] httpcli_post return: %d, length: %d===========", ret, http_body_buf.recv_len);
     free(post_data);
 
     if (ret != HERROR_OK || http_body_buf.recv_len <= 0) {
         log_i("==========================================MODE 8: HTTP request failed================================");
-        log_i("==========================================[MODE7] HTTP request failed, process terminated================================");
+        log_i("==========================================[MODE8] HTTP request failed, process terminated================================");
         if (http_body_buf.p) free(http_body_buf.p);
         return;
     }
 
-    log_i("==========================================[MODE7] HTTP response: %s================================", http_body_buf.p);
+    log_i("==========================================[MODE8] HTTP response: %s================================", http_body_buf.p);
     // Parse JSON response
     const cJSON *resp = cJSON_Parse(http_body_buf.p);
     if (!resp) {
         log_i("==========================================MODE 8: Response is not valid JSON================================");
-        log_i("==========================================[MODE7] Response is not valid JSON, process terminated================================");
+        log_i("==========================================[MODE8] Response is not valid JSON, process terminated================================");
         free(http_body_buf.p);
         return;
     }
@@ -225,19 +229,19 @@ static void mode8_execute_sn_request(void)
     const cJSON *sn = data ? cJSON_GetObjectItem(data, "sn") : NULL;
     const cJSON *key = data ? cJSON_GetObjectItem(data, "key") : NULL;
     if (sn && key && cJSON_IsString(sn) && cJSON_IsString(key)) {
-        log_i("===============================[MODE7] SN: %s=======================", sn->valuestring);
-        log_i("===============================[MODE7] Key: %s=======================", key->valuestring);
+        log_i("===============================[MODE8] SN: %s=======================", sn->valuestring);
+        log_i("===============================[MODE8] Key: %s=======================", key->valuestring);
         
         // 保存获取到的SN和Key到全局变量
-        strncpy(g_mode8_obtained_sn, sn->valuestring, MODE7_SN_SIZE - 1);
-        g_mode8_obtained_sn[MODE7_SN_SIZE - 1] = '\0';  // 确保字符串终止
-        strncpy(g_mode8_obtained_key, key->valuestring, MODE7_KEY_SIZE - 1);
-        g_mode8_obtained_key[MODE7_KEY_SIZE - 1] = '\0';  // 确保字符串终止
+        strncpy(g_mode8_obtained_sn, sn->valuestring, MODE8_SN_SIZE - 1);
+        g_mode8_obtained_sn[MODE8_SN_SIZE - 1] = '\0';  // 确保字符串终止
+        strncpy(g_mode8_obtained_key, key->valuestring, MODE8_KEY_SIZE - 1);
+        g_mode8_obtained_key[MODE8_KEY_SIZE - 1] = '\0';  // 确保字符串终止
         
-        log_i("===============================[MODE7] SN and Key saved to global variables=======================");
+        log_i("===============================[MODE8] SN and Key saved to global variables=======================");
         
         set_led_red();
-        log_i("========================[MODE7] SN/Key obtained successfully, red LED is ON=================");
+        log_i("========================[MODE8] SN/Key obtained successfully, red LED is ON=================");
         
         // 设置SN和Key获取成功标志
         g_mode8_sn_key_obtained = 1;
@@ -253,7 +257,7 @@ static void mode8_execute_sn_request(void)
         // g_mode8_op_running = 1;
         // log_i("MODE 8: test_getsn.mp3 started successfully");
     } else {
-        log_i("===============================[MODE7] Failed to get SN/Key, process terminated==========");
+        log_i("===============================[MODE8] Failed to get SN/Key, process terminated==========");
         log_i("=============================MODE 8: SN/Key fetch failed================================");
     }
     cJSON_Delete(resp);
@@ -325,13 +329,119 @@ static void mode8_wrsn_audio_callback(void *priv)
 //=================================================================================================
 
 #define KEY_SIZE 16
+
+
 /**
  * @brief 将SN和Key写入存储
  * @param sn 序列号字符串
  * @param key 密钥字符串 
  * @return 0成功, -1失败
  */
-static int mode8_write_sn_key_to_storage(const char* sn, const char* key)
+static int mode8_write_sn_key_to_otp(const char* sn, const char* key)
+{
+    if (!sn || !key) {
+        log_e("MODE 8: Invalid SN or Key pointer");
+        return -1;
+    }
+    
+    if (strlen(sn) == 0 || strlen(key) == 0) {
+        log_e("MODE 8: Empty SN or Key string");
+        return -2;
+    }
+    
+    log_i("MODE 8: Writing SN/Key to OTP...");
+    log_i("MODE 8: SN: %s (length: %d)", sn, strlen(sn));
+    log_i("MODE 8: Key: %s (length: %d)", key, strlen(key));
+
+    
+    uint8_t keyInByte[KEY_SIZE];
+    int key_len = hex2bytes(key, keyInByte);
+    if (key_len != KEY_SIZE) {
+        log_e("MODE 8: Failed to exchange Key data, len = %d, expected: %d", key_len, KEY_SIZE);
+        return -7;
+    }
+    
+    norflash_eraser_otp();  //强制擦除otp，包括SN和Wifi
+    
+    //这里仅写入操作，先组合sn和key，一次性写入，跳过前8字节
+    u8 otp_buf[8 + SN_SIZE + KEY_SIZE + 1 + 1] = {0};
+    memcpy(otp_buf + 8, sn, SN_SIZE + 1);
+    memcpy(otp_buf + 8 + SN_SIZE + 1, keyInByte, KEY_SIZE);
+    otp_buf[8 + SN_SIZE + 1 + KEY_SIZE] = '\0'; // Key结束符
+    int ret_otp = norflash_write_otp(otp_buf, 8 + SN_SIZE + KEY_SIZE + 1 + 1, 8 + SN_SIZE + KEY_SIZE + 1 + 1);//写，读写最大字节：768
+    if (ret_otp != 0) {
+        log_e("MODE 8: Failed to write SN/Key to OTP, error: %d", ret_otp);
+        return -8;
+    }
+    
+    log_i("MODE 8: ========== SN/KEY WRITE SUCCESS ==========");
+    log_i("MODE 8: OTP Written SN:  %s (%d bytes)", sn, strlen(sn));
+    log_i("MODE 8: ==========================================");
+
+    log_i("MODE 8: SN/Key verification passed");
+    return 0;  // 成功
+}
+
+/**
+ * @brief 验证写入的SN和Key是否正确
+ * @param expected_sn 期望的SN
+ * @param expected_key 期望的Key
+ * @return 0成功, -1失败
+ */
+static int mode8_verify_written_sn_key_from_otp(const char* expected_sn, const char* expected_key)
+{
+    if (!expected_sn || !expected_key) {
+        log_e("MODE 8: Invalid expected SN or Key pointer");
+        return -1;
+    }
+    
+    log_i("MODE 8: Verifying written SN/Key...");
+    //仅读取OTP，进行对比
+    u8 otp_buf[8 + SN_SIZE + KEY_SIZE + 1 + 1] = {0};
+    norflash_read_otp(otp_buf, 8 + SN_SIZE + KEY_SIZE + 1 + 1, 8 + SN_SIZE + KEY_SIZE + 1 + 1);
+    if (strncmp((char *)(otp_buf + 8), expected_sn, SN_SIZE) != 0) {
+        log_e("MODE 8: OTP SN data mismatch");
+        log_e("MODE 8: Expected: %s", expected_sn);
+        log_e("MODE 8: Read:     %s", otp_buf + 8);
+        return -12;
+    }else {
+        log_i("MODE 8: OTP SN data match~~\n");
+    }
+
+    char keyInOTP[MODE8_KEY_SIZE] = {0};
+    int read_key_len = KEY_SIZE;
+
+    read_key_len = bytes2hex(otp_buf + 8 + SN_SIZE + 1, read_key_len, keyInOTP, sizeof(keyInOTP));
+    
+    if (strncasecmp(keyInOTP, expected_key, read_key_len) != 0) {
+        log_e("MODE 8: Key data mismatch");
+        log_e("MODE 8: Expected: %s", expected_key);
+        log_e("MODE 8: Read:     %.*s", read_key_len, keyInOTP);
+        return -13;
+    }
+
+    //log otp_buf完整内容
+    log_i("MODE 8:VERIFICATION OTP content:");
+    for (int i = 0; i < 8 + SN_SIZE + KEY_SIZE + 1 + 1; i++) {
+        log_i("0x%02X ", otp_buf[i]);
+    }
+    log_i("\n");
+
+    log_i("MODE 8: ========== VERIFICATION SUCCESS ==========");
+    log_i("MODE 8: SN verification:  PASSED (%s)", expected_sn);
+    log_i("MODE 8: Key verification: PASSED (%s)", expected_key);
+    log_i("MODE 8: ========================================");
+    
+    return 0;  // 验证成功
+}
+
+/**
+ * @brief 将SN和Key写入存储
+ * @param sn 序列号字符串
+ * @param key 密钥字符串 
+ * @return 0成功, -1失败
+ */
+static int mode8_write_sn_key_to_lfs(const char* sn, const char* key)
 {
     if (!sn || !key) {
         log_e("MODE 8: Invalid SN or Key pointer");
@@ -436,7 +546,7 @@ static int mode8_write_sn_key_to_storage(const char* sn, const char* key)
     log_i("MODE 8: Written Key: %s (%d bytes)", key, key_len);
     log_i("MODE 8: File: SN_KEY.bin");
     log_i("MODE 8: ==========================================");
-    
+
     log_i("MODE 8: SN/Key verification passed");
     return 0;  // 成功
 }
@@ -447,7 +557,7 @@ static int mode8_write_sn_key_to_storage(const char* sn, const char* key)
  * @param expected_key 期望的Key
  * @return 0成功, -1失败
  */
-static int mode8_verify_written_sn_key(const char* expected_sn, const char* expected_key)
+static int mode8_verify_written_sn_key_from_lfs(const char* expected_sn, const char* expected_key)
 {
     if (!expected_sn || !expected_key) {
         log_e("MODE 8: Invalid expected SN or Key pointer");
@@ -482,7 +592,7 @@ static int mode8_verify_written_sn_key(const char* expected_sn, const char* expe
     // 读取并验证SN
     uint32_t read_sn_len = SN_SIZE;
     
-    char read_sn[MODE7_SN_SIZE] = {0};
+    char read_sn[MODE8_SN_SIZE] = {0};
     lfs_ssize_t bytes_read = lfs_file_read(&g_lfs, &file, read_sn, read_sn_len);
     if (bytes_read != read_sn_len) {
         log_e("MODE 8: Failed to read SN data, read: %d, expected: %d", bytes_read, read_sn_len);
@@ -503,7 +613,7 @@ static int mode8_verify_written_sn_key(const char* expected_sn, const char* expe
     // 读取并验证Key
     uint32_t read_key_len = KEY_SIZE;
     
-    char read_key[MODE7_KEY_SIZE] = {0};
+    char read_key[MODE8_KEY_SIZE] = {0};
     bytes_read = lfs_file_read(&g_lfs, &file, read_key, read_key_len);
     if (bytes_read != read_key_len) {
         log_e("MODE 8: Failed to read Key data, read: %d, expected: %d", bytes_read, read_key_len);
@@ -527,7 +637,7 @@ static int mode8_verify_written_sn_key(const char* expected_sn, const char* expe
     lfs_file_close(&g_lfs, &file);
     // 释放读锁
     rwlock_release_read(&g_lfs_rwlock);
-    
+
     log_i("MODE 8: ========== VERIFICATION SUCCESS ==========");
     log_i("MODE 8: SN verification:  PASSED (%s)", expected_sn);
     log_i("MODE 8: Key verification: PASSED (%s)", expected_key);
@@ -560,7 +670,7 @@ static int mode8_write_and_verify_sn_key(const char* sn, const char* key)
     log_i("MODE 8: Starting combined write and verify operation...");
     
     // 第一步：执行写入操作
-    int write_result = mode8_write_sn_key_to_storage(sn, key);
+    int write_result = mode8_write_sn_key_to_lfs(sn, key);
     if (write_result != 0) {
         log_e("MODE 8: ========== SN/KEY WRITE FAILED ==========");
         log_e("MODE 8: Failed to write SN/Key to storage, error code: %d", write_result);
@@ -572,7 +682,7 @@ static int mode8_write_and_verify_sn_key(const char* sn, const char* key)
     log_i("MODE 8: SN/Key written to storage successfully!");
     
     // 验证写入的数据
-    int read_result = mode8_verify_written_sn_key(sn, key);
+    int read_result = mode8_verify_written_sn_key_from_lfs(sn, key);
     if (read_result != 0) {
         log_w("MODE 8: Read back verification failed, but write was successful");
         log_w("MODE 8: Read error code: %d", read_result);

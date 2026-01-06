@@ -26,7 +26,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "LED/LED.h"
 #include "gpio.h"
-#include "../lwl_peri_dev.h"
+#include "app_mode/lwl_peri_dev.h"
 
 #include "./bt_ble/app_wifi_manage.h"
 #include "net_music_play_my.h"

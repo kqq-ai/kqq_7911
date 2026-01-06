@@ -288,7 +288,6 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_6_edev.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_7_wifi.c \
 	../../../../apps/ling_wl/app_mode/devices_check/mode_8_SN.c \
-	../../../../apps/ling_wl/app_mode/devices_check/mode_danzai.c \
 	../../../../apps/ling_wl/app_mode/update/update.c \
 	../../../../apps/ling_wl/app_mode/net_connected/net_connected.c \
 	../../../../apps/ling_wl/app_mode/net_connecting/net_connecting.c \

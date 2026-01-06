@@ -34,6 +34,7 @@ static int g_audio_player_start = false; // 音频播放中标志（播放器状
 
 static uint8_t g_prebuffer[PREBUFFER_SIZE];
 static uint32_t g_prebuffer_pos = 0;
+static bool g_stream_end = false; // 音频流结束标志
 
 static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len);
 
@@ -52,7 +53,7 @@ void set_speaker() {
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
-    // bdo_enable();
+    bdo_enable();
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -62,7 +63,6 @@ void set_speaker() {
 void app_music_play_end_cb(void *priv)
 {
     log_i("[AUDIO]app_music_play_end_cb");
-    g_audio_play_ongoing = false; // 音乐播放结束标志
     g_audio_playing = false;
     g_audio_player_start = false;
     set_led_tts_off();
@@ -71,6 +71,7 @@ void app_music_play_end_cb(void *priv)
     wss_ble_audio_stop(stream_id, true);
 }
 
+static void wss_audio_playback_start(void);
 // 允许网络音频开始播放
 void wss_audio_allow_playback()
 {
@@ -89,7 +90,7 @@ void wss_audio_allow_playback()
 
     /* 标记为播放中 */
     audio_req_time = timer_get_ms();
-    g_audio_play_ongoing = true;
+    if (g_stream_end == false) g_audio_play_ongoing = true;
     set_led_tts_on();
     log_i("【dg】[AUDIO]wss_audio_allow_playback: after, g_audio_play_ongoing=%d, audio_req_time=%u", 
           g_audio_play_ongoing, audio_req_time);
@@ -182,7 +183,7 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
         return 0;
     }
 
-    log_d("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
+    // log_i("[AUDIO]stream_write len=%u, play_ongoing=%d, prebuffer_pos=%u", len, g_audio_play_ongoing, g_prebuffer_pos);
 
     os_mutex_pend(&g_audio_mutex, 0);
 
@@ -203,7 +204,6 @@ static int wss_audio_stream_write(uint8_t *data, uint32_t len)
         /* 预缓冲已满或未分配，但尚未启动播放 => 丢弃或缓存溢出 */
         log_w("[AUDIO]prebuffer full/unavailable but playback not started, dropping %u bytes", len);
         wss_audio_allow_playback();
-        wss_audio_playback_start(); // 尝试启动播放
         goto stream_write;
     }
 
@@ -215,7 +215,7 @@ stream_write:
         g_audio_player_start = true;
     }
     /* 直接写入播放器流（data/len 为需要写入的部分） */
-    while (len > 0 && !g_audio_off) {
+    while (len > idx && !g_audio_off) {
         uint32_t chunk_size = (len > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : len;
         uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, data + idx, chunk_size);
         if (written == 0) {
@@ -226,9 +226,9 @@ stream_write:
         idx += written;
         total_written += written;
         log_d("[AUDIO]stream_write chunk: %u bytes (total: %u / %u)", written, idx, total_written);
-        if (idx == len || g_audio_off) break;
         msleep(10);
     }
+    os_mutex_post(&g_audio_mutex);
 
     /* update playing flag if started */
     int player_status = app_music_play_get_status(g_app_ctx->music_player);
@@ -261,8 +261,6 @@ stream_write:
         log_i("【dg】[AUDIO]stream_write: playing flag NOT set, player_status=%d, g_audio_player_start=%d, idx=%u", 
               player_status, g_audio_player_start, idx);
     }
-    os_mutex_post(&g_audio_mutex);
-
     log_i("[AUDIO]stream_write completed: %u / %u bytes", idx, total_written);
     return 0;
 }
@@ -287,12 +285,14 @@ static uint32_t odmp_audio_data_cbk(uint8_t *data, uint32_t len)
 
 // 获取当前音频播放状态
 bool is_audio_playing(){
-    bool playing = g_audio_playing || (g_audio_play_ongoing && 
-        (total_written >> 2) + 1000 > timer_get_ms()-audio_req_time); // 数据长度小于当前流逝时间，可能无法启动播放
-    if (!g_audio_playing && playing) {
-        log_d("[AUDIO]is_audio_playing total_written=%u time last %u", total_written, timer_get_ms()-audio_req_time);
+
+    if (g_audio_playing == false && g_stream_end) {
+        if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+            g_audio_playing = true;
+            log_i("[AUDIO]is_audio_playing: stream ended but player started, marking playing");
+        }
     }
-    return playing;
+    return g_audio_playing;
 }
 
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
@@ -311,7 +311,6 @@ void wss_ble_audio_stop(const char *stream_id, bool finish) {
     
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_off = true;
-    odmp_register_audio_data_cbk(NULL); 
     if (g_audio_play_ongoing) {
         set_led_tts_off();
         g_audio_play_ongoing = false; // 停止音频播放
@@ -337,7 +336,30 @@ void wss_ble_audio_start(const char *stream_id) {
     /* reset prebuffer */
     total_written = 0;
     g_prebuffer_pos = 0;
+    g_stream_end = false;
+    os_mutex_post(&g_audio_mutex);
+}
+
+void wss_audio_set_stream_start() {
+    log_i("[AUDIO]wss_audio_set_stream_start");
+    g_stream_end = false;
     odmp_register_audio_data_cbk(odmp_audio_data_cbk); 
+}
+
+void wss_audio_set_stream_end() {
+    log_i("[AUDIO]wss_audio_set_stream_end");
+    if (total_written > 0) {
+        odmp_register_audio_data_cbk(NULL); 
+        log_i("[AUDIO]total_written=%u marking stream end", total_written);
+        g_stream_end = true;
+        g_audio_play_ongoing = false;
+    }
+}
+
+bool wss_audio_is_stream_end() {
+    bool ended;
+    os_mutex_pend(&g_audio_mutex, 0);
+    ended = g_stream_end;
     os_mutex_post(&g_audio_mutex);
     
     // 主动允许播放，不要等待预缓冲满

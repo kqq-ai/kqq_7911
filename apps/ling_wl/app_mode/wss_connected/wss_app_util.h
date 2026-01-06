@@ -20,11 +20,10 @@ int send_audio_play_started(const char *stream_id, const char *status, const cha
 int send_audio_play_finished(const char *stream_id, const char *status);
 int send_btn_tap(int type, int duration);
 
-void wss_exception_exit(void);
 bool wss_check_exit(void);
 bool wss_connect(void);
 void wss_disconnect(void);
 bool wss_reconnect(void);
-// const char *wss_get_last_disconnect_reason(void);
+const char *wss_get_last_disconnect_reason(void);
 
 #endif

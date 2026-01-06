@@ -4,6 +4,9 @@
 #include "wifi/wifi_connect.h"
 #include "app_cookie.h"
 
+// Please review "syscfg_id.h"
+#define CFG_USER_MAC 2
+
 static lwl_app_context_t* s_app_context = NULL;
 static OS_MUTEX g_mutex;
 
@@ -50,7 +53,8 @@ static void init_app_context(lwl_app_context_t* context)
         wifi_get_mac(s_app_context->mac);
         syscfg_write(CFG_USER_MAC, s_app_context->mac, 6);
     }
-    log_i_buf(s_app_context->mac, 6);
+    log_i("%02X %02X %02X %02X %02X %02X", s_app_context->mac[0], s_app_context->mac[1], s_app_context->mac[2]
+                                         , s_app_context->mac[3], s_app_context->mac[4], s_app_context->mac[5]);
 
     g_event_scheduler_exit = 0;
     context->websockets_info = NULL;
@@ -117,7 +121,7 @@ void lwl_app_core_destroy()
 lwl_eend_dev_t *add_new_eend_dev(u8 *sn)
 {
     ASSERT(s_app_context != NULL);
-    ASSERT(strlen(sn) == SN_SIZE);
+    ASSERT(strlen(sn) == PI_SN_SIZE);
 
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)malloc(sizeof(lwl_eend_dev_t));
     ASSERT(pdev != NULL);

@@ -203,13 +203,9 @@
  *     功能: 启用BDO(Broadcast Device Operation)功能
  *     说明: 向UART发送启用命令和当前广播码
  *
- * void bdo_disable(void)
+ * void bdo_disable(bool mute)
  *     功能: 禁用BDO功能
  *     说明: 向UART发送禁用命令(使用全0广播码)
- *
- * void bdo_set_ctrl(uint8_t code)
- *     功能: 设置BDO控制码
- *     参数: code - 控制码值(0x00/0x03)
  *
  * void bdo_notify_e_conncted(void)
  *     功能: 通知端点设备已连接/启用(供外部事件回调调用)
@@ -268,21 +264,18 @@ static inline void process_cb(ble_dev_op_t *op, u8 code) {
     if (op->cb) op->cb(code, op->cb_priv);
 }
 
-void bdo_disable()
+void bdo_disable(bool mute)
 {
     log_i("[BDO]bdo_disable");
-    uart_send_set_ctrl(0x01);
+    uart_send_set_ctrl(mute ? 0x01 : 0x00);
+    log_i("[BDO] switch_audio_bc %s ctrl(0x0%d)", broadcast_code, mute);
 }
 
 void bdo_enable()
 {
     log_i("[BDO]bdo_enable %s", broadcast_code);
+    log_i("[BDO] switch_audio_bc %s ctrl(0x03)", broadcast_code);
     uart_send_set_ctrl(0x03);
-}
-
-void bdo_set_ctrl(uint8_t code)
-{
-    log_i("[BDO]bdo_set_ctrl %d", code);
 }
 
 void bdo_notify_e_conncted(char sn[])
@@ -298,15 +291,19 @@ void bdo_notify_e_conncted(char sn[])
 void bdo_notify_e_disconncted(char sn[])
 {
     if (!sn) return;
-    log_i("[BDO] Device %s disconnectd", sn);
+    log_i("[BDO] Device %s disconnectd(%s)", sn, broadcast_code);
     if (strcmp(broadcast_code, &sn[10]) == 0) {
-        uart_send_switch_audio_bc(empty_broadcast_code, 0x01);
+        log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, empty_broadcast_code);
+        memcpy(broadcast_code, empty_broadcast_code, sizeof(broadcast_code));
+        uart_send_switch_audio_bc(broadcast_code, 0x01);
+        uart_send_set_ctrl(0x01); // soft disable
         os_sem_post(&g_e_disconnected_sem);
     }
     // TODO: 这里可以考虑直接清除断连信号量，以防止误触发
 }
 
-int max_rssi = -127;
+static int max_rssi = -127;
+static bool need_active = true;
 
 static void ble_dev_op_handler_active(ble_dev_op_t* op)
 {
@@ -318,13 +315,13 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         return;
     }
     for (int i=0;i<10;i++) {
-        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
+        mdelay(50);
+        if (!my_blocking_queue_is_empty(&g_ble_dev_op_queue) || need_active == false) {
             log_i("[BDO]There are other pending tasks, skip this activation!");
             dev->op_state &= ~BDO_STATE_ACTIVATING;
             process_cb(op, BDOCode_Skip);
             return;
         }
-        mdelay(50);
     }
     if (dev->max_rssi < max_rssi) {
         log_i("[BDO]not the closest dev, ignore!");
@@ -416,19 +413,25 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         process_cb(op, BDOCode_Null_Pointer);
         return;
     }
-    if (dev->distance_info.rssi_sample_count < 1) {
+    
+    for (int i=0;i<10;i++) {
+        if (dev->distance_info.rssi_sample_count > 0)  break;
+        mdelay(50);
+    }
+    if (dev->distance_info.rssi_sample_count == 0) {
         log_i("[BDO]Error dev lost!");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Dev_Busy);
         return;
     }
-    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+
     if (dev->adv_state == BDPAS_CONNECTED) {
+        memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
         os_sem_set(&g_e_disconnected_sem, 0);
         if (os_sem_pend(&g_e_disconnected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
             log_e("[BDO]Error dev busy! %d", op->turnon.scan_timeout);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
-            process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+            process_cb(op, BDOCode_Dev_Busy);
             return;
         }
     }
@@ -481,20 +484,28 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     log_i("[BDO]Waiting adv state change...");
     process_cb(op, BDOCode_Success);
     msleep(300);
-    uart_send_set_ctrl(0x01);
-    uart_send_switch_audio_bc(broadcast_code, 0x01);
+    if (dev->op_state & BDO_STATE_TURNNING_ON) {
+        log_i("[BDO]Continue turn on...");
+        log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
+        memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+        uart_send_set_ctrl(0x01);
+        uart_send_switch_audio_bc(broadcast_code, 0x01);
+        uart_send_set_ctrl(0x01);
 
-    /* - 扫描设备 ADV 状态变化 -> connected */
-    if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
-        log_e("[BDO]Error scan adv state timeout!!!");
-        dev->op_state &= ~BDO_STATE_TURNNING_ON;
-        process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
-        return;
+        /* - 扫描设备 ADV 状态变化 -> connected */
+        if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
+            log_e("[BDO]Error scan adv state timeout!!!");
+            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+            return;
+        }
     }
 
-    log_i("[BDO]Turn on end");
-    dev->op_state &= ~BDO_STATE_TURNNING_ON;
-    process_cb(op, BDOCode_Ready_to_Play);
+    if (dev->op_state & BDO_STATE_TURNNING_ON) {
+        log_i("[BDO]Turn on end");
+        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        process_cb(op, BDOCode_Ready_to_Play);
+    }
 }
 
 static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
@@ -513,6 +524,7 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
         return;
     }
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
+        log_i("[BDO] switch_audio_bc %s ctrl(0x00)", broadcast_code);
         uart_send_set_ctrl(0x00);
     }
 
@@ -560,6 +572,7 @@ void ble_dev_task_scheduler_init()
     ble_disconn_event_user_handler_add(ble_disconn_event_handler, NULL);
 }
 
+int dev_task_is_on = 0;
 int dev_task_is_running = 0;
 
 static void ble_dev_task_scheduler()
@@ -571,7 +584,7 @@ static void ble_dev_task_scheduler()
 
     dev_task_is_running = 1;
 
-    while (dev_task_is_running) {
+    while (dev_task_is_on) {
         if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
             max_rssi = -127;
         }
@@ -580,8 +593,10 @@ static void ble_dev_task_scheduler()
 
         if (g_op_handler_entries[op.op_type] != NULL) {
             g_op_handler_entries[op.op_type](&op);
+            need_active = false;
         }
     }
+    dev_task_is_running = 0;
     my_blocking_queue_clear(&g_ble_dev_op_queue);
 }
 
@@ -590,6 +605,7 @@ void ble_dev_task_scheduler_start()
     if (dev_task_is_running) {
         return;
     }
+    dev_task_is_on = true;
     max_rssi = -127;
     log_i("ble_dev_task_scheduler_start");
     if (thread_fork("ble_dev_task_scheduler", 15, 512, 0, 0, ble_dev_task_scheduler, NULL)) {
@@ -597,36 +613,19 @@ void ble_dev_task_scheduler_start()
     }
 }
 
-static void ble_dev_task_loop()
+void ble_dev_task_scheduler_stop()
 {
-    ble_dev_op_t op;
-    log_i("ble_dev_task_loop");
-
-    dev_task_is_running = 1;
-    my_blocking_queue_dequeue(&g_ble_dev_op_queue, &op);
-    ASSERT(op.op_type < g_op_handler_entries_count);
-
-    if (g_op_handler_entries[op.op_type] != NULL) {
-        g_op_handler_entries[op.op_type](&op);
-    }
-    dev_task_is_running = 0;
+    dev_task_is_on = false;
 }
 
-void ble_dev_task_epcho()
+void ble_dev_task_enable()
 {
-    if (dev_task_is_running) {
-        return;
-    }
-    if (my_blocking_queue_is_empty(&g_ble_dev_op_queue)) {
-        max_rssi = -127;
-    } else if (thread_fork("ble_dev_task_loop", 15, 512, 0, 0, ble_dev_task_loop, NULL)) {
-        log_e("Error: Failed to create task ble_dev_task_loop.");
-    }
+    need_active = true;
 }
 
 int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
-    log_i("[MEASDIST]Active %s, %d", dev->sn, dev->max_rssi);
+    log_i("[BDO]Active %s, %d", dev->sn, dev->max_rssi);
     // 获取dev的最大rssi信号值
     int rssi = dev->max_rssi;
     if (max_rssi > dev->max_rssi) {
@@ -650,7 +649,7 @@ int bdo_active(lwl_eend_dev_t *dev, int timeout, ble_dev_op_cb_func_t cb, void *
 
 int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev_op_cb_func_t cb, void *priv)
 {
-    log_i("[MEASDIST]bdo_turn_on %s", dev->sn);
+    log_i("[BDO]bdo_turn_on %s", dev->sn);
     if (dev->op_state & BDO_STATE_TURNNING_ON)
         return 0;
     dev->op_state |= BDO_STATE_TURNNING_ON;
@@ -663,7 +662,7 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
     op.turnon.address_type = dev->address_type;
     memcpy(op.turnon.address, dev->address, sizeof(op.turnon.address));
     memcpy(op.turnon.broadcast_code, &dev->sn[10], sizeof(op.turnon.broadcast_code));
-    log_i("[MEASDIST]bdo_turn_on %s(%s)", dev->sn, op.turnon.broadcast_code);
+    log_i("[BDO]bdo_turn_on %s(%s)", dev->sn, op.turnon.broadcast_code);
     op.cb = cb;
     op.cb_priv = priv;
     return my_blocking_queue_push_front(&g_ble_dev_op_queue, &op) == MYERROR_Success;
@@ -671,10 +670,17 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
 
 int bdo_turn_off(lwl_eend_dev_t *dev)
 {
-    log_i("[MEASDIST]bdo_turn_off %s", dev->sn);
+    log_i("[BDO]bdo_turn_off %s", dev->sn);
+    if (dev->op_state & BDO_STATE_TURNNING_ON) {
+        log_i("[BDO]Turn on abort");
+        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        os_sem_post(&g_e_connected_sem);
+
+    }
+    dev->op_state = BDO_STATE_IDLE;
     // broadcast_code 等于dev->sn的后6位则继续
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
-        dev->op_state = BDO_STATE_IDLE;
+        log_i("[BDO] switch_audio_bc %s ctrl(0x00)", broadcast_code);
         uart_send_set_ctrl(0x00);
     }
     return 1;

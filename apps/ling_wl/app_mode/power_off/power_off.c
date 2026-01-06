@@ -24,7 +24,6 @@
 #include "app_mode/lwl_app_core.h"
 #include "app_mode/lwl_peri_dev.h"
 #include "log.h"
-#include "app_lfs.h"
 #include "app_cookie.h"
 #include "gpio.h"
 #include "LED/LED.h"

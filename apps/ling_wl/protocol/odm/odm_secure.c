@@ -16,7 +16,7 @@ extern lfs_t g_lfs;
 #define BUF_SIZE 128
 #define KEY_SIZE 16
 
-char snInVm[SN_SIZE+1]="\0";
+char snInVm[SN_SIZE+1];
 
 char keyInVm[KEY_SIZE];
 
@@ -95,25 +95,10 @@ void get_Key_from_Char(){
 }
 #endif 
 
-static void gen_SN()
+static void get_SN_from_lfs()
 {
     struct lfs_info info;
     lfs_file_t file;
-
-#if 0
-    get_Key_from_Char();
-    // 新设备，写入pt 和 keyInVm
-    int err = lfs_file_open(&g_lfs, &file, "SN_KEY.bin", 
-                LFS_O_WRONLY | LFS_O_CREAT | LFS_O_TRUNC);
-    /* 3. 写入数据 */
-    size_t bytes_written = lfs_file_write(&g_lfs, &file, snInVm, SN_SIZE );
-    assert(bytes_written == SN_SIZE+1);
-    bytes_written        = lfs_file_write(&g_lfs, &file, keyInVm, KEY_SIZE);
-    assert(bytes_written == KEY_SIZE);
-    log_i(" write LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_written );
-    lfs_file_close(&g_lfs, &file);
-
-#else
     if (lfs_stat(&g_lfs, "SN_KEY.bin", &info) != LFS_ERR_OK) {
         return;
     }
@@ -130,11 +115,33 @@ static void gen_SN()
         log_i(" read LittleFS snInVm = %s ,  key len = %d \n", snInVm , bytes_read ); //读取成功，第二次启动
     }
     lfs_file_close(&g_lfs, &file);
-#endif
+}
+
+static void get_SN_from_OTP()
+{
+    struct lfs_info info;
+    lfs_file_t file;
+
+    int norflash_read_otp(u8 *buf, const int len, const int zone_len);
+    u8 otp_buf[8 + SN_SIZE + KEY_SIZE + 1 + 1] = {0};   //明确最后一个字符为'\0'
+    int ret_otp = norflash_read_otp(otp_buf, 8 + SN_SIZE + KEY_SIZE + 1 + 1, 8 + SN_SIZE + KEY_SIZE + 1 + 1);
+    if (ret_otp != 0) {
+        log_i("gen_SN norflash_read_otp fail \n");
+        return;
+    }
+    if (strncmp((char *)(otp_buf + 8), "KC", 2) != 0) {
+        log_i("gen_SN OTP not start with KC\n");
+        return;
+    }
+    //把otp的sn部分copy出来
+    memcpy(snInVm, otp_buf + 8, SN_SIZE + 1);
+    //把otp的key部分copy出来
+    memcpy(keyInVm, otp_buf + 8 + SN_SIZE + 1, KEY_SIZE);
+    log_i("gen_SN get from OTP OK,  snInVm = %s ,  key len = %d \n", snInVm , KEY_SIZE );
 }
 
 bool get_SN(char* SN){
-    if (snInVm[0] == 0) gen_SN();
+    if (snInVm[0] == 0) get_SN_from_lfs();
     if (snInVm[0] == 0 || strlen(snInVm) != SN_SIZE || WRITE_SN_KEY) {
         log_i("❌get_SN NULL\n");
         snInVm[0] = 0;

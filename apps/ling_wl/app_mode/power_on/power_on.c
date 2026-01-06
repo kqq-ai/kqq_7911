@@ -23,10 +23,9 @@
 #include "app_mode/lwl_app_framework.h"
 #include "app_mode/lwl_app_core.h"
 #include "log.h"
-#include "app_lfs.h"
 #include "app_cookie.h"
 #include "gpio.h"
-#include "../lwl_peri_dev.h"
+#include "app_mode/lwl_peri_dev.h"
 #include "LED/LED.h"
 
 #define MOVE_TIMEOUT_MS 60000 // 60s
