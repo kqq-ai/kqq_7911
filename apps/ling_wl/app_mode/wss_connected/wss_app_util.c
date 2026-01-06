@@ -8,6 +8,7 @@
 
 #include "system/includes.h"
 #include "app_cookie.h"
+#include "cJSON_common/cJSON.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -402,6 +403,224 @@ int send_nearby_update(void **devices, int device_count)
 
     if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
         log_e("[nearby_update] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_stream_start消息
+ * @param stream_id 流ID
+ * @param stream_type 流类型，例如 "uplink" 或 "downlink"
+ * @return 0成功,-1失败
+ */
+int send_audio_stream_start(const char *stream_id, const char *stream_type)
+{
+    if (stream_id == NULL || stream_type == NULL) {
+        log_e("[wss_app_util]send_audio_stream_start: stream_id or stream_type is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成audio_stream_start消息
+    char *send_data = odmp_audio_stream_start(stream_id, stream_type);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_stream_start: odmp_audio_stream_start returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[audio_stream_start] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[audio_stream_start] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_stream_end消息
+ * @param stream_id 流ID，必须与audio_stream_start发送时的stream_id相同
+ * @param status 状态，例如 "user_interrupted"
+ * @return 0成功,-1失败
+ */
+int send_audio_stream_end(const char *stream_id, const char *status)
+{
+    if (stream_id == NULL || status == NULL) {
+        log_e("[wss_app_util]send_audio_stream_end: stream_id or status is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成audio_stream_end消息
+    char *send_data = odmp_audio_stream_end(stream_id, status);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_stream_end: odmp_audio_stream_end returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[audio_stream_end] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[audio_stream_end] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送bind_result消息
+ * @param sn E端设备序列号
+ * @param success 是否成功
+ * @param status 状态，例如 "connected"
+ * @param stream_id 流ID
+ * @return 0成功,-1失败
+ */
+int send_bind_result(const char *sn, bool success, const char *status, const char *stream_id)
+{
+    if (sn == NULL || status == NULL || stream_id == NULL) {
+        log_e("[wss_app_util]send_bind_result: sn, status or stream_id is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成bind_result消息
+    char *send_data = odmp_bind_result(sn, success, status, stream_id);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_bind_result: odmp_bind_result returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[bind_result] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[bind_result] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_play_started消息
+ * @param stream_id 流ID
+ * @param status 状态，例如 "normal_start"
+ * @param play_mode 播放模式，例如 "normal"
+ * @return 0成功,-1失败
+ */
+int send_audio_play_started(const char *stream_id, const char *status, const char *play_mode)
+{
+    if (stream_id == NULL || status == NULL || play_mode == NULL) {
+        log_e("[wss_app_util]send_audio_play_started: stream_id, status or play_mode is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成audio_play_started消息
+    char *send_data = odmp_audio_play_started(stream_id, status, play_mode);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_play_started: odmp_audio_play_started returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[audio_play_started] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[audio_play_started] Error %s %d.", __FILE__, __LINE__);
+
+        free(send_data);
+        wss_exception_exit();
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_play_finished消息
+ * @param stream_id 流ID，必须与audio_play_started发送时的stream_id相同
+ * @param status 状态，例如 "playback_complete"
+ * @return 0成功,-1失败
+ */
+int send_audio_play_finished(const char *stream_id, const char *status)
+{
+    if (stream_id == NULL || status == NULL) {
+        log_e("[wss_app_util]send_audio_play_finished: stream_id or status is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
+    if (ctx->websockets_info == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    // 生成audio_play_finished消息
+    char *send_data = odmp_audio_play_finished(stream_id, status);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_play_finished: odmp_audio_play_finished returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    log_i("[audio_play_finished] wbs send msg : %s", send_data);
+
+    if (FALSE == wss_send_message(ctx->websockets_info, send_data, strlen(send_data))) {
+        log_e("[audio_play_finished] Error %s %d.", __FILE__, __LINE__);
 
         free(send_data);
         wss_exception_exit();

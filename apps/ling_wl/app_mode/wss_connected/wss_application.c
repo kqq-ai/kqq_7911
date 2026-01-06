@@ -30,26 +30,17 @@ music_player *player;
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
 
-static bool g_mic_on = false;
-static bool multi_play_mode = false;
-
 static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
 static bool g_exit = false;
 
+static u32 g_touch_key_press_time = 0;
+static bool g_long_press_mic_started = false;  // 标记是否已经因为长按而开启了麦克风
+#define LONG_PRESS_THRESHOLD_MS 300  // 长按阈值300ms
+
 u32 last_E_found_time = 0;
 u32 last_move_time = 0;
 u32 last_mem_stats_time = 0;
-
-/* Task state */
-typedef enum {
-    APP_IDLE,
-    APP_AUDIO,
-    APP_VAD,
-    APP_WAIT,
-} AppTaskStepState;
-
-AppTaskStepState g_device_state = APP_IDLE;
 
 /* 输入事件队列 */
 typedef struct {
@@ -235,70 +226,42 @@ bool wss_application_check_power_key()
 }
 
 //=================================================================================================
-// 麦克风相关
-//=================================================================================================
-void wss_application_resume_mic()
-{
-    log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
-    os_mutex_pend(&g_wss_app_mutex, 0);
-    if (g_on_touch_key) {
-        wss_mic_start();
-    } else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
-        wss_mic_start();
-    } else if (!g_mic_on || g_device_state == APP_AUDIO) {
-        wss_mic_stop();
-    }
-    os_mutex_post(&g_wss_app_mutex);
-}
-
-// 打开麦克风并启动vad录音
-void wss_application_start_mic()
-{
-    log_i("[wss_application]wss_application_start_mic g_device_state: %d", g_device_state);
-    os_mutex_pend(&g_wss_app_mutex, 0);
-    g_mic_on = true;
-    if (g_device_state == APP_IDLE || g_device_state == APP_VAD) {
-        wss_mic_start();
-    } else if (g_device_state == APP_AUDIO || g_device_state == APP_WAIT) {
-        wss_mic_stop();
-    }
-    wss_vad_start(NO_REQ_TIMEOUT_MS); // 开始录音
-    os_mutex_post(&g_wss_app_mutex);
-}
-
-//=================================================================================================
 // 按键相关
 //=================================================================================================
+
+//=================================================================================================
+// 触摸按键事件处理函数（长按/短按）
+//=================================================================================================
+static void handle_long_press_end(void)
+{
+    log_mqtt("【butt】🔄🔄🔄 长按触摸键释放 - 关闭麦克风");
+    // 1. 停止麦克风录音和音频上传
+    wss_mic_stop();
+    send_audio_stream_end(wss_request_get_stream_id(), "user_interrupted");
+}
+
+static void handle_short_press(void)
+{
+    log_mqtt("【butt】🔄🔄🔄 短按触摸键释放 - 中断音频播放");
+    
+    
+    //  停止麦克风（确保状态清理）
+    wss_mic_stop();
+    wss_asr_stop();
+    
+    // 状态由全局标志决定，不需要手动设置
+}
 
 //=================================================================================================
 // 按键事件处理函数
 //=================================================================================================
 void wss_handle_key_event(void)
 {
-    log_mqtt("👆👆👆 电源键短按 此时multi_play_mode=%d", multi_play_mode);
+    log_mqtt("【butt】👆👆👆 电源键短按");
     if (g_exit) {
         g_power_key_retry = true;
-    } else {
-        multi_play_mode = !multi_play_mode;
-        g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-        if (!wss_request_is_playing()) {
-            if (multi_play_mode) {
-                play_prompt_sound("1to2.mp3");
-                wss_request_send_event_target(ORMET_PLAY_NEXT);
-                log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
-                g_device_state = APP_WAIT;
-            } else {
-                play_prompt_sound("1to1.mp3");
-                if (wss_device_call()) {
-                    log_i("[wss_application]STATE: MODE SWITCH -> APP_WAIT");
-                    g_device_state = APP_WAIT;
-                } else {
-                    log_i("[wss_application]STATE: MODE SWITCH no device call -> APP_IDLE");
-                    g_device_state = APP_IDLE;
-                }
-            }
-        }
     }
+    // 移除多人模式切换逻辑
 }
 
 // 处理触摸按键事件（按下/释放）
@@ -309,34 +272,32 @@ static void wss_handle_touch_key_event(bool press_down)
 #endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
-        wss_request_pause();
+        // ========== 触摸键按下事件 ==========
+        log_mqtt("【butt】👆👆 触摸键按下");
+        g_on_touch_key = true;
+        g_touch_key_press_time = timer_get_ms();
+        g_long_press_mic_started = false;  // 重置长按麦克风开启标志
+        // 1. 暂停音频播放
+        wss_request_stop_audio();
+        // 2. 停止麦克风
         wss_mic_stop();
-        wss_asr_start();
-        play_prompt_sound("t_key.mp3");
+        
     } else {
-        bool is_short_press = !is_recording_uploading(); //未上传音频，是短按
-        wss_request_resume();
-        wss_mic_stop();
-        wss_asr_stop();
-        if (is_short_press) {
-            // 短按触摸键，打断/切换对话状态
-            if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
-                log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
-                log_mqtt("🔄🔄🔄 短按触摸键，打断/切换对话状态");
-                g_device_state = APP_WAIT;
-                wss_request_send_event_target(ORMET_BUTTON_TRIGGER); 
-            } else if (wss_device_is_calling())  { // 按键前未在说话，周围有设备，则打开麦克风
-                log_i("[wss_application]STATE: Touch key -> APP_VAD");
-                g_device_state = APP_VAD;
-                wss_application_start_mic();
-            }
+        // ========== 触摸键释放事件 ==========
+        log_mqtt("【butt】👇👇 触摸键释放");
+        g_on_touch_key = false;
+        g_long_press_mic_started = false;  // 重置长按麦克风开启标志
+        
+        // 判断长按/短按
+        u32 press_duration = timer_get_ms() - g_touch_key_press_time;
+        bool is_long_press = (press_duration >= LONG_PRESS_THRESHOLD_MS);
+        
+        if (is_long_press) {
+            // ========== 长按结束事件 ==========
+            handle_long_press_end();
         } else {
-            // 长按默认进剧本和多角色模式
-            log_i("[wss_application]STATE: long press -> APP_WAIT");
-            g_device_state = APP_WAIT;
-            multi_play_mode = true;
-            g_mic_on = false;
-            last_req_time = g_curr_time;
+            // ========== 短按事件 ==========
+            handle_short_press();
         }
     }
     os_mutex_post(&g_wss_app_mutex);
@@ -344,17 +305,13 @@ static void wss_handle_touch_key_event(bool press_down)
 
 static void wss_handle_touch_key_press(void)
 {
-    log_mqtt("👆👆 触摸键按下");
-    g_on_touch_key = true;
     wss_handle_touch_key_event(true);
     wss_application_vailed();
 }
 
 static void wss_handle_touch_key_release(void)
 {
-    log_mqtt("👇👇 触摸键释放");
     wss_handle_touch_key_event(false);
-    g_on_touch_key = false;
     wss_application_vailed();
 }
 
@@ -393,20 +350,19 @@ static void input_event_handler_cb(lwl_event_t *e)
 static void wss_app_mode_play_cb(void *priv)
 {
     log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
-    if (g_on_touch_key) {
-        wss_mic_start();
-    } else if (g_device_state == APP_WAIT) {
-        wss_mic_start();
-    }
 }
 
 void play_prompt(const char *fname) 
 {
     lwl_app_mode_play(fname, wss_app_mode_play_cb);
-    if (g_device_state == APP_AUDIO) {
-        wss_ble_audio_stop();
+    /* 停止蓝牙音频播放 */
+    const char *stream_id = wss_request_get_stream_id();
+    if (stream_id != NULL && stream_id[0] != '\0') {
+        wss_ble_audio_stop(stream_id, false);
+    } else {
+        log_e("[wss_application]stream_id is empty, cannot stop audio");
     }
-    wss_mic_stop(); // 停止录音
+
 }
 
 //=================================================================================================
@@ -519,9 +475,6 @@ void wss_application_init()
     wss_mic_stop(); // 停止录音
 
     g_exit = false;
-    g_mic_on = true;
-    multi_play_mode = false;
-    g_device_state = APP_IDLE;
    // 检查线程是否已经在运行
     if (!monitor_thread_running) {
         pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
@@ -552,8 +505,6 @@ void wss_application_uninit()
 
     os_mutex_pend(&g_wss_app_mutex, 0);
     g_exit = false;
-    g_mic_on = false;
-    multi_play_mode = false;
     
     /* 清空事件队列 */
     g_event_queue_head = 0;
@@ -586,9 +537,6 @@ void wss_application_reset()
     wss_mic_stop(); // 停止录音
 
     g_exit = false;
-    g_mic_on = true;
-    multi_play_mode = false;
-    g_device_state = APP_IDLE;
     
     /* 清空事件队列 */
     g_event_queue_head = 0;
@@ -631,8 +579,6 @@ bool wss_application_loop()
 
     if (wss_check_exit()) {
         if (g_exit == false) {
-            log_i("[wss_application]STATE: wss_check_exit -> APP_IDLE");
-            g_device_state = APP_IDLE;
             wss_request_uninit();
             wss_audio_uninit();
             wss_mic_uninit();
@@ -644,80 +590,29 @@ bool wss_application_loop()
     }
 
     wss_request_loop();
-    if (lwl_app_mode_playing() || g_on_touch_key) {
+    
+    if (lwl_app_mode_playing()) {
         return false;
     }
-
-    // 状态机处理
-    switch (g_device_state) {
-    case APP_IDLE:
-        if (wss_request_is_playing()) {
-            log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
-            g_device_state = APP_AUDIO;
-            wss_mic_stop(); // 停止录音
-        } else if (g_mic_on && wss_device_is_calling()) {
-            log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
-            g_device_state = APP_VAD;
-            wss_application_start_mic();
-        } else if (!wss_device_is_calling() || multi_play_mode) {
-            if (wss_device_loop()) {
-                log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
-                g_device_state = APP_WAIT;
-                wss_application_vailed();
-            }
-        }
-        break;
-
-    case APP_AUDIO:
-        // AUDIO状态下，如果收到触摸按键事件则打断，回到IDLE
-        if (!wss_request_is_playing()) { //也可能是超时退出
-            if (multi_play_mode) {
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
-                wss_request_send_event_target(ORMET_PLAY_NEXT);
-                g_device_state = APP_WAIT;
-            } else if (wss_device_is_calling() && g_mic_on) { // g_mic_on一定为true，在multi_play_mode = false时
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_VAD");
-                wss_request_send_event_target(ORMET_PLAY_END);
-                g_device_state = APP_VAD;
-                wss_application_start_mic();
+    // 长按检测：在按下期间检测到阈值时开启麦克风
+    if (g_on_touch_key && g_touch_key_press_time > 0 && !g_long_press_mic_started) {
+        u32 press_duration = g_curr_time - g_touch_key_press_time;
+        if (press_duration >= LONG_PRESS_THRESHOLD_MS && !is_recording_uploading()) {
+            // 达到长按阈值，开启麦克风
+            log_mqtt("【butt】🔄🔄🔄 检测到长按，开启麦克风");
+            const char *stream_id = wss_request_get_stream_id();
+            if (stream_id != NULL && stream_id[0] != '\0') {
+                wss_mic_start(stream_id);
             } else {
-                // 之前的设备不在线，主动请求切换设备
-                log_i("[wss_application]STATE: APP_AUDIO -> APP_WAIT");
-                wss_request_send_event_target(ORMET_PLAY_NEXT);
-                g_device_state = APP_WAIT;
+                log_e("[wss_application]stream_id is empty, cannot start mic");
             }
-        }
-        wss_application_vailed();
-        break;
 
-    case APP_VAD: // until audio upload end
-        // 音频上传结束，回到IDLE状态
-        if (wss_request_is_playing()) {
-            log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
-            g_device_state = APP_AUDIO;
-            g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-            wss_mic_stop(); // 停止录音
+            g_long_press_mic_started = true;  // 标记已经开启，避免重复开启
         }
-        if (!wss_device_is_calling()) {
-            log_i("[wss_application]STATE: APP_VAD -> APP_IDLE");
-            g_device_state = APP_IDLE;
-        }
-        break;
-
-    case APP_WAIT: // until TTS_bind
-        // 等待下个角色说话
-        if (wss_request_is_playing()) {
-            log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
-            g_device_state = APP_AUDIO;
-            wss_mic_stop(); // 停止录音
-        } else if (wss_request_is_busy()) {
-            // 继续等待
-        } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
-            log_i("[wss_application]STATE: APP_WAIT -> APP_IDLE");
-            g_device_state = APP_IDLE;
-        }
-        break;
     }
+    
+
+    // 状态机处理逻辑已移除，状态由全局标志实时决定
 
     return false;
 }

@@ -39,6 +39,7 @@ static const char *odmp_et_str[] = {
     [OET_AUDIO_STATUS]          = "audio_status",
     [OET_SET_AUDIO_FORMAT]      = "set_audio_format",
     [OET_NEARBY_UPDATE]         = "nearby_update",
+    [OET_AUDIO_STREAM_START]    = "audio_stream_start",
 };
 
 static const char *odmp_ast_str[] = {
@@ -292,6 +293,225 @@ char *odmp_device_status(int status)
 }
 
 /**
+ * @brief 生成audio_stream_start消息
+ * @return JSON字符串,需要调用者释放
+ * @note 消息格式:
+ * {
+ *   "event": "audio_stream_start",
+ *   "data": {
+ *     "stream_id": "resp_20251225141650001",
+ *     "stream_type": "uplink",
+ *     "format": "mp3",
+ *     "sample_rate": 16000,
+ *     "channels": 1,
+ *     "play_mode": "",
+ *     "s_vad": true
+ *   }
+ * }
+ */
+char *odmp_audio_stream_start(const char *stream_id, const char *stream_type)
+{
+    if (stream_id == NULL || stream_type == NULL) {
+        return NULL;
+    }
+
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "event", "audio_stream_start");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    // 添加data字段
+    cJSON_AddStringToObject(nroot_data, "stream_id", stream_id);
+    cJSON_AddStringToObject(nroot_data, "stream_type", stream_type);
+    cJSON_AddStringToObject(nroot_data, "format", "mp3");
+    cJSON_AddNumberToObject(nroot_data, "sample_rate", 16000);
+    cJSON_AddNumberToObject(nroot_data, "channels", 1);
+    cJSON_AddStringToObject(nroot_data, "play_mode", "");
+    cJSON_AddBoolToObject(nroot_data, "s_vad", 1);
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
+}
+
+/**
+ * @brief 生成audio_stream_end消息
+ * @param stream_id 流ID，必须与audio_stream_start发送时的stream_id相同
+ * @param status 状态，例如 "user_interrupted"
+ * @return JSON字符串,需要调用者释放
+ * @note 消息格式:
+ * {
+ *   "event": "audio_stream_end",
+ *   "data": {
+ *     "stream_id": "resp_20251225141650001",
+ *     "status": "user_interrupted",
+ *     "stream_type": "uplink"
+ *   }
+ * }
+ */
+char *odmp_audio_stream_end(const char *stream_id, const char *status)
+{
+    if (stream_id == NULL || status == NULL) {
+        return NULL;
+    }
+    
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "event", "audio_stream_end");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    // 添加data字段
+    cJSON_AddStringToObject(nroot_data, "stream_id", stream_id);
+    cJSON_AddStringToObject(nroot_data, "status", status);
+    cJSON_AddStringToObject(nroot_data, "stream_type", "uplink");
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
+}
+
+/**
+ * @brief 生成bind_result消息
+ * @param sn E端设备序列号
+ * @param success 是否成功
+ * @param status 状态，例如 "connected"
+ * @param stream_id 流ID
+ * @return JSON字符串,需要调用者释放
+ * @note 消息格式:
+ * {
+ *   "event": "bind_result",
+ *   "data": {
+ *     "sn": "E9K2512003147",
+ *     "success": true,
+ *     "status": "connected",
+ *     "stream_id": "xxx"
+ *   }
+ * }
+ */
+char *odmp_bind_result(const char *sn, bool success, const char *status, const char *stream_id)
+{
+    if (sn == NULL || status == NULL || stream_id == NULL) {
+        return NULL;
+    }
+    
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "event", "bind_result");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    // 添加data字段
+    cJSON_AddStringToObject(nroot_data, "sn", sn);
+    cJSON_AddBoolToObject(nroot_data, "success", success ? 1 : 0);
+    cJSON_AddStringToObject(nroot_data, "status", status);
+    cJSON_AddStringToObject(nroot_data, "stream_id", stream_id);
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
+}
+
+/**
+ * @brief 生成audio_play_started消息
+ * @param stream_id 流ID
+ * @param status 状态，例如 "normal_start"
+ * @param play_mode 播放模式，例如 "normal"
+ * @return JSON字符串,需要调用者释放
+ * @note 消息格式:
+ * {
+ *   "event": "audio_play_started",
+ *   "data": {
+ *     "stream_id": "s:asstart_20251225221345022",
+ *     "status": "normal_start",
+ *     "play_mode": "normal"
+ *   }
+ * }
+ */
+char *odmp_audio_play_started(const char *stream_id, const char *status, const char *play_mode)
+{
+    if (stream_id == NULL || status == NULL || play_mode == NULL) {
+        return NULL;
+    }
+    
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "event", "audio_play_started");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    // 添加data字段
+    cJSON_AddStringToObject(nroot_data, "stream_id", stream_id);
+    cJSON_AddStringToObject(nroot_data, "status", status);
+    cJSON_AddStringToObject(nroot_data, "play_mode", play_mode);
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
+}
+
+/**
+ * @brief 生成audio_play_finished消息
+ * @param stream_id 流ID，必须与audio_play_started发送时的stream_id相同
+ * @param status 状态，例如 "playback_complete"
+ * @return JSON字符串,需要调用者释放
+ * @note 消息格式:
+ * {
+ *   "event": "audio_play_finished",
+ *   "data": {
+ *     "stream_id": "s:asstart_20251225221345022",
+ *     "status": "playback_complete"
+ *   }
+ * }
+ */
+char *odmp_audio_play_finished(const char *stream_id, const char *status)
+{
+    if (stream_id == NULL || status == NULL) {
+        return NULL;
+    }
+    
+    // 创建JSON对象
+    cJSON *nroot = cJSON_CreateObject();
+    cJSON_AddStringToObject(nroot, "event", "audio_play_finished");
+    
+    cJSON *nroot_data = cJSON_CreateObject();
+    cJSON_AddItemToObject(nroot, "data", nroot_data);
+    
+    // 添加data字段
+    cJSON_AddStringToObject(nroot_data, "stream_id", stream_id);
+    cJSON_AddStringToObject(nroot_data, "status", status);
+    
+    char *json_str = cJSON_PrintUnformatted(nroot);
+    
+    if (NULL != nroot) {
+        cJSON_Delete(nroot);
+    }
+    
+    return json_str;
+}
+
+/**
  * @brief 生成nearby_update消息
  * @param devices 设备指针数组
  * @param device_count 设备数量
@@ -384,114 +604,25 @@ char *odmp_nearby_update(void **devices, int device_count, const char *c_id)
     return json_str;
 }
 
-static int initial_setup_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    const cJSON *ndata = cjson_get_object(nroot, "data");
-    if (ndata == NULL) {
-        return PARSE_Error;
-    }
-    if (cjson_get_boolean_value(ndata, "setup_complete", &pkg->initial_setup_response.setup_complete)) {
-        return PARSE_Error;
-    }
-    return PARSE_Success;
-}
-
-static int device_switch_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    const cJSON *ndata = cjson_get_object(nroot, "data");
-    if (ndata == NULL) {
-        return PARSE_Error;
-    }
-    char *vdevice_id = cjson_get_string_value(ndata, "device_id");
-    if (vdevice_id == NULL) {
-        return PARSE_Error;
-    }
-    pkg->device_switch_response.device_id = vdevice_id;
-    char *vstatus = cjson_get_string_value(ndata, "status");
-    if (vstatus == NULL) {
-        return PARSE_Error;
-    }
-    pkg->device_switch_response.status = vstatus;
-    return PARSE_Success;
-}
-
 static int tts_bind_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 {
     const cJSON *ndata = cjson_get_object(nroot, "data");
     if (ndata == NULL) {
         return PARSE_Error;
     }
-    char *v_c_id = cjson_get_string_value(ndata, "c_id");
-    if (v_c_id == NULL) {
+    char *v_sn = cjson_get_string_value(ndata, "sn");
+    if (v_sn == NULL) {
         return PARSE_Error;
     }
-    pkg->tts_bind.c_id = v_c_id;
-    char *v_send_id = cjson_get_string_value(ndata, "send_id");
-    if (v_send_id == NULL) {
+    pkg->tts_bind.sn = v_sn;
+    char *v_stream_id = cjson_get_string_value(ndata, "stream_id");
+    if (v_stream_id == NULL) {
         return PARSE_Error;
     }
-    pkg->tts_bind.send_id = v_send_id;
-    if (cjson_get_integer_value(ndata, "wait_time", &pkg->tts_bind.wait_time)) {
+    pkg->tts_bind.stream_id = v_stream_id;
+    if (cjson_get_integer_value(ndata, "role_volume", &pkg->tts_bind.role_volume)) {
         return PARSE_Error;
     }
-    return PARSE_Success;
-}
-
-static int audio_status_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    const cJSON *ndata = cjson_get_object(nroot, "data");
-    if (ndata == NULL) {
-        return PARSE_Error;
-    }
-
-    char *v_c_id = cjson_get_string_value(ndata, "c_id");
-    if (v_c_id == NULL) {
-        return PARSE_Error;
-    }
-    pkg->audio_status.c_id = v_c_id;
-
-    if (cjson_get_integer_value(ndata, "type", &pkg->audio_status.type)) {
-        return PARSE_Error;
-    }
-    if (cjson_get_integer_value(ndata, "event", &pkg->audio_status.event)) {
-        return PARSE_Error;
-    }
-
-    const cJSON *naudio_params = cjson_get_object(ndata, "audio_params");
-    if (naudio_params == NULL) {
-        pkg->audio_status.has_audio_param = 0;
-    } else {
-        char *vformat = cjson_get_string_value(naudio_params, "format");
-        if (vformat == NULL) {
-            return PARSE_Error;
-        }
-        pkg->audio_status.audio_param.format = vformat;
-
-        if (cjson_get_integer_value(naudio_params, "sample_rate", &pkg->audio_status.audio_param.sample_rate)) {
-            return PARSE_Error;
-        }
-
-        if (cjson_get_integer_value(naudio_params, "volume", &pkg->audio_status.volume)) {
-            pkg->audio_status.volume = 70;
-        }
-    }
-    return PARSE_Success;
-}
-
-static int error_event_handler(const cJSON *nroot, odmp_package_t *pkg)
-{
-    const cJSON *ndata = cjson_get_object(nroot, "data");
-    if (ndata == NULL) {
-        return PARSE_Error;
-    }
-    if (cjson_get_integer_value(ndata, "err_code", &pkg->error.err_code)) {
-        return PARSE_Error;
-    }
-    char *reason = cjson_get_string_value(ndata, "reason");
-    if (reason == NULL) {
-        return PARSE_Error;
-    }
-    pkg->error.reason = reason;
     return PARSE_Success;
 }
 
@@ -521,26 +652,72 @@ static int message_text_event_handler(const cJSON *nroot, odmp_package_t *pkg)
     }
     return PARSE_Success;
 }
+static int pong_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    return PARSE_Success;
+}
+
+static int audio_status_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    return PARSE_Success;
+}
+
+static int initial_setup_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    return PARSE_Success;
+}
+
+static int device_switch_response_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    return PARSE_Success;
+}
+
+static int error_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    return PARSE_Success;
+}
 
 static int execution_time_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+{
+    return PARSE_Success;
+}
+
+static int audio_stream_start_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 {
     const cJSON *ndata = cjson_get_object(nroot, "data");
     if (ndata == NULL) {
         return PARSE_Error;
     }
-    char *vevent = cjson_get_string_value(ndata, "event");
-    if (vevent == NULL) {
+    char *stream_type = cjson_get_string_value(ndata, "stream_type");
+    if (stream_type == NULL) {
         return PARSE_Error;
     }
-    pkg->execution_time.event = vevent;
-    if (cjson_get_integer_value(ndata, "execution_time", &pkg->execution_time.execution_time)) {
-        return PARSE_Error;
+    // 只处理 downlink 类型的流
+    if (strcmp(stream_type, "downlink") == 0) {
+        char *stream_id = cjson_get_string_value(ndata, "stream_id");
+        log_i("🌲🌲 【gy】服务端开始下放音频: stream_id=%s, stream_type=%s", 
+              stream_id ? stream_id : "NULL", stream_type);
     }
     return PARSE_Success;
 }
 
-static int pong_event_handler(const cJSON *nroot, odmp_package_t *pkg)
+static int audio_stream_end_event_handler(const cJSON *nroot, odmp_package_t *pkg)
 {
+    const cJSON *ndata = cjson_get_object(nroot, "data");
+    if (ndata == NULL) {
+        return PARSE_Error;
+    }
+    char *stream_type = cjson_get_string_value(ndata, "stream_type");
+    if (stream_type == NULL) {
+        return PARSE_Error;
+    }
+    // 只处理 downlink 类型的流
+    if (strcmp(stream_type, "downlink") == 0) {
+        char *stream_id = cjson_get_string_value(ndata, "stream_id");
+        char *status = cjson_get_string_value(ndata, "status");
+        log_i("🌲🌲 【gy】服务端结束下放音频: stream_id=%s, stream_type=%s, status=%s", 
+              stream_id ? stream_id : "NULL", stream_type, status ? status : "NULL");
+    }
     return PARSE_Success;
 }
 
@@ -572,9 +749,12 @@ void mqtt_print_pkg_content(const cJSON *nroot, const char *event)
         log_mqtt("🚹️⬅️⬅️⬅️ [AUDIO_STATUS] type: %d, event: %d", type, event);
     }
     else if (strcmp(event, "tts_bind") == 0) {
-        char *send_id = cjson_get_string_value(ndata, "send_id");
-        if (send_id != NULL) {
-            log_mqtt("🚹️⬅️⬅️⬅️ [TTS_BIND] send_id: %s", send_id);
+        char *sn = cjson_get_string_value(ndata, "sn");
+        char *stream_id = cjson_get_string_value(ndata, "stream_id");
+        int role_volume = 0;
+        cjson_get_integer_value(ndata, "role_volume", &role_volume);
+        if (sn != NULL) {
+            log_mqtt("🚹️⬅️⬅️⬅️ [TTS_BIND] sn: %s, stream_id: %s, role_volume: %d", sn, stream_id ? stream_id : "NULL", role_volume);
         }
     }
     else if (strcmp(event, "message_text") == 0) {
@@ -654,7 +834,9 @@ static struct odmp_rsp_cb_entry_t g_rsp_cb_table[] = {
     {"event_error", OR_ERROR_EVENT, error_event_handler, NULL}, 
     {"message_text", OR_MESSAGE_TEXT, message_text_event_handler, NULL}, 
     {"execution_time", OR_EXECUTION_TIME, execution_time_event_handler, NULL},
-    {"pong", OR_PONG, pong_event_handler}, 
+    {"pong", OR_PONG, pong_event_handler, NULL},
+    {"audio_stream_start", OR_AUDIO_STREAM_START, audio_stream_start_event_handler, NULL},
+    {"audio_stream_end", OR_AUDIO_STREAM_END, audio_stream_end_event_handler, NULL},
 };
 static int g_rsp_cb_table_size = sizeof(g_rsp_cb_table) / sizeof(g_rsp_cb_table[0]);
 
@@ -692,9 +874,17 @@ void odmp_rsp_handler(u8 *buf, u32 len)
         /*  Successful */
         if (entry->handler != NULL) {
             int ret = entry->handler(nroot, &pkg);
-            if (ret == PARSE_Success && g_odmp_cbk != NULL) {
-                log_i("odmp_rsp_handler: event %s, type %d", pkg.event, entry->type);
-                g_odmp_cbk(entry->type, &pkg);
+            log_i("【dg】[odmp_rsp_handler] event %s, handler ret=%d, g_odmp_cbk=%p", 
+                  pkg.event, ret, g_odmp_cbk);
+            if (ret == PARSE_Success) {
+                if (g_odmp_cbk != NULL) {
+                    log_i("odmp_rsp_handler: event %s, type %d", pkg.event, entry->type);
+                    g_odmp_cbk(entry->type, &pkg);
+                } else {
+                    log_e("【dg】[odmp_rsp_handler] event %s g_odmp_cbk is NULL, cannot process event", pkg.event);
+                }
+            } else {
+                log_e("【dg】[odmp_rsp_handler] event %s handler returned PARSE_Error", pkg.event);
             }
         }
         if (entry->release != NULL) {
@@ -702,8 +892,12 @@ void odmp_rsp_handler(u8 *buf, u32 len)
         }
     } else {
         /*  Error */
+        log_i("【dg】[odmp_rsp_handler] event %s, errno=%d, g_odmp_cbk=%p", 
+              pkg.event, pkg.errno, g_odmp_cbk);
         if (g_odmp_cbk != NULL) {
             g_odmp_cbk(entry->type, &pkg);
+        } else {
+            log_e("【dg】[odmp_rsp_handler] event %s g_odmp_cbk is NULL, cannot process error event", pkg.event);
         }
     }
 

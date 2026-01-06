@@ -204,77 +204,8 @@ edev_entry_t edev_set[MAX_EDEV_SIZE] = {0};
 static int edev_set_count = 0;
 static OS_MUTEX edev_manager_mutex;
 
-/**
- * 添加E端设备到集合(已持有互斥锁)
- * 参数：pdev - 待添加的E端设备指针
- * 行为：设备已存在则更新，不存在则新增；集合满时丢弃
- * 注意：此函数已废弃,不再使用edev_set集合机制
- */
-/*
-static void add_edev(lwl_eend_dev_t *pdev)
-{
-    if (!pdev) {
-        log_i("[add_edev] Invalid: pdev is NULL");
-        return;
-    }
 
-    for (int i = 0; i < edev_set_count; ++i) {
-        if (strncmp(edev_set[i].sn, pdev->sn, SN_SIZE) == 0) {
-            edev_set[i].edev = pdev;
-            edev_set[i].distance = pdev->distance_info.distance;
-            log_i("[add_edev] Update sn=%s dist=%.2f", pdev->sn, pdev->distance_info.distance);
-            return;
-        }
-    }
 
-    if (edev_set_count >= MAX_EDEV_SIZE) {
-        log_i("[add_edev] Set full(%d), drop sn=%s", MAX_EDEV_SIZE, pdev->sn);
-        return;
-    }
-
-    strncpy(edev_set[edev_set_count].sn, pdev->sn, SN_SIZE+1);
-    edev_set[edev_set_count].last_get_time = 0;
-    edev_set[edev_set_count].distance = pdev->distance_info.distance;
-    edev_set[edev_set_count].edev = pdev;
-    edev_set_count++;
-    
-    log_i("[add_edev] Add new sn=%s dist=%.2f cnt=%d", pdev->sn, pdev->distance_info.distance, edev_set_count);
-}
-*/
-
-/**
- * 从集合中删除E端设备(已持有互斥锁)
- * 参数：pdev - 待删除的E端设备指针
- * 行为：使用数组紧凑方式移除
- * 注意：此函数已废弃,不再使用edev_set集合机制
- */
-/*
-static void remove_edev(lwl_eend_dev_t *pdev)
-{
-    if (!pdev) {
-        log_i("[remove_edev] Invalid: pdev is NULL");
-        return;
-    }
-
-    for (int i = 0; i < edev_set_count; ++i) {
-        if (strncmp(edev_set[i].sn, pdev->sn, SN_SIZE) == 0) {
-            log_i("[remove_edev] Remove sn=%s dist=%.2f cnt=%d->%d", 
-                  pdev->sn, edev_set[i].distance, edev_set_count, edev_set_count - 1);
-            
-            if (edev_last == edev_set[i].edev) {
-                edev_last = NULL;
-            }
-            
-            edev_set[i] = edev_set[edev_set_count - 1];
-            edev_set[edev_set_count - 1].edev = NULL;
-            edev_set_count--;
-            return;
-        }
-    }
-    
-    log_i("[remove_edev] Device sn=%s not found", pdev->sn);
-}
-*/
 
 /**
  * 清空E端设备集合
@@ -315,35 +246,6 @@ static void refresh_and_clean_edev_set(void)
     }
 }
 
-/**
- * 从集合中获取距离最近的有效设备
- * 流程：刷新距离→移除无效设备→返回最近设备
- */
-static lwl_eend_dev_t* get_edev()
-{
-    os_mutex_pend(&edev_manager_mutex, 0);
-
-    /* 第一步：刷新距离并清理无效设备(已持有锁) */
-    refresh_and_clean_edev_set();
-
-    if (edev_set_count == 0) {
-        os_mutex_post(&edev_manager_mutex);
-        return NULL;
-    }
-
-    /* 第二步：找距离最近的设备 */
-    int min_index = 0;
-    for (int i = 1; i < edev_set_count; i++) {
-        if (edev_set[i].distance < edev_set[min_index].distance) {
-            min_index = i;
-        }
-    }
-
-    lwl_eend_dev_t *result_dev = edev_set[min_index].edev;
-    
-    os_mutex_post(&edev_manager_mutex);
-    return result_dev;
-}
 
 /**
  * 更新E设备最后使用时间
@@ -390,55 +292,6 @@ bool update_edev_time(char* sn)
     os_mutex_post(&edev_manager_mutex);
     return index != -1;
 }
-
-/**
- * BLE距离变化事件处理回调
- * 功能：DISTANCE_0/1→加入集合，DISTANCE_2/3→移除集合
- * 注意：此函数已废弃,不再使用。现在使用nearby_update事件机制
- */
-/*
-static void device_event_handler_cb(lwl_event_t *e)
-{
-    if (!e) {
-        log_i("[device_event_handler_cb] Invalid: e is NULL");
-        return;
-    }
-
-    if (e->event_type != LWL_EVENT_TYPE_EEND_DEV_DISTANCE_CHANGE) {
-        return;
-    }
-
-    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
-    if (!p_eend_dev) {
-        log_i("[device_event_handler_cb] Invalid device pointer in event");
-        return;
-    }
-
-    if (p_eend_dev->distance_info.rssi_sample_count == 0) {
-        log_i("[device_event_handler_cb] Skip sn=%s (no RSSI)", p_eend_dev->sn);
-        return;
-    }
-    os_mutex_pend(&edev_manager_mutex, 0);
-    
-    switch (p_eend_dev->distance_info.distance_type) {
-    case DISTANCE_0:
-        add_edev(p_eend_dev);
-        break;
-    case DISTANCE_1:
-        break;
-    case DISTANCE_2:
-    case DISTANCE_3:
-        remove_edev(p_eend_dev);
-        break;
-    default:
-        log_i("[device_event_handler_cb] Unknown distance type: %d", 
-              p_eend_dev->distance_info.distance_type);
-        break;
-    }
-    
-    os_mutex_post(&edev_manager_mutex);
-}
-*/
 
 /**
  * 初始化WSS设备管理模块
@@ -503,79 +356,129 @@ void wss_device_uninit()
 }
 
 /**
- * 设备循环处理函数(被动触发)
- * 行为：检查防抖→获取最近设备→验证距离<2.0m→发送事件→更新状态
+ * 查找距离<2m的最近设备
+ * 返回值：最近设备指针，如果没有符合条件的设备则返回NULL
+ */
+static lwl_eend_dev_t *find_nearest_device_under_2m(void)
+{
+    if (!g_app_ctx || !g_app_ctx->dev_map) {
+        return NULL;
+    }
+
+    lwl_eend_dev_t *result = NULL;
+    double min_distance = 2.0f; // 只查找距离<2m的设备
+
+    // 尝试获取互斥锁（超时时间0表示无限等待，但在实际应用中不应该阻塞太久）
+    if (os_mutex_pend(&g_app_ctx->dev_map_mutex, 0) != 0) {
+        log_i("[find_nearest_device_under_2m] Failed to acquire mutex");
+        return NULL;
+    }
+    
+    MapIterator it = map_begin(g_app_ctx->dev_map);
+    MapIterator end = map_end(g_app_ctx->dev_map);
+
+    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
+        lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
+        
+        // 检查设备有效性：距离<2m，RSSI样本有效
+        if (dev && dev->distance_info.rssi_sample_count > 0 && 
+            dev->distance_info.distance < min_distance) {
+            min_distance = dev->distance_info.distance;
+            result = dev;
+        }
+    }
+    map_iterator_unlock(it);
+    os_mutex_post(&g_app_ctx->dev_map_mutex);
+
+    return result;
+}
+
+/**
+ * 设备循环检测处理(应在主循环中周期调用)
+ * 返回值：返回距离<2m的最近设备指针，否则返回NULL
+ * 行为：
+ *   - 防抖：1秒内只选择一次新设备
+ *   - 自动发送ORMET_NEAR_TRIGGER事件到目标设备
  */
 lwl_eend_dev_t *wss_device_loop()
 {
     g_curr_time = timer_get_ms();
-
-    if (!edev_set_count) {
-        ble_dev_task_epcho();
-        return NULL;
-    }
-    if (g_curr_time - last_dequeue_time < TTS_BIND_TIMEOUT_MS) {
-        ble_dev_task_epcho();
-        return NULL;
-    }
-
-    lwl_eend_dev_t *pdev = get_edev();
-    if (!pdev) {
-        ble_dev_task_epcho();
-        return NULL;
-    }
-
-    if (pdev == edev_last) {
-        ble_dev_task_epcho();
-        return NULL;
-    }
-
-    if (pdev->distance_info.distance >= 2.0f) {
-        ble_dev_task_epcho();
-        return NULL;
-    }
-
-    int dist_int = (int)(pdev->distance_info.distance * 100);
-    log_i("[wss_device_loop] Trigger sn=%s dist=%d", pdev->sn, dist_int);
     
-    wss_request_send_event(pdev->sn, ORMET_NEAR_TRIGGER);
-    last_dequeue_time = g_curr_time;
+    // 防抖检查：1秒内不重复触发
+    if (g_curr_time - last_dequeue_time < TTS_BIND_TIMEOUT_MS) {
+        return edev_last;
+    }
 
-    return pdev;
+    // 查找距离<2m的最近设备
+    lwl_eend_dev_t *nearest_dev = find_nearest_device_under_2m();
+    
+    if (!nearest_dev) {
+        // 如果没有找到新设备，检查当前设备是否仍然有效
+        if (edev_last) {
+            // 检查上下文是否有效
+            if (!g_app_ctx || !g_app_ctx->dev_map) {
+                edev_last = NULL;
+                return NULL;
+            }
+            
+            // 验证设备是否仍然存在于dev_map中
+            lwl_eend_dev_t *pdev = find_eend_dev_by_sn((u8 *)edev_last->sn);
+            if (!pdev || pdev != edev_last || 
+                pdev->distance_info.distance >= 2.0f || 
+                pdev->distance_info.rssi_sample_count == 0) {
+                edev_last = NULL;
+            }
+        }
+        return edev_last;
+    }
+
+    // 如果是新设备或设备已变化，发送触发事件
+    if (edev_last != nearest_dev) {
+        wss_request_send_event((char *)nearest_dev->sn, ORMET_NEAR_TRIGGER);
+        log_i("[wss_device_loop] Send ORMET_NEAR_TRIGGER to device %s, distance=%.2fm", 
+              (char *)nearest_dev->sn, nearest_dev->distance_info.distance);
+        
+        edev_last = nearest_dev;
+        last_dequeue_time = g_curr_time;
+    }
+
+    return edev_last;
 }
 
 /**
- * 主动请求最近设备通话(主动触发)
- * 行为：获取最近设备→发送事件→更新状态(无防抖限制)
+ * 主动请求与最近设备进行通话/交互
+ * 返回值：返回成功发送请求的设备指针，否则返回NULL
+ * 行为：
+ *   - 获取当前距离最近的设备（距离<2m）
+ *   - 发送ORMET_NEAR_TRIGGER事件
+ *   - 更新防抖计时器
  */
 lwl_eend_dev_t *wss_device_call()
 {
     g_curr_time = timer_get_ms();
-
-    lwl_eend_dev_t *pdev = get_edev();
-    if (!pdev) {
-        log_i("[wss_device_call] No available device");
-        ble_dev_task_epcho();
-        return NULL;
-    }
-
-    if (!pdev->sn) {
-        log_i("[wss_device_call] Invalid device SN");
-        return NULL;
-    }
-
-    log_i("[wss_device_call] Active trigger sn=%s dist=%d",
-          pdev->sn, (int)(pdev->distance_info.distance * 100));
     
-    wss_request_send_event(pdev->sn, ORMET_NEAR_TRIGGER);
+    // 查找距离<2m的最近设备
+    lwl_eend_dev_t *nearest_dev = find_nearest_device_under_2m();
+    
+    if (!nearest_dev) {
+        log_i("[wss_device_call] No device found within 2m");
+        return NULL;
+    }
+
+    // 发送触发事件
+    wss_request_send_event((char *)nearest_dev->sn, ORMET_NEAR_TRIGGER);
+    log_i("[wss_device_call] Send ORMET_NEAR_TRIGGER to device %s, distance=%.2fm", 
+          (char *)nearest_dev->sn, nearest_dev->distance_info.distance);
+    
+    edev_last = nearest_dev;
     last_dequeue_time = g_curr_time;
 
-    return pdev;
+    return nearest_dev;
 }
 
 /**
- * 判断最近唤起的设备是否仍在通话范围内
- * 返回值：true=在范围内(距离<2.5m)，false=超出范围
+ * 判断最近唤起的设备是否仍在通话范围内(2.5m)
+ * 返回值：true=在范围内，false=超出范围或未选中设备
  */
 bool wss_device_is_calling()
 {
@@ -583,13 +486,28 @@ bool wss_device_is_calling()
         return false;
     }
 
-    bool in_range = edev_last->distance_info.distance < MAX_DIS;
-    
-    if (!in_range) {
-        int dist_int = (int)(edev_last->distance_info.distance * 100);
-        log_i("[wss_device_is_calling] Device out of range dist=%d", dist_int);
+    // 检查上下文是否有效
+    if (!g_app_ctx || !g_app_ctx->dev_map) {
         edev_last = NULL;
+        return false;
     }
 
-    return in_range;
+    // 查找当前设备信息，验证设备是否仍然存在
+    lwl_eend_dev_t *pdev = find_eend_dev_by_sn((u8 *)edev_last->sn);
+    
+    if (!pdev || pdev != edev_last) {
+        // 设备不存在或指针不匹配（设备可能已被释放和重新分配）
+        edev_last = NULL;
+        return false;
+    }
+
+    // 检查设备是否在范围内：距离<2.5m且RSSI有效
+    if (pdev->distance_info.distance > MAX_DIS || 
+        pdev->distance_info.rssi_sample_count == 0) {
+        edev_last = NULL;
+        return false;
+    }
+
+    return true;
 }
+

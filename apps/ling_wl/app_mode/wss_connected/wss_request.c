@@ -31,58 +31,10 @@ static int last_event = 0;
 static int send_message = 0;
 static bool ready_to_play = false;
 
-static bool g_mode_script = 0; // 如果true则不播放切换提示音
-
 static char g_edev_target_sn[SN_SIZE+1]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE+1]; // E 已连接
+static char g_stream_id[64]; // 保存 stream_id
 
-//=================================================================================================
-// 当前状态维护
-//=================================================================================================
-typedef enum {
-    STATE_IDLE,
-    STATE_TTS_BIND,
-
-    STATE_DOWNLOAD,
-    STATE_PLAYING, // 播放状态
-    STATE_WAITING,
-} AppRequestState;
-
-AppRequestState g_mode_state = STATE_IDLE;
-
-bool wss_request_is_busy(){
-    return (g_mode_state != STATE_IDLE);
-}
-
-bool wss_request_is_playing(){
-    return (g_mode_state != STATE_IDLE && g_mode_state != STATE_WAITING);
-}
-
-static void wss_request_update_state(AppRequestState mode_state, char* tag)
-{
-    switch (mode_state) {
-    case STATE_IDLE:
-        log_i("[wss_request]%d -> [%s]STEP_TO STATE_IDLE", g_mode_state, tag);
-        break;
-    case STATE_TTS_BIND:
-        log_i("[wss_request]%d -> [%s]STEP_TO STATE_TTS_BIND", g_mode_state, tag);
-        break;
-    case STATE_DOWNLOAD:
-        log_i("[wss_request]%d -> [%s]STEP_TO STATE_DOWNLOAD", g_mode_state, tag);
-        break;
-    case STATE_PLAYING:
-        log_i("[wss_request]%d -> [%s]STEP_TO STATE_PLAYING", g_mode_state, tag);
-        break;
-    case STATE_WAITING:
-        log_i("[wss_request]%d -> [%s]STEP_TO STATE_WAITING", g_mode_state, tag);
-        break;
-    }
-    g_mode_state = mode_state;
-    if (STATE_IDLE == g_mode_state && g_mode_script) g_mode_state = STATE_WAITING;
-    g_mode_last_time = g_curr_time;
-    last_message_type = 0;
-    last_event = 0;
-}
 
 //=================================================================================================
 // Pi设备切换 callback
@@ -147,6 +99,11 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     } else {
         if (strcmp(sn_string,g_edev_target_sn) == 0) { // 连接的目标E失败
             send_message = ORMET_SWITCH_FAILED;
+            log_i("【dg】[e_turn_on_cb]Connection failed for target device %s, code=%d, send_message=%d", 
+                  sn_string, code, send_message);
+        } else {
+            log_i("【dg】[e_turn_on_cb]Connection failed for non-target device %s (target=%s), code=%d", 
+                  sn_string, g_edev_target_sn, code);
         }
     }
     os_mutex_post(&g_request_mutex);
@@ -179,103 +136,31 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
     os_mutex_pend(&g_request_mutex, 0);
     switch (type) {
-    case OR_INITIAL_SETUP_RESPONSE:
-        log_i("INITIAL_SETUP_RESPONSE\n");
-        break;
-    case OR_DEVICE_SWITCH_RESPONSE:
-        log_i("DEVICE_SWITCH_RESPONSE\n");
-        break;
     case OR_TTS_BIND: {
         log_i("TTS_BIND\n");
-        log_i("c_id: %s\n", pkg->tts_bind.c_id);
-        log_i("send_id: %s (%s)\n", pkg->tts_bind.send_id, g_edev_target_sn);
-        log_i("wait_time: %d\n", pkg->tts_bind.wait_time);
-        if (strlen(pkg->tts_bind.send_id)!= SN_SIZE) break;
+        log_i("sn: %s (%s)\n", pkg->tts_bind.sn, g_edev_target_sn);
+        log_i("stream_id: %s\n", pkg->tts_bind.stream_id);
+        log_i("role_volume: %d\n", pkg->tts_bind.role_volume);
         
-        if (strncmp(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE) != 0) {
-            wss_ble_audio_stop();
-            memcpy(g_edev_target_sn, pkg->tts_bind.send_id, SN_SIZE+1);
-            turn_on_Pi(g_edev_target_sn);
-            if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
-        } else if (g_mode_state == STATE_TTS_BIND) {
-            //continue
-        } else if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING) {
-            wss_ble_audio_stop();
-            send_message = ORMET_SWITCH_SUCCESS;
-            ready_to_play = true;
-            log_i("[wss_request]send_message = %d", send_message);
-        } else if (g_mode_state == STATE_IDLE || g_mode_state == STATE_WAITING) {
-            turn_on_Pi(g_edev_target_sn);
-            if (!g_mode_script) play_prompt_sound("TTSBind.mp3");
+        // 保存 stream_id 到全局变量
+        if (pkg->tts_bind.stream_id != NULL) {
+            strncpy(g_stream_id, pkg->tts_bind.stream_id, sizeof(g_stream_id) - 1);
+            g_stream_id[sizeof(g_stream_id) - 1] = '\0';
+        } else {
+            g_stream_id[0] = '\0';
         }
-        g_wss_last_time = g_curr_time;
-
-        wait_time = pkg->tts_bind.wait_time;
-        wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND");
+        if (pkg->tts_bind.sn == NULL || strlen(pkg->tts_bind.sn) != SN_SIZE) break;
+        // const char *stream_id = wss_request_get_stream_id();
+        // if (stream_id != NULL && stream_id[0] != '\0') {
+        //     wss_ble_audio_stop(stream_id);
+        // } else {
+        //     log_e("[wss_request]stream_id is empty, cannot stop audio");
+        // }
+        memcpy(g_edev_target_sn, pkg->tts_bind.sn, SN_SIZE+1);
+        turn_on_Pi(g_edev_target_sn);
+        play_prompt_sound("TTSBind.mp3");
     }   break;
-    case OR_AUDIO_STATUS:
-        log_i("AUDIO_STATUS\n");
-        log_i("c_id: %s\n", pkg->audio_status.c_id);
-        log_i("type: %s\n", odmp_ast_to_text(pkg->audio_status.type));
-        log_i("event: %s\n", odmp_ase_to_text(pkg->audio_status.event));
-        log_i("format: %s\n", pkg->audio_status.audio_param.format);
-        log_i("sample_rate: %d\n", pkg->audio_status.audio_param.sample_rate);
-        
-        if (pkg->audio_status.type == OAST_ASR) {
-            // if (pkg->audio_status.event == OASE_START) {
-            //     last_message_type = OAST_ASR;
-            //     last_event = OASE_START;
-            // }
-            // if (pkg->audio_status.event == OASE_END) {
-            //     last_message_type = OAST_ASR;
-            //     last_event = OASE_END;
-            // }
-        } else if (pkg->audio_status.type == OAST_TTS) {
-            if (pkg->audio_status.event == OASE_START) {
-                log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
-                last_message_type = OAST_TTS;
-                last_event = OASE_START;
-                set_tts_volume(pkg->audio_status.volume);
-            } else if (pkg->audio_status.event == OASE_END && g_curr_time - g_mode_last_time > 100) {
-                log_i("AUDIO_STATUS: OASE_END\n");
-                last_message_type = OAST_TTS;
-                last_event = OASE_END;
-            }
-            g_wss_last_time = g_curr_time;
-        } else if (pkg->audio_status.type == OAST_SCRIPT) {
-            if (pkg->audio_status.event == OASE_START) {
-                log_i("AUDIO_STATUS: SCRIPT START\n");
-                g_mode_script = true;
-                play_prompt_sound("script_st.mp3");
-                wait_time = 0;
-                wss_request_update_state(STATE_WAITING, "receive SCRIPT START");
-            } else if (pkg->audio_status.event == OASE_END) {
-                log_i("AUDIO_STATUS: SCRIPT END\n");
-                g_mode_script = false;
-                play_prompt_sound("script_ed.mp3");
-                wss_request_update_state(STATE_IDLE, "receive SCRIPT END");
-                wss_application_start_mic();// start vad
-            }
-            g_wss_last_time = g_curr_time;
-        }
-        break;
-    case OR_ERROR_EVENT:
-        log_i("ERROR_EVENT %d reason: %s\n", pkg->error.err_code, pkg->error.reason);
-        if (pkg->error.err_code == 1001) {
-            g_mode_script = false;
-            play_prompt_sound("script_err.mp3");
-            wss_handle_key_event();
-        }
-        break;
-    case OR_MESSAGE_TEXT:
-        // if (pkg->message_text.type == 1)
-        //     log_i("ASR_TEXT %d %s\n", pkg->message_text.text, pkg->message_text.text);
-        // if (pkg->message_text.type == 2)
-        //     log_i("TTS_TEXT %d %s\n", pkg->message_text.c_id, pkg->message_text.text);
-        break;
-    case OR_EXECUTION_TIME:
-        // log_i("EXECUTION_TIME %s %d\n", pkg->execution_time.event, pkg->execution_time.execution_time);
-        break;
+
     case OR_PONG:
         // log_i("LR_PONG\n");
         break;
@@ -291,37 +176,48 @@ void wss_request_stop()
     log_i("[wss_request]Stop WSS request\n");
     os_mutex_pend(&g_request_mutex, 0);
 
-    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND) {
-        wss_ble_audio_stop();
-        turn_off_Pi();
+    const char *stream_id = wss_request_get_stream_id();
+    if (stream_id != NULL && stream_id[0] != '\0') {
+        wss_ble_audio_stop(stream_id, false);
+    } else {
+        log_e("[wss_request]stream_id is empty, cannot stop audio");
     }
-    wss_request_send_event_target(ORMET_PLAY_STOP);
+    turn_off_Pi();
 
-    // 重置状态到IDLE
-    wss_request_update_state(STATE_IDLE, "wss_request_stop");
+    // 重置状态
     last_message_type = 0;
     last_event = 0;
-    g_mode_script = false;
     os_mutex_post(&g_request_mutex);
 }
 
 void wss_request_pause()
 {
-    log_i("[wss_request]Stop WSS pause\n");
+
+    log_i("[wss_request]Pause WSS request\n");
     os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
 
-    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND) {
-        wss_ble_audio_stop();
-        wss_request_send_event_target(ORMET_PLAY_STOP);
-        turn_off_Pi();
+    const char *stream_id = wss_request_get_stream_id();
+    if (stream_id != NULL && stream_id[0] != '\0') {
+        wss_ble_audio_stop(stream_id, false);
+    } else {
+        log_e("[wss_request]stream_id is empty, cannot stop audio");
     }
+    turn_off_Pi();
 
-    // 重置状态到IDLE
-    wss_request_update_state(STATE_IDLE, "wss_request_pause");
     last_message_type = 0;
     last_event = 0;
-    g_mode_script = false;
+    os_mutex_post(&g_request_mutex);
+}
+void wss_request_stop_audio()
+{
+    log_i("[wss_request]Stop WSS request audio\n");
+    os_mutex_pend(&g_request_mutex, 0);
+    const char *stream_id = wss_request_get_stream_id();
+    if (stream_id != NULL && stream_id[0] != '\0') {
+        wss_ble_audio_stop(stream_id, false);
+    }
+    turn_off_Pi();
     os_mutex_post(&g_request_mutex);
 }
 
@@ -339,13 +235,9 @@ void wss_request_init()
     g_app_ctx = lwl_app_core_context_get_instance();
     /* 注册odmp事件回调 */
     g_edev_target_sn[0] = 0;
-
-    g_mode_state = STATE_IDLE;
     g_curr_time = timer_get_ms();
     g_mode_last_time = g_curr_time;
-    g_mode_script = false;
-    wss_request_send_event_target(ORMET_INITIAL_SETUP);
-    send_audio_format(OAST_TTS);
+
     if (!os_mutex_valid(&g_request_mutex)) {
         os_mutex_create(&g_request_mutex);
     }
@@ -362,84 +254,57 @@ void wss_request_uninit()
 
 bool wss_request_loop()
 {
-    // 使用 last_message_type 和 last_event 替代 last_audio_status_type、last_audio_status_event、last_tts_bind_received
+    // 只做一件事：turn_on_Pi 切换成功之后马上发送切换成功消息
     os_mutex_pend(&g_request_mutex, 0);
-    g_curr_time = timer_get_ms();
-    switch (g_mode_state) {
-    case STATE_IDLE: // until receive TTS_BIND
-        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-            send_ping();
-            g_wss_last_time = g_curr_time;
+    
+    if (send_message == ORMET_SWITCH_SUCCESS) {
+        log_mqtt("💔💔💔 切换设备成功，开始播放音频");
+        log_i("【dg】[wss_request_loop]ORMET_SWITCH_SUCCESS: g_edev_connected_sn=%s, g_stream_id=%s", 
+              g_edev_connected_sn, g_stream_id);
+        
+        // 检查所有必要条件
+        if (g_edev_connected_sn[0] == 0) {
+            log_e("[wss_request_loop]ERROR: g_edev_connected_sn is empty, cannot start audio");
+            send_message = 0;
+            os_mutex_post(&g_request_mutex);
+            return false;
         }
-        break;
-    case STATE_TTS_BIND: // until send_message == ORMET_SWITCH_SUCCESS or ORMET_SWITCH_FAILED
-        // TTS下载流程
-        if (send_message == ORMET_SWITCH_SUCCESS) {
-            log_i("[wss_request]Switch success, send ORMET_SWITCH_SUCCESS");
-            if (g_edev_connected_sn[0] != 0) {
-                wss_ble_audio_start();
-                wss_request_send_event_target(send_message);
-            }
-            if (send_message == ORMET_SWITCH_SUCCESS) send_message = 0; // 重置发送消息标志
-        } else if (send_message == ORMET_SWITCH_FAILED) {
-            wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
-            wss_request_send_event_target(send_message);
-            // g_edev_target_sn[0] = 0;
-            send_message = 0; // 重置发送消息标志
-            play_prompt_sound("SwFailed.mp3");
-        } else if (ready_to_play) {
-            wss_audio_allow_playback();
-            wss_request_update_state(STATE_DOWNLOAD, "Switch success ready_to_play");
-        } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-            send_message = ORMET_SWITCH_FAILED;
+        
+        if (g_stream_id[0] == '\0') {
+            log_e("[wss_request_loop]ERROR: g_stream_id is empty, cannot start audio");
+            send_message = 0;
+            os_mutex_post(&g_request_mutex);
+            return false;
         }
-        break;
-
-    case STATE_DOWNLOAD: // until receive AUDIO END
-        // 下载结束，继续播放
-        if (last_message_type == OAST_TTS && last_event == OASE_START) {
-            last_event = 0;
-        }
-        if (!is_audio_playing()) {
-            if ((g_curr_time & 63) == 0) log_i("[wss_request]!is_audio_playing timeout %d > %d\n", g_curr_time - g_wss_last_time, WSS_TIMEOUT);
-            if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
-                wss_request_stop();
-                play_prompt_sound("SwFailed.mp3");
-            }
+        
+        wss_ble_audio_start(g_stream_id);
+        // 发送 bind_result 消息
+        send_bind_result(g_edev_connected_sn, true, "connected", g_stream_id);
+        send_message = 0; // 重置发送消息标志
+    } else if (send_message == ORMET_SWITCH_FAILED) {
+        log_mqtt("💔💔💔 切换设备失败");
+        log_i("【dg】[wss_request_loop]ORMET_SWITCH_FAILED: g_edev_target_sn=%s, g_stream_id=%s", 
+              g_edev_target_sn, g_stream_id);
+        
+        // 连接失败，发送失败消息给服务器
+        if (g_stream_id[0] != '\0' && g_edev_target_sn[0] != 0) {
+            send_bind_result(g_edev_target_sn, false, "connection_failed", g_stream_id);
         } else {
-            g_wss_last_time = g_curr_time;
-            if (last_message_type == OAST_TTS && last_event == OASE_END){
-                wss_request_update_state(STATE_PLAYING, "receive AUDIO END");
-            }
+            log_e("[wss_request_loop]ERROR: cannot send bind_result, g_edev_target_sn or g_stream_id is empty");
         }
-        break;
-
-    case STATE_PLAYING: // until player end
-        // 播放结束，回到IDLE状态
-        if (g_curr_time - g_mode_last_time > WSS_MUSIC_TIMEOUT) {
-            if (!is_audio_playing()) {
-                wss_request_update_state(STATE_IDLE, "[Decoder Play end cb]STEP_TO");
-                wss_ble_audio_stop();
-                turn_off_Pi();
-            }
-        } else {
-            ble_dev_task_epcho();
-        }
-        break;
-
-    case STATE_WAITING:
-        if (g_curr_time - g_wss_last_time > WSS_TIMEOUT * 2) {
-            g_mode_script = 0;
-            wss_request_update_state(STATE_IDLE, "WSS_TIMEOUT");
-        } else {
-            wss_application_vailed();
-        }
-        break;
+       play_prompt_sound("SwFailed.mp3");
+        // 清理状态
+        g_edev_target_sn[0] = 0;
+        g_edev_connected_sn[0] = 0;
+        g_stream_id[0] = '\0';
+        send_message = 0; // 重置发送消息标志
+        
+        // 关闭可能已连接的设备
+        turn_off_Pi();
     }
     
-
     os_mutex_post(&g_request_mutex);
-    return (g_mode_state == STATE_IDLE);
+    return false;
 }
 
 void wss_request_send_event(char *sn, int msg_event)
@@ -459,4 +324,9 @@ void wss_request_send_event(char *sn, int msg_event)
 void wss_request_send_event_target(int msg_event)
 {
     wss_request_send_event(g_edev_target_sn, msg_event);
+}
+
+const char *wss_request_get_stream_id(void)
+{
+    return g_stream_id;
 }
