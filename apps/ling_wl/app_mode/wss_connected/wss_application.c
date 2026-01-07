@@ -187,9 +187,16 @@ static void wss_handle_touch_key_event(bool press_down)
         lwl_app_mode_stop_playing();
         play_prompt_sound("t_key.mp3");
     } else {
-        bool is_short_press = wss_upload_stop(); //未上传音频，是短按
+        bool is_long_press = wss_upload_stop(); //正在上传音频，是长按
         wss_request_start();
-        if (is_short_press) {
+        if (is_long_press) {
+            // 长按默认进剧本和多角色模式
+            log_i("[wss_application]STATE: long press -> APP_WAIT");
+            g_device_state = APP_WAIT;
+            multi_play_mode = true;
+            g_mic_on = false;
+            last_req_time = g_curr_time;
+        } else {
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
                 log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
@@ -201,13 +208,6 @@ static void wss_handle_touch_key_event(bool press_down)
                 g_device_state = APP_VAD;
                 wss_application_start_mic();
             }
-        } else {
-            // 长按默认进剧本和多角色模式
-            log_i("[wss_application]STATE: long press -> APP_WAIT");
-            g_device_state = APP_WAIT;
-            multi_play_mode = true;
-            g_mic_on = false;
-            last_req_time = g_curr_time;
         }
     }
     os_mutex_post(&g_wss_app_mutex);

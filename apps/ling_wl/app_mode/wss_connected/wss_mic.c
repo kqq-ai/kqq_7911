@@ -164,7 +164,7 @@ void wait_vad_task(void *priv)
     set_led_mic_on(); // 开启录音时灯光变橙色
 
     if (g_recording) {
-        log_i("[WSS_MIC]🎙️🎙️🎙️ASR upload started\n");
+        log_i("[WSS_MIC]🎙️🎙️🎙️VAD upload started\n");
         send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
     }
     g_recording_uploading = false;
@@ -176,7 +176,7 @@ void wait_vad_task(void *priv)
             }
             int ret = asr_data_to_server(&asr_data_frame);
             if (ret != 0) {
-                log_i("[WSS_MIC]ASR Upload failed, break loop.");
+                log_i("[WSS_MIC]VAD Upload failed, break loop.");
                 break;
             }
         } else if (g_recording_vad == false) {
@@ -207,6 +207,7 @@ void wait_vad_task(void *priv)
 void wait_asr_task(void *priv)
 {
     u32 asr_start_time = timer_get_ms();
+    vad_stop_time = asr_start_time;
     log_i("[WSS_MIC]🎙️🎙️🎙️start ASR task %d\n", asr_start_time);
     
     my_blocking_queue_clear(&g_asr_data_queue);
@@ -244,6 +245,7 @@ void wait_asr_task(void *priv)
         g_recording_uploading = false;
         send_audio_status(OAST_STREAM_AUDIO, OASE_END);
     }
+    vad_stop_time = 0;
     g_recording = false;
 }
 
@@ -316,7 +318,7 @@ void wss_mic_upload_start() {
 
 // 取消上传ASR, 获取当前音频上传状态，及是否是长按，满足500ms以上才算长按
 bool wss_upload_stop() {
-    log_i("🛑🛑🛑wss_upload_stop");
+    log_i("🛑🛑🛑wss_upload_stop %d", g_recording_uploading);
     os_mutex_pend(&g_mic_mutex, 0);
     bool uploading = (g_recording_uploading == true);
     recorder_data_upstream(NULL);
@@ -325,8 +327,8 @@ bool wss_upload_stop() {
     os_mutex_post(&g_mic_mutex);
     // 等待上传完成，打印等待时长
     u32 start_time = timer_get_ms();
-    while (vad_stop_time > 0 || g_recording_uploading) {
-        msleep(10);
+    while (vad_stop_time > 0) {
+        msleep(2);
     }
     u32 end_time = timer_get_ms();
     log_i("🛑🛑🛑Wait for upload complete, duration %d ms\n", end_time - start_time);
