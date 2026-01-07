@@ -206,10 +206,8 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         if (pkg->audio_status.type == OAST_ASR) {
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: OASE_START\n");
-                // wss_asr_start(); // 允许ASR开始
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
-                // wss_asr_stop(); // 标记ASR结束
             }
             g_wss_last_time = g_curr_time;
         } else if (pkg->audio_status.type == OAST_TTS) {
@@ -259,11 +257,9 @@ void wss_request_stop()
     os_mutex_pend(&g_request_mutex, 0);
     odmp_register_rsp_cbk(NULL);
 
-    if (g_mode_state == STATE_DOWNLOAD || g_mode_state == STATE_PLAYING || g_mode_state == STATE_TTS_BIND || g_mode_state == STATE_LE_AUDIO) {
-        wss_ble_audio_stop();
-        wss_request_send_event_target(ORMET_PLAY_STOP);
-        turn_off_Pi();
-    }
+    wss_ble_audio_stop();
+    turn_off_Pi();
+    wss_request_send_event_target(ORMET_PLAY_STOP);
     bdo_disable(0);
 
     // 重置状态到IDLE

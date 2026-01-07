@@ -127,34 +127,13 @@ bool wss_application_check_power_key()
     return rst;
 }
 
-//=================================================================================================
-// 麦克风相关
-//=================================================================================================
-void wss_application_resume_mic()
-{
-    log_i("[wss_application]wss_application_resume_mic touch=%d mic_on=%d", g_on_touch_key, g_mic_on);
-    os_mutex_pend(&g_wss_app_mutex, 0);
-    if (g_on_touch_key) {
-        wss_mic_start();
-    } else if (g_mic_on && (g_device_state == APP_IDLE || g_device_state == APP_VAD)) {
-        wss_mic_start();
-    } else if (!g_mic_on || g_device_state == APP_AUDIO) {
-        wss_mic_stop();
-    }
-    os_mutex_post(&g_wss_app_mutex);
-}
-
 // 打开麦克风并启动vad录音
 void wss_application_start_mic()
 {
     log_i("[wss_application]wss_application_start_mic g_device_state: %d", g_device_state);
     os_mutex_pend(&g_wss_app_mutex, 0);
     g_mic_on = true;
-    if (g_device_state == APP_IDLE || g_device_state == APP_VAD) {
-        wss_mic_start();
-    } else if (g_device_state == APP_AUDIO || g_device_state == APP_WAIT) {
-        wss_mic_stop();
-    }
+    wss_mic_start();
     wss_vad_start(NO_REQ_TIMEOUT_MS); // 开始录音
     os_mutex_post(&g_wss_app_mutex);
 }
@@ -202,16 +181,14 @@ static void wss_handle_touch_key_event(bool press_down)
 #endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
+        wss_asr_stop();
         wss_request_stop();
-        lwl_app_mode_stop_playing();
-        wss_mic_stop();
         wss_asr_start();
+        lwl_app_mode_stop_playing();
         play_prompt_sound("t_key.mp3");
     } else {
-        bool is_short_press = !is_recording_uploading(); //未上传音频，是短按
+        bool is_short_press = wss_asr_stop(); //未上传音频，是短按
         wss_request_start();
-        wss_mic_stop();
-        wss_asr_stop();
         if (is_short_press) {
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
@@ -300,7 +277,6 @@ void play_prompt(const char *fname)
     if (g_device_state == APP_AUDIO) {
         wss_ble_audio_stop();
     }
-    wss_mic_stop(); // 停止录音
 }
 
 //=================================================================================================
@@ -411,7 +387,6 @@ void wss_application_init()
     wss_mic_init();
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
-    wss_mic_stop(); // 停止录音
 
     g_exit = false;
     g_mic_on = true;
@@ -477,7 +452,6 @@ void wss_application_reset()
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
     wss_mic_init();
-    wss_mic_stop(); // 停止录音
 
     g_exit = false;
     g_mic_on = true;
