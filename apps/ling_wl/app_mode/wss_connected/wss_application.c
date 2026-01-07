@@ -147,7 +147,7 @@ static void long_press_timeout_callback(void *priv)
         log_i("【butt】🔄🔄🔄 检测到长按，开启麦克风");
         const char *stream_id = wss_request_get_stream_id();
         if (stream_id != NULL && stream_id[0] != '\0') {
-            wss_mic_start(stream_id);
+            wss_mic_upload_start();
             g_long_press_mic_started = true;  // 标记已经开启，避免重复开启
         } else {
             log_e("[wss_application]stream_id is empty, cannot start mic");
@@ -164,15 +164,14 @@ static void handle_long_press_end(void)
 {
     log_i("【butt】🔄🔄🔄 长按触摸键释放 - 关闭麦克风");
     // 1. 停止麦克风录音和音频上传
-    wss_mic_stop();
-    send_audio_stream_end(wss_request_get_stream_id(), "user_interrupted");
+    wss_upload_stop();
 }
 
 static void handle_short_press(void)
 {
     log_i("【butt】🔄🔄🔄 短按触摸键释放 - 中断音频播放");
     //  停止麦克风（确保状态清理）
-    wss_mic_stop();
+    wss_upload_stop();
     
     // 状态由全局标志决定，不需要手动设置
 }
@@ -215,8 +214,6 @@ static void wss_handle_touch_key_event(bool press_down)
         
         // 1. 暂停音频播放
         wss_request_stop_audio();
-        // 2. 停止麦克风
-        wss_mic_stop();
         
     } else {
         // ========== 触摸键释放事件 ==========
@@ -418,7 +415,6 @@ void wss_application_init()
     wss_request_init();//发送1
     wss_device_init();//设备初始化，包含设备队列等
     nearby_update_handler_init(); // 初始化nearby_update事件处理器
-    wss_mic_stop(); // 停止录音
 
     g_exit = false;
    // 检查线程是否已经在运行
@@ -488,7 +484,6 @@ void wss_application_reset()
     wss_device_init();//设备初始化，包含设备队列等
     nearby_update_handler_init(); // 初始化nearby_update事件处理器
     wss_mic_init();
-    wss_mic_stop(); // 停止录音
 
     g_exit = false;
     
