@@ -22,8 +22,8 @@ static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 /*=================================================================================================
  * Audio dec app context
  *=================================================================================================*/
-static int g_audio_on = false; // 音频播放结束标志（外部请求状态）
-static int g_audio_playing = false; // 音频播放中标志（播放线程状态）
+static int g_audio_on = false;      // 音频播放启动（对decoder的请求状态）
+static int g_audio_playing = false; // 音频播放中标志（decoder的实际播放状态）
 static int g_audio_thread_running = false; // 播放线程运行标志
 
 #define G_MAX_VOLUME 100
@@ -37,13 +37,11 @@ void set_tts_volume(int volume) {
 
 void set_speaker() {
     log_i("[AUDIO]set_speaker Pi: %d", g_volume);
-    os_mutex_pend(&g_audio_mutex, 0);
     lwl_app_mode_stop_playing();
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  //Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
     bdo_enable();
-    os_mutex_post(&g_audio_mutex);
 }
 
 //=================================================================================================
@@ -55,8 +53,6 @@ void app_music_play_end_cb(void *priv)
     g_audio_playing = false;
     g_audio_on = false;
     set_led_tts_off();
-    const char *stream_id = wss_request_get_stream_id();
-    // 播放器实际播放结束，传入 true 表示实际播放完成
 }
 
 /**
@@ -88,6 +84,10 @@ static void wss_audio_playback_thread(void *priv)
             /* 有数据，写入播放器 */
             last_data_time = timer_get_ms(); // 更新最后数据时间
             os_mutex_pend(&g_audio_mutex, 0);
+            if (!g_audio_thread_running) {
+                os_mutex_post(&g_audio_mutex);
+                break;
+            }
             
             if (!g_audio_on) {
                 /* 第一次播放，启动播放器 */
@@ -110,8 +110,13 @@ static void wss_audio_playback_thread(void *priv)
             /* 无数据，检查是否stream已结束或超时 */
             if (wss_stream_is_empty()) {
                 log_i("[AUDIO]stream finish");
-                // send_audio_play_finished(stream_id, "playback_complete");
                 break;
+            } else {
+                uint32_t elapsed = timer_get_ms() - last_data_time;
+                if (elapsed > TIMEOUT_MS) {
+                    log_w("[AUDIO]stream timeout: no data for %u ms, exiting", elapsed);
+                    break;
+                }
             }
             msleep(20);
         } else if (!g_audio_playing) {
@@ -121,14 +126,15 @@ static void wss_audio_playback_thread(void *priv)
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;
                 if (elapsed > TIMEOUT_MS) {
-                    log_w("[AUDIO]timeout: no data for %u ms, exiting", elapsed);
+                    log_w("[AUDIO]decoder timeout: no data for %u ms, exiting", elapsed);
                     break;
                 }
             }
-            msleep(50);
+            msleep(20);
         }
     }
 
+    os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_on) {
         app_music_play_stop(g_app_ctx->music_player);
         g_audio_playing = false;
@@ -137,6 +143,7 @@ static void wss_audio_playback_thread(void *priv)
         log_i("[AUDIO]audio playback stopped");
     }
     g_audio_thread_running = false;
+    os_mutex_post(&g_audio_mutex);
     
     log_i("[AUDIO]playback thread exited");
 }
@@ -173,14 +180,7 @@ void wss_ble_audio_stop() {
     
     wss_stream_reset();
     os_mutex_pend(&g_audio_mutex, 0);
-    g_audio_on = false;
     g_audio_thread_running = false;
-    os_mutex_post(&g_audio_mutex);
-    
-    /* 等待播放线程退出 */
-    msleep(100);
-    
-    os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_on) {
         set_led_tts_off();
         g_audio_on = false;
