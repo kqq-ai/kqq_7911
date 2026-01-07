@@ -112,6 +112,47 @@ void wss_device_uninit()
  * @param e 事件指针
  * @note 每500ms触发一次,收集所有扫描到的E端设备信息并通过WebSocket发送
  */
+/**
+ * @brief 检查设备是否有效（有RSSI样本）
+ * @param dev 设备指针
+ * @return true 设备有效，false 设备无效
+ */
+static inline bool is_valid_device(lwl_eend_dev_t *dev)
+{
+    return dev != NULL && dev->distance_info.rssi_sample_count > 0;
+}
+
+/**
+ * @brief 将设备插入到已排序数组的正确位置（插入排序）
+ * @param devices 设备指针数组
+ * @param count 当前数组中的设备数量
+ * @param dev 要插入的设备
+ * @note 按距离从小到大排序，devices[0]为最近设备
+ */
+static void insert_device_sorted(void **devices, int count, lwl_eend_dev_t *dev)
+{
+    double dev_distance = dev->distance_info.distance;
+    
+    // 找到插入位置：找到第一个距离大于等于当前设备的位置
+    // 如果所有设备距离都更小，则插入到最后（位置count）
+    int insert_pos = count;
+    for (int i = 0; i < count; i++) {
+        lwl_eend_dev_t *existing_dev = (lwl_eend_dev_t *)devices[i];
+        if (existing_dev->distance_info.distance >= dev_distance) {
+            insert_pos = i;
+            break;
+        }
+    }
+    
+    // 将插入位置之后的元素后移
+    for (int i = count; i > insert_pos; i--) {
+        devices[i] = devices[i - 1];
+    }
+    
+    // 插入新设备
+    devices[insert_pos] = (void *)dev;
+}
+
 static void nearby_update_event_handler(lwl_event_t *e)
 {
     if (!e) {
@@ -123,8 +164,6 @@ static void nearby_update_event_handler(lwl_event_t *e)
     if (e->event_type != LWL_EVENT_TYPE_NEARBY_UPDATE) {
         return;
     }
-
-    // log_d("[nearby_update] Event triggered, collecting device info...");
 
     // 获取应用上下文
     lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
@@ -140,15 +179,13 @@ static void nearby_update_event_handler(lwl_event_t *e)
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (dev && dev->distance_info.rssi_sample_count > 0) {
+        if (is_valid_device(dev)) {
             valid_device_count++;
         }
     }
     map_iterator_unlock(it);
 
-    // log_i("[nearby_update] Found %d valid devices", valid_device_count);
-
-    // 如果没有有效设备,仍然发送空列表
+    // 如果没有有效设备,发送空列表
     if (valid_device_count == 0) {
         log_i("[nearby_update] No valid devices, sending empty list");
         send_nearby_update(NULL, 0);
@@ -162,34 +199,27 @@ static void nearby_update_event_handler(lwl_event_t *e)
         return;
     }
 
-    // 第二次遍历:收集有效设备
-    int idx = 0;
+    // 第二次遍历:收集有效设备并按距离排序（插入排序）
+    // 使用插入排序的原因：设备数量通常较少(<10个)，插入排序在小规模数据上性能优秀
+    // 且可以在收集过程中实时排序，代码简单易维护
+    int device_count = 0;
     it = map_begin(ctx->dev_map);
     end = map_end(ctx->dev_map);
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
-        if (dev && dev->distance_info.rssi_sample_count > 0) {
-            if (idx < valid_device_count) {
-                devices[idx++] = (void *)dev;
-                // TODO : 简单选择排序保持devices[0]为最近设备
-                if (((lwl_eend_dev_t *)devices[0])->distance_info.distance > dev->distance_info.distance) {
-                    // 保持devices[0]为最近设备
-                    void *temp = devices[0];
-                    devices[0] = (void *)dev;
-                    devices[idx - 1] = temp;
-                }
-            }
+        if (is_valid_device(dev)) {
+            // 将设备插入到已排序数组的正确位置
+            insert_device_sorted(devices, device_count, dev);
+            device_count++;
         }
     }
     map_iterator_unlock(it);
 
     // 发送nearby_update消息
-    int ret = send_nearby_update(devices, idx);
+    int ret = send_nearby_update(devices, device_count);
     if (ret != 0) {
         log_e("[nearby_update] Failed to send nearby_update message");
-    } else {
-        // log_i("[nearby_update] Successfully sent nearby_update with %d devices", idx);
     }
 
     // 释放设备指针数组

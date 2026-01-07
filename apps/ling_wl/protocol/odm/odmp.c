@@ -598,8 +598,7 @@ char *odmp_nearby_update(void **devices, int device_count, const char *c_id)
     cJSON *devices_array = cJSON_CreateArray();
     cJSON_AddItemToObject(nroot_data, "devices", devices_array);
     
-    if (device_count > 1) device_count = 1; // TODO 仅支持单设备
-    // 遍历所有设备,添加到数组中
+    // 遍历所有设备,添加到数组中（按距离从近到远排序）
     for (int i = 0; i < device_count; i++) {
         lwl_eend_dev_t *dev = (lwl_eend_dev_t *)devices[i];
         if (dev == NULL) {
@@ -709,7 +708,7 @@ static int audio_stream_start_event_handler(const cJSON *nroot, odmp_package_t *
     // 只处理 downlink 类型的流
     if (strcmp(stream_type, "downlink") == 0) {
         char *stream_id = cjson_get_string_value(ndata, "stream_id");
-        log_i("🌲🌲 【gy】服务端开始下放音频: stream_id=%s, stream_type=%s", 
+        log_mqtt("【flow】收到服务端开始播放: stream_id=%s, stream_type=%s", 
               stream_id ? stream_id : "NULL", stream_type);
     }
     return PARSE_Success;
@@ -729,7 +728,7 @@ static int audio_stream_end_event_handler(const cJSON *nroot, odmp_package_t *pk
     if (strcmp(stream_type, "downlink") == 0) {
         char *stream_id = cjson_get_string_value(ndata, "stream_id");
         char *status = cjson_get_string_value(ndata, "status");
-        log_i("🌲🌲 【gy】服务端结束下放音频: stream_id=%s, stream_type=%s, status=%s", 
+        log_mqtt("【flow】收到服务端结束下放音频的消息: stream_id=%s, stream_type=%s, status=%s", 
               stream_id ? stream_id : "NULL", stream_type, status ? status : "NULL");
     }
     return PARSE_Success;
@@ -841,11 +840,11 @@ struct odmp_rsp_cb_entry_t {
 };
 
 static struct odmp_rsp_cb_entry_t g_rsp_cb_table[] = {
-    {"tts_bind", OR_TTS_BIND, tts_bind_event_handler, NULL},
-    {"message_text", OR_MESSAGE_TEXT, message_text_event_handler, NULL}, 
-    {"pong", OR_PONG, pong_event_handler, NULL},
-    {"audio_stream_start", OR_AUDIO_STREAM_START, audio_stream_start_event_handler, NULL},
-    {"audio_stream_end", OR_AUDIO_STREAM_END, audio_stream_end_event_handler, NULL},
+    {"tts_bind", TTS_BIND, tts_bind_event_handler, NULL},
+    {"message_text", MESSAGE_TEXT, message_text_event_handler, NULL}, 
+    {"pong", PONG, pong_event_handler, NULL},
+    {"audio_stream_start", AUDIO_STREAM_START, audio_stream_start_event_handler, NULL},
+    {"audio_stream_end", AUDIO_STREAM_END, audio_stream_end_event_handler, NULL},
 };
 static int g_rsp_cb_table_size = sizeof(g_rsp_cb_table) / sizeof(g_rsp_cb_table[0]);
 

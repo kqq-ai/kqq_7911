@@ -67,13 +67,14 @@ static void wss_audio_playback_thread(void *priv)
 {
     uint32_t last_data_time = timer_get_ms();
     
-    log_i("[AUDIO]playback thread started");
+    log_mqtt("【flow】音频播放线程开始，等待服务端发送播放开始（可能先发了）");
 
+    //在这里如果收到服务器的播放结束消息，则直接退出，等待下一次播放（已经实现）
     while (wss_stream_on() == false && g_audio_thread_running) {
         msleep(10);
     }
-    
-    log_i("[AUDIO]stream is on, starting playback loop");
+    //检测到stream开启后，开始播放循环
+    log_mqtt("【flow】stream开启, 开始播放循环");
     
     while (g_audio_thread_running) {
         
@@ -95,21 +96,23 @@ static void wss_audio_playback_thread(void *priv)
                 app_music_play_stream_music_with_callback(g_app_ctx->music_player, app_music_play_end_cb, NULL);
                 g_audio_on = true;
                 set_led_tts_on();
-                log_i("[AUDIO]playback started");
+                log_mqtt("【flow】检测到音频数据，开始播放，发送audio_play_started消息给服务器");
+                send_audio_play_started(wss_request_get_stream_id(), "normal_playing", "normal");
             }
             
             uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, buffer, read_len);
             if (written > 0) {
-                log_d("[AUDIO]stream_write %u bytes", written);
+                log_mqtt("【flow】成功写入音频数据: %u bytes", written);
             } else {
-                log_e("[AUDIO]failed to write stream");
+                log_mqtt("【flow】写入音频数据失败, 跳过");
             }
             
             os_mutex_post(&g_audio_mutex);
         } else if (!g_audio_on) {
             /* 无数据，检查是否stream已结束或超时 */
             if (wss_stream_is_empty()) {
-                log_i("[AUDIO]stream finish");
+                log_mqtt("【flow】收到音频播放结束并且实际无数据，发送audio_play_finished消息给服务器");
+                send_audio_play_finished(wss_request_get_stream_id(), "normal_complete");
                 break;
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;
@@ -126,7 +129,8 @@ static void wss_audio_playback_thread(void *priv)
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;
                 if (elapsed > TIMEOUT_MS) {
-                    log_w("[AUDIO]decoder timeout: no data for %u ms, exiting", elapsed);
+                    log_mqtt("【flow】音频播放超时: %u ms, 退出", elapsed);
+                    send_audio_play_finished(wss_request_get_stream_id(), "timeout");
                     break;
                 }
             }
@@ -140,12 +144,14 @@ static void wss_audio_playback_thread(void *priv)
         g_audio_playing = false;
         g_audio_on = false;
         set_led_tts_off();
-        log_i("[AUDIO]audio playback stopped");
+        log_mqtt("【flow】音频播放停止");
     }
     g_audio_thread_running = false;
     os_mutex_post(&g_audio_mutex);
     
-    log_i("[AUDIO]playback thread exited");
+    log_mqtt("【flow】音频播放线程退出");
+    //这里需要turn_off_Pi
+    turn_off_Pi();
 }
 
 // 获取当前音频播放状态
@@ -165,8 +171,6 @@ static void wss_audio_playback_start(void)
         log_w("[AUDIO]playback thread already running");
         return;
     }
-    
-    log_i("[AUDIO]starting playback thread");
     g_audio_thread_running = true;
     
     /* 启动播放线程 */
@@ -175,8 +179,7 @@ static void wss_audio_playback_start(void)
 
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
 void wss_ble_audio_stop() {
-    log_i("[AUDIO]wss_ble_audio_stop");
-    log_mqtt("💔💔💔 停止蓝牙音频播放");
+    log_i("[AUDIO]停止蓝牙音频播放");
     
     wss_stream_reset();
     os_mutex_pend(&g_audio_mutex, 0);
@@ -195,8 +198,7 @@ void wss_ble_audio_stop() {
 // 开始蓝牙音频，启动播放线程，循环获取stream数据进行播放
 void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
-    log_mqtt("❤️‍🔥❤️‍🔥❤️‍🔥 开始蓝牙音频播放");
-    
+
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_on = false;
     g_audio_playing = false;

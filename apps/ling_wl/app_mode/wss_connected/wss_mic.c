@@ -54,14 +54,6 @@ void app_recorder_en(u8 en)
         }
     }
 }
-
-// 获取当前麦克风状态
-static bool is_mic_on() {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    bool recording = (recorder_get_play_pause_state(context->recorder) == 1);
-    return recording;
-}
-
 //=================================================================================================
 // ASR data queue
 //=================================================================================================
@@ -168,7 +160,7 @@ void wait_vad_task(void *priv)
         send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
     }
     g_recording_uploading = false;
-    while (is_mic_on() && g_recording && vad_stop_time > timer_get_ms()) {
+    while ( g_recording && vad_stop_time > timer_get_ms()) {
         if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
             if (g_recording_uploading == false) {
                 // send_audio_status(OAST_ASR, OASE_START);
@@ -207,31 +199,29 @@ void wait_vad_task(void *priv)
 void wait_asr_task(void *priv)
 {
     u32 asr_start_time = timer_get_ms();
-    log_i("[WSS_MIC]🎙️🎙️🎙️start ASR task %d\n", asr_start_time);
-    
     my_blocking_queue_clear(&g_asr_data_queue);
     recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-    while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms() || is_mic_on() == false) && g_recording) {
+    while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms()) && g_recording) {
         msleep(20);
     }
     set_led_mic_on(); // 开启录音时灯光变橙色
 
     if (g_recording) {
-        log_i("[WSS_MIC]🎙️🎙️🎙️ASR upload started\n");
+        log_mqtt("【flow】500ms到了🎙️🎙️🎙️音频实际上传开始\n");
         send_audio_stream_start(wss_request_get_stream_id(), "uplink");
         g_recording_uploading = true;
         send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
     }
 
-    while (is_mic_on()) {
+    while (g_recording) {
         if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
+            log_mqtt("【flow】上传音频数据，音频长度: %d 字节\n", ASR_DATA_CHUNK_SIZE);
             int ret = asr_data_to_server(&asr_data_frame);
             if (ret != 0) {
                 log_i("[WSS_MIC]ASR Upload failed, break loop.");
+                log_i("【debug】ret: %d", ret);
                 break;
             }
-        } else if (g_recording == false) {
-            break;
         }
         msleep(10);
     }
@@ -242,7 +232,7 @@ void wait_asr_task(void *priv)
     log_i("[WSS_MIC]🎙️🎙️🎙️end ASR task %d, duration %d ms\n", asr_end_time, asr_end_time - asr_start_time);
     if (g_recording_uploading) {
         g_recording_uploading = false;
-        send_audio_stream_end(wss_request_get_stream_id(), "user_interrupted");
+        send_audio_stream_end(wss_request_get_stream_id(), "normal_complete");
     }
     g_recording = false;
 }
@@ -304,7 +294,7 @@ void wss_vad_upload_start(uint timestamp) {
 
 // 开始麦克风录音，准备上传ASR
 void wss_mic_upload_start() {
-    log_i("📤️📤️📤️wss_mic_upload_start");
+    log_mqtt("【flow】开始上传音频");
     os_mutex_pend(&g_mic_mutex, 0);
     g_vad_on = false; // 关闭VAD
     if (!g_recording) {
@@ -320,7 +310,6 @@ bool wss_upload_stop() {
     os_mutex_pend(&g_mic_mutex, 0);
     bool uploading = (g_recording_uploading == true);
     recorder_data_upstream(NULL);
-    wss_mic_stop();
     g_recording = false;
     os_mutex_post(&g_mic_mutex);
     // 等待上传完成，打印等待时长
@@ -329,7 +318,7 @@ bool wss_upload_stop() {
         msleep(10);
     }
     u32 end_time = timer_get_ms();
-    log_i("🛑🛑🛑Wait for upload complete, duration %d ms\n", end_time - start_time);
+    log_mqtt("【flow】上传音频结束, duration %d ms\n", end_time - start_time);
     return uploading;
 }
 
@@ -363,6 +352,7 @@ void wss_mic_uninit()
     set_led_vad_off();
 
     wss_upload_stop();
+    wss_mic_stop();
     
     g_recording = false;
 

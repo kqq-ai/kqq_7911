@@ -32,14 +32,15 @@ music_player *player;
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
 
-static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
 static bool g_exit = false;
 
 static u32 g_touch_key_press_time = 0;
 static bool g_long_press_mic_started = false;  // 标记是否已经因为长按而开启了麦克风
 static u16 g_long_press_timer_id = 0;  // 长按定时器ID
+static u16 g_ble_audio_stop_timer_id = 0;  // 停止蓝牙音频定时器ID
 #define LONG_PRESS_THRESHOLD_MS 300  // 长按阈值300ms
+#define BLE_AUDIO_STOP_DELAY_MS 50  // 停止蓝牙音频延迟50ms
 
 // 按钮点击事件类型
 #define BTN_TAP_TYPE_PRESS    1  // 按下
@@ -131,50 +132,6 @@ bool wss_application_check_power_key()
 // 按键相关
 //=================================================================================================
 
-//=================================================================================================
-// 触摸按键事件处理函数（长按/短按）
-//=================================================================================================
-
-// 长按超时回调函数：当达到长按阈值时触发
-static void long_press_timeout_callback(void *priv)
-{
-    os_mutex_pend(&g_wss_app_mutex, 0);
-    
-    // 检查按键是否仍然按下且未开启麦克风
-    if (g_on_touch_key && !g_long_press_mic_started) {
-        // 达到长按阈值，开启麦克风
-        log_mqtt("【butt】🔄🔄🔄 检测到长按，开启麦克风");
-        log_i("【butt】🔄🔄🔄 检测到长按，开启麦克风");
-        const char *stream_id = wss_request_get_stream_id();
-        if (stream_id != NULL && stream_id[0] != '\0') {
-            wss_mic_upload_start();
-            g_long_press_mic_started = true;  // 标记已经开启，避免重复开启
-        } else {
-            log_e("[wss_application]stream_id is empty, cannot start mic");
-        }
-    }
-    
-    // 定时器是一次性的，会自动删除，这里清空ID
-    g_long_press_timer_id = 0;
-    
-    os_mutex_post(&g_wss_app_mutex);
-}
-
-static void handle_long_press_end(void)
-{
-    log_i("【butt】🔄🔄🔄 长按触摸键释放 - 关闭麦克风");
-    // 1. 停止麦克风录音和音频上传
-    wss_upload_stop();
-}
-
-static void handle_short_press(void)
-{
-    log_i("【butt】🔄🔄🔄 短按触摸键释放 - 中断音频播放");
-    //  停止麦克风（确保状态清理）
-    wss_upload_stop();
-    
-    // 状态由全局标志决定，不需要手动设置
-}
 
 //=================================================================================================
 // 按键事件处理函数
@@ -185,7 +142,17 @@ void wss_handle_key_event(void)
     if (g_exit) {
         g_power_key_retry = true;
     }
-    // 移除多人模式切换逻辑
+}
+// 50ms定时器回调：停止蓝牙音频播放
+static void ble_audio_stop_timer_callback(void *priv)
+{
+    log_mqtt("【flow】定时器触发，停止蓝牙音频播放");
+    wss_ble_audio_stop();
+    // 定时器执行完后立即关闭
+    if (g_ble_audio_stop_timer_id != 0) {
+        sys_timeout_del(g_ble_audio_stop_timer_id);
+        g_ble_audio_stop_timer_id = 0;
+    }
 }
 
 // 处理触摸按键事件（按下/释放）
@@ -197,49 +164,33 @@ static void wss_handle_touch_key_event(bool press_down)
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
         // ========== 触摸键按下事件 ==========
-        log_i("【butt】👆👆 触摸键按下");
+        log_mqtt("【flow】触摸键按下,等待500ms后开始上传音频");
         send_btn_tap(BTN_TAP_TYPE_PRESS, 0);
-        g_on_touch_key = true;
         g_touch_key_press_time = timer_get_ms();
-        g_long_press_mic_started = false;  // 重置长按麦克风开启标志
-        
-        // 停止之前的定时器（如果存在）
-        if (g_long_press_timer_id != 0) {
-            sys_timeout_del(g_long_press_timer_id);
-            g_long_press_timer_id = 0;
+
+        // 创建定时器，用于停止蓝牙音频播放
+        if (g_ble_audio_stop_timer_id != 0) {
+            sys_timeout_del(g_ble_audio_stop_timer_id);
         }
-        
-        // 启动长按定时器，300ms后触发
-        g_long_press_timer_id = sys_timeout_add_to_task("app_core", NULL, long_press_timeout_callback, LONG_PRESS_THRESHOLD_MS);
-        
-        // 1. 暂停音频播放
-        wss_request_stop_audio();
+        g_ble_audio_stop_timer_id = sys_timeout_add(NULL, ble_audio_stop_timer_callback, BLE_AUDIO_STOP_DELAY_MS);
+
+        // 1.开启音频上传，等500ms
+        wss_mic_upload_start();
         
     } else {
         // ========== 触摸键释放事件 ==========
-        log_i("【butt】👇👇 触摸键释放");
+        log_mqtt("【flow】触摸键释放,停止音频上传(会有延时)");
         u32 duration = timer_get_ms() - g_touch_key_press_time;
         send_btn_tap(BTN_TAP_TYPE_RELEASE, duration);
         
-        // 停止长按定时器（如果还在运行）
-        if (g_long_press_timer_id != 0) {
-            sys_timeout_del(g_long_press_timer_id);
-            g_long_press_timer_id = 0;
+        // 如果定时器还在运行，删除它
+        if (g_ble_audio_stop_timer_id != 0) {
+            sys_timeout_del(g_ble_audio_stop_timer_id);
+            g_ble_audio_stop_timer_id = 0;
         }
         
-        g_on_touch_key = false;
-        
-        // 判断长按/短按（基于是否已经开启了麦克风）
-        bool is_long_press = g_long_press_mic_started;
-        g_long_press_mic_started = false;  // 重置长按麦克风开启标志
-        
-        if (is_long_press) {
-            // ========== 长按结束事件 ==========
-            handle_long_press_end();
-        } else {
-            // ========== 短按事件 ==========
-            handle_short_press();
-        }
+        //  停止音频上传
+        wss_upload_stop();
     }
     os_mutex_post(&g_wss_app_mutex);
 }
@@ -296,13 +247,6 @@ static void wss_app_mode_play_cb(void *priv)
 void play_prompt(const char *fname) 
 {
     lwl_app_mode_play(fname, wss_app_mode_play_cb);
-    /* 停止蓝牙音频播放 */
-    const char *stream_id = wss_request_get_stream_id();
-    if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop();
-    } else {
-        log_e("[wss_application]stream_id is empty, cannot stop audio");
-    }
 
 }
 
@@ -451,6 +395,12 @@ void wss_application_uninit()
     if (g_long_press_timer_id != 0) {
         sys_timeout_del(g_long_press_timer_id);
         g_long_press_timer_id = 0;
+    }
+    
+    // 停止蓝牙音频停止定时器（如果还在运行）
+    if (g_ble_audio_stop_timer_id != 0) {
+        sys_timeout_del(g_ble_audio_stop_timer_id);
+        g_ble_audio_stop_timer_id = 0;
     }
     
     g_exit = false;
