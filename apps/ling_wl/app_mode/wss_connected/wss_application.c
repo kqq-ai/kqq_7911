@@ -134,7 +134,7 @@ void wss_application_start_mic()
     os_mutex_pend(&g_wss_app_mutex, 0);
     g_mic_on = true;
     wss_mic_start();
-    wss_vad_start(NO_REQ_TIMEOUT_MS); // 开始录音
+    wss_vad_upload_start(NO_REQ_TIMEOUT_MS); // 开始录音
     os_mutex_post(&g_wss_app_mutex);
 }
 
@@ -181,13 +181,13 @@ static void wss_handle_touch_key_event(bool press_down)
 #endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
-        wss_asr_stop();
+        wss_upload_stop();
         wss_request_stop();
-        wss_asr_start();
+        wss_mic_upload_start();
         lwl_app_mode_stop_playing();
         play_prompt_sound("t_key.mp3");
     } else {
-        bool is_short_press = wss_asr_stop(); //未上传音频，是短按
+        bool is_short_press = wss_upload_stop(); //未上传音频，是短按
         wss_request_start();
         if (is_short_press) {
             // 短按触摸键，打断/切换对话状态
@@ -521,7 +521,7 @@ bool wss_application_loop()
         if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
             g_device_state = APP_AUDIO;
-            wss_mic_stop(); // 停止录音
+            wss_upload_stop();
         } else if (g_mic_on && wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
             g_device_state = APP_VAD;
@@ -565,7 +565,7 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
             g_device_state = APP_AUDIO;
             g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-            wss_mic_stop(); // 停止录音
+            wss_upload_stop();
         }
         if (!wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_VAD -> APP_IDLE");
@@ -578,7 +578,7 @@ bool wss_application_loop()
         if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
             g_device_state = APP_AUDIO;
-            wss_mic_stop(); // 停止录音
+            wss_upload_stop();
         } else if (wss_request_is_busy()) {
             // 继续等待
         } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {

@@ -1,6 +1,7 @@
 #include "wss_audio.h"
 #include "wss_app_util.h"
 #include "protocol/odm/odmp.h"
+#include "wss_request.h"
 
 #include "bt_ble/client/ble_distance.h"
 #include "app_mode/lwl_app_core.h"
@@ -67,6 +68,12 @@ static void wss_audio_playback_thread(void *priv)
     uint32_t last_data_time = timer_get_ms();
     
     log_i("[AUDIO]playback thread started");
+
+    while (wss_stream_on() == false && g_audio_thread_running) {
+        msleep(10);
+    }
+    
+    log_i("[AUDIO]stream is on, starting playback loop");
     
     while (g_audio_thread_running) {
         
