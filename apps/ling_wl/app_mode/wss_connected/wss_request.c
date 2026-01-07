@@ -357,8 +357,6 @@ bool wss_request_loop()
                 wss_ble_audio_stop();
                 turn_off_Pi();
             }
-        } else {
-            ble_dev_task_enable(); // 允许一次BLE设备任务激活
         }
         break;
 

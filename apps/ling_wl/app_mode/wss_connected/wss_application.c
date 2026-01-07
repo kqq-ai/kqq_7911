@@ -531,8 +531,6 @@ bool wss_application_loop()
                 log_i("[wss_application]STATE: APP_IDLE -> APP_WAIT");
                 g_device_state = APP_WAIT;
                 wss_application_vailed();
-            } else {
-                ble_dev_task_enable(); // 允许一次BLE设备任务激活
             }
         }
         break;
