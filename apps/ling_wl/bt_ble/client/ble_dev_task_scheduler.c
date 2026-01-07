@@ -358,9 +358,11 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
         ble_simple_client_create_cannel();
         log_e("[BDO]Error ble connection timeout!!!");
-        ble_simple_client_module_enable(1);
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Connection_Timeout);
+        // 增加延迟确保BLE栈完全取消连接
+        mdelay(100);
+        ble_simple_client_module_enable(1);
         return;
     }
     g_ble_conn_pending = 0;  // 连接成功，清除标记
@@ -464,9 +466,11 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
             g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
             ble_simple_client_create_cannel();
             log_e("[BDO]Error ble connection timeout!!!");
-            ble_simple_client_module_enable(1);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_Connection_Timeout);
+            // 增加延迟确保BLE栈完全取消连接
+            mdelay(100);
+            ble_simple_client_module_enable(1);
             return;
         }
         g_ble_conn_pending = 0;  // 连接成功，清除标记
