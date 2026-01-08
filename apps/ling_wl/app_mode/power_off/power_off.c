@@ -49,8 +49,9 @@ static void power_off_init(void)
 
     led_off = 0;
     
+    int charge_in = gpio_read(CHARGE_IN_IO);
     u16 voltage = get_vbat_level();
-    if (voltage < LOW_BATT_VOLT) {
+    if (!charge_in && voltage < LOW_BATT_VOLT) {
         set_led_power_off();
         log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
         return;

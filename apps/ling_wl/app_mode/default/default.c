@@ -59,8 +59,13 @@ static void default_input_event_handler_cb(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_TOUCH_KEY:
         // play 提示音
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+            wait_for_button = false;
+        }
         break;
     case LWL_EVENT_TYPE_KEY:
+        log_i("Power key event received");
         wait_for_button = false;
         break;
     case LWL_EVENT_TYPE_GSENSOR_IDLE:
@@ -71,12 +76,13 @@ static void default_input_event_handler_cb(lwl_event_t *e)
             set_led_charging();
         }
         else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_OUT) {
-            u16 voltage = get_vbat_level();
-            if (voltage < LOW_BATT_VOLT) {
-                set_led_low_batt();
-            } else {
-                set_led_idle();
-            }
+            set_led_idle();
+            // u16 voltage = get_vbat_level();
+            // if (voltage < LOW_BATT_VOLT) {
+            //     set_led_low_batt();
+            // } else {
+            //     set_led_idle();
+            // }
         }
         else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_FULL) {
             set_led_charged();
@@ -104,18 +110,18 @@ static int default_init(void)
             set_led_charged();
         } else {
             set_led_charging();
-            // play_system_music("Charging.mp3");
         }
+        play_system_music("Charging.mp3");
     } else {
-        if (voltage < LOW_BATT_VOLT) {
-            set_led_low_batt();
+        if (voltage < LOW_BATT_VERY_SHUTDOWN) {
+            set_led_idle();
+            wifi_and_network_off();
             // play_system_music("LowBattery.mp3");
         } else {
             set_led_idle();
         }
     }
 
-    wifi_and_network_off();
     wait_for_button = true;
     return 0;
 }
@@ -124,24 +130,29 @@ static int default_unint(void)
 {
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(default_input_event_handler_cb);
-    wifi_and_network_on();
     return 0;
 }
 
 void app_default_loop()
 {
-    u16 voltage = get_vbat_level();
-    if (voltage > LOW_BATT_VOLT) {
-        if (!wait_for_button) {
-            lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
-        }
-    }
     int charge_in = gpio_read(CHARGE_IN_IO);
+    u16 voltage = get_vbat_level();
+    if (!wait_for_button) {
+        if (charge_in || voltage > LOW_BATT_VOLT) {
+            lwl_app_mode_stop_playing();
+            play_system_music("poweron.mp3");
+            lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        } else {
+            lwl_app_mode_stop_playing();
+            play_system_music("LowBattery.mp3");
+        }
+        wait_for_button = true;
+    }
     if (charge_in) {
         g_sensor_reset_alive_timer();
     } else { // 超时关机，低电量避免反复关机
         if (timer_get_ms() - init_time >= MODE_TIMEOUT_MS) {
-            if (voltage < LOW_BATT_VOLT) {
+            if (voltage < LOW_BATT_VERY_SHUTDOWN) {
                 log_i("Low battery timeout, shutdown immediately\r\n");
                 disable_gsensor();// 低电量避免晃动反复唤醒设备，需要关机，而不是休眠
             }

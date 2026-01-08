@@ -1,4 +1,5 @@
 #include "app_config.h"
+#include "app_cookie.h"
 #include "system/includes.h"
 #include "device/device.h"
 #include "gpio.h"
@@ -531,9 +532,10 @@ static void battery_detection_loop(uint32_t curr_time)
     static uint32_t battery_timer = 0;
     if (curr_time - battery_timer >= BATTERY_CHECK_INTERVAL) {
         battery_timer = curr_time;
+        int charge_in = gpio_read(CHARGE_IN_IO);
         u16 voltage = get_vbat_level();
         log_i("voltage: %d\n",voltage);
-        if (voltage < POWER_OFF_BATTERY_LEVEL)
+        if (!charge_in && voltage < LOW_BATT_VERY_SHUTDOWN)
         {
             log_i("low battery!\n");
             // 发送低电压事件通知

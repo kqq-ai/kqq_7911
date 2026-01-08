@@ -87,6 +87,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
             reset_ble_net();
+            lwl_app_mode_stop_playing();
             lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH "t_key.mp3", start_ble_net);
         } else {
             log_i("Touch key released");
@@ -114,6 +115,7 @@ static int net_connecting_init(void)
     key_press_time_ms = 0;
     ble_simple_server_init();
 
+    wifi_and_network_on();
     
     while (lwl_app_mode_playing()) {
         msleep(10);
