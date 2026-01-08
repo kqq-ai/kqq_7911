@@ -56,6 +56,28 @@ void app_music_play_end_cb(void *priv)
 }
 
 /**
+ * @brief 音频播放线程退出清理函数
+ * @details
+ *   统一处理音频播放线程退出时的资源清理，包括停止播放器、重置状态标志、关闭LED等。
+ */
+static void wss_audio_playback_cleanup(void)
+{
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (g_audio_on) {
+        app_music_play_stop(g_app_ctx->music_player);
+        g_audio_playing = false;
+        g_audio_on = false;
+        set_led_tts_off();
+        log_mqtt("【flow】音频播放停止");
+    }
+    g_audio_thread_running = false;
+    os_mutex_post(&g_audio_mutex);
+    
+    log_mqtt("【flow】音频播放线程退出");
+    turn_off_Pi();
+}
+
+/**
  * @brief 音频播放线程函数
  * @details
  *   循环从stream缓冲队列中获取数据并写入播放器，直到stream结束且队列为空。
@@ -65,12 +87,20 @@ const uint32_t MAX_CHUNK_SIZE = 16000;
 uint8_t buffer[MAX_CHUNK_SIZE];
 static void wss_audio_playback_thread(void *priv)
 {
+
     uint32_t last_data_time = timer_get_ms();
     
     log_mqtt("【flow】音频播放线程开始，等待服务端发送播放开始（可能先发了）");
 
-    //在这里如果收到服务器的播放结束消息，则直接退出，等待下一次播放（已经实现）
+    //在这里如果收到服务器的播放结束消息，则直接退出，等待下一次播放（已经实现），增加超时退出机制
+    uint32_t wait_start_time = timer_get_ms();
     while (wss_stream_on() == false && g_audio_thread_running) {
+        uint32_t elapsed = timer_get_ms() - wait_start_time;
+        if (elapsed > TIMEOUT_MS) {
+            log_w("【flow】音频播放线程等待服务器下发播放开始消息超时: %u ms, 退出", elapsed);
+            wss_audio_playback_cleanup();
+            return; // 退出线程
+        }
         msleep(10);
     }
     //检测到stream开启后，开始播放循环
@@ -138,20 +168,7 @@ static void wss_audio_playback_thread(void *priv)
         }
     }
 
-    os_mutex_pend(&g_audio_mutex, 0);
-    if (g_audio_on) {
-        app_music_play_stop(g_app_ctx->music_player);
-        g_audio_playing = false;
-        g_audio_on = false;
-        set_led_tts_off();
-        log_mqtt("【flow】音频播放停止");
-    }
-    g_audio_thread_running = false;
-    os_mutex_post(&g_audio_mutex);
-    
-    log_mqtt("【flow】音频播放线程退出");
-    //这里需要turn_off_Pi
-    turn_off_Pi();
+    wss_audio_playback_cleanup();
 }
 
 // 获取当前音频播放状态
@@ -191,8 +208,7 @@ void wss_ble_audio_stop() {
         log_i("[AUDIO]audio playback stopped");
     }
     os_mutex_post(&g_audio_mutex);
-    
-    send_device_status(DEVICE_STATUS_BLE_AUDIO_STOP);
+
 }
 
 // 开始蓝牙音频，启动播放线程，循环获取stream数据进行播放

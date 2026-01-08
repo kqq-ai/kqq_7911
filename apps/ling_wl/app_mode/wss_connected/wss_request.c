@@ -12,12 +12,8 @@
 #include "log/log_mqtt.h"
 #include "LED/LED.h"
 
-#define WSS_TIMEOUT 10000
-#define WSS_MUSIC_TIMEOUT 870
-
 static u32 g_curr_time = 0;
 static u32 g_wss_last_time = 0;
-static u32 g_mode_last_time = 0;
 static OS_MUTEX g_request_mutex;
 
 static lwl_app_context_t *g_app_ctx = NULL;
@@ -28,12 +24,28 @@ static lwl_app_context_t *g_app_ctx = NULL;
 static char g_edev_target_sn[SN_SIZE+1]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE+1]; // E 已连接
 static char g_stream_id[64]; // 保存 stream_id
-static int g_stream_id_len; // 保存 stream_id
+static int g_stream_id_len; // 保存 stream_id的长度
 
 
 //=================================================================================================
 // Pi设备切换 callback
 //=================================================================================================
+static const char* get_bdo_code_desc(bdo_code_e code) {
+    switch(code) {
+        case BDOCode_Skip:                   return "操作被跳过";
+        case BDOCode_Unknown_Broadcast_Code: return "操作失败，广播码未知";
+        case BDOCode_Null_Pointer:           return "操作失败，空指针错误";
+        case BDOCode_BLE_Api_Error:          return "操作失败，BLE 接口调用失败";
+        case BDOCode_BLE_Buffer_Full:        return "操作失败，BLE 缓冲满了";
+        case BDOCode_Connection_Timeout:     return "操作失败，BLE 连接超时";
+        case BDOCode_Disconnect_Timeout:     return "操作失败，BLE 断连超时";
+        case BDOCode_Scan_Adv_Stat_Timeout:  return "操作失败，扫描ADV状态变化超时";
+        case BDOCode_Dev_Busy:               return "操作失败，设备繁忙";
+        case BDOCode_Unexpected_Error:       return "意外错误";
+        default:                             return "未知错误";
+    }
+}
+
 static void turn_off_Pi_internal() {
     if (g_edev_connected_sn[0] != 0) {
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
@@ -102,9 +114,10 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     
     default: {
         // 错误：所有其他错误情况
+        const char* error_desc = get_bdo_code_desc(code);
         if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的目标E失败
-            log_mqtt("【flow】切换设备失败,发送失败消息给服务器: g_edev_target_sn=%s, g_stream_id=%s, code=%d", 
-                  g_edev_target_sn, g_stream_id, code);
+            log_mqtt("【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s, code=%d (%s)", 
+                  g_edev_target_sn, g_stream_id, code, error_desc);
             
             play_prompt_sound("SwFailed.mp3");
             
@@ -116,8 +129,8 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             // 关闭可能已连接的设备
             bdo_disable(0);
         } else {
-            log_i("【flow】Connection failed for non-target device %s (target=%s), code=%d", 
-                  sn_string, g_edev_target_sn, code);
+            log_i("【flow】Connection failed for non-target device %s (target=%s), code=%d (%s)", 
+                  sn_string, g_edev_target_sn, code, error_desc);
         }
         break;
     }
@@ -136,10 +149,10 @@ void turn_on_Pi(const char *pdev_sn) {
     
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
-        log_mqtt("【flow】切换设备失败,设备不存在");
-        log_mqtt("【flow】切换设备失败，发送失败消息给服务器: g_edev_target_sn=%s, g_stream_id=%s", 
+        // log_mqtt("【flow】切换设备失败,设备不存在");
+        log_mqtt("【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s", 
             g_edev_target_sn, g_stream_id);
-        send_bind_result(g_edev_target_sn, false, "device_not_found", g_stream_id);
+        // send_bind_result(g_edev_target_sn, false, "device_not_found", g_stream_id);
         play_prompt_sound("SwFailed.mp3");
         // 清理状态
         g_edev_target_sn[0] = 0;
@@ -160,7 +173,7 @@ void turn_on_Pi(const char *pdev_sn) {
 }
 
 //=================================================================================================
-// WSS response callback
+// WSS response callback 回调函数，实际处理wss请求的回调函数
 //=================================================================================================
 static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
@@ -173,11 +186,15 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     switch (type) {
     case TTS_BIND: {
         log_mqtt("【flow】收到TTS_BIND消息,开始切换设备: sn: %s (%s), stream_id: %s, role_volume: %d\n", 
-            pkg->tts_bind.sn, g_edev_target_sn, pkg->tts_bind.stream_id, pkg->tts_bind.role_volume);
-        if (pkg->tts_bind.sn == NULL || strlen(pkg->tts_bind.sn) != SN_SIZE) break;
+            pkg->tts_bind.sn, g_edev_target_sn, pkg->tts_bind.stream_id, pkg->tts_bind.role_volume);  
+        if (pkg->tts_bind.sn == NULL || strlen(pkg->tts_bind.sn) != SN_SIZE) {
+            os_mutex_post(&g_request_mutex);
+            break;
+        }
+
         //此处拿到目标E的SN，保存到g_edev_target_sn
         memcpy(g_edev_target_sn, pkg->tts_bind.sn, SN_SIZE+1);
-        //收到ttsbind-停止当前正在
+        turn_off_Pi_internal();
         turn_on_Pi(g_edev_target_sn);
         play_prompt_sound("TTSBind.mp3");
         break;
@@ -204,51 +221,16 @@ void wss_request_stop()
     log_i("[wss_request]Stop WSS request\n");
     os_mutex_pend(&g_request_mutex, 0);
 
-    const char *stream_id = wss_request_get_stream_id();
-    if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop();
-    } else {
-        log_e("[wss_request]stream_id is empty, cannot stop audio");
-    }
-    turn_off_Pi();
-
-
-    os_mutex_post(&g_request_mutex);
-}
-
-void wss_request_pause()
-{
-
-    log_i("[wss_request]Pause WSS request\n");
-    os_mutex_pend(&g_request_mutex, 0);
-    odmp_register_rsp_cbk(NULL);
-
-    const char *stream_id = wss_request_get_stream_id();
-    if (stream_id != NULL && stream_id[0] != '\0') {
-        wss_ble_audio_stop();
-    } else {
-        log_e("[wss_request]stream_id is empty, cannot stop audio");
-    }
-    turn_off_Pi();
-
-    os_mutex_post(&g_request_mutex);
-}
-void wss_request_stop_audio()
-{
-    log_i("[wss_request]Stop WSS request audio\n");
-    os_mutex_pend(&g_request_mutex, 0);
+    //停止音频播放并关闭Pi
     wss_ble_audio_stop();
+    //关闭Pi
     turn_off_Pi();
-    os_mutex_post(&g_request_mutex);
-}
 
-void wss_request_resume()
-{
-    odmp_register_rsp_cbk(wss_rsp_cbk);
+    os_mutex_post(&g_request_mutex);
 }
 
 //=================================================================================================
-// 请求状态机初始化与循环接口
+// 初始化WSS请求
 //=================================================================================================
 void wss_request_init()
 {
@@ -257,8 +239,6 @@ void wss_request_init()
     /* 注册odmp事件回调 */
     g_edev_target_sn[0] = 0;
     g_curr_time = timer_get_ms();
-    g_mode_last_time = g_curr_time;
-
     if (!os_mutex_valid(&g_request_mutex)) {
         os_mutex_create(&g_request_mutex);
     }
@@ -273,6 +253,9 @@ void wss_request_uninit()
     wss_request_stop();
 }
 
+//=================================================================================================
+// 发送WSS请求
+//=================================================================================================
 
 void wss_request_send_event(char *sn, int msg_event)
 {

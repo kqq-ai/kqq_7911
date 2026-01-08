@@ -7,9 +7,6 @@ void wss_request_init();
 void wss_request_uninit();
 
 void wss_request_stop();
-void wss_request_pause();
-void wss_request_resume();
-void wss_request_stop_audio();
 
 void wss_request_send_event(char *sn, int msg_event);
 void wss_request_send_event_target(int msg_event);

@@ -143,17 +143,6 @@ void wss_handle_key_event(void)
         g_power_key_retry = true;
     }
 }
-// 50ms定时器回调：停止蓝牙音频播放
-static void ble_audio_stop_timer_callback(void *priv)
-{
-    log_mqtt("【flow】定时器触发，停止蓝牙音频播放");
-    wss_ble_audio_stop();
-    // 定时器执行完后立即关闭
-    if (g_ble_audio_stop_timer_id != 0) {
-        sys_timeout_del(g_ble_audio_stop_timer_id);
-        g_ble_audio_stop_timer_id = 0;
-    }
-}
 
 // 处理触摸按键事件（按下/释放）
 static void wss_handle_touch_key_event(bool press_down)
@@ -167,13 +156,8 @@ static void wss_handle_touch_key_event(bool press_down)
         log_mqtt("【flow】触摸键按下,等待500ms后开始上传音频");
         send_btn_tap(BTN_TAP_TYPE_PRESS, 0);
         g_touch_key_press_time = timer_get_ms();
-
-        // 创建定时器，用于停止蓝牙音频播放
-        if (g_ble_audio_stop_timer_id != 0) {
-            sys_timeout_del(g_ble_audio_stop_timer_id);
-        }
-        g_ble_audio_stop_timer_id = sys_timeout_add(NULL, ble_audio_stop_timer_callback, BLE_AUDIO_STOP_DELAY_MS);
-
+        //停止音频播放
+        wss_ble_audio_stop();
         // 1.开启音频上传，等500ms
         wss_mic_upload_start();
         
@@ -182,12 +166,6 @@ static void wss_handle_touch_key_event(bool press_down)
         log_mqtt("【flow】触摸键释放,停止音频上传(会有延时)");
         u32 duration = timer_get_ms() - g_touch_key_press_time;
         send_btn_tap(BTN_TAP_TYPE_RELEASE, duration);
-        
-        // 如果定时器还在运行，删除它
-        if (g_ble_audio_stop_timer_id != 0) {
-            sys_timeout_del(g_ble_audio_stop_timer_id);
-            g_ble_audio_stop_timer_id = 0;
-        }
         
         //  停止音频上传
         wss_upload_stop();
@@ -379,6 +357,8 @@ void wss_application_init()
     lwl_event_handler_add(input_event_handler_cb);
     
     /* 初始化完成后发送空闲状态 */
+    //发送版本号
+    log_mqtt("版本号: %s",LOCAL_VERSION_CODE);
     send_device_status(DEVICE_STATUS_IDLE); // 在线
 }
 

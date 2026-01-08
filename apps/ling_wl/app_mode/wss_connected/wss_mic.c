@@ -334,7 +334,7 @@ void wss_mic_init()
     g_app_ctx = lwl_app_core_context_get_instance();
 
     /* 设置VAD回调，触发音频上传 */
-    recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
+    // recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
     g_vad_on = true;
     wss_mic_start(); // 开启录音
 
