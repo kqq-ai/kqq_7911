@@ -28,6 +28,7 @@
 
 #include "bt_ble/ble_data.h"
 #include "bt_ble/app_wifi_manage.h"  // 添加这行以访问 get_wifi_scan_status
+#include "app_cookie.h"
 
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
@@ -97,7 +98,7 @@ static u8 adv_data[ADV_RSP_PACKET_MAX];//max is 31
 static u8 scan_rsp_data_len;
 static u8 scan_rsp_data[ADV_RSP_PACKET_MAX];//max is 31
 
-static char gap_device_name[BT_NAME_LEN_MAX+1] = "wl80_ble_test";
+static char gap_device_name[BT_NAME_LEN_MAX+1] = "wl80";
 static u8 gap_device_name_len = 0; //名字长度，不包含结束符
 static u8 ble_work_state = 0;      //ble 状态变化
 static u8 adv_ctrl_en;             //广播控制
@@ -867,20 +868,39 @@ void ble_simple_server_name_enable(u8 idle_busy)
     assert(os_mutex_valid(&mutex));
     os_mutex_pend(&mutex, 0);
     ble_simple_server_module_enable(0);
-    const char *name_p = bt_get_local_name();
+    char *name_p = bt_get_local_name();
     const char* ext_name = idle_busy ? ble_ext_busy : ble_ext_idle;
     u8 ext_name_len = 3;
     
+    static u8 mac_addr[6] = {0x68, 0x77, 0xFF, 0xFF, 0xFF, 0xFE};
+    const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    ///extern u32 get_key_times_in_net_connecting();
+    ///if( get_key_times_in_net_connecting() ) {
+        log_i("***** ble_2,3 rand32 ******\n");
+        mac_addr[2]  = rand32() & 0xFF;
+        mac_addr[3]  = rand32() & 0xFF;
+        le_controller_set_mac((void *)mac_addr);
+        ///return mac_addr;
+    ///}
 
-    gap_device_name_len = strlen(name_p);
-    if (gap_device_name_len > BT_NAME_LEN_MAX - ext_name_len) {
-        gap_device_name_len = BT_NAME_LEN_MAX - ext_name_len;
-    }
+    memset(gap_device_name, 0, BT_NAME_LEN_MAX+1);
     
-    memcpy(gap_device_name, name_p, gap_device_name_len);
+    //先把name_p开头的JL-AC79XX-这几个字符替换成KQQ，无需验证JL-AC79XX-
+    //然后复制到gap_device_name中
+    if (strncmp(name_p, "JL-AC79XX-", 9) == 0) {
+        memcpy(gap_device_name, "KQQ", 3);
+        char sn[SN_SIZE+1];
+        memset(sn, 0, SN_SIZE+1);
+        get_SN(sn);
+        memcpy(&gap_device_name[3], sn+2, SN_SIZE-2); //跳过前两位KC
+        gap_device_name_len = strlen(gap_device_name);
+        memcpy(&gap_device_name[gap_device_name_len], LOCAL_VERSION_CODE,  strlen(LOCAL_VERSION_CODE));
+    } else {
+        memcpy(gap_device_name, name_p, strlen(name_p));
+    }
+    gap_device_name_len = strlen(gap_device_name);
     memcpy(&gap_device_name[gap_device_name_len], ext_name, ext_name_len);
-
-    gap_device_name_len += ext_name_len;
+    gap_device_name_len +=  ext_name_len;
     gap_device_name[gap_device_name_len] = 0;//结束符
 
     
@@ -944,10 +964,13 @@ int notify_app_wifi_ip_succ(void *pri)
         log_info("Error: Failed to create cJSON object\n");
         goto cleanup;
     }
+    char sn[SN_SIZE+1];
+    get_SN(sn);
 
     cJSON_AddStringToObject(root, "cmd_name", cmd_name);
     cJSON_AddNumberToObject(root, "return_code", ret); // 添加返回码
     cJSON_AddStringToObject(root, "return_errstr", return_errstr);
+    cJSON_AddStringToObject(root, "sn", sn);
     cJSON_AddStringToObject(root, "ip_address", sta_localip);
 
     char *return_json_str = cJSON_PrintUnformatted(root);
