@@ -26,12 +26,13 @@
 #define LOG_QUEUE_THRESHOLD 10  // 添加新的阈值定义
 
 char temp[LOG_QUEUE_ITEM_MAX_LEN];
-char log_buffer[LOG_QUEUE_ITEM_MAX_LEN];
-char time_str[32];  // 增加缓冲区大小，确保能容纳完整的时间戳格式 [HH:MM:SS.mmm]
+// log_buffer 改为在 log_mqtt 函数内使用局部变量，避免多线程竞态
+char time_str[32];  // 增加缓冲区大小，确保能容纳完整的时间戳格式 [HH:MM:SS.mmm]（仅在 log_mqtt_battery 中使用）
 char mqtt_payload[600];
 char token[256] = {0};
 char sn[25];
 char reset_topic[64];
+// json_item_buf 改为在 log_mqtt 函数内使用局部变量，避免多线程竞态
 /* 全局MQTT客户端指针 */
 static Client* g_mqtt_client = NULL;
 /* MQTT连接配置结构体 */
@@ -72,6 +73,10 @@ static bool g_mqtt_connected = false;
 /* 互斥锁 */
 static OS_MUTEX g_log_mqtt_mutex;
 static bool g_mqtt_start = false;
+
+/* RTC设备句柄（在整个MQTT线程生命周期内保持打开，避免频繁打开/关闭） */
+static void *g_rtc_device = NULL;
+static OS_MUTEX g_rtc_mutex;  // 保护RTC设备访问（多线程读取需要）
 
 void log_mqtt_disconnect();
 void log_mqtt_battery(const char* sn_param,int battery);
@@ -221,21 +226,34 @@ int log_mqtt_send_message(const char* topic, const char* message) {
     return rc;
 }
 
-// 获取与log_i相同格式的系统时间戳
+// 获取与log_i相同格式的系统时间戳（优化版本：使用已打开的RTC设备）
 static int get_system_timestamp(char *time_str, int str_len) {
     struct sys_time t;
+    int ret;
     
-    // 获取系统时间
-    void *dev = dev_open("rtc", NULL);
-    if (!dev) {
-        return -1;  // 无法打开RTC设备
-    }
-    
-    int ret = dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
-    dev_close(dev);
-    
-    if (ret != 0) {
-        return -1;  // 获取时间失败
+    // 如果设备已打开，使用已打开的设备（性能优化，避免频繁打开/关闭）
+    if (g_rtc_device != NULL) {
+        // 使用已打开的设备，需要加锁保护（多线程安全）
+        os_mutex_pend(&g_rtc_mutex, 0);
+        ret = dev_ioctl(g_rtc_device, IOCTL_GET_SYS_TIME, (u32)&t);
+        os_mutex_post(&g_rtc_mutex);
+        
+        if (ret != 0) {
+            return -1;  // 设备操作失败
+        }
+    } else {
+        // 设备未打开，回退到原始方法（兼容性，避免启动前调用失败）
+        void *dev = dev_open("rtc", NULL);
+        if (!dev) {
+            return -1;  // 无法打开RTC设备
+        }
+        
+        ret = dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
+        dev_close(dev);
+        
+        if (ret != 0) {
+            return -1;  // 获取时间失败
+        }
     }
     
     // 获取毫秒部分（使用更高精度的jiffies_half_msec）
@@ -397,6 +415,13 @@ static void log_monitor_thread(void* arg) {
     my_blocking_queue_destroy_static(&log_queue);// 释放队列资源
 
     log_mqtt_disconnect();// 断开MQTT连接
+    
+    // 在线程退出时关闭RTC设备（备份清理，确保资源释放）
+    if (g_rtc_device != NULL) {
+        dev_close(g_rtc_device);
+        g_rtc_device = NULL;
+        log_i("【MQTT】RTC设备已关闭（线程退出时）\n");
+    }
 
     g_mqtt_start = false;
     
@@ -462,37 +487,41 @@ void log_mqtt_enqueue(const char *msg) {
     // os_mutex_post(&g_log_mqtt_mutex);
 }
 
-/* 日志发送函数 */
+/* 日志发送函数 - 优化版本（线程安全，无全局缓冲区竞态） */
 void log_mqtt(const char* format, ...) {
+    // 使用栈上的局部变量，每个线程有自己的副本，避免竞态条件
+    char log_buffer[LOG_QUEUE_ITEM_MAX_LEN];
+    char time_str[32];
+    char json_item_buf[LOG_QUEUE_ITEM_MAX_LEN];
+    
+    // 格式化日志消息
     __builtin_va_list args;
     va_start(args, format);
-    vsnprintf(log_buffer, sizeof(log_buffer), format, args);
+    int msg_len = vsnprintf(log_buffer, sizeof(log_buffer), format, args);
     va_end(args);
+    
     // 打印到控制台
     log_i("【MQTT】message: %s", log_buffer);
 
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    
-    // 从系统时间戳获取时间
+    // 获取时间戳（耗时操作，在锁外执行）
     get_system_timestamp(time_str, sizeof(time_str));
 
-
-    // 构造JSON
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "time", time_str);
-    cJSON_AddStringToObject(root, "sn", sn);
-    cJSON_AddStringToObject(root, "msg", log_buffer);
-
-    char *json_str = cJSON_PrintUnformatted(root);
+    // 构建JSON字符串（快速操作，在锁外执行）
+    int json_len = snprintf(json_item_buf, sizeof(json_item_buf), 
+                            "{\"time\":\"%s\",\"sn\":\"%s\",\"msg\":\"%s\"}", 
+                            time_str, sn, log_buffer);
     
-    // 发送到队列
-    log_mqtt_enqueue(json_str);
-
-    // 清理资源
-    cJSON_Delete(root);
-    free(json_str);
-
-    os_mutex_post(&g_log_mqtt_mutex);
+    // 检查JSON构建是否成功
+    if (json_len < 0 || json_len >= sizeof(json_item_buf)) {
+        log_i("【MQTT】JSON构建失败或截断（长度:%d）\n", json_len);
+        return;  // JSON构建失败，无法入队
+    }
+    
+    // 入队操作：队列内部已经有锁保护（my_blocking_queue_try_enqueue内部有pthread_mutex_lock）
+    int ret = my_blocking_queue_try_enqueue(&log_queue, json_item_buf);
+    if (ret != MYERROR_Success) {
+        log_i("【MQTT】❌❌❌ 日志入队失败, error code: %d\n", ret);
+    }
 }
 
 // 回调函数实现
@@ -536,6 +565,23 @@ int log_mqtt_start(void) {
     if (!os_mutex_valid(&g_log_mqtt_mutex)) {
         os_mutex_create(&g_log_mqtt_mutex);
     }
+    
+    // 初始化RTC设备互斥锁
+    if (!os_mutex_valid(&g_rtc_mutex)) {
+        os_mutex_create(&g_rtc_mutex);
+    }
+    
+    // 打开RTC设备（在整个MQTT线程生命周期内保持打开，避免频繁打开/关闭，性能优化）
+    if (g_rtc_device == NULL) {
+        g_rtc_device = dev_open("rtc", NULL);
+        if (g_rtc_device == NULL) {
+            log_i("【MQTT】⚠️ RTC设备打开失败，时间戳功能将使用回退方法（性能较低）\n");
+            // 不返回错误，允许继续运行（使用回退方法）
+        } else {
+            log_i("【MQTT】✓ RTC设备已打开，时间戳性能优化启用（保持设备打开）\n");
+        }
+    }
+    
     // 获取SN
     get_SN(sn);
     // 设置启动标志
@@ -546,6 +592,11 @@ int log_mqtt_start(void) {
     int ret = thread_fork("log_mqtt_monitor", 15, 2048 * 4, 0, &monitor_thread_pid, log_monitor_thread, NULL);
     if (ret != 0) {
         log_i("【MQTT】❌❌❌ Failed to create monitor thread, error: %d\n", ret);
+        // 清理：关闭RTC设备（如果线程创建失败）
+        if (g_rtc_device != NULL) {
+            dev_close(g_rtc_device);
+            g_rtc_device = NULL;
+        }
         return ret;
     }
     return 0;
@@ -564,6 +615,13 @@ void log_mqtt_stop(void) {
         thread_kill(&monitor_thread_pid, KILL_WAIT);  // 等待线程退出
         log_i("MQTT monitor thread killed\n");
         monitor_thread_pid = 0;
+    }
+
+    // 关闭RTC设备（释放资源）
+    if (g_rtc_device != NULL) {
+        dev_close(g_rtc_device);
+        g_rtc_device = NULL;
+        log_i("【MQTT】RTC设备已关闭\n");
     }
 
     // 确保最后的消息都发送出去

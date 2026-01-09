@@ -207,7 +207,7 @@ void wait_asr_task(void *priv)
     set_led_mic_on(); // 开启录音时灯光变橙色
 
     if (g_recording) {
-        log_mqtt("【flow】500ms到了🎙️🎙️🎙️音频实际上传开始\n");
+        log_mqtt("【flow】500ms到了🎙️🎙️🎙️音频实际上传开始");
         send_audio_stream_start(wss_request_get_stream_id(), "uplink");
         g_recording_uploading = true;
         send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
@@ -215,7 +215,7 @@ void wait_asr_task(void *priv)
 
     while (g_recording) {
         if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
-            log_mqtt("【flow】上传音频数据，音频长度: %d 字节\n", ASR_DATA_CHUNK_SIZE);
+            // log_mqtt("【flow】上传音频数据，音频长度: %d 字节", ASR_DATA_CHUNK_SIZE);
             int ret = asr_data_to_server(&asr_data_frame);
             if (ret != 0) {
                 log_i("[WSS_MIC]ASR Upload failed, break loop.");
@@ -318,7 +318,7 @@ bool wss_upload_stop() {
         msleep(10);
     }
     u32 end_time = timer_get_ms();
-    log_mqtt("【flow】上传音频结束, duration %d ms\n", end_time - start_time);
+    log_mqtt("【flow】上传音频结束, duration %d ms", end_time - start_time);
     return uploading;
 }
 

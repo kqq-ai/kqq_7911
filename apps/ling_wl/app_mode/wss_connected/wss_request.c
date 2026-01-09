@@ -79,7 +79,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         // 连接成功
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
         if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的是目标E
-            log_mqtt("【flow】切换设备成功,发送bind_result成功消息给服务器: g_edev_connected_sn=%s, g_stream_id=%s", 
+            log_mqtt("【flow】切换设备成功,发送bind_result成功消息给服务器: esn=%s, stream_id=%s", 
                   g_edev_connected_sn, g_stream_id);
             // 检查所有必要条件
             if (g_edev_connected_sn[0] == 0) {
@@ -162,6 +162,32 @@ void turn_on_Pi(const char *pdev_sn) {
         return;
     }
     
+    // 如果sn和已连接的相同，检查设备是否真的已连接
+    if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) == 0) {
+        // 检查设备是否已连接且是目标设备
+        if (pdev->adv_state == BDPAS_CONNECTED && 
+            strcmp(pdev_sn, g_edev_target_sn) == 0) {
+            // 设备已连接且是目标设备，直接发送 bind_result，并启动音频播放
+            log_mqtt("【flow】设备已连接，跳过重复连接: esn=%s, stream_id=%s", 
+                g_edev_connected_sn, g_stream_id);
+            
+            // 检查必要条件
+            if (g_stream_id[0] != '\0') {
+                // 上传E的电量
+                log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
+                // 发送 bind_result 消息
+                send_bind_result(g_edev_connected_sn, true, "already_connected", g_stream_id);
+                // 设备已连接，直接启动音频播放（相当于 Ready_to_Play 状态）
+                log_mqtt("【flow】e端播放器已准备就绪，播放线程开始");
+                wss_ble_audio_start();
+            }
+            
+            os_mutex_post(&g_request_mutex);
+            return;
+        }
+        // 如果设备未连接或不是目标设备，继续执行连接流程
+    }
+    
     //上传E的电量
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
     
@@ -185,26 +211,24 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
     }
     switch (type) {
     case TTS_BIND: {
-        log_mqtt("【flow】收到TTS_BIND消息,开始切换设备: sn: %s (%s), stream_id: %s, role_volume: %d\n", 
+        log_mqtt("【flow】收到TTS_BIND消息,开始切换设备: sn: %s (%s), stream_id: %s, role_volume: %d", 
             pkg->tts_bind.sn, g_edev_target_sn, pkg->tts_bind.stream_id, pkg->tts_bind.role_volume);  
         if (pkg->tts_bind.sn == NULL || strlen(pkg->tts_bind.sn) != SN_SIZE) {
             os_mutex_post(&g_request_mutex);
             break;
         }
-
         //此处拿到目标E的SN，保存到g_edev_target_sn
         memcpy(g_edev_target_sn, pkg->tts_bind.sn, SN_SIZE+1);
-        turn_off_Pi_internal();
         turn_on_Pi(g_edev_target_sn);
         play_prompt_sound("TTSBind.mp3");
         break;
     } 
     case AUDIO_STREAM_START: {
-        log_mqtt("【flow】收到下放音频流开始信息，允许播放线程开始播放\n");
+        log_mqtt("【flow】收到下放音频流开始信息，允许播放线程开始播放");
         wss_stream_start();
     } break;
     case AUDIO_STREAM_END: {
-        log_mqtt("【flow】收到下放音频流结束信息，允许停止播放线程\n");
+        log_mqtt("【flow】收到下放音频流结束信息，允许停止播放线程");
         wss_stream_stop();
     } break;
 

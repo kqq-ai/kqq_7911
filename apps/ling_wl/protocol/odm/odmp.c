@@ -705,12 +705,7 @@ static int audio_stream_start_event_handler(const cJSON *nroot, odmp_package_t *
     if (stream_type == NULL) {
         return PARSE_Error;
     }
-    // 只处理 downlink 类型的流
-    if (strcmp(stream_type, "downlink") == 0) {
-        char *stream_id = cjson_get_string_value(ndata, "stream_id");
-        log_mqtt("【flow】收到服务端开始播放: stream_id=%s, stream_type=%s", 
-              stream_id ? stream_id : "NULL", stream_type);
-    }
+
     return PARSE_Success;
 }
 
@@ -723,13 +718,6 @@ static int audio_stream_end_event_handler(const cJSON *nroot, odmp_package_t *pk
     char *stream_type = cjson_get_string_value(ndata, "stream_type");
     if (stream_type == NULL) {
         return PARSE_Error;
-    }
-    // 只处理 downlink 类型的流
-    if (strcmp(stream_type, "downlink") == 0) {
-        char *stream_id = cjson_get_string_value(ndata, "stream_id");
-        char *status = cjson_get_string_value(ndata, "status");
-        log_mqtt("【flow】收到服务端结束下放音频的消息: stream_id=%s, stream_type=%s, status=%s", 
-              stream_id ? stream_id : "NULL", stream_type, status ? status : "NULL");
     }
     return PARSE_Success;
 }
@@ -754,23 +742,8 @@ void mqtt_print_pkg_content(const cJSON *nroot, const char *event)
     if (ndata == NULL) {
         return;
     }
-    if (strcmp(event, "audio_status") == 0) {
-        int type = 0;
-        int event = 0;
-        cjson_get_integer_value(ndata, "type", &type);
-        cjson_get_integer_value(ndata, "event", &event);
-        log_mqtt("🚹️⬅️⬅️⬅️ [AUDIO_STATUS] type: %d, event: %d", type, event);
-    }
-    else if (strcmp(event, "tts_bind") == 0) {
-        char *sn = cjson_get_string_value(ndata, "sn");
-        char *stream_id = cjson_get_string_value(ndata, "stream_id");
-        int role_volume = 0;
-        cjson_get_integer_value(ndata, "role_volume", &role_volume);
-        if (sn != NULL) {
-            log_mqtt("🚹️⬅️⬅️⬅️ [TTS_BIND] sn: %s, stream_id: %s, role_volume: %d", sn, stream_id ? stream_id : "NULL", role_volume);
-        }
-    }
-    else if (strcmp(event, "message_text") == 0) {
+
+    if (strcmp(event, "message_text") == 0) {
         int type = 0;
         cjson_get_integer_value(ndata, "type", &type);
         char *text = cjson_get_string_value(ndata, "text");
