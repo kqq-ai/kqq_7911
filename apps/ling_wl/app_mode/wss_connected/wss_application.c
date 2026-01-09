@@ -396,6 +396,7 @@ void wss_application_uninit()
     nearby_update_handler_uninit(); // 反初始化nearby_update事件处理器
     wss_device_uninit();
     monitor_stop();//free all pdev
+    log_mqtt("❌❌❌ 停止WSS应用");
 
     os_mutex_post(&g_wss_app_mutex);
 }
@@ -467,6 +468,7 @@ bool wss_application_loop()
             wss_mic_uninit();
             nearby_update_handler_uninit(); // 反初始化nearby_update事件处理器
             wss_device_uninit();
+            log_mqtt("❌❌❌ 退出WSS应用");
             g_exit = true;
         }
         return true;

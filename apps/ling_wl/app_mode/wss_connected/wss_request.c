@@ -143,7 +143,7 @@ void turn_on_Pi(const char *pdev_sn) {
     os_mutex_pend(&g_request_mutex, 0);
     
     // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
-    if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) != 0) {
+    if (strcmp(g_edev_connected_sn, pdev_sn) != 0) {
         turn_off_Pi_internal();
     }
     
@@ -163,10 +163,10 @@ void turn_on_Pi(const char *pdev_sn) {
     }
     
     // 如果sn和已连接的相同，检查设备是否真的已连接
-    if (strncmp(g_edev_connected_sn, pdev_sn, SN_SIZE) == 0) {
+    if (strcmp(g_edev_connected_sn, pdev_sn) == 0) {
         // 检查设备是否已连接且是目标设备
         if (pdev->adv_state == BDPAS_CONNECTED && 
-            strcmp(pdev_sn, g_edev_target_sn) == 0) {
+            strcmp(g_edev_target_sn, pdev_sn) == 0) {
             // 设备已连接且是目标设备，直接发送 bind_result，并启动音频播放
             log_mqtt("【flow】设备已连接，跳过重复连接: esn=%s, stream_id=%s", 
                 g_edev_connected_sn, g_stream_id);
@@ -185,6 +185,7 @@ void turn_on_Pi(const char *pdev_sn) {
             os_mutex_post(&g_request_mutex);
             return;
         }
+        log_mqtt("【debug】设备未连接或不是目标设备，继续执行连接流程");
         // 如果设备未连接或不是目标设备，继续执行连接流程
     }
     
@@ -238,22 +239,6 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 }
 
 //=================================================================================================
-// 请求中断相关接口
-//=================================================================================================
-void wss_request_stop()
-{
-    log_i("[wss_request]Stop WSS request\n");
-    os_mutex_pend(&g_request_mutex, 0);
-
-    //停止音频播放并关闭Pi
-    wss_ble_audio_stop();
-    //关闭Pi
-    turn_off_Pi();
-
-    os_mutex_post(&g_request_mutex);
-}
-
-//=================================================================================================
 // 初始化WSS请求
 //=================================================================================================
 void wss_request_init()
@@ -274,7 +259,11 @@ void wss_request_uninit()
     log_i("[wss_request]Uninit WSS request\n");
     /* 取消注册loswssp事件回调 */
     odmp_register_rsp_cbk(NULL);
-    wss_request_stop();
+    //停止音频播放并关闭Pi
+    wss_ble_audio_stop();
+    //关闭Pi
+    turn_off_Pi();
+   
 }
 
 //=================================================================================================

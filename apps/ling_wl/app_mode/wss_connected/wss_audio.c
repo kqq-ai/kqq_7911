@@ -177,23 +177,6 @@ bool is_audio_playing()
     return g_audio_thread_running || g_audio_on;
 }
 
-/**
- * @brief 启动音频播放线程
- * @details
- *   初始化播放线程，该线程会循环调用wss_stream_get_data获取音频数据并写入播放器。
- */
-static void wss_audio_playback_start(void)
-{
-    if (g_audio_thread_running) {
-        log_w("[AUDIO]playback thread already running");
-        return;
-    }
-    g_audio_thread_running = true;
-    
-    /* 启动播放线程 */
-    threadpool_add_task(g_app_ctx->threadpool, wss_audio_playback_thread, NULL);
-}
-
 // 停止蓝牙音频播放，关闭音频数据流，释放播放器资源
 void wss_ble_audio_stop() {
     log_i("[AUDIO]停止蓝牙音频播放");
@@ -211,17 +194,26 @@ void wss_ble_audio_stop() {
 
 }
 
-// 开始蓝牙音频，启动播放线程，循环获取stream数据进行播放
-void wss_ble_audio_start() {
-    log_i("[AUDIO]wss_ble_audio_start");
 
+/**
+ * @brief 启动音频播放线程
+ * @details
+ *   初始化播放线程，该线程会循环调用wss_stream_get_data获取音频数据并写入播放器。
+ */
+void wss_ble_audio_start() {
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_on = false;
     g_audio_playing = false;
     os_mutex_post(&g_audio_mutex);
+    /* 启动播放线程 */
+    if (g_audio_thread_running) {
+        log_w("[AUDIO]playback thread already running");
+        return;
+    }
+    g_audio_thread_running = true;
     
     /* 启动播放线程 */
-    wss_audio_playback_start();
+    threadpool_add_task(g_app_ctx->threadpool, wss_audio_playback_thread, NULL);
 }
 
 void wss_audio_init()

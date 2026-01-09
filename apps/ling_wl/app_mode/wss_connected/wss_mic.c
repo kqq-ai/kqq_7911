@@ -267,7 +267,6 @@ static void recorder_vad_cb(void* priv, int type)
 
 // 停止麦克风录音，可选择是否上传剩余音频数据
 void wss_mic_stop() {
-    log_mqtt("❌❌❌ 停止麦克风收音");
     app_recorder_en(DISABLE);
 }
 
