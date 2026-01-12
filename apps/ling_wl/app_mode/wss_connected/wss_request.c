@@ -224,6 +224,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: SCRIPT START\n");
                 g_mode_script = true;
+                wss_mic_stop();
                 play_prompt_sound("script_st.mp3");
                 wait_time = 0;
                 wss_request_update_state(STATE_WAITING, "receive SCRIPT START");
