@@ -186,6 +186,7 @@ static void wss_handle_touch_key_event(bool press_down)
         wss_mic_upload_start();
         lwl_app_mode_stop_playing();
         play_prompt_sound("t_key.mp3");
+        wss_mic_start();
     } else {
         bool is_long_press = wss_upload_stop(); //正在上传音频，是长按
         wss_request_start();
@@ -199,6 +200,7 @@ static void wss_handle_touch_key_event(bool press_down)
         } else {
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
+                wss_mic_stop();
                 log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
                 log_mqtt("🔄🔄🔄 短按触摸键，打断/切换对话状态");
                 g_device_state = APP_WAIT;

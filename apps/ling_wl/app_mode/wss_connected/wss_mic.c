@@ -212,7 +212,7 @@ void wait_asr_task(void *priv)
     
     my_blocking_queue_clear(&g_asr_data_queue);
     recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-    while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms() || is_mic_on() == false) && g_recording) {
+    while (asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms() && g_recording) {
         msleep(20);
     }
     set_led_mic_on(); // 开启录音时灯光变橙色
