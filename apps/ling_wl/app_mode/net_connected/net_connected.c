@@ -79,7 +79,6 @@ static int net_connected_init(void)
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 1;
     }
-    int ret = log_mqtt_start();
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
         play_system_music("NetCfgSucc.mp3");

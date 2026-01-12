@@ -487,8 +487,17 @@ void log_mqtt_enqueue(const char *msg) {
     // os_mutex_post(&g_log_mqtt_mutex);
 }
 
-/* 日志发送函数 - 优化版本（线程安全，无全局缓冲区竞态） */
+/**
+ * @brief 发送MQTT消息
+ * @param format 格式化字符串
+ * @note 注意，使用该函数不可以在字符串中包含\n换行符
+ */
 void log_mqtt(const char* format, ...) {
+    //检查队列是否已经初始化
+    if (!g_mqtt_start) {
+        log_i("【MQTT】队列未初始化，无法发送消息");
+        return;
+    }
     // 使用栈上的局部变量，每个线程有自己的副本，避免竞态条件
     char log_buffer[LOG_QUEUE_ITEM_MAX_LEN];
     char time_str[32];
@@ -522,6 +531,56 @@ void log_mqtt(const char* format, ...) {
     if (ret != MYERROR_Success) {
         log_i("【MQTT】❌❌❌ 日志入队失败, error code: %d\n", ret);
     }
+}
+//实现一个同步连接mqtt并发送一条信息的函数
+int log_mqtt_send_message_sync(const char* topic, const int progress) {
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+    
+    // 获取时间戳
+    char time_str[32];
+    if (get_system_timestamp(time_str, sizeof(time_str)) != 0) {
+        log_i("【MQTT】ota获取时间戳失败\n");
+        os_mutex_post(&g_log_mqtt_mutex);
+        return -1;
+    }
+    
+    // 组装消息，使用与log_mqtt相同的JSON格式
+    char message[128];
+    int msg_len = snprintf(message, sizeof(message), 
+                          "{\"time\":\"%s\",\"sn\":\"%s\",\"msg\":\"🚀🚀🚀 OTA更新进度：%d /100\"}", 
+                          time_str, sn, progress);
+    
+    if (msg_len < 0 || msg_len >= sizeof(message)) {
+        log_i("【MQTT】ota JSON构建失败或截断（长度:%d）\n", msg_len);
+        os_mutex_post(&g_log_mqtt_mutex);
+        return -1;
+    }
+    
+    log_i("【MQTT】ota开始同步发送进度: %d\n", progress);
+    if (!log_mqtt_is_connected()) {
+        log_i("【MQTT】ota未连接, 开始重连\n");
+        int ret = log_mqtt_connect();
+        if (ret != 0) {
+            log_i("【MQTT】ota重连失败\n");
+            os_mutex_post(&g_log_mqtt_mutex);
+            return -1;
+        }
+    }
+    log_i("【MQTT】ota连接成功, 开始发送进度\n");
+    MQTTMessage mqtt_msg;
+    mqtt_msg.qos = QOS1;
+    mqtt_msg.retained = 0;
+    mqtt_msg.payload = (void*)message;
+    mqtt_msg.payloadlen = strlen(message);
+    int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
+    if (rc != 0) {
+        log_i("【MQTT】ota发送进度失败, error code: %d\n", rc);
+        os_mutex_post(&g_log_mqtt_mutex);
+        return -1;
+    }
+    log_i("【MQTT】ota发送进度成功\n");
+    os_mutex_post(&g_log_mqtt_mutex);
+    return rc;
 }
 
 // 回调函数实现
@@ -584,10 +643,10 @@ int log_mqtt_start(void) {
     
     // 获取SN
     get_SN(sn);
-    // 设置启动标志
-    g_mqtt_start = true;
     // 初始化队列用于缓存MQTT日志消息
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
+    // 设置启动标志
+    g_mqtt_start = true;
     // 启动线程用于监控队列阈值和超时
     int ret = thread_fork("log_mqtt_monitor", 15, 2048 * 4, 0, &monitor_thread_pid, log_monitor_thread, NULL);
     if (ret != 0) {
@@ -605,8 +664,10 @@ int log_mqtt_start(void) {
 // 添加停止函数
 void log_mqtt_stop(void) {
     if (!g_mqtt_start) {
+        log_i("【MQTT】队列未初始化，无法停止");
         return;
     }
+    g_mqtt_start = false;
     // 停止监控线程
     g_monitor_thread_running = false;
     

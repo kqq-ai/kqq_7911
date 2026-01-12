@@ -155,6 +155,7 @@ static void wss_audio_playback_thread(void *priv)
         } else if (!g_audio_playing) {
             /* 检查超时 */
             if (app_music_play_get_status(g_app_ctx->music_player) == AUDIO_DEC_START) {
+                // log_i("request audio_server, owner is app_core");
                 g_audio_playing = true;
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;

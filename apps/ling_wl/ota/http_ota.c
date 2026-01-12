@@ -55,6 +55,8 @@ static void download_task(void *priv)
     int ret = 0;
     int err = 0;
     char sock_err = 0;
+    u32 last_report_time = 0;
+    int need_pause_for_mqtt = 0;  // 暂停标志：用于暂停下载以发送MQTT
 
     update_fd = net_fopen(CONFIG_UPGRADE_OTA_FILE_NAME, "w");
     if (!update_fd) {
@@ -79,22 +81,41 @@ _reconnect_:
     }
 
     while (hdl->ctx.req_exit_flag == 0) {
-        ret = hdl->download_ops->read(&hdl->ctx, (char *)hdl->recv_buf, hdl->recv_buf_size);//最大接收为recv_buf_size
-        if (ret <  0) {  //读取数据失败
-            sock_err = 1;
-            goto _out_;
-        } else {
-            hdl->download_len += ret;
-            err = net_fwrite(update_fd, hdl->recv_buf, ret, 0);
-            if (err != ret) {
+        // 每2秒检查是否需要暂停下载并发送MQTT消息
+        if (timer_get_ms() - last_report_time >= 2000) {
+            need_pause_for_mqtt = 1;  // 设置暂停标志
+        }
+
+        // 如果需要暂停，跳过读取操作，让网络资源释放给MQTT使用
+        if (!need_pause_for_mqtt) {
+            ret = hdl->download_ops->read(&hdl->ctx, (char *)hdl->recv_buf, hdl->recv_buf_size);//最大接收为recv_buf_size
+            if (ret <  0) {  //读取数据失败
+                sock_err = 1;
                 goto _out_;
+            } else {
+                hdl->download_len += ret;
+                err = net_fwrite(update_fd, hdl->recv_buf, ret, 0);
+                if (err != ret) {
+                    goto _out_;
+                }
             }
+        } else {
+            // 暂停下载，发送MQTT消息
+            int progress = (hdl->download_len * 100) / hdl->file_size;
+            log_mqtt_send_message_sync("h-log", progress);
+            last_report_time = timer_get_ms();
+            need_pause_for_mqtt = 0;  // 重置暂停标志，继续下载
+            // 短暂延时，确保MQTT消息发送完成
+            mdelay(100);
         }
 
         if (hdl->download_len >= hdl->file_size) {
             goto _finish_;
         }
-        mdelay(1);
+        
+        if (!need_pause_for_mqtt) {
+            mdelay(1);
+        }
     }
 
 _finish_:
