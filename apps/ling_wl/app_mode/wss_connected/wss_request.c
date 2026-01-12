@@ -317,7 +317,7 @@ bool wss_request_loop()
         } else if (tts_bind_state == -1) {
             wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
             wss_request_send_event_target(ORMET_SWITCH_FAILED);
-            play_prompt_sound("SwFailed.mp3");
+            // play_prompt_sound("SwFailed.mp3");
             bdo_disable(0);
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
             tts_bind_state = -1;
@@ -331,7 +331,7 @@ bool wss_request_loop()
         } else if (tts_bind_state == -1) {
             wss_request_update_state(STATE_IDLE, "send ORMET_SWITCH_FAILED");
             wss_request_send_event_target(ORMET_SWITCH_FAILED);
-            play_prompt_sound("SwFailed.mp3");
+            // play_prompt_sound("SwFailed.mp3");
             bdo_disable(0);
         } else if (g_curr_time - g_wss_last_time > WSS_TIMEOUT) {
             tts_bind_state = -1;
