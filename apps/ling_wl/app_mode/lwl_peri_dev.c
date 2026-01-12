@@ -533,8 +533,9 @@ static void battery_detection_loop(uint32_t curr_time)
     if (curr_time - battery_timer >= BATTERY_CHECK_INTERVAL) {
         battery_timer = curr_time;
         int charge_in = gpio_read(CHARGE_IN_IO);
-        u16 voltage = get_vbat_level();
-        log_i("voltage: %d\n",voltage);
+        u16 voltage = adc_get_voltage(AD_CH_PA07) * 2 / 10;//
+        u16 vBat_level = get_vbat_level();
+        log_i("voltage chargeIn: %d ,  IO07: %d, vBat: %d\n",gpio_read(CHARGE_IN_IO), voltage, vBat_level);
         if (!charge_in && voltage < LOW_BATT_VERY_SHUTDOWN)
         {
             log_i("low battery!\n");
@@ -709,6 +710,10 @@ void lwl_peri_dev_init(void)
     gpio_set_die(GSENSOR_IO, 1);
     gpio_set_dieh(GSENSOR_IO, 1);
     /* 6. 电量检测初始化 */
+    gpio_set_direction(IO_PORTA_07, 1);
+    gpio_set_pull_down(IO_PORTA_07, 0);
+    gpio_set_pull_up(IO_PORTA_07, 0);
+    adc_add_sample_ch(AD_CH_PA07);//添加通道
 }
 
 
