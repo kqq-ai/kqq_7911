@@ -108,7 +108,7 @@ static void wss_audio_playback_thread(void *priv)
             os_mutex_post(&g_audio_mutex);
         } else if (!g_audio_on) {
             /* 无数据，检查是否stream已结束或超时 */
-            if (wss_stream_is_empty()) {
+            if (!wss_stream_on()) {
                 log_i("[AUDIO]stream finish");
                 break;
             } else {
@@ -136,9 +136,9 @@ static void wss_audio_playback_thread(void *priv)
 
     os_mutex_pend(&g_audio_mutex, 0);
     if (g_audio_on) {
+        g_audio_on = false;
         app_music_play_stop(g_app_ctx->music_player);
         g_audio_playing = false;
-        g_audio_on = false;
         set_led_tts_off();
         log_i("[AUDIO]audio playback stopped");
     }
@@ -182,9 +182,10 @@ void wss_ble_audio_stop() {
     os_mutex_pend(&g_audio_mutex, 0);
     g_audio_thread_running = false;
     if (g_audio_on) {
-        set_led_tts_off();
         g_audio_on = false;
         app_music_play_stop(g_app_ctx->music_player);
+        g_audio_playing = false;
+        set_led_tts_off();
         log_i("[AUDIO]audio playback stopped");
     }
     os_mutex_post(&g_audio_mutex);
@@ -195,13 +196,9 @@ void wss_ble_audio_stop() {
 // 开始蓝牙音频，启动播放线程，循环获取stream数据进行播放
 void wss_ble_audio_start() {
     log_i("[AUDIO]wss_ble_audio_start");
+    assert(g_audio_on == false);
+    assert(g_audio_playing == false);
     log_mqtt("❤️‍🔥❤️‍🔥❤️‍🔥 开始蓝牙音频播放");
-    
-    os_mutex_pend(&g_audio_mutex, 0);
-    g_audio_on = false;
-    g_audio_playing = false;
-    os_mutex_post(&g_audio_mutex);
-    
     /* 启动播放线程 */
     wss_audio_playback_start();
 }

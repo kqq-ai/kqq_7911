@@ -33,12 +33,14 @@ u8 lwl_app_mode_get_current_mode()
 
 static void lwl_app_mode_play_cb(void *priv)
 {
+    os_mutex_pend(&g_mode_mutex, 0);
     g_sensor_reset_alive_timer();
     play_voice_prompt = 0;
     if (prompt_cb_priv) {
         prompt_cb_priv();
     }
     gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
+    os_mutex_post(&g_mode_mutex);
 }
 
 /**

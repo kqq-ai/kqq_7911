@@ -160,10 +160,6 @@ bool wss_stream_on() {
     return g_stream_end == false || _get_readable_size() > 0;
 }
 
-bool wss_stream_is_empty() {
-    return g_stream_end && (_get_readable_size() == 0);
-}
-
 void wss_stream_init()
 {
     log_i("[STREAM]Init WSS stream\n");
