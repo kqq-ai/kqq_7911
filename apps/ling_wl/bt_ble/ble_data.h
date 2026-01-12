@@ -48,7 +48,6 @@ int handle_wifi_stop_scan(const char *cmd, cJSON *args, char * return_json_data)
 int handle_wifi_connect(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_disconnect(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_reconnect(const char *cmd, cJSON *args, char * return_json_data);
-int handle_wifi_get_status(const char *cmd, cJSON *args, char * return_json_data);
 int handle_wifi_info(const char *cmd, cJSON *args, char * return_json_data);
 
 // 主解析函数

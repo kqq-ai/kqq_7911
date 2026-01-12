@@ -968,6 +968,69 @@ cleanup:
     return ret;
 }
 
+int notify_app_wifi_connect_fail(void *pri)
+{
+    int ret = 0;
+    char cmd_name[32] = {0};
+    char return_errstr[64] = {0};
+    char return_json_data[BUFFER_SIZE] = {0};
+    WIFI_connect_STATUES connect_status;
+
+    // 检查BLE连接状态
+    if (get_ble_app_disconnect_flag() != 0) {
+        log_info("BLE not connected, skip wifi connect fail notification\n");
+        return 0;
+    }
+    // 获取当前WiFi连接状态和命令状态
+    connect_status = get_wifi_connect_status(NULL);
+    // 设置命令名称
+    memcpy(cmd_name, "wifi_connect", strlen("wifi_connect"));
+
+    // 只区分密码错误
+    if (connect_status == WIFI_CONNECT_ASSOCIAT_FAIL) {
+        // 密码错误
+        memcpy(return_errstr, "WIFI_CONNECT_CODE_PASSWORD_ERROR", strlen("WIFI_CONNECT_CODE_PASSWORD_ERROR"));
+        ret = 1;
+    }else {
+        // 如果不是错误状态，不发送通知
+        log_info("Not an error status, skip notification: %d\n", connect_status);
+        return 0;
+    }
+
+    // 封装return_json_data
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL)
+    {
+        ret = 1;
+        log_info("Error: Failed to create cJSON object\n");
+        goto cleanup;
+    }
+
+    cJSON_AddStringToObject(root, "cmd_name", cmd_name);
+    cJSON_AddNumberToObject(root, "return_code", ret);
+    cJSON_AddStringToObject(root, "return_errstr", return_errstr);
+
+    char *return_json_str = cJSON_PrintUnformatted(root);
+    if (return_json_str == NULL)
+    {
+        ret = 1;
+        log_info("Error: Failed to print cJSON object\n");
+        cJSON_Delete(root);
+        goto cleanup;
+    }
+
+    memcpy(return_json_data, return_json_str, strlen(return_json_str));
+    send_return_json_data(return_json_data);
+
+    free(return_json_str);
+    log_info("notify app wifi connect fail: %s, return_json_str:%s\r\n", return_errstr, return_json_data);
+cleanup:
+    if (root != NULL) {
+        cJSON_Delete(root);
+    }
+    return ret;
+}
+
 int notify_app_wifi_mqtt_succ(void *pri)
 {
     int ret = 0;

@@ -55,6 +55,13 @@ static void notify_app_wifi_ip_succ_wrapper(void *pri)
     notify_app_wifi_ip_succ(pri);
 }
 
+/* 包装函数：将 notify_app_wifi_connect_fail 适配为线程池需要的函数签名 */
+static void notify_app_wifi_connect_fail_wrapper(void *pri)
+{
+    extern int notify_app_wifi_connect_fail(void *pri);
+    notify_app_wifi_connect_fail(pri);
+}
+
 static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 {
     int ret = 0;
@@ -193,6 +200,15 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         block_connect_sem_post(NULL); // 通知连接函数
 
+        {
+            lwl_app_context_t *ctx_timeout = lwl_app_core_context_get_instance();
+            /* 通知 APP(小程序) WiFi连接失败 */
+            if (!threadpool_add_task(ctx_timeout->threadpool, notify_app_wifi_connect_fail_wrapper, NULL))
+            {
+                printf("Failed to add the notify_app_wifi_connect_fail task !\r\n");
+            }
+        }
+
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
@@ -215,6 +231,15 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
             wifi_connect_fail_cb_func_pri(NULL);
         }
 
+        {
+            lwl_app_context_t *ctx_associat = lwl_app_core_context_get_instance();
+            /* 通知 APP(小程序) WiFi连接失败 */
+            if (!threadpool_add_task(ctx_associat->threadpool, notify_app_wifi_connect_fail_wrapper, NULL))
+            {
+                printf("Failed to add the notify_app_wifi_connect_fail task !\r\n");
+            }
+        }
+
         break;
 
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
@@ -227,6 +252,15 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
+
+        {
+            lwl_app_context_t *ctx_associat_timeout = lwl_app_core_context_get_instance();
+            /* 通知 APP(小程序) WiFi连接失败 */
+            if (!threadpool_add_task(ctx_associat_timeout->threadpool, notify_app_wifi_connect_fail_wrapper, NULL))
+            {
+                printf("Failed to add the notify_app_wifi_connect_fail task !\r\n");
+            }
+        }
 
         break;
 
@@ -297,6 +331,13 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
+
+        lwl_app_context_t *ctx_dhcp = lwl_app_core_context_get_instance();
+        /* 通知 APP(小程序) WiFi连接失败 */
+        if (!threadpool_add_task(ctx_dhcp->threadpool, notify_app_wifi_connect_fail_wrapper, NULL))
+        {
+            printf("Failed to add the notify_app_wifi_connect_fail task !\r\n");
+        }
         // wifi_enter_smp_cfg_mode(); // 进入SMP模式
         break;
 

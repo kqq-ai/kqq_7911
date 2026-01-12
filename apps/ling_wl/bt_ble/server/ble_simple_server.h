@@ -31,6 +31,8 @@ int get_ble_app_disconnect_flag(void);
 /* 通知 APP（小程序） 相关 函数*/
 int notify_app_wifi_ip_succ(void *pri);
 
+int notify_app_wifi_connect_fail(void *pri);
+
 int notify_app_wifi_mqtt_succ(void *pri);
 
 int notify_app_wifi_list_update(void *pri);
