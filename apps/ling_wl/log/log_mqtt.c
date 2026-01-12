@@ -529,7 +529,29 @@ void log_mqtt(const char* format, ...) {
     // 入队操作：队列内部已经有锁保护（my_blocking_queue_try_enqueue内部有pthread_mutex_lock）
     int ret = my_blocking_queue_try_enqueue(&log_queue, json_item_buf);
     if (ret != MYERROR_Success) {
-        log_i("【MQTT】❌❌❌ 日志入队失败, error code: %d\n", ret);
+        switch (ret) {
+            case MYERROR_Null_Pointer:
+                log_i("【MQTT】❌❌❌ 日志入队失败：空指针错误\n");
+                break;
+            case MYERROR_Malloc_Failed:
+                log_i("【MQTT】❌❌❌ 日志入队失败：内存分配失败\n");
+                break;
+            case MYERROR_OS_Api_Error:
+                log_i("【MQTT】❌❌❌ 日志入队失败：操作系统API错误\n");
+                break;
+            case MYERROR_Is_Full:
+                log_i("【MQTT】❌❌❌ 日志入队失败：队列已满\n");
+                break;
+            case MYERROR_Is_Empty:
+                log_i("【MQTT】❌❌❌ 日志入队失败：队列为空（异常状态）\n");
+                break;
+            case MYERROR_Not_Found:
+                log_i("【MQTT】❌❌❌ 日志入队失败：未找到（异常状态）\n");
+                break;
+            default:
+                log_i("【MQTT】❌❌❌ 日志入队失败：未知错误，错误码: %d\n", ret);
+                break;
+        }
     }
 }
 //实现一个同步连接mqtt并发送一条信息的函数
