@@ -1455,7 +1455,6 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
     
     // 发送帧 -> 写入 RingBuffer
     // log_i("[ws_custom]Buffering frame: type=0x%02x, len=%d", frame_type, len);
-    // 注意：这里绝不能用 sprintf 循环拼 hex（会反复写 '\0'，极易越界导致栈被踩，最终触发 PC 跑飞/axi_rd_inv）
     if (len > 0 && len < 128) { // 只打印短数据的内容
         static const char hex[] = "0123456789abcdef";
         char dump_buf[256];

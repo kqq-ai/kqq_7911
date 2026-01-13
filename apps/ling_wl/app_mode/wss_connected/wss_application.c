@@ -389,6 +389,7 @@ bool wss_application_loop()
     if (music_file[0] != 0 && play_voice_prompt == 0) {
         wss_app_mode_play();
     }
+
     wss_request_loop();
     if (play_voice_prompt || g_on_touch_key) {
         return false;
