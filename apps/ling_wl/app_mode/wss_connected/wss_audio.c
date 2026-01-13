@@ -3,6 +3,8 @@
 #include "cpu.h"
 #include "app_cookie.h"
 
+#include <string.h> // memcpy
+
 #include "util/cqueue.h"
 #include "util/ringbuffer.h"
 #include "bt_ble/client/ble_distance.h"
@@ -382,7 +384,7 @@ void wait_vad_task(void *priv)
         msleep(30);
     }
     if (g_recording_upload) {
-        // my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
+        // my_ring_buffer_clear(&g_asr_ringbuffer); /* 如需清空环形缓冲，用 ringbuffer 的 clear */
         wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
         set_led_mic_on(); // 开启录音时灯光变橙色
         while (vad_start_time + VAD_START_THRESHOLD + VAD_START_HEAT_TIMEOUT_MS > get_time_stamp() && g_recording_upload) {
@@ -420,31 +422,44 @@ void wait_vad_task(void *priv)
  */
 void wait_asr_task(void *priv)
 {
-    my_blocking_queue_clear(&g_asr_ringbuffer); /* 清空 g_asr_data_queue */
+    log_i("[AUDIO]wait_asr_task start (ring_buffer_clear)");
+
+    // 注意：g_asr_ringbuffer 是 MyRingBuffer，不能用 my_blocking_queue_clear（会破坏内存导致 misalign/bus_inv）
+    my_ring_buffer_clear(&g_asr_ringbuffer);     /* 清空 g_asr_ringbuffer */
+    my_blocking_queue_clear(&g_asr_data_queue);  /* 清空 g_asr_data_queue */
     wss_app_recorder_data_upstream(recorder_data_to_ringbuffer); /* 录音数据 -> asr_ringbuffer */
-    my_blocking_queue_clear(&g_asr_data_queue); /* 清空 g_asr_data_queue */
     set_led_mic_on(); // 开启录音时灯光变橙色
     u32 asr_start_time = get_time_stamp();
-    log_i("[AUDIO]start ASR task %d\n", asr_start_time);
-    while (MYRBERROR_Success != my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
+
+    /* 等待第一帧到来，避免空跑 */
+    while (g_recording && is_mic_on() &&
+           (MYRBERROR_Success != my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame))) {
         msleep(10);
     }
 
-    while (1) {
-        int ret = wss_asr_data_to_server(&asr_data_frame);
-        // 修改: 如果发送失败，退出循环
-        if (ret != 0) {
-            log_i("[AUDIO]ASR Upload failed, break loop.");
-            break;
+    /* 给用户一点缓冲时间（原逻辑保留） */
+    msleep(1000);
+    log_i("[AUDIO]start ASR task %d\n", asr_start_time);
+
+    g_recording_uploading = true;
+
+    /* 循环读取并上传，避免死循环重复发送同一帧导致发送缓冲膨胀/触发其他栈问题 */
+    while (g_recording && is_mic_on()) {
+        if (MYRBERROR_Success == my_ring_buffer_read(&g_asr_ringbuffer, &asr_data_frame)) {
+            int ret = wss_asr_data_to_server(&asr_data_frame);
+            if (ret != 0) {
+                log_i("[AUDIO]ASR upload failed (ret=%d), stop.", ret);
+                break;
+            }
+        } else {
+            msleep(10);
         }
     }
 
-    if (g_recording_uploading) {
-        g_recording_uploading = false;
-        send_audio_status(OAST_STREAM_AUDIO, OASE_END);
-        wss_app_recorder_data_upstream(NULL);
-        set_led_idle();
-    }
+    g_recording_uploading = false;
+    wss_app_recorder_data_upstream(NULL);
+    set_led_idle();
+    send_audio_status(OAST_STREAM_AUDIO, OASE_END);
 }
 
 //=================================================================================================

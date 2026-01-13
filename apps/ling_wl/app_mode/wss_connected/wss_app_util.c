@@ -27,6 +27,19 @@ static int target_sn_count = 0;
 // 使用自定义WebSocket实现
 static ws_client_t g_ws_client_custom = NULL;
 
+static void wss_dump_lwip_tcp_config_once(void)
+{
+    static u8 printed = 0;
+    if (printed) {
+        return;
+    }
+    printed = 1;
+    log_i("[lwip]TCP_SND_BUF=%u TCP_SND_QUEUELEN=%u TCP_WND=%u",
+          (unsigned int)TCP_SND_BUF,
+          (unsigned int)TCP_SND_QUEUELEN,
+          (unsigned int)TCP_WND);
+}
+
 // 添加SN到集合
 void add_target_sn(const char* sn) {
     if (!sn) return;
@@ -102,6 +115,12 @@ static void wss_mark_exception(const char *reason)
     g_exception_exit = true;
 }
 
+void wss_note_disconnect_reason(const char *reason)
+{
+    // 这里用同一套异常标志，确保上层能看到准确原因
+    wss_mark_exception(reason ? reason : "disconnect");
+}
+
 void wss_exception_exit()
 {
     wss_mark_exception("generic");
@@ -149,6 +168,7 @@ static void wss_custom_recv_callback(u8 *buf, u32 len, u8 is_text)
 static void wss_custom_disconnect_callback(const char *reason)
 {
     log_i("[wss_client]websocket exit notify: %s", reason ? reason : "unknown");
+    wss_note_disconnect_reason(reason);
     odmp_disconnect_handler();
 }
 
@@ -157,6 +177,7 @@ bool wss_connect(void) {
         os_mutex_create(&g_wss_mutex);
     }
     os_mutex_pend(&g_wss_mutex, 0);
+    wss_dump_lwip_tcp_config_once();
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
 
     log_i("[wss_app_util]wss_connect start (using custom WebSocket implementation)");
@@ -421,7 +442,9 @@ int send_ping()
     free(send_data);
     
     // 可选：同时发送WebSocket协议层的Ping帧
-    // ws_client_send_ping(g_ws_client_custom);
+    // 公网/域名/WSS 场景下，中间层（NAT/CDN/反向代理）可能会对“长时间无 WebSocket control frame”更敏感
+    // 同时发送协议层 Ping 帧可显著降低 idle 被掐导致的 1006 unexpected EOF
+    ws_client_send_ping(g_ws_client_custom);
     
     os_mutex_post(&g_wss_mutex);
     return 0;
