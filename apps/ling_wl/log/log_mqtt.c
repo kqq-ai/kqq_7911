@@ -92,6 +92,9 @@ static bool g_battery_update_flag = false;
 static int g_current_battery_level = 0;
 static char g_sn_battery[25];
 
+/* 缓存的MQTT token（只在初始化时获取一次） */
+static char* g_mqtt_token = NULL;
+
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
     // 初始化网络
@@ -107,9 +110,8 @@ static int init_mqtt_network(void) {
         
         // 重要：连接失败时，需要断开网络连接，释放socket资源
         // ConnectNetwork失败时可能已经创建了socket，需要清理
-        if (mqtt_network.my_socket != NULL) {
-            mqtt_network.disconnect(&mqtt_network);
-        }
+        // 统一使用log_mqtt_disconnect释放资源（虽然此时g_mqtt_client为NULL，但会释放网络资源）
+        log_mqtt_disconnect();
         
         return rc;
     }
@@ -157,18 +159,15 @@ int log_mqtt_connect(void) {
     // 初始化网络
     int rc = init_mqtt_network();
     if (rc != 0) {
+        // init_mqtt_network内部已经处理了资源释放，这里直接返回
         return rc;
-    }
-    // 获取token,也就是password
-    char* token = get_mqtt_token();
-    if (token == NULL) {
-        log_i("【MQTT】❌❌❌ 获取MQTT token失败\n");
-        return -1;
-    }
-    // 初始化MQTT客户端并连接
-    rc = init_mqtt_client(token);
+    }   
+    // 使用缓存的token连接（不再每次获取）
+    rc = init_mqtt_client(g_mqtt_token);
     if (rc != 0) { 
         log_i("【MQTT】❌❌❌ 初始化MQTT客户端并连接失败\n");
+        // 统一使用log_mqtt_disconnect释放资源（包括已建立的TCP连接）
+        log_mqtt_disconnect();
         return rc;
     }
     log_i("【MQTT】初始化MQTT客户端并连接成功,rc: %d\n", rc);
@@ -194,13 +193,25 @@ static void log_mqtt_reconnect_until_success(void) {
 
 /* 断开MQTT连接 */
 void log_mqtt_disconnect(void) {
+    // 断开MQTT客户端连接（如果已建立）
     if (g_mqtt_client != NULL) {
         MQTTDisconnect(g_mqtt_client);
         g_mqtt_client = NULL;
-        mqtt_network.disconnect(&mqtt_network);
-        g_mqtt_connected = false;
-        log_i("MQTT connection disconnected\n");
     }
+    
+    // 释放网络连接资源（TCP socket等），无论MQTT客户端是否存在
+    // 这很重要：因为可能在网络连接建立后，MQTT连接失败，此时需要释放TCP资源
+    if (mqtt_network.my_socket != NULL) {
+        mqtt_network.disconnect(&mqtt_network);
+    }
+    
+    // 重置Network结构体，确保所有状态都被清理
+    NewNetwork(&mqtt_network);
+    
+    // 重置连接状态标志
+    g_mqtt_connected = false;
+    
+    log_i("MQTT connection disconnected\n");
 }
 
 /* 通过MQTT发送消息 */
@@ -671,6 +682,18 @@ int log_mqtt_start(void) {
     
     // 获取SN
     get_SN(sn);
+    // 【优化】在初始化时获取token，失败则每秒重试直到成功
+    log_i("【MQTT】开始获取token...\n");
+    while (g_mqtt_token == NULL) {
+        g_mqtt_token = get_mqtt_token();
+        if (g_mqtt_token == NULL) {
+            log_i("【MQTT】❌ 获取MQTT token失败，1秒后重试...\n");
+            msleep(1000);  // 等待1秒后重试
+        } else {
+            log_i("【MQTT】✓ Token获取成功，已缓存\n");
+            break;
+        }
+    }  
     // 初始化队列用于缓存MQTT日志消息
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     // 设置启动标志
@@ -683,6 +706,11 @@ int log_mqtt_start(void) {
         if (g_rtc_device != NULL) {
             dev_close(g_rtc_device);
             g_rtc_device = NULL;
+        }
+        // 释放token
+        if (g_mqtt_token != NULL) {
+            free(g_mqtt_token);
+            g_mqtt_token = NULL;
         }
         return ret;
     }
@@ -711,6 +739,13 @@ void log_mqtt_stop(void) {
         dev_close(g_rtc_device);
         g_rtc_device = NULL;
         log_i("【MQTT】RTC设备已关闭\n");
+    }
+    
+    // 【优化】释放缓存的token
+    if (g_mqtt_token != NULL) {
+        free(g_mqtt_token);
+        g_mqtt_token = NULL;
+        log_i("【MQTT】Token已释放\n");
     }
 
     // 确保最后的消息都发送出去
