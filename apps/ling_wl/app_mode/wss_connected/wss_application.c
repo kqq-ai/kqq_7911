@@ -238,11 +238,13 @@ static void input_event_handler_cb(lwl_event_t *e)
     
     switch (e->event_type) {
     case LWL_EVENT_TYPE_KEY:
+        log_i("=== input_event_handler_cb KEY ===");
         event.event_type = LWL_EVENT_TYPE_KEY;
         input_event_queue_push(&event);
         break;
         
     case LWL_EVENT_TYPE_TOUCH_KEY:
+        log_i("=== input_event_handler_cb TOUCH KEY ===");
         event.event_type = LWL_EVENT_TYPE_TOUCH_KEY;
         event.data.touch_key_event.is_press_down = (e->touch_key_cmd.touch_key_event_type == 0);
         input_event_queue_push(&event);

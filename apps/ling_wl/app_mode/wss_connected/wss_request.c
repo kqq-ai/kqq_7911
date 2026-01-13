@@ -145,6 +145,8 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     os_mutex_post(&g_request_mutex);
 }
 
+static uint32_t g_stream_time = 0;
+
 void turn_on_Pi(const char *pdev_sn) {
     log_i("[wss_request]turn_on_Pi %s\n", pdev_sn);
     // 如果sn和g_edev_connected_sn 不相同则关闭之前的连接
@@ -215,9 +217,16 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
                 log_i("AUDIO_STATUS: OASE_START volume = %d\n", pkg->audio_status.volume);
                 set_tts_volume(pkg->audio_status.volume);
                 wss_stream_start(); // 允许音频流开始
+                g_stream_time = timer_get_ms();
             } else if (pkg->audio_status.event == OASE_END) {
                 log_i("AUDIO_STATUS: OASE_END\n");
-                wss_stream_stop(); // 标记音频流结束
+                if (timer_get_ms() - g_stream_time < 200) {
+                    log_i("AUDIO_STATUS: stream duration too short, ignoring stop, restarting stream");
+                    wss_stream_start(); // 确保结束错位清空能继续播放，且清空现有数据
+                } else {
+                    log_i("AUDIO_STATUS: marking stream end");
+                    wss_stream_stop(); // 标记音频流结束
+                }
             }
             g_wss_last_time = g_curr_time;
         } else if (pkg->audio_status.type == OAST_SCRIPT) {
