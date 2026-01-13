@@ -81,8 +81,8 @@ _reconnect_:
     }
 
     while (hdl->ctx.req_exit_flag == 0) {
-        // 每2秒检查是否需要暂停下载并发送MQTT消息
-        if (timer_get_ms() - last_report_time >= 2000) {
+        // 每400ms检查是否需要暂停下载并发送MQTT消息
+        if (timer_get_ms() - last_report_time >= 400) {
             need_pause_for_mqtt = 1;  // 设置暂停标志
         }
 
@@ -100,13 +100,14 @@ _reconnect_:
                 }
             }
         } else {
-            // 暂停下载，发送MQTT消息
+            mdelay(20);
+            // 暂停下载，发送MQTT消息（每次都尝试发送，让重连机制工作）
             int progress = (hdl->download_len * 100) / hdl->file_size;
             log_mqtt_send_message_sync("h-log", progress);
             last_report_time = timer_get_ms();
             need_pause_for_mqtt = 0;  // 重置暂停标志，继续下载
             // 短暂延时，确保MQTT消息发送完成
-            mdelay(100);
+            mdelay(20);
         }
 
         if (hdl->download_len >= hdl->file_size) {

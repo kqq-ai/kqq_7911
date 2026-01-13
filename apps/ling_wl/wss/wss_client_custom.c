@@ -1087,13 +1087,11 @@ static void ws_recv_thread(void *param)
             os_mutex_post(&client->mutex);
         }
         
-        // 处理读事件 (或者 SSL 读缓冲中有数据)
-        // SSL 可能内部有缓存数据，select 不一定会触发，所以 SSL 模式下如果没有写事件，也尝试读一下？
-        // 或者依赖 select。通常 SSL 读缓冲有数据时，底层 socket 也是可读的（除非刚好读完了）。
-        if (ret == 0 && !client->use_ssl) continue; // 超时且非SSL
+        // 处理读事件
+        if (ret == 0) continue; // 超时，继续下一轮循环
         
-        if ((ret > 0 && FD_ISSET(fd, &read_fds)) || client->use_ssl) {
-             // 读取数据
+        if (ret > 0 && FD_ISSET(fd, &read_fds)) {
+            // 读取数据
             int n = 0;
             if (client->use_ssl) {
                 n = mbedtls_ssl_read(&client->ssl, client->recv_buf + client->recv_buf_len,
@@ -1107,19 +1105,17 @@ static void ws_recv_thread(void *param)
                     if (n != 0) break; // 真正错误或关闭
                 }
             } else {
-                if (ret > 0 && FD_ISSET(fd, &read_fds)) {
-                    n = recv(client->sock_fd, client->recv_buf + client->recv_buf_len,
-                            WS_RECV_BUF_SIZE - client->recv_buf_len, 0);
-                    if (n < 0) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
-                        else {
-                            log_e("[ws_custom]TCP recv error: %d", errno);
-                            break;
-                        }
-                    } else if (n == 0) {
-                        log_i("[ws_custom]Connection closed by peer");
+                n = recv(client->sock_fd, client->recv_buf + client->recv_buf_len,
+                        WS_RECV_BUF_SIZE - client->recv_buf_len, 0);
+                if (n < 0) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
+                    else {
+                        log_e("[ws_custom]TCP recv error: %d", errno);
                         break;
                     }
+                } else if (n == 0) {
+                    log_i("[ws_custom]Connection closed by peer");
+                    break;
                 }
             }
             

@@ -556,51 +556,57 @@ void log_mqtt(const char* format, ...) {
 }
 //实现一个同步连接mqtt并发送一条信息的函数
 int log_mqtt_send_message_sync(const char* topic, const int progress) {
-    os_mutex_pend(&g_log_mqtt_mutex, 0);
-    
-    // 获取时间戳
+    // 获取时间戳和构建消息在锁外进行，减少锁持有时间
     char time_str[32];
     if (get_system_timestamp(time_str, sizeof(time_str)) != 0) {
         log_i("【MQTT】ota获取时间戳失败\n");
-        os_mutex_post(&g_log_mqtt_mutex);
         return -1;
     }
-    
-    // 组装消息，使用与log_mqtt相同的JSON格式
+
+    // 简化消息格式，去除特殊字符
     char message[128];
-    int msg_len = snprintf(message, sizeof(message), 
-                          "{\"time\":\"%s\",\"sn\":\"%s\",\"msg\":\"🚀🚀🚀 OTA更新进度：%d /100\"}", 
+    int msg_len = snprintf(message, sizeof(message),
+                          "{\"time\":\"%s\",\"sn\":\"%s\",\"msg\":\"OTA更新进度：%d /100\"}",
                           time_str, sn, progress);
-    
+
     if (msg_len < 0 || msg_len >= sizeof(message)) {
         log_i("【MQTT】ota JSON构建失败或截断（长度:%d）\n", msg_len);
-        os_mutex_post(&g_log_mqtt_mutex);
         return -1;
     }
-    
+
     log_i("【MQTT】ota开始同步发送进度: %d\n", progress);
+
+    // 每次未连接时都尝试重连
     if (!log_mqtt_is_connected()) {
-        log_i("【MQTT】ota未连接, 开始重连\n");
+        log_i("【MQTT】ota未连接，尝试重连\n");
+        os_mutex_pend(&g_log_mqtt_mutex, 0);
         int ret = log_mqtt_connect();
+        os_mutex_post(&g_log_mqtt_mutex);
+
         if (ret != 0) {
             log_i("【MQTT】ota重连失败\n");
-            os_mutex_post(&g_log_mqtt_mutex);
             return -1;
         }
+        log_i("【MQTT】ota重连成功，继续发送\n");
     }
-    log_i("【MQTT】ota连接成功, 开始发送进度\n");
+
+    int rc = -1;
+    os_mutex_pend(&g_log_mqtt_mutex, 0);
+
     MQTTMessage mqtt_msg;
-    mqtt_msg.qos = QOS1;
+    mqtt_msg.qos = QOS0; // 降低QoS级别，提高发送成功率
     mqtt_msg.retained = 0;
     mqtt_msg.payload = (void*)message;
     mqtt_msg.payloadlen = strlen(message);
-    int rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
+
+    rc = MQTTPublish(g_mqtt_client, topic, &mqtt_msg);
     if (rc != 0) {
         log_i("【MQTT】ota发送进度失败, error code: %d\n", rc);
-        os_mutex_post(&g_log_mqtt_mutex);
-        return -1;
+        g_mqtt_connected = false; // 标记连接断开
+    } else {
+        log_i("【MQTT】ota发送进度成功\n");
     }
-    log_i("【MQTT】ota发送进度成功\n");
+
     os_mutex_post(&g_log_mqtt_mutex);
     return rc;
 }
