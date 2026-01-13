@@ -11,7 +11,6 @@
 
 /* 本地文件播放控制 */
 static u8 g_play_voice_prompt = 0;          // 本地文件播放中标志
-static char g_music_file[128] = {0};        // 待播放的本地文件名
 typedef int (*music_cbk_t)(void);
 static music_cbk_t g_prompt_cb_priv = NULL; // 播放完成回调
 
@@ -80,7 +79,6 @@ static void set_stream_speaker(void)
     
     // 先关闭本地播放
     lwl_app_audio_stop_playing();
-    g_music_file[0] = 0;
     
     gpio_direction_output(IO_PORTA_00, 0);  // Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  // Enable E speaker
@@ -104,7 +102,7 @@ static void lwl_app_audio_stream_end_cb(void *priv)
 //=================================================================================================
 
 /**
- * @brief 异步播放本地提示音（仅存储文件名，实际播放在loop中执行）
+ * @brief 播放本地提示音文件（同步等待前一个播放完成，然后启动新播放）
  * @param fname 音频文件名
  * @param priv  播放完成时的回调函数
  */
@@ -116,24 +114,9 @@ void lwl_app_audio_play(const char *fname, void *priv)
     }
     
     os_mutex_pend(&g_audio_mutex, 0);
-    log_i("[AUDIO_LOCAL]lwl_app_audio_play: prepare to play %s", fname);
-    memcpy(g_music_file, fname, strlen(fname) + 1);
-    g_prompt_cb_priv = (music_cbk_t)priv;
-    os_mutex_post(&g_audio_mutex);
-}
+    log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s", fname);
 
-/**
- * @brief 音频播放主循环接口（需在主循环中定期调用）
- */
-void lwl_app_audio_play_loop(void)
-{
-    if (g_music_file[0] == 0) {
-        return;
-    }
-    
-    os_mutex_pend(&g_audio_mutex, 0);
-    log_i("[AUDIO_LOCAL]lwl_app_audio_play_loop: play %s", g_music_file);
-
+    // 先停止所有其他播放
     lwl_app_audio_stop_playing();
     lwl_app_audio_stream_stop();
     
@@ -141,15 +124,15 @@ void lwl_app_audio_play_loop(void)
     set_local_speaker();
     int err = app_music_play_local_music_with_callback(
         g_app_ctx->music_player, 
-        g_music_file, 
+        fname, 
         lwl_app_audio_play_cb, 
         NULL
     );
     
     if (!err) {
         g_play_voice_prompt = 1;
+        g_prompt_cb_priv = (music_cbk_t)priv;
     }
-    g_music_file[0] = 0;
     os_mutex_post(&g_audio_mutex);
 }
 
@@ -387,7 +370,6 @@ void lwl_app_audio_init(void)
     g_app_ctx = lwl_app_core_context_get_instance();
     
     g_play_voice_prompt = 0;
-    g_music_file[0] = 0;
     g_prompt_cb_priv = NULL;
     
     g_stream_audio_on = false;

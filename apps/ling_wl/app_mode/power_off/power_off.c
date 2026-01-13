@@ -89,7 +89,6 @@ void app_power_off_mode(void)
 {
     power_off_init();
     while (1) {
-        lwl_app_audio_play_loop();
         power_off_loop();
         if (lwl_app_mode_exitting()) {
             power_off_unint();

@@ -220,7 +220,6 @@ void app_net_connecting_mode(void)
     net_connecting_init();
 
     while (1) {
-        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             net_connecting_unint();
             return;

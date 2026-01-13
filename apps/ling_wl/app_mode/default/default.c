@@ -164,7 +164,6 @@ void app_default_mode(void)
     default_init();
     //mdelay(2000);
     while (1) {
-        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             default_unint();
             return;

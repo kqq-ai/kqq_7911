@@ -181,14 +181,10 @@ static void wss_handle_touch_key_event(bool press_down)
 #endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
-        wss_upload_stop();
-        wss_request_stop();
-        wss_mic_upload_start();
-        play_prompt_sound("t_key.mp3");
         wss_mic_start();
     } else {
-        bool is_long_press = wss_upload_stop(); //正在上传音频，是长按
         wss_request_start();
+        bool is_long_press = wss_upload_stop(); //正在上传音频，是长按
         if (is_long_press) {
             // 长按默认进剧本和多角色模式
             log_i("[wss_application]STATE: long press -> APP_WAIT");
@@ -247,6 +243,15 @@ static void input_event_handler_cb(lwl_event_t *e)
         event.event_type = LWL_EVENT_TYPE_TOUCH_KEY;
         event.data.touch_key_event.is_press_down = (e->touch_key_cmd.touch_key_event_type == 0);
         input_event_queue_push(&event);
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
+            log_i("Touch key pressed down");
+            play_prompt_sound("t_key.mp3");
+            wss_request_stop();
+            wss_upload_stop();
+            wss_mic_upload_start();
+        } else {
+            log_i("Touch key released");
+        }
         break;
         
     case LWL_EVENT_TYPE_LOW_BATTERY:

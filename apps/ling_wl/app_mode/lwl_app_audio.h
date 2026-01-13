@@ -20,23 +20,15 @@ void lwl_app_audio_init(void);
 void lwl_app_audio_uninit(void);
 
 /**
- * @brief 播放本地提示音文件（异步播放）
+ * @brief 播放本地提示音文件
  * @details
- *   将音频文件名存储，在主循环中实际执行播放。
- *   确保先关闭任何正在进行的流式播放，再启动本地文件播放。
- *   会等待上一次播放完成并回调执行完毕。
+ *   同步等待上一个播放完成，然后启动新播放。
+ *   会先关闭任何正在进行的流式播放，再启动本地文件播放。
+ *   播放完成时调用回调函数。
  * @param fname 本地音频文件名
  * @param priv  播放完成时的回调函数指针
  */
 void lwl_app_audio_play(const char *fname, void *priv);
-
-/**
- * @brief 音频播放主循环接口
- * @details
- *   需在应用主循环中定期调用，用于处理本地文件播放的启动。
- *   管理播放器的开启关闭逻辑。
- */
-void lwl_app_audio_play_loop(void);
 
 /**
  * @brief 检查本地文件播放是否正在进行

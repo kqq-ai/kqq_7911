@@ -39,7 +39,6 @@ apps/ling_wl/app_mode/
 └──────────────────┬──────────────────────────────────────┘
                    │
                    ▼
-        lwl_app_audio_play_loop()    ◄─── 每次循环调用
                    │
          ┌─────────┴──────────┬──────────────┐
          │                    │              │
@@ -60,7 +59,7 @@ lwl_app_init()
 lwl_app_audio_init()
     ↓
 [应用运行中]
-    ├─ 本地播放: lwl_app_audio_play() → lwl_app_audio_play_loop() → 回调 → 结束
+    ├─ 本地播放: lwl_app_audio_play() → 回调 → 结束
     ├─ 流式播放: lwl_app_audio_stream_start() → 播放线程 → lwl_app_audio_stream_stop()
     └─ 混合使用: 自动切换，先关闭后开启
     ↓
@@ -112,21 +111,18 @@ void lwl_app_uninit()
 
 ### 主循环集成
 
-在应用主循环中每次都要调用播放循环接口：
+无需在应用主循环中调用额外的音频接口，播放已在 `lwl_app_audio_play()` 中同步完成。
 
 ```c
 void lwl_app_mode_loop()
 {
-    // 调用统一音频管理模块的主循环接口
-    lwl_app_audio_play_loop();  // ◄─── 每次循环调用
-    
     switch(app_curr_mode) {
         // ... 其他模式处理
     }
 }
 ```
 
-**重要：** 必须在每个循环周期调用，以处理本地文件的播放启动。
+**说明：** 播放是同步的，调用 `lwl_app_audio_play()` 后，会等待上一个播放完成再启动新播放。
 
 ---
 
@@ -135,7 +131,7 @@ void lwl_app_mode_loop()
 ### 播放提示音
 
 ```c
-// 方法1：播放文件并在完成时回调
+// 播放文件并在完成时回调
 void my_playback_callback(void) {
     log_i("音频播放完成");
 }
@@ -144,16 +140,16 @@ lwl_app_audio_play("ui/prompt_success.mp3", (void *)my_playback_callback);
 ```
 
 **工作流程：**
-1. `lwl_app_audio_play()` 存储文件名和回调
-2. 等待播放完成
-3. 主循环中 `lwl_app_audio_play_loop()` 启动实际播放
+1. `lwl_app_audio_play()` 同步等待上一个播放完成
+2. 关闭任何正在进行的流式播放
+3. 启动新的本地文件播放
 4. 播放完成时调用回调
 
 **特点：**
-- ✅ 异步播放（不阻塞主线程）
+- ✅ 同步播放（等待上一个完成，保证顺序）
 - ✅ 自动关闭流式播放
 - ✅ 支持完成回调
-- ✅ 重置传感器计时器（防止设备睡眠）
+- ✅ 直接启动（无需主循环驱动）
 
 ### 检查播放状态
 
@@ -302,8 +298,7 @@ static void set_stream_speaker(void)
 
 | API | 说明 |
 |-----|------|
-| `lwl_app_audio_play(fname, priv)` | 播放本地文件 |
-| `lwl_app_audio_play_loop()` | 播放循环（每次循环调用） |
+| `lwl_app_audio_play(fname, priv)` | 播放本地文件（同步等待，直接启动） |
 | `lwl_app_audio_playing()` | 检查本地播放状态 |
 | `lwl_app_audio_stop_playing()` | 停止本地播放 |
 
@@ -348,9 +343,8 @@ os_mutex_post(&g_audio_mutex);
 
 ```c
 // 本地播放
-static u8 g_play_voice_prompt;      // 本地播放中
-static char g_music_file[128];      // 待播放文件
-static music_cbk_t g_prompt_cb_priv; // 完成回调
+static u8 g_play_voice_prompt;      // 本地播放中标志
+static music_cbk_t g_prompt_cb_priv; // 完成回调函数
 
 // 流式播放
 static int g_stream_audio_on;        // 流式启动请求
@@ -362,12 +356,12 @@ static int g_stream_audio_thread_running; // 线程运行
 
 ## 常见问题
 
-### Q1: 为什么主循环中必须调用 `lwl_app_audio_play_loop()`？
+### Q1: lwl_app_audio_play() 是同步的吗？
 
-**A:** 本地文件播放是异步的：
-1. `lwl_app_audio_play()` 只存储文件名和回调
-2. 实际播放在 `lwl_app_audio_play_loop()` 中启动
-3. 需要在每个循环周期检查是否有待播放文件
+**A:** 是的。该函数会：
+1. 同步等待上一个播放完成（每10ms检查一次）
+2. 然后同步启动新播放
+3. 返回后播放已经启动，无需主循环驱动
 
 ### Q2: 本地播放和流式播放能同时进行吗？
 

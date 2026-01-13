@@ -127,7 +127,6 @@ void app_net_connected_mode(void)
     net_connected_init();
 
     while (1) {
-        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             net_connected_unint();
             return;

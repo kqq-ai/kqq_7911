@@ -297,7 +297,6 @@ void app_devices_check_mode(void)
     log_i("Multi-mode system active");
 
     while (1) {
-        lwl_app_audio_play_loop();
         // 主循环延时
         mdelay(100);
 
