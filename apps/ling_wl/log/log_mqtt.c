@@ -175,9 +175,23 @@ int log_mqtt_connect(void) {
     return 0;
 }
 
-/* MQTT重连函数，持续重连直到成功 */
+/* MQTT重连函数，持续重连直到成功
+ * 内部负责获取/刷新 token，并在 token 就绪后再尝试连接。
+ */
 static void log_mqtt_reconnect_until_success(void) {
     while (!log_mqtt_is_connected() && g_monitor_thread_running) {
+        // 确保 token 可用；失败则等待后重试
+        if (g_mqtt_token == NULL) {
+            log_i("【MQTT】开始获取token...\n");
+            g_mqtt_token = get_mqtt_token();
+            if (g_mqtt_token == NULL) {
+                log_i("【MQTT】❌ 获取MQTT token失败，1秒后重试...\n");
+                msleep(1000);
+                continue;
+            }
+            log_i("【MQTT】✓ Token获取成功，已缓存\n");
+        }
+
         log_i("【MQTT】尝试连接......\n");
         int ret = log_mqtt_connect();
         if (ret == 0) {
@@ -376,8 +390,8 @@ static void log_monitor_thread(void* arg) {
     log_i("【MQTT】日志上传线程启动\n");
 
     g_monitor_thread_running = true;
-    
-    // 初次连接，失败则持续重连
+
+    // 初次连接，失败则持续重连（内部包含获取 token）
     log_mqtt_reconnect_until_success();
 
     last_upload_time = timer_get_ms();  // 初始化上传时间
@@ -682,18 +696,7 @@ int log_mqtt_start(void) {
     
     // 获取SN
     get_SN(sn);
-    // 【优化】在初始化时获取token，失败则每秒重试直到成功
-    log_i("【MQTT】开始获取token...\n");
-    while (g_mqtt_token == NULL) {
-        g_mqtt_token = get_mqtt_token();
-        if (g_mqtt_token == NULL) {
-            log_i("【MQTT】❌ 获取MQTT token失败，1秒后重试...\n");
-            msleep(1000);  // 等待1秒后重试
-        } else {
-            log_i("【MQTT】✓ Token获取成功，已缓存\n");
-            break;
-        }
-    }  
+
     // 初始化队列用于缓存MQTT日志消息
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
     // 设置启动标志
