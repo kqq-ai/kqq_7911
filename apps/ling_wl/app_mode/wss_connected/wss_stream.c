@@ -10,6 +10,7 @@ static uint8_t g_prebuffer[PREBUFFER_SIZE];
 static uint32_t g_prebuffer_write_pos = 0; /* 循环队列写指针 */
 static uint32_t g_prebuffer_read_pos = 0;  /* 循环队列读指针 */
 static bool g_stream_end = false; // 音频流结束标志
+static uint32_t g_stream_time = 0;
 
 /**
  * @brief 计算循环队列中可读取的数据长度
@@ -128,12 +129,18 @@ void wss_stream_start() {
     g_stream_end = false;
     g_prebuffer_write_pos = 0;
     g_prebuffer_read_pos = 0;
+    g_stream_time = timer_get_ms();
     odmp_register_audio_data_cbk(wss_stream_stream_write); 
     os_mutex_post(&g_stream_mutex);
 }
 
 void wss_stream_stop() {
     log_i("[STREAM]wss_stream_stop");
+    if (timer_get_ms() - g_stream_time < 200) {
+        log_i("[STREAM]stream duration too short, ignoring stop, restarting stream");
+        wss_stream_start();
+        return;
+    }
     os_mutex_pend(&g_stream_mutex, 0);
     odmp_register_audio_data_cbk(NULL); 
     if (g_prebuffer_write_pos > 0) {
