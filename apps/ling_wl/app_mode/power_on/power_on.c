@@ -64,7 +64,7 @@ static int power_on_init(void)
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         //增加音效提示
         play_system_music("reset_wifi.mp3");
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         mdelay(3000);
         system_reset(); //restart
         return 0;
@@ -135,7 +135,7 @@ void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             power_on_unint();
             return;

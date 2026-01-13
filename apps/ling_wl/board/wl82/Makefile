@@ -276,6 +276,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/log/log_mqtt.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_core.c \
 	../../../../apps/ling_wl/app_mode/lwl_app_framework.c \
+	../../../../apps/ling_wl/app_mode/lwl_app_audio.c \
 	../../../../apps/ling_wl/app_mode/lwl_eend_device.c \
 	../../../../apps/ling_wl/app_mode/default/default.c \
 	../../../../apps/ling_wl/app_mode/lwl_peri_dev.c \

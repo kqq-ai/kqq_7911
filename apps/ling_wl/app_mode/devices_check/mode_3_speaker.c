@@ -44,7 +44,7 @@ void process_mode_3(void)
             log_i("MODE 3: Starting loop audio playback");
             
             // 播放循环测试音频，使用回调
-            lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_1hz5s.mp3", mode3_audio_callback);
+            lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"test_1hz5s.mp3", mode3_audio_callback);
             g_audio_playing = 1;
             last_play_time = current_time;
             log_i("MODE 3: Loop audio started successfully");
@@ -58,7 +58,7 @@ void mode3_init()
     g_mode3_playing_prompt = 1;  // 标记正在播放提示音
     log_i("MODE 3: Audio loop mode started, C speaker enabled");
     // 播放进入模式3的音频，使用回调    
-    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_loud.mp3", mode3_audio_callback);
+    lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"test_loud.mp3", mode3_audio_callback);
     log_i("Playing test_loud.mp3 for MODE 3 with callback");
 }
 

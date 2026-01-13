@@ -3,6 +3,7 @@
 #include "cpu.h"
 #include "log.h"
 #include "app_mode/lwl_app_core.h"
+#include "app_mode/lwl_app_audio.h"
 
 #include "power_on/power_on.h"
 #include "app_core.h"
@@ -16,11 +17,6 @@ static u8 app_next_mode = 0;
 static u8 mode_exitting = 0;
 static OS_MUTEX g_mode_mutex;
 
-static bool play_voice_prompt = 0;
-static char music_file[128];
-typedef int (*music_cbk_t)(void);
-music_cbk_t prompt_cb_priv = NULL;
-
 // 获取当前模式状态
 u8 lwl_app_mode_get_current_mode()
 {
@@ -29,80 +25,6 @@ u8 lwl_app_mode_get_current_mode()
     mode = app_curr_mode;
     os_mutex_post(&g_mode_mutex);
     return mode;
-}
-
-static void lwl_app_mode_play_cb(void *priv)
-{
-    os_mutex_pend(&g_mode_mutex, 0);
-    g_sensor_reset_alive_timer();
-    play_voice_prompt = 0;
-    if (prompt_cb_priv) {
-        prompt_cb_priv();
-    }
-    gpio_direction_output(IO_PORTA_00, 0);  //Disable C speaker
-    os_mutex_post(&g_mode_mutex);
-}
-
-/**
- * @brief 异步播放提示音（仅存储文件名，实际播放在loop中执行）
- * @param fname 音频文件名
- */
-void lwl_app_mode_play(const char *fname, void *priv) 
-{
-    while (play_voice_prompt) { // 等待播放结束并回调完成
-        msleep(10);
-    }
-    os_mutex_pend(&g_mode_mutex, 0);
-    log_i("lwl_app_mode_play: prepare to play %s", fname);
-    memcpy(music_file, fname, strlen(fname) + 1);
-    prompt_cb_priv = priv;
-    os_mutex_post(&g_mode_mutex);
-}
-
-/**
- * @brief 音频播放主循环接口（需在主循环中定期调用）
- */
-void lwl_app_mode_play_loop(void)
-{
-    if (music_file[0] == 0 || play_voice_prompt) {
-        return;
-    }
-    
-    os_mutex_pend(&g_mode_mutex, 0);
-    log_i("lwl_app_mode_play_loop: play %s", music_file);
-    g_sensor_reset_alive_timer();
-    
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    gpio_direction_output(IO_PORTA_00, 1);  //Enable C speaker
-    set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
-    int err = app_music_play_local_music_with_callback(context->music_player, music_file, lwl_app_mode_play_cb, NULL);
-    if (!err) {
-        play_voice_prompt = 1;
-    }
-    music_file[0] = 0;
-    os_mutex_post(&g_mode_mutex);
-}
-
-bool lwl_app_mode_playing()
-{
-    bool rst;
-    os_mutex_pend(&g_mode_mutex, 0);
-    rst = play_voice_prompt;
-    os_mutex_post(&g_mode_mutex);
-    return rst;
-} 
-
-void lwl_app_mode_stop_playing()
-{
-    os_mutex_pend(&g_mode_mutex, 0);
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    if (play_voice_prompt) {
-        log_i("music_play_stop");
-        app_music_play_stop(context->music_player);
-        play_voice_prompt = 0;
-    }
-    music_file[0] = 0;
-    os_mutex_post(&g_mode_mutex);
 }
 
 //*----------------------------------------------------------------------------*/
@@ -230,7 +152,9 @@ void lwl_app_init()
     os_mutex_create(&g_mode_mutex);
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     app_curr_mode = APP_POWER_ON_MODE;
-    play_voice_prompt = 0;
+    
+    // 初始化统一音频管理模块
+    lwl_app_audio_init();
 }
 
 void lwl_app_mode_loop()
@@ -278,9 +202,10 @@ void lwl_app_mode_loop()
     }
 }
 
-// 在释放时删除互斥锁
+// 在释放时删除互斥锁和反初始化音频模块
 void lwl_app_uninit()
 {
+    lwl_app_audio_uninit();
     os_mutex_del(&g_mode_mutex, 1);
 }
 

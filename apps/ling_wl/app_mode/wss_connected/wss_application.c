@@ -184,7 +184,6 @@ static void wss_handle_touch_key_event(bool press_down)
         wss_upload_stop();
         wss_request_stop();
         wss_mic_upload_start();
-        lwl_app_mode_stop_playing();
         play_prompt_sound("t_key.mp3");
         wss_mic_start();
     } else {
@@ -277,7 +276,7 @@ static void wss_app_mode_play_cb(void *priv)
 
 void play_prompt(const char *fname) 
 {
-    lwl_app_mode_play(fname, wss_app_mode_play_cb);
+    lwl_app_audio_play(fname, wss_app_mode_play_cb);
     if (g_device_state == APP_AUDIO) {
         wss_ble_audio_stop();
     }
@@ -515,7 +514,7 @@ bool wss_application_loop()
     }
 
     wss_request_loop();
-    if (lwl_app_mode_playing() || g_on_touch_key) {
+    if (lwl_app_audio_playing() || g_on_touch_key) {
         return false;
     }
 

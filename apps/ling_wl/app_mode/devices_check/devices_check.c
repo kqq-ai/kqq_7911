@@ -124,8 +124,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
         log_i("Current mode: %s (%d)", mode_names[g_current_mode], g_current_mode);
         log_i("key type : %d", e->key_cmd.key_event_type);
         
-
-        lwl_app_mode_stop_playing();
         
         // 按键切换模式逻辑
         work_mode_e next_mode;
@@ -199,7 +197,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {
-                lwl_app_mode_stop_playing();
                 process_mode_1_touch_key(e->touch_key_cmd.touch_key_event_type);
             }
         } else {
@@ -300,7 +297,7 @@ void app_devices_check_mode(void)
     log_i("Multi-mode system active");
 
     while (1) {
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         // 主循环延时
         mdelay(100);
 

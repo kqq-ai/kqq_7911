@@ -87,8 +87,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
             reset_ble_net();
-            lwl_app_mode_stop_playing();
-            lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH "t_key.mp3", start_ble_net);
+            lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH "t_key.mp3", start_ble_net);
         } else {
             log_i("Touch key released");
         }
@@ -117,7 +116,7 @@ static int net_connecting_init(void)
 
     wifi_and_network_on();
     
-    while (lwl_app_mode_playing()) {
+    while (lwl_app_audio_playing()) {
         msleep(10);
         if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == wifi_get_sta_connect_state()) {
             break;
@@ -221,7 +220,7 @@ void app_net_connecting_mode(void)
     net_connecting_init();
 
     while (1) {
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             net_connecting_unint();
             return;

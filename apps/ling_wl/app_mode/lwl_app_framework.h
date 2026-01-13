@@ -3,15 +3,7 @@
 
 #include "cpu.h"
 #include "app_core.h"
-
-#define play_system_music(x) lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH x, NULL);
-void lwl_app_mode_play(const char *fname, void *priv);
-bool lwl_app_mode_playing();
-/**
- * @brief Asynchronous audio playback loop (should be called periodically from main loop)
- * @note This function handles actual playback of audio files queued by lwl_app_mode_play()
- */
-void lwl_app_mode_play_loop(void);
+#include "lwl_app_audio.h"
 
 
 /**

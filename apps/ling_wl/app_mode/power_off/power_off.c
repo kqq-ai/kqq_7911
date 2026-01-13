@@ -78,7 +78,7 @@ void power_off_loop()
             set_led_bye();
         }
     }
-    if (!lwl_app_mode_playing()) {
+    if (!lwl_app_audio_playing()) {
         power_set_soft_poweroff();
     } else if (timer_get_ms() - init_time >= WAIT_FOR_POWER_OFF_TIME_MS) {
         power_set_soft_poweroff();
@@ -89,7 +89,7 @@ void app_power_off_mode(void)
 {
     power_off_init();
     while (1) {
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         power_off_loop();
         if (lwl_app_mode_exitting()) {
             power_off_unint();

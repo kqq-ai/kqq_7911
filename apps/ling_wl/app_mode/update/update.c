@@ -44,7 +44,7 @@ void update_loop()
         play_system_music("NetCfgFail.mp3");
         return;
     }
-    if (timer_get_ms() - init_time < 3000 || lwl_app_mode_playing()) {
+    if (timer_get_ms() - init_time < 3000 || lwl_app_audio_playing()) {
         return;
     }
     if (progress == -1) {
@@ -73,7 +73,7 @@ void app_update_mode(void)
     update_init();
 
     while (1) {
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             update_unint();
             return;

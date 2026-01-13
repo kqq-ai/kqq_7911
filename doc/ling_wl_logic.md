@@ -27,7 +27,7 @@
 
 ## 4. 模式状态机（`apps/ling_wl/app_mode/lwl_app_framework.*`）
 - `lwl_app_task` 驱动以下模式，初始状态为 `APP_POWER_ON_MODE`。`lwl_app_mode_switch_to()` 负责在互斥保护下更新 `app_next_mode`，由 `lwl_app_mode_exit_ok()` 在当前模式收尾后真正切换。
-- `lwl_app_mode_play()` 确保语音提示串行播放，并在播放期间拉高扬声器供电引脚。
+- `lwl_app_audio_play()` 确保语音提示串行播放，并在播放期间拉高扬声器供电引脚。
 
 | 模式枚举 | 主要文件 | 进入条件/入口 | 核心职责 | 退出条件 |
 | --- | --- | --- | --- | --- |
@@ -73,7 +73,7 @@
 - 入口调试：可在 `app_main()` 的 `start_app()` 之前添加日志或自定义 `intent`，但需保证 `app_cookie` 注册名一致。
 - 模式扩展：在 `app_mode/lwl_app_framework.c` 中添加新的枚举及 `case`，并在对应目录实现初始化/循环/退出模式，注意在 `lwl_app_mode_switch_check/exit_check` 中维护进入/退出条件。
 - 事件使用：新增模块需调用 `lwl_event_handler_add()` 注册回调，并通过 `lwl_event_notify()` 投递事件，避免在中断中直接访问共享状态。
-- 音频提示：所有提示音放置在 `CONFIG_CP_VOICE_FILE_PATH` 指定目录，调用 `play_system_music()`/`lwl_app_mode_play()` 自动处理音量与扬声器控制。
+- 音频提示：所有提示音放置在 `CONFIG_CP_VOICE_FILE_PATH` 指定目录，调用 `play_system_music()`/`lwl_app_audio_play()` 自动处理音量与扬声器控制。
 - OTA/云端：`check_ota_info()` 依据 LittleFS 中的配置与服务器握手结果决定是否进入 `APP_UPDATE_MODE`，确保远程版本信息写入 `context`。
 - UART 协议：与 7016 协处理器的协议在 `protocol/cp/c_uart_p.*`，扩展按键/LED/测试项时需同步修改协议栈及事件回调。
 

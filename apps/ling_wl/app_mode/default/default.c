@@ -139,11 +139,9 @@ void app_default_loop()
     u16 voltage = get_vbat_level();
     if (!wait_for_button) {
         if (charge_in || voltage > LOW_BATT_VOLT) {
-            lwl_app_mode_stop_playing();
             play_system_music("poweron.mp3");
             lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
         } else {
-            lwl_app_mode_stop_playing();
             play_system_music("LowBattery.mp3");
         }
         wait_for_button = true;
@@ -166,7 +164,7 @@ void app_default_mode(void)
     default_init();
     //mdelay(2000);
     while (1) {
-        lwl_app_mode_play_loop();
+        lwl_app_audio_play_loop();
         if (lwl_app_mode_exitting()) {
             default_unint();
             return;

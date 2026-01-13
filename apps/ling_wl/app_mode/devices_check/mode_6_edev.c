@@ -104,7 +104,7 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针
         g_mode6_playing_prompt = 1;
-        lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"SwFailed.mp3", mode6_audio_callback);
+        lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"SwFailed.mp3", mode6_audio_callback);
     }
 }
 static void switch_to_e_target(lwl_eend_dev_t* pdev)
@@ -173,7 +173,7 @@ void mode6_init()
     // msleep(2000); // 等待7016开机完成，但实际执行到lwl_app_mode_play会等待音频播放结束，超过2s
     g_mode6_state = MODE6_PLAY_PROMPT;
     g_mode6_e_index = 0;
-    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3", mode6_audio_callback);
+    lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3", mode6_audio_callback);
     g_mode6_action_in_progress = 1;
     g_mode6_playing_prompt = 1;
     log_i("MODE 6: 串行状态机启动");
