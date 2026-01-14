@@ -225,7 +225,7 @@ void log_mqtt_disconnect(void) {
     // 重置连接状态标志
     g_mqtt_connected = false;
     
-    log_i("MQTT connection disconnected\n");
+    log_i("MQTT disconnected\n");
 }
 
 /* 通过MQTT发送消息 */
