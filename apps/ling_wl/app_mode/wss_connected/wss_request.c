@@ -99,7 +99,7 @@ void turn_off_Pi() {
 
 static void e_turn_on_cb(bdo_code_e code, void *priv)
 {
-    // if (g_mode_state != STATE_TTS_BIND) return;
+    u32 callback_start_time = timer_get_ms();
     os_mutex_pend(&g_request_mutex, 0);
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     
@@ -143,6 +143,12 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         }
     }
     os_mutex_post(&g_request_mutex);
+    
+    u32 callback_end_time = timer_get_ms();
+    u32 callback_duration = callback_end_time - callback_start_time;
+    if (callback_duration > 30) {
+        log_w("[e_turn_on_cb] Callback took %u ms (code: %d)", callback_duration, code);
+    }
 }
 
 static uint32_t g_stream_time = 0;
@@ -170,6 +176,7 @@ void turn_on_Pi(const char *pdev_sn) {
 //=================================================================================================
 static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
+    u32 callback_start_time = timer_get_ms();
     os_mutex_pend(&g_request_mutex, 0);
     switch (type) {
     case OR_TTS_BIND: {
@@ -196,6 +203,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 
         wait_time = pkg->tts_bind.wait_time;
         wss_request_update_state(STATE_TTS_BIND, "receive TTS_BIND");
+        wss_upload_stop();
     }   break;
     case OR_AUDIO_STATUS:
         log_i("AUDIO_STATUS\n");
@@ -233,7 +241,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
             if (pkg->audio_status.event == OASE_START) {
                 log_i("AUDIO_STATUS: SCRIPT START\n");
                 g_mode_script = true;
-                wss_mic_stop();
+                wss_upload_stop();
                 play_prompt_sound("script_st.mp3");
                 wait_time = 0;
                 wss_request_update_state(STATE_WAITING, "receive SCRIPT START");
@@ -257,6 +265,12 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         break;
     }
     os_mutex_post(&g_request_mutex);
+    
+    u32 callback_end_time = timer_get_ms();
+    u32 callback_duration = callback_end_time - callback_start_time;
+    if (callback_duration > 150) {
+        log_w("[wss_rsp_cbk] Callback took %u ms (type: %d)", callback_duration, type);
+    }
 }
 
 //=================================================================================================

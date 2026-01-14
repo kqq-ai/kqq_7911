@@ -2,6 +2,7 @@
 #define __LWL_APP_AUDIO_H__
 
 #include "cpu.h"
+//播放音频大概需要等待100ms左右
 #define play_system_music(x) lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH x, NULL);
 
 /**

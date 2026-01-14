@@ -8,6 +8,7 @@
 #include "gpio.h"
 #include "os/os_api.h"
 #include "util/threadpool_tasks.h"
+#include "LED/LED.h"
 
 /* 本地文件播放控制 */
 static u8 g_play_voice_prompt = 0;          // 本地文件播放中标志
@@ -32,10 +33,9 @@ extern uint32_t wss_stream_get_data(uint8_t *buffer, uint32_t max_len);
 extern bool wss_stream_on(void);
 
 /* LED控制 */
-extern void set_rgb_ON(int color, int num);
-extern void set_rgb_OFF(int color, int num);
+static void set_led_tts_on(void)    { set_rgb_ON(COLOR_BLUE,3); }
+static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
 extern void bdo_enable(void);
-#define COLOR_BLUE 3
 
 //=================================================================================================
 // 本地文件播放回调
@@ -94,7 +94,7 @@ static void lwl_app_audio_stream_end_cb(void *priv)
     log_i("[AUDIO_STREAM]stream playback end callback");
     g_stream_audio_playing = false;
     g_stream_audio_on = false;
-    set_rgb_OFF(COLOR_BLUE, 3);
+    set_led_tts_off();
 }
 
 //=================================================================================================
@@ -108,11 +108,6 @@ static void lwl_app_audio_stream_end_cb(void *priv)
  */
 void lwl_app_audio_play(const char *fname, void *priv)
 {
-    // 等待上一次播放结束并回调完成
-    while (g_play_voice_prompt) {
-        msleep(10);
-    }
-    
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s", fname);
 
@@ -212,7 +207,7 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
                     NULL
                 );
                 g_stream_audio_on = true;
-                set_rgb_ON(COLOR_BLUE, 3);
+                set_led_tts_on();
                 log_i("[AUDIO_STREAM]playback started");
             }
             
@@ -257,7 +252,7 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
         g_stream_audio_on = false;
         app_music_play_stop(g_app_ctx->music_player);
         g_stream_audio_playing = false;
-        set_rgb_OFF(COLOR_BLUE, 3);
+        set_led_tts_off();
         log_i("[AUDIO_STREAM]audio playback stopped");
     }
     g_stream_audio_thread_running = false;
@@ -296,7 +291,7 @@ void lwl_app_audio_stream_stop(void)
         g_stream_audio_on = false;
         app_music_play_stop(g_app_ctx->music_player);
         g_stream_audio_playing = false;
-        set_rgb_OFF(COLOR_BLUE, 3);
+        set_led_tts_off();
         log_i("[AUDIO_STREAM]audio playback stopped");
     }
     os_mutex_post(&g_audio_mutex);

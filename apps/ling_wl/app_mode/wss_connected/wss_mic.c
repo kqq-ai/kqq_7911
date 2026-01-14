@@ -322,7 +322,6 @@ bool wss_upload_stop() {
     os_mutex_pend(&g_mic_mutex, 0);
     bool uploading = (g_recording_uploading == true);
     recorder_data_upstream(NULL);
-    wss_mic_stop();
     g_recording = false;
     os_mutex_post(&g_mic_mutex);
     // 等待上传完成，打印等待时长
@@ -341,6 +340,7 @@ void wss_mic_init()
     if (!os_mutex_valid(&g_mic_mutex)) {
         os_mutex_create(&g_mic_mutex);
     }
+    os_mutex_pend(&g_mic_mutex, 0);
     my_blocking_queue_init_static(&g_asr_data_queue, g_asr_data_queue_buffer, sizeof(AsrData), MY_ASR_DATA_QUEUE_CAPACITY);
     my_ring_buffer_init_static(&g_asr_ringbuffer, g_asr_ringbuffer_buffer, sizeof(AsrData), MY_ASR_RING_BUFFER_CAPACITY);
 
@@ -352,13 +352,15 @@ void wss_mic_init()
     wss_mic_start(); // 开启录音
 
     g_recording = false;
+    os_mutex_post(&g_mic_mutex);
 }
 
 void wss_mic_uninit()
 {
     log_i("[WSS_MIC]Uninit WSS wss_mic\n");
     os_mutex_pend(&g_mic_mutex, 0);
-    
+
+    wss_mic_stop();
     /* 取消VAD回调 */
     recorder_set_vad_cbk(g_app_ctx->recorder, NULL, NULL);
     // g_recording_vad = false;

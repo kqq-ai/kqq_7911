@@ -133,7 +133,6 @@ void wss_application_start_mic()
     log_i("[wss_application]wss_application_start_mic g_device_state: %d", g_device_state);
     os_mutex_pend(&g_wss_app_mutex, 0);
     g_mic_on = true;
-    wss_mic_start();
     wss_vad_upload_start(NO_REQ_TIMEOUT_MS); // 开始录音
     os_mutex_post(&g_wss_app_mutex);
 }
@@ -181,7 +180,6 @@ static void wss_handle_touch_key_event(bool press_down)
 #endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
-        wss_mic_start();
     } else {
         wss_request_start();
         bool is_long_press = wss_upload_stop(); //正在上传音频，是长按
@@ -195,7 +193,7 @@ static void wss_handle_touch_key_event(bool press_down)
         } else {
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
-                wss_mic_stop();
+                wss_upload_stop();
                 log_i("[wss_application]STATE: APP_VAD -> APP_WAIT");
                 log_mqtt("🔄🔄🔄 短按触摸键，打断/切换对话状态");
                 g_device_state = APP_WAIT;
@@ -229,6 +227,7 @@ static void wss_handle_touch_key_release(void)
 // 事件回调：仅记录事件到队列，避免在回调中调用加锁函数
 static void input_event_handler_cb(lwl_event_t *e)
 {
+    u32 callback_start_time = timer_get_ms();
     input_event_t event = {0};
     
     switch (e->event_type) {
@@ -245,8 +244,8 @@ static void input_event_handler_cb(lwl_event_t *e)
         input_event_queue_push(&event);
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
-            play_prompt_sound("t_key.mp3");
             wss_request_stop();
+            play_prompt_sound("t_key.mp3");
             wss_upload_stop();
             wss_mic_upload_start();
         } else {
@@ -264,24 +263,20 @@ static void input_event_handler_cb(lwl_event_t *e)
     default:
         break;
     }
+    
+    u32 callback_end_time = timer_get_ms();
+    u32 callback_duration = callback_end_time - callback_start_time;
+    if (callback_duration > 100) {
+        log_w("[input_event_handler_cb] Callback took %u ms (event_type: %d)", callback_duration, e->event_type);
+    }
 }
 
 //=================================================================================================
 // 播放提示音相关
 //=================================================================================================
-static void wss_app_mode_play_cb(void *priv)
-{
-    log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
-    if (g_on_touch_key) {
-        wss_mic_start();
-    } else if (g_device_state == APP_WAIT) {
-        wss_mic_start();
-    }
-}
-
 void play_prompt(const char *fname) 
 {
-    lwl_app_audio_play(fname, wss_app_mode_play_cb);
+    lwl_app_audio_play(fname, NULL);
     if (g_device_state == APP_AUDIO) {
         wss_ble_audio_stop();
     }
@@ -529,7 +524,6 @@ bool wss_application_loop()
         if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_AUDIO");
             g_device_state = APP_AUDIO;
-            wss_upload_stop();
         } else if (g_mic_on && wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_IDLE -> APP_VAD");
             g_device_state = APP_VAD;
@@ -571,11 +565,11 @@ bool wss_application_loop()
             log_i("[wss_application]STATE: APP_VAD -> APP_AUDIO");
             g_device_state = APP_AUDIO;
             g_mic_on = !multi_play_mode; // 自由模式关闭麦克风
-            wss_upload_stop();
         }
         if (!wss_device_is_calling()) {
             log_i("[wss_application]STATE: APP_VAD -> APP_IDLE");
             g_device_state = APP_IDLE;
+            wss_upload_stop();
         }
         break;
 
@@ -584,7 +578,6 @@ bool wss_application_loop()
         if (wss_request_is_playing()) {
             log_i("[wss_application]STATE: APP_WAIT -> APP_AUDIO");
             g_device_state = APP_AUDIO;
-            wss_upload_stop();
         } else if (wss_request_is_busy()) {
             // 继续等待
         } else if (g_curr_time - last_req_time >= DEV_CALL_TIMEOUT_MS) {
