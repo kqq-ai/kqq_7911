@@ -826,7 +826,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
     odmp_package_t pkg;
     memset(&pkg, 0, sizeof(odmp_package_t));
 
-    const cJSON *nroot = cjson_parse(buf);
+    const cJSON *nroot = cjson_parse_len(buf, len);
     if (nroot == NULL) {
         goto error_ret;
     }

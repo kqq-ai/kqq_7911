@@ -62,7 +62,7 @@ static int wss_connected_unint(void)
 void app_wss_connected_mode(void)
 {
     wss_connected_init();//application init 和blk RSSI测距 
-    u32 g_heat_timer = 0;
+    // u32 g_heat_timer = 0;
     
     while (1) {
         lwl_app_mode_play_loop();
@@ -72,10 +72,10 @@ void app_wss_connected_mode(void)
             return;
         }
         mdelay(10);
-        if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
-            dump_all_eend_info();
-            g_heat_timer = timer_get_ms();
-        }
+        // if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
+        //     dump_all_eend_info();
+        //     g_heat_timer = timer_get_ms();
+        // }
         // 应用代码
         if (wss_application_loop()) {
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {

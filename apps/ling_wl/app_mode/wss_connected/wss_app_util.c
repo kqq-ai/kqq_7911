@@ -4,6 +4,7 @@
 #include "os/os_api.h"
 
 #include "protocol/odm/odmp.h"
+#include "protocol/odm/odm_secure.h"
 #include "app_mode/lwl_app_core.h"
 #include "wss/wss_client.h"
 #include "wss/wss_client_custom.h"
@@ -30,6 +31,19 @@ static OS_MUTEX g_wss_mutex;
 static char* target_sn_set[MAX_TARGET_SN_SET] = {0};
 static int target_sn_count = 0;
 static u32 wss_send_time = 0;
+
+static void wss_dump_lwip_tcp_config_once(void)
+{
+    static u8 printed = 0;
+    if (printed) {
+        return;
+    }
+    printed = 1;
+    log_i("[lwip]TCP_SND_BUF=%u TCP_SND_QUEUELEN=%u TCP_WND=%u",
+          (unsigned int)TCP_SND_BUF,
+          (unsigned int)TCP_SND_QUEUELEN,
+          (unsigned int)TCP_WND);
+}
 
 // 添加SN到集合
 void add_target_sn(const char* sn) {
@@ -105,6 +119,22 @@ static void wss_mark_exception(const char *reason)
     g_exception_exit = true;
 }
 
+void wss_note_disconnect_reason(const char *reason)
+{
+    // 这里用同一套异常标志，确保上层能看到准确原因
+    wss_mark_exception(reason ? reason : "disconnect");
+}
+
+void wss_exception_exit()
+{
+    wss_mark_exception("generic");
+}
+
+const char *wss_get_last_disconnect_reason(void)
+{
+    return g_last_disconnect_reason;
+}
+
 bool wss_check_exit(void)
 {
     if (g_exception_exit) {
@@ -147,6 +177,7 @@ static void wss_custom_recv_callback(u8 *buf, u32 len, u8 is_text)
 static void wss_custom_disconnect_callback(const char *reason)
 {
     log_i("[wss_client]websocket exit notify: %s", reason ? reason : "unknown");
+    wss_note_disconnect_reason(reason);
     odmp_disconnect_handler();
 }
 
@@ -155,6 +186,7 @@ bool wss_connect(void) {
         os_mutex_create(&g_wss_mutex);
     }
     os_mutex_pend(&g_wss_mutex, 0);
+    wss_dump_lwip_tcp_config_once();
 
     log_i("[wss_app_util]wss_connect start (using custom WebSocket implementation)");
     
@@ -387,13 +419,12 @@ int send_bin_data(uint8_t *data, uint32_t len)
         os_mutex_post(&g_wss_mutex);
         return -1;
     }
-
     // 发送二进制数据
     int ret = ws_client_send_binary(g_ws_client_custom, data, len);
     wss_send_time = timer_get_ms();
     if (ret < 0) {
         // 当队列满时，丢弃也会返回-1，所以不处理
-        log_e("[wss_app_util]Error %s %d. len=%u ret=%d", __FILE__, __LINE__, len, ret);
+        // log_e("[wss_app_util]Error %s %d. len=%u ret=%d", __FILE__, __LINE__, len, ret);
         // ws_client_disconnect(g_ws_client_custom);
         // ws_client_destroy(g_ws_client_custom);
         // g_ws_client_custom = NULL;
@@ -445,7 +476,9 @@ int send_ping()
     free(send_data);
     
     // 可选：同时发送WebSocket协议层的Ping帧
-    // ws_client_send_ping(g_ws_client_custom);
+    // 公网/域名/WSS 场景下，中间层（NAT/CDN/反向代理）可能会对“长时间无 WebSocket control frame”更敏感
+    // 同时发送协议层 Ping 帧可显著降低 idle 被掐导致的 1006 unexpected EOF
+    ws_client_send_ping(g_ws_client_custom);
     
     os_mutex_post(&g_wss_mutex);
     return 0;

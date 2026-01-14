@@ -17,6 +17,35 @@ const cJSON *cjson_parse(u8 *buf)
     return nroot;
 }
 
+// WebSocket payload 不保证以 '\0' 结尾：必须按长度解析
+const cJSON *cjson_parse_len(const u8 *buf, u32 len)
+{
+    if (buf == NULL || len == 0) {
+        return NULL;
+    }
+
+    char *tmp = (char *)malloc(len + 1);
+    if (!tmp) {
+        log_i("INFO: cjson_parse_len malloc failed, len=%u", (unsigned)len);
+        return NULL;
+    }
+    memcpy(tmp, buf, len);
+    tmp[len] = '\0';
+
+    const cJSON *nroot = cJSON_Parse(tmp);
+    if (nroot == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL) {
+            log_i("INFO: failed to analysis JSON string at position %ld", (long)((const u8 *)error_ptr - (const u8 *)tmp));
+        } else {
+            log_i("INFO: failed to analysis JSON string, unknown reason");
+        }
+    }
+
+    free(tmp);
+    return nroot;
+}
+
 cJSON *cjson_get_object(cJSON *object, const char *string)
 {
     const cJSON *nnode = cJSON_GetObjectItem(object, string);
