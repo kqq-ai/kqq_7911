@@ -1083,6 +1083,9 @@ static void ws_recv_thread(void *param)
     bool logged_read_want_write = false;
     bool logged_write_want_read = false;
 
+    // P3: SSL场景下强制监听写事件（避免TLS read->WANT_WRITE 卡住）
+    bool logged_ssl_watch_write = false;
+
     log_i("[ws_custom]IO thread started (Non-blocking)");
 
     while (client->thread_running && (client->state == WS_STATE_CONNECTED || client->state == WS_STATE_CLOSING)) {
@@ -1100,9 +1103,15 @@ static void ws_recv_thread(void *param)
         os_mutex_pend(&client->mutex, 0);
         bool has_data_to_send = (rb_available(&client->send_rb) > 0);
         os_mutex_post(&client->mutex);
-        
-        if (has_data_to_send) {
+
+        // P3: SSL/TLS 读写耦合：即使应用层没有待发数据，TLS层也可能需要写才能继续读。
+        // 因此 use_ssl 场景下强制监听 write_fds，避免 WANT_WRITE 卡死导致被对端/链路踢掉。
+        if (client->use_ssl || has_data_to_send) {
             FD_SET(fd, &write_fds);
+            if (client->use_ssl && !logged_ssl_watch_write) {
+                log_mqtt("【debug】[ws_custom]select watch_write forced (ssl), fd=%d", fd);
+                logged_ssl_watch_write = true;
+            }
         }
         
         struct timeval tv;
