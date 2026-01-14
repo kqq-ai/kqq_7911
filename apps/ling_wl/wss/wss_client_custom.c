@@ -18,6 +18,7 @@
 #include "web_socket/websocket_sha_1.h"
 // 注意：不包含 websocket_base64.h，因为我们自己实现了简单的base64编码
 // #include "web_socket/websocket_base64.h"
+#include "log/log_mqtt.h"
 #include "log.h"
 #include <string.h>
 #include <stdlib.h>
@@ -1297,32 +1298,44 @@ static void ws_recv_thread(void *param)
     
     log_i("[ws_custom]IO thread exited");
 thread_exit:
+    log_mqtt("【debug】[ws_custom]ws_recv_thread: thread_exit begin, state=%d, fd=%d, use_ssl=%d, exit_reason=%s",
+          client ? (int)client->state : -1,
+          client ? client->sock_fd : -1,
+          client ? (int)client->use_ssl : 0,
+          exit_reason);
     free(frame_buf);
     free(resp_buf);
-    
-    if (client->disconnect_cb) {
-        client->disconnect_cb(exit_reason);
-    }
 
     client->thread_running = false;
 
     // 统一在 IO 线程退出时做清理，避免外部 kill 导致 socket 直接被硬断（服务端常见 1006 unexpected EOF）
     os_mutex_pend(&client->mutex, 0);
-    if (client->state != WS_STATE_DISCONNECTED) {
-        if (client->sock_fd >= 0) {
-            if (client->use_ssl) {
-                (void)mbedtls_ssl_close_notify(&client->ssl);
-                mbedtls_ssl_free(&client->ssl);
-                mbedtls_ssl_config_free(&client->ssl_conf);
-                mbedtls_ctr_drbg_free(&client->ctr_drbg);
-                mbedtls_entropy_free(&client->entropy);
-            }
-            close(client->sock_fd);
-            client->sock_fd = -1;
+    log_mqtt("【debug】[ws_custom]ws_recv_thread: cleanup begin (locked), state=%d, fd=%d",
+          (int)client->state, client->sock_fd);
+    if (client->sock_fd >= 0) {
+        if (client->use_ssl) {
+            log_mqtt("【debug】[ws_custom]ws_recv_thread: ssl_close_notify/free begin");
+            (void)mbedtls_ssl_close_notify(&client->ssl);
+            mbedtls_ssl_free(&client->ssl);
+            mbedtls_ssl_config_free(&client->ssl_conf);
+            mbedtls_ctr_drbg_free(&client->ctr_drbg);
+            mbedtls_entropy_free(&client->entropy);
+            log_mqtt("【debug】[ws_custom]ws_recv_thread: ssl resources freed");
         }
-        client->state = WS_STATE_DISCONNECTED;
+        log_mqtt("【debug】[ws_custom]ws_recv_thread: closing fd=%d", client->sock_fd);
+        close(client->sock_fd);
+        client->sock_fd = -1;
     }
+    client->state = WS_STATE_DISCONNECTED;
+    client->recv_thread_id = 0;
+    log_mqtt("【debug】[ws_custom]ws_recv_thread: cleanup done, state=%d, fd=%d", (int)client->state, client->sock_fd);
     os_mutex_post(&client->mutex);
+
+    if (client->disconnect_cb) {
+        log_mqtt("【debug】[ws_custom]ws_recv_thread: calling disconnect_cb, exit_reason=%s", exit_reason);
+        client->disconnect_cb(exit_reason);
+    }
+    log_mqtt("【debug】[ws_custom]ws_recv_thread: thread_exit end");
 }
 
 // API实现
@@ -1576,6 +1589,9 @@ void ws_client_disconnect(ws_client_t client)
     if (!client) {
         return;
     }
+
+    log_mqtt("【debug】[ws_custom]ws_client_disconnect: enter, state=%d, running=%d, fd=%d, tid=%d, use_ssl=%d",
+          (int)client->state, (int)client->thread_running, client->sock_fd, client->recv_thread_id, (int)client->use_ssl);
     
     os_mutex_pend(&client->mutex, 0);
     
@@ -1594,6 +1610,10 @@ void ws_client_disconnect(ws_client_t client)
             } else {
                 if (rb_space(&client->send_rb) >= close_len) {
                     rb_write(&client->send_rb, client->temp_send_buf, close_len);
+                    log_mqtt("【debug】[ws_custom]ws_client_disconnect: buffered CLOSE frame, len=%d", close_len);
+                } else {
+                    log_mqtt("【debug】[ws_custom]ws_client_disconnect: not enough rb_space for CLOSE, space=%d, need=%d",
+                          rb_space(&client->send_rb), close_len);
                 }
             }
         } else {
@@ -1605,34 +1625,38 @@ void ws_client_disconnect(ws_client_t client)
     
     // 给一点时间让IO线程发送数据
     msleep(100);
-    
+
+    log_mqtt("【debug】[ws_custom]ws_client_disconnect: request io thread exit (thread_running=false)");
     client->thread_running = false;
     
     // 等待接收线程退出 (此时不能持有锁)
     if (client->recv_thread_id > 0) {
+        log_mqtt("【debug】[ws_custom]ws_client_disconnect: waiting io thread tid=%d", client->recv_thread_id);
         thread_kill(&client->recv_thread_id, KILL_WAIT);
+        log_mqtt("【debug】[ws_custom]ws_client_disconnect: io thread wait done");
     }
     
     // 重新获取锁进行清理
     os_mutex_pend(&client->mutex, 0);
     
-    if (client->state != WS_STATE_DISCONNECTED) {
-        // 关闭socket
+    // 兜底清理：如果 IO 线程因为被强杀等原因没走到 thread_exit，这里保证资源最终被回收。
+    if (client->sock_fd >= 0) {
+        log_mqtt("【debug】[ws_custom]ws_client_disconnect: fallback cleanup begin, fd=%d, use_ssl=%d",
+              client->sock_fd, (int)client->use_ssl);
         if (client->use_ssl) {
-            mbedtls_ssl_close_notify(&client->ssl);
+            (void)mbedtls_ssl_close_notify(&client->ssl);
             mbedtls_ssl_free(&client->ssl);
             mbedtls_ssl_config_free(&client->ssl_conf);
-            // mbedtls_net_free(&client->net_ctx); // 不再使用
             mbedtls_ctr_drbg_free(&client->ctr_drbg);
             mbedtls_entropy_free(&client->entropy);
-            close(client->sock_fd); // 统一关闭 fd
-        } else {
-            close(client->sock_fd);
         }
-        
+        close(client->sock_fd);
         client->sock_fd = -1;
-        client->state = WS_STATE_DISCONNECTED;
     }
+    client->state = WS_STATE_DISCONNECTED;
+    client->recv_thread_id = 0;
+    log_mqtt("【debug】[ws_custom]ws_client_disconnect: exit, state=%d, fd=%d, tid=%d",
+          (int)client->state, client->sock_fd, client->recv_thread_id);
     
     os_mutex_post(&client->mutex);
 }
