@@ -1165,6 +1165,17 @@ static void ws_recv_thread(void *param)
                     n = 0; // 忽略
                 } else if (n == 0) {
                     // mbedTLS: 0 表示底层连接 EOF（对端可能直接断开，未必发送 close_notify）
+                    // 为了定位根因，尽量收集当下 socket 错误信息（仅调试日志）
+                    int so_error = 0;
+                    socklen_t so_len = sizeof(so_error);
+                    int fd_snapshot = client->sock_fd;
+                    int errno_snapshot = errno;
+                    int gs_ret = -1;
+                    if (fd_snapshot >= 0) {
+                        gs_ret = getsockopt(fd_snapshot, SOL_SOCKET, SO_ERROR, &so_error, &so_len);
+                    }
+                    log_mqtt("【debug】[ws_custom]ssl_eof: ssl_read==0, state=%d, fd=%d, errno=%d, getsockopt_ret=%d, so_error=%d",
+                             (int)client->state, fd_snapshot, errno_snapshot, gs_ret, so_error);
                     log_i("[ws_custom]SSL connection closed by peer (EOF)");
                     strncpy(exit_reason, "ssl_eof", sizeof(exit_reason) - 1);
                     exit_reason[sizeof(exit_reason) - 1] = '\0';
@@ -1587,6 +1598,14 @@ int ws_client_send_ping(ws_client_t client)
 void ws_client_disconnect(ws_client_t client)
 {
     if (!client) {
+        return;
+    }
+
+    // 幂等短路：避免上层多处重复调用导致调试日志混乱
+    // 满足以下条件基本代表已经彻底断开，不需要重复执行 disconnect 流程
+    if (client->state == WS_STATE_DISCONNECTED && client->sock_fd < 0 && client->recv_thread_id == 0) {
+        log_mqtt("【debug】[ws_custom]ws_client_disconnect: already disconnected (skip), state=%d, fd=%d, tid=%d",
+                 (int)client->state, client->sock_fd, client->recv_thread_id);
         return;
     }
 
