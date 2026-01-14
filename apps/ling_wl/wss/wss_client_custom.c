@@ -1079,6 +1079,10 @@ static void ws_recv_thread(void *param)
     const int MAX_SSL_READ_RETRIES = 3;
     const int SSL_READ_RETRY_DELAY = 100; // 100ms
 
+    // P2: TLS耦合观测（避免刷屏：只在“卡住”时打印一次，读写恢复后复位）
+    bool logged_read_want_write = false;
+    bool logged_write_want_read = false;
+
     log_i("[ws_custom]IO thread started (Non-blocking)");
 
     while (client->thread_running && (client->state == WS_STATE_CONNECTED || client->state == WS_STATE_CLOSING)) {
@@ -1130,12 +1134,22 @@ static void ws_recv_thread(void *param)
                 if (sent > 0) {
                     // log_d("[ws_custom]Sent %d bytes", sent);
                     rb_advance(&client->send_rb, sent);
+                    // 有实际写进展，解除“写需要读”的卡住标记
+                    logged_write_want_read = false;
                 } else {
                     // 处理非阻塞错误
                     bool would_block = false;
                     if (client->use_ssl) {
                         if (sent == MBEDTLS_ERR_SSL_WANT_WRITE || sent == MBEDTLS_ERR_SSL_WANT_READ) {
                             would_block = true;
+                        }
+
+                        // P2: 观测TLS耦合：ssl_write 可能需要先读（WANT_READ）才能继续写
+                        if (sent == MBEDTLS_ERR_SSL_WANT_READ && !logged_write_want_read) {
+                            log_mqtt("【debug】[ws_custom]ssl_write WANT_READ (tls_coupling), state=%d, fd=%d, rb_avail=%d, rb_space=%d",
+                                     (int)client->state, client->sock_fd,
+                                     (int)rb_available(&client->send_rb), (int)rb_space(&client->send_rb));
+                            logged_write_want_read = true;
                         }
                     } else {
                         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -1162,6 +1176,15 @@ static void ws_recv_thread(void *param)
                 n = mbedtls_ssl_read(&client->ssl, client->recv_buf + client->recv_buf_len,
                                     WS_RECV_BUF_SIZE - client->recv_buf_len);
                 if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
+                    // P2: 观测TLS耦合：ssl_read 可能需要先写（WANT_WRITE）才能继续读
+                    if (n == MBEDTLS_ERR_SSL_WANT_WRITE && !logged_read_want_write) {
+                        // watch_write: 当前是否监听写事件（当前实现：仅send_rb有数据才监听write）
+                        bool watch_write = has_data_to_send;
+                        log_mqtt("【debug】[ws_custom]ssl_read WANT_WRITE (tls_coupling), state=%d, fd=%d, watch_write=%d, rb_avail=%d, rb_space=%d",
+                                 (int)client->state, client->sock_fd, (int)watch_write,
+                                 (int)rb_available(&client->send_rb), (int)rb_space(&client->send_rb));
+                        logged_read_want_write = true;
+                    }
                     n = 0; // 忽略
                 } else if (n == 0) {
                     // mbedTLS: 0 表示底层连接 EOF（对端可能直接断开，未必发送 close_notify）
@@ -1227,6 +1250,8 @@ static void ws_recv_thread(void *param)
             
             if (n > 0) {
                 client->recv_buf_len += n;
+                // 有实际读进展，解除“读需要写”的卡住标记
+                logged_read_want_write = false;
                 
                 // 解析WebSocket帧
                 while (client->recv_buf_len > 0) {
