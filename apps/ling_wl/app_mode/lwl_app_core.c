@@ -207,22 +207,37 @@ void dump_all_eend_info()
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
-    log_i("|       sn        | bat |  adv_state |  deadline  | rssi |  distance | OP | num |");
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+-----------+----+-----+");
+    log_i("|       sn        | bat |  adv_state |  deadline  | rssi | distance(m)| dist_type | OP | num |");
+    log_i("+-----------------+-----+------------+------------+------+-----------+-----------+----+-----+");
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
         if (adv_stat_to_text(pdev->adv_state)[0] != '\0') {
-            log_i("| %15.15s | %3d | %10s | %10d | %.2f | %9s | %02X | %3d |", pdev->sn, 
-                pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline, 
-                pdev->distance_info.distance, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
+            // distance_info 里有独立mutex，打印时取快照，避免被更新线程打断
+            s8 rssi = -128;
+            double distance = 0;
+            int distance_type = DISTANCE_3;
+            int sample_count = 0;
+
+            os_mutex_pend(&pdev->distance_info.mutex, 0);
+            distance = pdev->distance_info.distance;
+            distance_type = pdev->distance_info.distance_type;
+            sample_count = pdev->distance_info.rssi_sample_count;
+            if (sample_count > 0 && sample_count <= MAX_SAMPLES) {
+                rssi = pdev->distance_info.rssi_samples[sample_count - 1];
+            }
+            os_mutex_post(&pdev->distance_info.mutex);
+
+            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9.2f | %9s | %02X | %3d |", pdev->sn,
+                  pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline,
+                  rssi, distance, distance_type_to_text(distance_type), pdev->op_state, sample_count);
         } else {
             log_i("[ERROR]%s UNKNOWN type: %d", pdev->sn, pdev->adv_state);
         }
     }
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+-----------+----+-----+");
 
     map_iterator_unlock(it); // 释放锁
 }
@@ -406,7 +421,7 @@ void free_5m_edev_targets(char **targets, int targets_num)
  * 
  * @param [in] handler 回调函数引用
  */
-void lwl_event_handler_add(lwl_event_handler_cb_t *handler) 
+void lwl_event_handler_add(lwl_event_handler_cb_t handler) 
 {
     ASSERT(s_app_context != NULL);
 
@@ -430,7 +445,7 @@ void lwl_event_handler_add(lwl_event_handler_cb_t *handler)
  * 
  * @param [in] handler 回调函数引用
  */
-void lwl_event_handler_remove(lwl_event_handler_cb_t *handler)
+void lwl_event_handler_remove(lwl_event_handler_cb_t handler)
 {
     ASSERT(s_app_context != NULL);
 
@@ -496,4 +511,39 @@ void lwl_rtc_timer_update()
     timeinfo.tm_isdst = -1;  // -1 表示不确定是否夏令时
     // 转换为 Unix 时间戳
     rtc_time_delta = mktime(&timeinfo) - 28800;
+}
+
+/**
+ * @brief 获取ISO8601格式的时间字符串
+ * @param buffer 输出缓冲区
+ * @param buffer_size 缓冲区大小
+ * @note 格式: YYYY-MM-DDTHH:MM:SS.mmmZ
+ */
+void lwl_rtc_get_iso8601_time(char *buffer, int buffer_size)
+{
+    if (buffer == NULL || buffer_size < 25) {
+        return;
+    }
+    
+    // 获取RTC时间
+    struct sys_time t;
+    void *dev = dev_open("rtc", NULL);
+    if (dev) {
+        dev_ioctl(dev, IOCTL_GET_SYS_TIME, (u32)&t);
+        dev_close(dev);
+    } else {
+        // 如果无法打开RTC设备,使用默认值
+        memset(&t, 0, sizeof(t));
+        t.year = 2025;
+        t.month = 1;
+        t.day = 1;
+    }
+    
+    // 获取毫秒部分(使用jiffies_half_msec)
+    uint32_t half_ms = jiffies_half_msec();
+    uint32_t milliseconds = (half_ms / 2) % 1000;
+    
+    // 格式化为ISO8601格式: YYYY-MM-DDTHH:MM:SS.mmmZ
+    snprintf(buffer, buffer_size, "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
+             t.year, t.month, t.day, t.hour, t.min, t.sec, milliseconds);
 }

@@ -45,6 +45,8 @@ enum odmp_event_type_e {
     OET_REQ_MESSAGE             = 1,
     OET_AUDIO_STATUS            = 2,
     OET_SET_AUDIO_FORMAT        = 3,
+    OET_NEARBY_UPDATE           = 4,  // nearby_update事件
+    OET_AUDIO_STREAM_START      = 5,  // audio_stream_start事件
 };
 
 
@@ -58,6 +60,11 @@ enum ORX_EVENT_TYPE {
     OR_MESSAGE_TEXT,
     OR_EXECUTION_TIME,
     OR_PONG,
+    TTS_BIND,
+    MESSAGE_TEXT,
+    PONG,
+    AUDIO_STREAM_START,
+    AUDIO_STREAM_END,
 };
 
 typedef struct {
@@ -144,6 +151,13 @@ char *odmp_audio_status(const char *c_id, int oast, int oase);
 
 char *odmp_set_audio_format(const char *c_id, int type);
 char *odmp_device_status(int status);
+char *odmp_nearby_update(void **devices, int device_count, const char *c_id);
+char *odmp_audio_stream_start(const char *stream_id, const char *stream_type);
+char *odmp_audio_stream_end(const char *stream_id, const char *status);
+char *odmp_bind_result(const char *sn, bool success, const char *status, const char *stream_id);
+char *odmp_audio_play_started(const char *stream_id, const char *status, const char *play_mode);
+char *odmp_audio_play_finished(const char *stream_id, const char *status);
+char *odmp_btn_tap(int type, int duration);
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk);
 void odmp_register_audio_data_cbk(g_odmp_audio_data_cbk_t odmp_audio_data_cbk);

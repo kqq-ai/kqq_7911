@@ -13,9 +13,14 @@
 #include <time.h>
 #include "../../include_lib/net/mqtt/MQTTClient.h"
 
-/* 日志函数 */
+/**
+ * @brief 打印MQTT日志
+ * @param format 格式化字符串
+ * @note 注意，使用该函数不可以在字符串中包含\n换行符
+ */
 void log_mqtt(const char* format, ...);
 void log_mqtt_set_battery_level(char *sn_battery, int battery_level);
+int log_mqtt_send_message_sync(const char* topic, const int progress);
 
 /* MQTT连接管理函数 */
 int log_mqtt_start(void);

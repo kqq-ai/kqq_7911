@@ -4,12 +4,14 @@
 #include "os/os_api.h"
 
 #include "protocol/odm/odmp.h"
+#include "protocol/odm/odm_secure.h"
 #include "app_mode/lwl_app_core.h"
 #include "wss/wss_client.h"
 #include "wss/wss_client_custom.h"
 
 #include "system/includes.h"
 #include "app_cookie.h"
+#include "cJSON_common/cJSON.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -29,6 +31,19 @@ static OS_MUTEX g_wss_mutex;
 static char* target_sn_set[MAX_TARGET_SN_SET] = {0};
 static int target_sn_count = 0;
 static u32 wss_send_time = 0;
+
+static void wss_dump_lwip_tcp_config_once(void)
+{
+    static u8 printed = 0;
+    if (printed) {
+        return;
+    }
+    printed = 1;
+    log_i("[lwip]TCP_SND_BUF=%u TCP_SND_QUEUELEN=%u TCP_WND=%u",
+          (unsigned int)TCP_SND_BUF,
+          (unsigned int)TCP_SND_QUEUELEN,
+          (unsigned int)TCP_WND);
+}
 
 // 添加SN到集合
 void add_target_sn(const char* sn) {
@@ -104,6 +119,22 @@ static void wss_mark_exception(const char *reason)
     g_exception_exit = true;
 }
 
+void wss_note_disconnect_reason(const char *reason)
+{
+    // 这里用同一套异常标志，确保上层能看到准确原因
+    wss_mark_exception(reason ? reason : "disconnect");
+}
+
+void wss_exception_exit()
+{
+    wss_mark_exception("generic");
+}
+
+const char *wss_get_last_disconnect_reason(void)
+{
+    return g_last_disconnect_reason;
+}
+
 bool wss_check_exit(void)
 {
     if (g_exception_exit) {
@@ -146,6 +177,7 @@ static void wss_custom_recv_callback(u8 *buf, u32 len, u8 is_text)
 static void wss_custom_disconnect_callback(const char *reason)
 {
     log_i("[wss_client]websocket exit notify: %s", reason ? reason : "unknown");
+    wss_note_disconnect_reason(reason);
     odmp_disconnect_handler();
 }
 
@@ -154,6 +186,7 @@ bool wss_connect(void) {
         os_mutex_create(&g_wss_mutex);
     }
     os_mutex_pend(&g_wss_mutex, 0);
+    wss_dump_lwip_tcp_config_once();
 
     log_i("[wss_app_util]wss_connect start (using custom WebSocket implementation)");
     
@@ -522,8 +555,324 @@ int send_ping()
     free(send_data);
     
     // 可选：同时发送WebSocket协议层的Ping帧
-    // ws_client_send_ping(g_ws_client_custom);
+    // 公网/域名/WSS 场景下，中间层（NAT/CDN/反向代理）可能会对“长时间无 WebSocket control frame”更敏感
+    // 同时发送协议层 Ping 帧可显著降低 idle 被掐导致的 1006 unexpected EOF
+    ws_client_send_ping(g_ws_client_custom);
     
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送nearby_update消息
+ * @param devices 设备指针数组
+ * @param device_count 设备数量
+ * @return 0成功,-1失败
+ */
+int send_nearby_update(void **devices, int device_count)
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_nearby_update(devices, device_count, sn_c_id);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_nearby_update: odmp_nearby_update returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_nearby_update: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[nearby_update] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_stream_start消息
+ * @param stream_id 流ID
+ * @param stream_type 流类型，例如 "uplink" 或 "downlink"
+ * @return 0成功,-1失败
+ */
+int send_audio_stream_start(const char *stream_id, const char *stream_type)
+{
+    if (stream_id == NULL || stream_type == NULL) {
+        log_e("[wss_app_util]send_audio_stream_start: stream_id or stream_type is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_audio_stream_start(stream_id, stream_type);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_stream_start: odmp_audio_stream_start returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_stream_start: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("[audio_stream_start] wbs send msg : %s", send_data);
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_stream_start] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_stream_end消息
+ * @param stream_id 流ID，必须与audio_stream_start发送时的stream_id相同
+ * @param status 状态，例如 "user_interrupted"
+ * @return 0成功,-1失败
+ */
+int send_audio_stream_end(const char *stream_id, const char *status)
+{
+    if (stream_id == NULL || status == NULL) {
+        log_e("[wss_app_util]send_audio_stream_end: stream_id or status is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_audio_stream_end(stream_id, status);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_stream_end: odmp_audio_stream_end returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_stream_end: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("[audio_stream_end] wbs send msg : %s", send_data);
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_stream_end] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送bind_result消息
+ * @param sn E端设备序列号
+ * @param success 是否成功
+ * @param status 状态，例如 "connected"
+ * @param stream_id 流ID
+ * @return 0成功,-1失败
+ */
+int send_bind_result(const char *sn, bool success, const char *status, const char *stream_id)
+{
+    if (sn == NULL || status == NULL || stream_id == NULL) {
+        log_e("[wss_app_util]send_bind_result: sn, status or stream_id is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_bind_result(sn, success, status, stream_id);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_bind_result: odmp_bind_result returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_bind_result: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("[bind_result] wbs send msg : %s", send_data);
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[bind_result] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_play_started消息
+ * @param stream_id 流ID
+ * @param status 状态，例如 "normal_start"
+ * @param play_mode 播放模式，例如 "normal"
+ * @return 0成功,-1失败
+ */
+int send_audio_play_started(const char *stream_id, const char *status, const char *play_mode)
+{
+    if (stream_id == NULL || status == NULL || play_mode == NULL) {
+        log_e("[wss_app_util]send_audio_play_started: stream_id, status or play_mode is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_audio_play_started(stream_id, status, play_mode);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_play_started: odmp_audio_play_started returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_play_started: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("[audio_play_started] wbs send msg : %s", send_data);
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_play_started] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送audio_play_finished消息
+ * @param stream_id 流ID，必须与audio_play_started发送时的stream_id相同
+ * @param status 状态，例如 "playback_complete"
+ * @return 0成功,-1失败
+ */
+int send_audio_play_finished(const char *stream_id, const char *status)
+{
+    if (stream_id == NULL || status == NULL) {
+        log_e("[wss_app_util]send_audio_play_finished: stream_id or status is NULL");
+        return -1;
+    }
+
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_audio_play_finished(stream_id, status);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_audio_play_finished: odmp_audio_play_finished returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_audio_play_finished: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("[audio_play_finished] wbs send msg : %s", send_data);
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[audio_play_finished] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
+    os_mutex_post(&g_wss_mutex);
+    return 0;
+}
+
+/**
+ * @brief 发送btn_tap消息
+ * @param type 按键类型
+ * @param duration 持续时间（毫秒）
+ * @return 0成功,-1失败
+ */
+int send_btn_tap(int type, int duration)
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    if (g_ws_client_custom == NULL) {
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
+    char *send_data = odmp_btn_tap(type, duration);
+    if (send_data == NULL) {
+        log_e("[wss_app_util]send_btn_tap: odmp_btn_tap returned NULL");
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    size_t send_len = strlen(send_data);
+    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
+        log_e("[wss_app_util]send_btn_tap: payload too large (%u), drop", (u32)send_len);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    log_i("[btn_tap] wbs send msg : %s", send_data);
+    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
+    wss_send_time = timer_get_ms();
+    if (ret < 0) {
+        log_e("[btn_tap] Error %s %d. ret=%d", __FILE__, __LINE__, ret);
+        free(send_data);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+    free(send_data);
     os_mutex_post(&g_wss_mutex);
     return 0;
 }

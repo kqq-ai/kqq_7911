@@ -165,6 +165,28 @@ const uint32_t MAX_CHUNK_SIZE = 16000;
 static uint8_t g_stream_buffer[MAX_CHUNK_SIZE];
 #define STREAM_TIMEOUT_MS 5000
 
+
+
+/**
+ * @brief 初始化WSS音频模块
+ * @details
+ *   统一处理音频播放线程退出时的资源清理，包括停止播放器、重置状态标志、关闭LED等。
+ */
+static void wss_audio_playback_cleanup(void)
+{
+    os_mutex_pend(&g_audio_mutex, 0);
+    if (g_stream_audio_on) {
+        g_stream_audio_on = false;
+        app_music_play_stop(g_app_ctx->music_player);
+        g_stream_audio_playing = false;
+        set_led_tts_off();
+        log_mqtt("【flow】音频播放停止");
+    }
+    g_stream_audio_thread_running = false;
+    os_mutex_post(&g_audio_mutex);
+    log_mqtt("【flow】音频播放线程退出");
+    turn_off_Pi();
+}
 /**
  * @brief 流式音频播放线程函数
  * @details
@@ -175,14 +197,23 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
 {
     uint32_t last_data_time = timer_get_ms();
     
-    log_i("[AUDIO_STREAM]playback thread started");
+    log_mqtt("【flow】音频播放线程开始，等待服务端发送播放开始（可能先发了）");
 
     // 等待stream启动
+    //在这里如果收到服务器的播放结束消息，则直接退出，等待下一次播放（已经实现），增加超时退出机制
+    uint32_t wait_start_time = timer_get_ms();
     while (wss_stream_on() == false && g_stream_audio_thread_running) {
+        uint32_t elapsed = timer_get_ms() - wait_start_time;
+        if (elapsed > STREAM_TIMEOUT_MS) {
+            log_w("【flow】音频播放线程等待服务器下发播放开始消息超时: %u ms, 退出", elapsed);
+            wss_audio_playback_cleanup();
+            return; // 退出线程
+        }
         msleep(10);
     }
     
-    log_i("[AUDIO_STREAM]stream is on, starting playback loop");
+    //检测到stream开启后，开始播放循环
+    log_mqtt("【flow】stream开启, 开始播放循环");
     
     while (g_stream_audio_thread_running) {
         /* 从stream获取数据 */
@@ -208,21 +239,23 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
                 );
                 g_stream_audio_on = true;
                 set_led_tts_on();
-                log_i("[AUDIO_STREAM]playback started");
+                log_mqtt("【flow】检测到音频数据，开始播放，发送audio_play_started消息给服务器");
+                // send_audio_play_started(wss_request_get_stream_id(), "normal_playing", "normal");
             }
             
             uint32_t written = app_music_play_stream_write(g_app_ctx->music_player, g_stream_buffer, read_len);
             if (written > 0) {
-                log_d("[AUDIO_STREAM]stream_write %u bytes", written);
+                log_mqtt("【flow】成功写入音频数据: %u bytes", written);
             } else {
-                log_e("[AUDIO_STREAM]failed to write stream");
+                log_mqtt("【flow】写入音频数据失败, 跳过");
             }
             
             os_mutex_post(&g_audio_mutex);
         } else if (!g_stream_audio_on) {
             /* 无数据，检查是否stream已结束或超时 */
             if (!wss_stream_on()) {
-                log_i("[AUDIO_STREAM]stream finish");
+                log_mqtt("【flow】收到音频播放结束并且实际无数据，发送audio_play_finished消息给服务器");
+                // send_audio_play_finished(wss_request_get_stream_id(), "normal_complete");
                 break;
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;
@@ -239,26 +272,15 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;
                 if (elapsed > STREAM_TIMEOUT_MS) {
-                    log_w("[AUDIO_STREAM]decoder timeout: no data for %u ms, exiting", elapsed);
+                    log_mqtt("【flow】音频播放超时: %u ms, 退出", elapsed);
+                    // send_audio_play_finished(wss_request_get_stream_id(), "timeout");
                     break;
                 }
             }
             msleep(20);
         }
     }
-
-    os_mutex_pend(&g_audio_mutex, 0);
-    if (g_stream_audio_on) {
-        g_stream_audio_on = false;
-        app_music_play_stop(g_app_ctx->music_player);
-        g_stream_audio_playing = false;
-        set_led_tts_off();
-        log_i("[AUDIO_STREAM]audio playback stopped");
-    }
-    g_stream_audio_thread_running = false;
-    os_mutex_post(&g_audio_mutex);
-    
-    log_i("[AUDIO_STREAM]playback thread exited");
+    wss_audio_playback_cleanup();
 }
 
 /**
