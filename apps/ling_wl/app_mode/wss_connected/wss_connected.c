@@ -65,7 +65,6 @@ void app_wss_connected_mode(void)
     u32 g_heat_timer = 0;
     
     while (1) {
-        lwl_app_mode_play_loop();
         if (lwl_app_mode_exitting()) {
             log_i("[wss_connected]mode exiting requested");
             wss_connected_unint();

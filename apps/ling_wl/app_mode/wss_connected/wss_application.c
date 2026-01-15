@@ -160,6 +160,7 @@ static void wss_handle_touch_key_event(bool press_down)
         wss_ble_audio_stop();
         // 1.开启音频上传，等500ms
         wss_mic_upload_start();
+        play_prompt_sound("t_key.mp3");
         
     } else {
         // ========== 触摸键释放事件 ==========
@@ -173,21 +174,10 @@ static void wss_handle_touch_key_event(bool press_down)
     os_mutex_post(&g_wss_app_mutex);
 }
 
-static void wss_handle_touch_key_press(void)
-{
-    wss_handle_touch_key_event(true);
-    wss_application_vailed();
-}
-
-static void wss_handle_touch_key_release(void)
-{
-    wss_handle_touch_key_event(false);
-    wss_application_vailed();
-}
-
 // 事件回调：仅记录事件到队列，避免在回调中调用加锁函数
 static void input_event_handler_cb(lwl_event_t *e)
 {
+    u32 callback_start_time = timer_get_ms();
     input_event_t event = {0};
     
     switch (e->event_type) {
@@ -202,6 +192,10 @@ static void input_event_handler_cb(lwl_event_t *e)
         input_event_queue_push(&event);
         break;
         
+    case LWL_EVENT_TYPE_RST_KEY:
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        break;
+
     case LWL_EVENT_TYPE_LOW_BATTERY:
         int voltage = get_vbat_level();
         if (voltage < LOW_BATT_VERY_SHUTDOWN) {
@@ -212,20 +206,21 @@ static void input_event_handler_cb(lwl_event_t *e)
     default:
         break;
     }
+    
+    u32 callback_end_time = timer_get_ms();
+    u32 callback_duration = callback_end_time - callback_start_time;
+    if (callback_duration > 100) {
+        log_w("[debug] Callback took %u ms (event_type: %d)", callback_duration, e->event_type);
+    }
 }
 
 //=================================================================================================
 // 播放提示音相关
 //=================================================================================================
-static void wss_app_mode_play_cb(void *priv)
-{
-    log_i("[wss_application]wss_app_mode_play_cb turnoff cookie speaker");
-}
-
 void play_prompt(const char *fname) 
 {
-    lwl_app_mode_play(fname, wss_app_mode_play_cb);
-
+    lwl_app_audio_play(fname, NULL);
+    wss_ble_audio_stop();
 }
 
 //=================================================================================================
@@ -324,7 +319,6 @@ void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
     log_mqtt("🤖🤖🤖 初始化WSS应用");
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
     player = lwl_app_core_context_get_instance()->music_player;
 
@@ -406,7 +400,6 @@ void wss_application_reset()
     log_i("[wss_application]Reset WSS application\n");
     log_mqtt("🤖🤖🤖 重置WSS应用");
     os_mutex_pend(&g_wss_app_mutex, 0);
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
 
     
@@ -472,10 +465,6 @@ bool wss_application_loop()
             g_exit = true;
         }
         return true;
-    }
-    
-    if (lwl_app_mode_playing()) {
-        return false;
     }
 
     return false;

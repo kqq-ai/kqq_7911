@@ -81,7 +81,6 @@ static int net_connected_init(void)
     }
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-        play_system_music("NetCfgSucc.mp3");
     } else {
         log_mqtt("❌ websockets init failed");
         set_led_connect_error();// WSS ERROR
@@ -108,7 +107,6 @@ void app_net_connected_loop()
     }
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-        play_system_music("NetCfgSucc.mp3");
     } else {
         log_mqtt("❌❌❌ websockets init failed");
         set_led_connect_error();// WSS ERROR
@@ -126,7 +124,6 @@ void app_net_connected_mode(void)
     net_connected_init();
 
     while (1) {
-        lwl_app_mode_play_loop();
         if (lwl_app_mode_exitting()) {
             net_connected_unint();
             return;

@@ -97,6 +97,12 @@ static char* g_mqtt_token = NULL;
 
 /* 初始化MQTT网络 */
 static int init_mqtt_network(void) {
+    // 先清理前一次的网络资源，确保不会泄漏TCP_PCB
+    if (mqtt_network.my_socket != NULL) {
+        mqtt_network.disconnect(&mqtt_network);
+        mqtt_network.my_socket = NULL;  // 明确设置为NULL
+    }
+    
     // 初始化网络
     NewNetwork(&mqtt_network);
     SetNetworkRecvTimeout(&mqtt_network, 2000);  // 2秒超时
@@ -179,6 +185,9 @@ int log_mqtt_connect(void) {
  * 内部负责获取/刷新 token，并在 token 就绪后再尝试连接。
  */
 static void log_mqtt_reconnect_until_success(void) {
+    int retry_count = 0;
+    int max_retries = 10;  // 最多重试10次，之后增加等待时间
+    
     while (!log_mqtt_is_connected() && g_monitor_thread_running) {
         // 确保 token 可用；失败则等待后重试
         if (g_mqtt_token == NULL) {
@@ -197,10 +206,16 @@ static void log_mqtt_reconnect_until_success(void) {
         if (ret == 0) {
             log_i("【MQTT】连接成功\n");
             mqtt_subscribe_reset();
+            retry_count = 0;  // 连接成功，重置计数器
             break;
         } else {
-            log_i("【MQTT】连接失败,1秒后重试, error code: %d\n", ret);
-            msleep(1000);  // 等待1000ms后重试
+            log_i("【MQTT】连接失败,准备重试, error code: %d\n", ret);
+            retry_count++;
+            
+            // 动态调整重试等待时间：快速重试10次，然后增加等待时间
+            uint32_t wait_time = (retry_count <= max_retries) ? 1000 : 5000;
+            log_i("【MQTT】等待 %u ms 后重试 (第 %d 次)\n", wait_time, retry_count);
+            msleep(wait_time);
         }
     }
 }

@@ -42,6 +42,5 @@ bool is_audio_playing();
  * @brief 设置播放器音量
  * @param volume 音量值(1~100)
  */
-void set_tts_volume(int volume);
 
 #endif
