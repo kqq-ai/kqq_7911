@@ -69,6 +69,7 @@ void process_mode_7(void)
         if (!g_mode_7_wifi_checked || g_mode_7_wifi_connected) {
             g_mode_7_wifi_connected = 0;
             g_mode_7_wifi_checked = 1;
+            ble_simple_server_name_enable(1);
             if (context && context->music_player) {
                 g_audio_playing = 1;
                 lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3", mode7_audio_callback);
@@ -99,7 +100,6 @@ void mode7_init()
 {
     wifi_and_network_on();
     ble_simple_server_init();
-    ble_simple_server_name_enable(1);
 
     g_mode_7_wifi_checked = 0;
     g_mode_7_wifi_connected = 0;

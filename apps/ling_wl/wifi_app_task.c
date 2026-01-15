@@ -20,6 +20,8 @@
 #include "sock_api/sock_api.h"
 #include "asm/rf_coexistence_config.h"
 
+#include "log.h"
+
 #include "bt_ble/app_wifi_manage.h"
 #include "bt_ble/server/ble_simple_server.h"
 #include "app_mode/lwl_app_core.h"
@@ -146,6 +148,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_START:
         puts("|network_user_callback->WIFI_EVENT_STA_START\n");
 
+        log_i("【debug】wifi开始连接: WIFI_EVENT_STA_START");
+
         /*hzx add*/
 
         set_wifi_manager_mode(WIFI_STA_MODE);
@@ -266,6 +270,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC:
         puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_SUCC\n");
+
+        log_i("【debug】wifi连接成功: WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC");
         net.arg = "net";
         net.event = NET_EVENT_CONNECTED;
         net_event_notify(NET_EVENT_FROM_USER, &net);

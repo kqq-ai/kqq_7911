@@ -61,7 +61,7 @@ u32 get_key_times_in_net_connecting(){
 
 static void start_ble_net(){
     if (wifi_manager_state) {
-        key_press_time_ms = timer_get_ms();
+        key_press_time_ms = 0;
     }
 } 
 static void reset_ble_net(){
@@ -112,6 +112,7 @@ static int net_connecting_init(void)
     ble_connecting = false;
     ble_connected = false;
     key_press_time_ms = 0;
+    log_i("【debug】wifi开始连接: enter NET_CONNECTING mode");
     ble_simple_server_init();
 
     
@@ -172,6 +173,7 @@ void app_net_connecting_loop()
         ///if( wifi_manager_state )         /// 等待配网的BLE通讯完成
         ///if( !NET_NTP_GET_TIME_SUCC )     /// 等待获取时间，才能https通讯，NET_NTP_GET_TIME_SUCC
         mdelay(200);
+        log_i("【debug】wifi连接成功: DHCP_SUCC, switching to NET_CONNECTED");
         printf("Network connection is successful!\n");
         switch_rf_coexistence_config_table(3);
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
@@ -188,18 +190,22 @@ void app_net_connecting_loop()
     );
 
     if (!wifi_manager_state && is_connection_failed) {
+        log_i("【debug】wifi连接失败: first failure event=%d, start BLE advertising for provisioning", state);
         printf("Network connection is failed!\n");
-        
-        ble_simple_server_name_enable(0);
+
         wifi_manager_state = true;
-        
+        key_press_time_ms = timer_get_ms();
+        ble_connecting = true;
+        ble_connected = false;
+        ble_simple_server_name_enable(1);
+
         play_system_music("NetCfgEnter.mp3");
             
         return;
     }
 
     /* BLE连接处理 */
-    if (wifi_manager_state && key_press_time_ms > 0) {
+    if (wifi_manager_state) {
         handle_ble_connection_state();
         g_sensor_reset_alive_timer();
     }
