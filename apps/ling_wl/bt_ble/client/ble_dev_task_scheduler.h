@@ -13,6 +13,7 @@ typedef enum {
     BDOCode_Connection_Timeout,     //!< 操作失败，BLE 连接超时
     BDOCode_Disconnect_Timeout,     //!< 操作失败，BLE 断连超时
     BDOCode_Scan_Adv_Stat_Timeout,  //!< 操作失败，扫描ADV状态变化超时
+    BDOCode_Max_Reconnection_Attempts, //!< 操作失败，超过最大重连次数
     BDOCode_Dev_Busy,               //!< 操作失败，设备繁忙
     BDOCode_Unexpected_Error,       //!< 意外错误
     BDOCode_Ready_to_Play,          //!< 开始播放
@@ -73,7 +74,7 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
 int bdo_turn_off(lwl_eend_dev_t *dev);
 
 void bdo_notify_e_conncted(char sn[]);
-
+void bdo_notify_e_connecting(char sn[]);
 void bdo_notify_e_disconncted(char sn[]);
 
 void ble_dev_task_scheduler_init();

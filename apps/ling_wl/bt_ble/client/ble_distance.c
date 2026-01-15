@@ -572,6 +572,12 @@ static void scan_adv_process_task(void *priv)
             log_d("[MEASDIST]Has not deadline");
         }
 
+        // 上一次是OFF 下一次是CONNECTING
+        if (adv_state_latest != BDPAS_CONNECTING && dev->adv_state == BDPAS_CONNECTING)
+        {
+            bdo_notify_e_connecting(sn);
+        }
+
         if (adv_state_latest != BDPAS_CONNECTED && dev->adv_state == BDPAS_CONNECTED)
         {
             bdo_notify_e_conncted(sn);
