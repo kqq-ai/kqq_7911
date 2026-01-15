@@ -9,7 +9,12 @@
 
 static lwl_app_context_t *g_app_ctx = NULL;
 
-
+/**
+ * @brief 初始化WSS音频模块
+ * @details
+ *   该模块现在基于统一的音频管理模块(lwl_app_audio)实现。
+ *   初始化前级设备(7016)的电源。
+ */
 void wss_audio_init()
 {
     log_i("[AUDIO]Init WSS audio\n");

@@ -52,7 +52,7 @@ void clear_key_press_time_ms(){
 
 static void start_ble_net(){
     if (wifi_manager_state) {
-        key_press_time_ms = 0;
+        key_press_time_ms = timer_get_ms();
     }
 } 
 static void reset_ble_net(){
@@ -172,7 +172,6 @@ void app_net_connecting_loop()
         ///if( !NET_NTP_GET_TIME_SUCC )     /// 等待获取时间，才能https通讯，NET_NTP_GET_TIME_SUCC
         mdelay(200);
         log_i("【debug】wifi连接成功: DHCP_SUCC, switching to NET_CONNECTED");
-        printf("Network connection is successful!\n");
         switch_rf_coexistence_config_table(3);
         play_system_music("NetCfgSucc.mp3");
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
@@ -190,7 +189,7 @@ void app_net_connecting_loop()
     // log_i("【debug】wifi连接失败: first failure event=%d, start BLE advertising for provisioning", state);
 
     /* BLE连接处理 */
-    if (wifi_manager_state) {
+    if (wifi_manager_state && key_press_time_ms > 0) {
         handle_ble_connection_state();
         g_sensor_reset_alive_timer();
     }

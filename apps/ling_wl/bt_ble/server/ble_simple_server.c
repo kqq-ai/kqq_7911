@@ -872,14 +872,6 @@ void ble_simple_server_name_enable(u8 idle_busy)
     char *name_p = bt_get_local_name();
     const char* ext_name = idle_busy ? ble_ext_busy : ble_ext_idle;
     u8 ext_name_len = 3;
-    
-    static u8 mac_addr[6] = {0x68, 0x77, 0xFF, 0xFF, 0xFF, 0xFE};
-    const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    
-    log_i("***** ble_2,3 rand32 ******\n");
-    mac_addr[2]  = rand32() & 0xFF;
-    mac_addr[3]  = rand32() & 0xFF;
-    le_controller_set_mac((void *)mac_addr);
 
     memset(gap_device_name, 0, BT_NAME_LEN_MAX+1);
     

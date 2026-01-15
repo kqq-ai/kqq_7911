@@ -160,7 +160,7 @@ void wait_vad_task(void *priv)
         send_device_status(DEVICE_STATUS_RECORDING); // 正在录音
     }
     g_recording_uploading = false;
-    while (is_mic_on() && g_recording && vad_stop_time > timer_get_ms()) {
+    while (g_recording && vad_stop_time > timer_get_ms()) {
         if (MYERROR_Success == my_blocking_queue_try_dequeue(&g_asr_data_queue, &asr_data_frame)) {
             if (g_recording_uploading == false) {
                 // send_audio_status(OAST_ASR, OASE_START);
@@ -201,7 +201,7 @@ void wait_asr_task(void *priv)
     u32 asr_start_time = timer_get_ms();
     my_blocking_queue_clear(&g_asr_data_queue);
     recorder_data_upstream(recorder_data_to_data_queue); /* 录音数据 -> asr_data_queue */
-    while ((asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms()) && g_recording) {
+    while (asr_start_time + TOUCH_KEY_HEAT_TIMEOUT_MS > timer_get_ms() && g_recording) {
         msleep(20);
     }
     set_led_mic_on(); // 开启录音时灯光变橙色
@@ -234,6 +234,7 @@ void wait_asr_task(void *priv)
         g_recording_uploading = false;
         send_audio_stream_end(wss_request_get_stream_id(), "normal_complete");
     }
+    vad_stop_time = 0;
     g_recording = false;
 }
 
@@ -335,7 +336,7 @@ void wss_mic_init()
     g_app_ctx = lwl_app_core_context_get_instance();
 
     /* 设置VAD回调，触发音频上传 */
-    // recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
+    recorder_set_vad_cbk(g_app_ctx->recorder, recorder_vad_cb, NULL);
     g_vad_on = true;
     wss_mic_start(); // 开启录音
 

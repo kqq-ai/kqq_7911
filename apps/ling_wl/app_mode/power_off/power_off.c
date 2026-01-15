@@ -43,7 +43,6 @@ static void power_off_init(void)
     g_sensor_reset_alive_timer();
     
     /* 关闭 7016 */
-    log_i("7016 OFF\n");
     lwl_peri_dev_7016_on(false);
     disable_gsensor();
 
@@ -51,7 +50,7 @@ static void power_off_init(void)
     
     int charge_in = gpio_read(CHARGE_IN_IO);
     u16 voltage = get_vbat_level();
-    if (!charge_in && voltage < LOW_BATT_VOLT) {
+    if (!charge_in && voltage < LOW_BATT_VERY_SHUTDOWN) {
         set_led_power_off();
         log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
         return;

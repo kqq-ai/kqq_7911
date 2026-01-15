@@ -123,6 +123,7 @@ uint32_t wss_stream_get_data(uint8_t *buffer, uint32_t max_len)
 }
 
 void wss_stream_start() {
+    log_i("[STREAM]wss_stream_start");
     os_mutex_pend(&g_stream_mutex, 0);
     g_stream_end = false;
     g_prebuffer_write_pos = 0;
@@ -132,6 +133,7 @@ void wss_stream_start() {
 }
 
 void wss_stream_stop() {
+    log_i("[STREAM]wss_stream_stop");
     os_mutex_pend(&g_stream_mutex, 0);
     odmp_register_audio_data_cbk(NULL); 
     log_i("[STREAM]g_prebuffer_write_pos=%u marking stream end", g_prebuffer_write_pos);
