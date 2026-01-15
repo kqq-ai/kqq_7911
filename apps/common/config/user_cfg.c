@@ -138,14 +138,6 @@ const u8 *bt_get_mac_addr(void)
 {
     static u8 mac_addr[6] = {0x68, 0x77, 0xFF, 0xFF, 0xFF, 0xFE};
     const u8 bc_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    extern u32 get_key_times_in_net_connecting();
-    if( get_key_times_in_net_connecting() ) {
-        log_i("***** ble_2,3 rand32 ******\n");
-        mac_addr[2]  = rand32() & 0xFF;
-        mac_addr[3]  = rand32() & 0xFF;
-        le_controller_set_mac((void *)mac_addr);
-        return mac_addr;
-    }
 
     char sn[25];
     get_SN(sn);

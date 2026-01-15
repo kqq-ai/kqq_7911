@@ -213,11 +213,16 @@ static void key_scan_loop(uint32_t current_time_ms)
         if (hasFlip) {
             if (btnCurrState == 0) {
                 // on_key_down();
-                set_led_normal_key_on();
+                if (!g_disable_turn_off) {
+                    set_led_normal_key_on();
+                }
             } else {
                 // on_key_up();
-                set_led_normal_key_off();
-                g_disable_turn_off = 0;
+                if (!g_disable_turn_off) {
+                    set_led_normal_key_off();
+                } else {
+                    g_disable_turn_off = 0;
+                }
             }  
         }
         
@@ -337,7 +342,7 @@ static void rst_key_loop(uint32_t current_time_ms)
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_RST_KEY;
             e.key_cmd.key_event_type = 0; // RST key pressed
-            if (g_disable_turn_off==1) g_disable_turn_off = 2;//短按进入设备管理或7016OTA，只适用于开机8s内阶段
+            if (g_disable_turn_off == 1) g_disable_turn_off = 2;//短按进入设备管理或7016OTA，只适用于开机8s内阶段
             lwl_event_notify(&e);
         } else {
             set_led_rst_key_off();

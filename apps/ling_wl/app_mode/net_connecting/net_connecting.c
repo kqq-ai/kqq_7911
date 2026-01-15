@@ -38,26 +38,17 @@ bool wifi_manager_state = false; // wifi manager 状态
 bool ble_connecting = false; // wifi manager 状态
 bool ble_connected = false; // wifi manager 状态
 
-void clear_key_press_time_ms(){
-    
-    ble_connecting = false;
-    ble_connected = false;
-    key_press_time_ms = 0;
-}
-
 static void set_led_connecting(void)        { set_rgb_color(COLOR_CYAN); }
 static void set_led_connected(void)         { set_rgb_color(COLOR_BLUE); }
 static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_GREEN,2); }
 static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_GREEN,2); }
 
-int app_net_connecting_event_handler(struct application *app, struct sys_event *event)
-{
-    return false;
+void clear_key_press_time_ms(){
+    set_led_connecting();
+    ble_connecting = false;
+    ble_connected = false;
+    key_press_time_ms = 0;
 }
-
-u32 get_key_times_in_net_connecting(){
-    return ble_connecting;
-} 
 
 static void start_ble_net(){
     if (wifi_manager_state) {
@@ -67,10 +58,8 @@ static void start_ble_net(){
 static void reset_ble_net(){
     if (wifi_manager_state) {
         set_led_confirm_off();
-        key_press_time_ms = 0;
         ble_simple_server_name_enable(0);
-        ble_connecting = false;
-        ble_connected = false;
+        clear_key_press_time_ms();
         printf("BLE timeout,restart ble\n");
     }
 } 
@@ -83,10 +72,19 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
     lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
 
     switch (e->event_type) {
+    case LWL_EVENT_TYPE_KEY:
+        log_i("PRESS NORMAL KEY\n");
+        reset_ble_net();
+        lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH "NetCfgEnter.mp3", NULL);
+        break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down");
-            reset_ble_net();
+            if (!ble_connected) {
+                reset_ble_net();
+            } else {
+                start_ble_net();
+            }
             lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH "t_key.mp3", start_ble_net);
         } else {
             log_i("Touch key released");
@@ -109,19 +107,21 @@ static int net_connecting_init(void)
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
     wifi_manager_state = false;
-    ble_connecting = false;
-    ble_connected = false;
-    key_press_time_ms = 0;
-    ble_simple_server_init();
+    clear_key_press_time_ms();
 
+    ble_simple_server_init();
     wifi_and_network_on();
     
     while (lwl_app_audio_playing()) {
         msleep(10);
         if (WIFI_STA_NETWORK_STACK_DHCP_SUCC == wifi_get_sta_connect_state()) {
-            break;
+            return 0;
         }
     }
+    printf("Network connection is failed!\n");
+    ble_simple_server_name_enable(0);
+    wifi_manager_state = true;
+    play_system_music("NetCfgEnter.mp3");
 
     return 0;
 }
@@ -131,8 +131,8 @@ static int net_connecting_unint(void)
     lwl_event_handler_remove(net_connecting_event_handler_cb);
     if (wifi_manager_state) {
         wifi_manager_state = false;
+        ble_simple_server_exit();
     }
-    ble_simple_server_exit();
     return 0;
 }
 
@@ -175,6 +175,7 @@ void app_net_connecting_loop()
         mdelay(200);
         printf("Network connection is successful!\n");
         switch_rf_coexistence_config_table(3);
+        play_system_music("NetCfgSucc.mp3");
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
     }
@@ -187,17 +188,6 @@ void app_net_connecting_loop()
         state == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
         state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT
     );
-
-    if (!wifi_manager_state && is_connection_failed) {
-        printf("Network connection is failed!\n");
-        
-        ble_simple_server_name_enable(0);
-        wifi_manager_state = true;
-        
-        play_system_music("NetCfgEnter.mp3");
-            
-        return;
-    }
 
     /* BLE连接处理 */
     if (wifi_manager_state && key_press_time_ms > 0) {
