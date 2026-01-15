@@ -22,7 +22,7 @@
 // 三个距离的宏定义
 #define BLUE_DISTANCE_TWO_METER (2.0)
 #define BLUE_DISTANCE_FIVE_METER (3.5)
-#define MAX_BLUE_DISTANCE (5.0)
+#define MAX_BLUE_DISTANCE (8.0)
 
 #define NOTIFY_APP_TIME 1000 // 1s
 #define RSSI_EXPIRE_TIME_MS (2000) // RSSI样本过期时间：2秒

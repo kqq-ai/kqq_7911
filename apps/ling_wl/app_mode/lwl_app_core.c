@@ -207,22 +207,37 @@ void dump_all_eend_info()
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
-    log_i("|       sn        | bat |  adv_state |  deadline  | rssi |  distance | OP | num |");
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+-----------+----+-----+");
+    log_i("|       sn        | bat |  adv_state |  deadline  | rssi | distance(m)| dist_type | OP | num |");
+    log_i("+-----------------+-----+------------+------------+------+-----------+-----------+----+-----+");
 
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
 
         if (adv_stat_to_text(pdev->adv_state)[0] != '\0') {
-            log_i("| %15.15s | %3d | %10s | %10d | %.2f | %9s | %02X | %3d |", pdev->sn, 
-                pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline, 
-                pdev->distance_info.distance, distance_type_to_text(pdev->distance_info.distance_type), pdev->op_state, pdev->distance_info.rssi_sample_count);
+            // distance_info 里有独立mutex，打印时取快照，避免被更新线程打断
+            s8 rssi = -128;
+            double distance = 0;
+            int distance_type = DISTANCE_3;
+            int sample_count = 0;
+
+            os_mutex_pend(&pdev->distance_info.mutex, 0);
+            distance = pdev->distance_info.distance;
+            distance_type = pdev->distance_info.distance_type;
+            sample_count = pdev->distance_info.rssi_sample_count;
+            if (sample_count > 0 && sample_count <= MAX_SAMPLES) {
+                rssi = pdev->distance_info.rssi_samples[sample_count - 1];
+            }
+            os_mutex_post(&pdev->distance_info.mutex);
+
+            log_i("| %15.15s | %3d | %10s | %10d | %4d | %9.2f | %9s | %02X | %3d |", pdev->sn,
+                  pdev->bat_level, adv_stat_to_text(pdev->adv_state), pdev->deadline,
+                  rssi, distance, distance_type_to_text(distance_type), pdev->op_state, sample_count);
         } else {
             log_i("[ERROR]%s UNKNOWN type: %d", pdev->sn, pdev->adv_state);
         }
     }
-    log_i("+-----------------+-----+------------+------------+------+-----------+----+-----+");
+    log_i("+-----------------+-----+------------+------------+------+-----------+-----------+----+-----+");
 
     map_iterator_unlock(it); // 释放锁
 }
