@@ -63,6 +63,7 @@ static void lwl_app_audio_play_cb(void *priv)
 static void set_local_speaker(void)
 {
     log_i("[AUDIO_LOCAL]set_local_speaker");
+    bdo_disable(0);
     gpio_direction_output(IO_PORTA_00, 1);  // Enable C speaker
     gpio_direction_output(IO_PORTB_02, 0);  // Disable E speaker
     set_dec_volume(g_app_ctx->music_player, INIT_VOLUME_VALUE);
@@ -77,13 +78,13 @@ static void set_stream_speaker(void)
 {
     log_i("[AUDIO_STREAM]set_stream_speaker volume: %d", g_volume);
     
+    bdo_enable();
     // 先关闭本地播放
     lwl_app_audio_stop_playing();
     
     gpio_direction_output(IO_PORTA_00, 0);  // Disable C speaker
     gpio_direction_output(IO_PORTB_02, 1);  // Enable E speaker
     set_dec_volume(g_app_ctx->music_player, g_volume);
-    bdo_enable();
 }
 
 /**

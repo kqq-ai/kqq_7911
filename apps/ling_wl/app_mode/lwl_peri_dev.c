@@ -26,7 +26,7 @@ static uint8_t  g_key_scan_ongoing = 0;
 static uint8_t  g_key_action_start = 0;
 static uint32_t g_key_press_start_time = 0;
 static uint32_t g_key_release_start_time = 0;
-static uint32_t g_key_latest_state = 1;             // 上一帧按键按下：0 上一帧按键未按下：1
+static uint32_t g_key_latest_state = 0;             // 上一帧按键按下：0 上一帧按键未按下：1
 static uint32_t g_key_click_counter = 0;
 
 static uint32_t g_gsensor_alive_timer = 0;
@@ -194,7 +194,7 @@ static void key_scan_start(void)
 {
     g_key_scan_ongoing = 0;
     g_key_press_start_time = 0;
-    g_key_latest_state = 1;       // 假设默认为上拉
+    g_key_latest_state = 0;       // 默认为按下开机
     g_key_scan_ongoing = true;
 }
 
@@ -210,19 +210,23 @@ static void key_scan_loop(uint32_t current_time_ms)
 
         uint8_t hasFlip = g_key_latest_state != btnCurrState;
 
+        // 按电源键开机忽略第一次按键
+        if (g_disable_turn_off) {
+            if (btnCurrState == 0) {
+                g_key_scan_timer = g_curr_time;
+            } else {
+                g_disable_turn_off = 0;
+                g_key_latest_state = btnCurrState;
+            }
+            return;
+        }
         if (hasFlip) {
             if (btnCurrState == 0) {
                 // on_key_down();
-                if (!g_disable_turn_off) {
-                    set_led_normal_key_on();
-                }
+                set_led_normal_key_on();
             } else {
                 // on_key_up();
-                if (!g_disable_turn_off) {
-                    set_led_normal_key_off();
-                } else {
-                    g_disable_turn_off = 0;
-                }
+                set_led_normal_key_off();
             }  
         }
         
@@ -256,7 +260,7 @@ static void key_scan_loop(uint32_t current_time_ms)
             }
 
             if (g_curr_time - g_key_press_start_time > BTN_PRPESS_TIME * 3) {
-                if (!g_disable_turn_off) on_key_long_press();
+                on_key_long_press();
             }
         } else {    // if (btnCurrState == 1)
             if (g_key_action_start) {
