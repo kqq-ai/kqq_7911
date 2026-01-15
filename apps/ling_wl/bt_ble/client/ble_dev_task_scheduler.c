@@ -255,6 +255,11 @@ static OS_SEM g_e_connected_sem; // E 端连接成功信号量
 static OS_SEM g_e_disconnected_sem; // E 端断连成功信号量
 static MyBlockingQueue g_ble_dev_op_queue;
 
+// 跟踪当前是否有活跃的连接操作在进行
+static volatile int g_ble_conn_pending = 0;  // 1表示有待处理的连接，0表示无
+
+
+
 #define MS2TICK(ms) ((ms) / 10)
 
 const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -340,7 +345,9 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     /* - 建立连接 */
     log_i("[BDO]ble handshake_task %s\n", op->sn);
     os_sem_set(&g_conn_sem, 0);
+    g_ble_conn_pending = 1;  // 标记有待处理的连接操作
     if (ble_simple_client_create_connection(op->active.address, op->active.address_type) == APP_BLE_OPERATION_ERROR) {
+        g_ble_conn_pending = 0;  // 清除标记
         log_e("[BDO]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
         ble_simple_client_module_enable(1);
         dev->op_state &= ~BDO_STATE_ACTIVATING;
@@ -348,13 +355,17 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         return;
     }
     if (os_sem_pend(&g_conn_sem, MS2TICK(op->active.conn_timeout)) == OS_TIMEOUT) {
+        g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
         ble_simple_client_create_cannel();
         log_e("[BDO]Error ble connection timeout!!!");
-        ble_simple_client_module_enable(1);
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Connection_Timeout);
+        // 增加延迟确保BLE栈完全取消连接
+        mdelay(100);
+        ble_simple_client_module_enable(1);
         return;
     }
+    g_ble_conn_pending = 0;  // 连接成功，清除标记
     log_i("[BDO]ble connected %s Send deadline = %d\n", op->sn, timestamp_now);
 
     /* - 发送激活数据 */
@@ -442,7 +453,9 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         log_i("[BDO]ble handshake_task %s\n", op->sn);
         os_sem_set(&g_conn_sem, 0);
         os_sem_set(&g_e_connected_sem, 0);
+        g_ble_conn_pending = 1;  // 标记有待处理的连接操作
         if (ble_simple_client_create_connection(op->turnon.address, op->turnon.address_type) == APP_BLE_OPERATION_ERROR) {
+            g_ble_conn_pending = 0;  // 清除标记
             log_e("[BDO]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
             ble_simple_client_module_enable(1);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
@@ -450,13 +463,17 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
             return;
         }
         if (os_sem_pend(&g_conn_sem, MS2TICK(op->turnon.conn_timeout)) == OS_TIMEOUT) {
+            g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
             ble_simple_client_create_cannel();
             log_e("[BDO]Error ble connection timeout!!!");
-            ble_simple_client_module_enable(1);
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_Connection_Timeout);
+            // 增加延迟确保BLE栈完全取消连接
+            mdelay(100);
+            ble_simple_client_module_enable(1);
             return;
         }
+        g_ble_conn_pending = 0;  // 连接成功，清除标记
         log_i("[BDO]ble connected");
 
         /* - 关闭连接 */
@@ -550,7 +567,16 @@ static const int g_op_handler_entries_count = sizeof(g_op_handler_entries) / siz
 
 static void ble_conn_event_handler(uint8_t *packet) {
     log_i("[BDO]BLE connnected\n");
-    os_sem_post(&g_conn_sem);
+    
+    // 检查是否有待处理的连接操作
+    if (g_ble_conn_pending) {
+        // 有待处理的连接操作，释放信号量让等待方继续
+        os_sem_post(&g_conn_sem);
+    } else {
+        // 这是超时后的迟到连接回调，需要立即断开
+        log_i("[BDO]BLE connnected but no pending operation, disconnecting...");
+        ble_simple_client_disconnect();
+    }
 }
 
 static void ble_disconn_event_handler(uint8_t *packet) {

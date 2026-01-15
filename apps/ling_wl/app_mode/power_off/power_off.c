@@ -43,14 +43,14 @@ static void power_off_init(void)
     g_sensor_reset_alive_timer();
     
     /* 关闭 7016 */
-    log_i("7016 OFF\n");
     lwl_peri_dev_7016_on(false);
     disable_gsensor();
 
     led_off = 0;
     
+    int charge_in = gpio_read(CHARGE_IN_IO);
     u16 voltage = get_vbat_level();
-    if (voltage < LOW_BATT_VOLT) {
+    if (!charge_in && voltage < LOW_BATT_VERY_SHUTDOWN) {
         set_led_power_off();
         log_i("Battery low, skip PowerOff prompt and shutdown immediately\r\n");
         return;
@@ -77,7 +77,7 @@ void power_off_loop()
             set_led_bye();
         }
     }
-    if (!lwl_app_mode_playing()) {
+    if (!lwl_app_audio_playing()) {
         power_set_soft_poweroff();
     } else if (timer_get_ms() - init_time >= WAIT_FOR_POWER_OFF_TIME_MS) {
         power_set_soft_poweroff();
@@ -88,7 +88,6 @@ void app_power_off_mode(void)
 {
     power_off_init();
     while (1) {
-        lwl_app_mode_play_loop();
         power_off_loop();
         if (lwl_app_mode_exitting()) {
             power_off_unint();

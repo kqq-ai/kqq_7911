@@ -11,8 +11,6 @@ void wss_stream_stop();
 
 void wss_stream_reset();
 
-bool wss_stream_is_empty();
-
 bool wss_stream_on();
 
 /**

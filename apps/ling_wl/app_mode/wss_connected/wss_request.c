@@ -75,6 +75,7 @@ void turn_off_Pi() {
 //=================================================================================================
 static void e_turn_on_cb(bdo_code_e code, void *priv)
 {
+    u32 callback_start_time = timer_get_ms();
     os_mutex_pend(&g_request_mutex, 0);
     lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
     
@@ -146,6 +147,12 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
     }
     
     os_mutex_post(&g_request_mutex);
+    
+    u32 callback_end_time = timer_get_ms();
+    u32 callback_duration = callback_end_time - callback_start_time;
+    if (callback_duration > 30) {
+        log_w("[e_turn_on_cb] Callback took %u ms (code: %d)", callback_duration, code);
+    }
 }
 
 //=================================================================================================
@@ -216,6 +223,7 @@ void turn_on_Pi(const char *pdev_sn) {
 //=================================================================================================
 static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 {
+    u32 callback_start_time = timer_get_ms();
     os_mutex_pend(&g_request_mutex, 0);
     log_i("[wss_request]Received WSS response type=%d\n", type);
     if (type == TTS_BIND) {
@@ -248,6 +256,12 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
 
     }
     os_mutex_post(&g_request_mutex);
+    
+    u32 callback_end_time = timer_get_ms();
+    u32 callback_duration = callback_end_time - callback_start_time;
+    if (callback_duration > 150) {
+        log_w("[wss_rsp_cbk] Callback took %u ms (type: %d)", callback_duration, type);
+    }
 }
 
 //=================================================================================================

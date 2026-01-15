@@ -69,10 +69,9 @@ void process_mode_7(void)
         if (!g_mode_7_wifi_checked || g_mode_7_wifi_connected) {
             g_mode_7_wifi_connected = 0;
             g_mode_7_wifi_checked = 1;
-            ble_simple_server_name_enable(1);
             if (context && context->music_player) {
                 g_audio_playing = 1;
-                lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3", mode7_audio_callback);
+                lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"NetCfgFail.mp3", mode7_audio_callback);
             }
             log_i("MODE 7: WiFi connect failed, playing NetCfgFail.mp3");
             return;
@@ -84,7 +83,7 @@ void process_mode_7(void)
             g_mode_7_wifi_checked = 1;
             if (context && context->music_player) {
                 g_audio_playing = 1;
-                lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"NetCfgSucc.mp3", mode7_audio_callback);
+                lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"NetCfgSucc.mp3", mode7_audio_callback);
             }
             log_i("MODE 7: WiFi connected, playing NetCfgSucc.mp3");
             return;
@@ -100,11 +99,12 @@ void mode7_init()
 {
     wifi_and_network_on();
     ble_simple_server_init();
+    ble_simple_server_name_enable(1);
 
     g_mode_7_wifi_checked = 0;
     g_mode_7_wifi_connected = 0;
     g_mode_7_last_wifi_status = -1;
-    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"NetConnting.mp3", mode7_audio_callback);
+    lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"NetConnting.mp3", mode7_audio_callback);
     g_audio_playing = 1;
     log_i("MODE 7: WiFi connecting, playing NetConnting.mp3");
 }

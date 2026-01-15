@@ -1,4 +1,5 @@
 #include "app_config.h"
+#include "app_cookie.h"
 #include "system/includes.h"
 #include "device/device.h"
 #include "gpio.h"
@@ -212,11 +213,16 @@ static void key_scan_loop(uint32_t current_time_ms)
         if (hasFlip) {
             if (btnCurrState == 0) {
                 // on_key_down();
-                set_led_normal_key_on();
+                if (!g_disable_turn_off) {
+                    set_led_normal_key_on();
+                }
             } else {
                 // on_key_up();
-                set_led_normal_key_off();
-                g_disable_turn_off = 0;
+                if (!g_disable_turn_off) {
+                    set_led_normal_key_off();
+                } else {
+                    g_disable_turn_off = 0;
+                }
             }  
         }
         
@@ -336,7 +342,7 @@ static void rst_key_loop(uint32_t current_time_ms)
             lwl_event_t e;
             e.event_type = LWL_EVENT_TYPE_RST_KEY;
             e.key_cmd.key_event_type = 0; // RST key pressed
-            if (g_disable_turn_off==1) g_disable_turn_off = 2;//短按进入设备管理或7016OTA，只适用于开机8s内阶段
+            if (g_disable_turn_off == 1) g_disable_turn_off = 2;//短按进入设备管理或7016OTA，只适用于开机8s内阶段
             lwl_event_notify(&e);
         } else {
             set_led_rst_key_off();
@@ -358,6 +364,7 @@ static void rst_key_loop(uint32_t current_time_ms)
 void g_sensor_set_alive_timeout(uint32_t timeout_ms)
 {
     g_gsensor_user_alive_timeout = timeout_ms;
+    g_gsensor_alive_timer = 0;
     log_i("G-Sensor: user alive timeout set to %u ms\n", timeout_ms);
 }
 static uint32_t g_gsensor_timer = 0;
@@ -531,9 +538,11 @@ static void battery_detection_loop(uint32_t curr_time)
     static uint32_t battery_timer = 0;
     if (curr_time - battery_timer >= BATTERY_CHECK_INTERVAL) {
         battery_timer = curr_time;
-        u16 voltage = get_vbat_level();
-        log_i("voltage: %d\n",voltage);
-        if (voltage < POWER_OFF_BATTERY_LEVEL)
+        int charge_in = gpio_read(CHARGE_IN_IO);
+        u16 voltage = adc_get_voltage(AD_CH_PA07) * 2 / 10;//
+        u16 vBat_level = get_vbat_level();
+        log_i("voltage chargeIn: %d ,  IO07: %d, vBat: %d\n",gpio_read(CHARGE_IN_IO), voltage, vBat_level);
+        if (!charge_in && voltage < LOW_BATT_VERY_SHUTDOWN)
         {
             log_i("low battery!\n");
             // 发送低电压事件通知
@@ -707,6 +716,10 @@ void lwl_peri_dev_init(void)
     gpio_set_die(GSENSOR_IO, 1);
     gpio_set_dieh(GSENSOR_IO, 1);
     /* 6. 电量检测初始化 */
+    gpio_set_direction(IO_PORTA_07, 1);
+    gpio_set_pull_down(IO_PORTA_07, 0);
+    gpio_set_pull_up(IO_PORTA_07, 0);
+    adc_add_sample_ch(AD_CH_PA07);//添加通道
 }
 
 

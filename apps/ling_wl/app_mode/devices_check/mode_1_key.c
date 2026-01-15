@@ -35,7 +35,7 @@ void process_mode_1_touch_key(u8 touch_key_event_type)
             if (!t_key_playing && !g_audio_playing) {
                 t_key_playing = 1;
                 g_audio_playing = 1;
-                lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"t_key.mp3", mode1_tkey_audio_end_cb);
+                lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"t_key.mp3", mode1_tkey_audio_end_cb);
                 log_i("MODE 1: t_key.mp3 started successfully");
             }
         } else if (touch_key_event_type == 1 && g_mode1_touch_active) {
@@ -86,7 +86,7 @@ void mode1_init()
     log_i("MODE 1: Touch key detection mode started, C speaker enabled");
 
     // 播放进入模式1的音频，使用回调
-    lwl_app_mode_play(CONFIG_CP_VOICE_FILE_PATH"test_touchk.mp3", mode1_audio_callback);
+    lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"test_touchk.mp3", mode1_audio_callback);
     log_i("Playing test_touchk.mp3 for MODE 1 with callback");
 }
 

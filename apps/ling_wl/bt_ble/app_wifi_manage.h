@@ -10,7 +10,7 @@
 
 typedef struct
 {
-    char ssid[33];
+    char ssid[64];
     char pwd[33];
 } app_wifi_info_t;
 
@@ -140,7 +140,7 @@ int disconnect_sem_post(void *pri);
 * 0: 扫描成功
 * -1: 扫描失败 STA模式下调用返回-1代表WIFI OFF/正在扫描/连接中,无需启动扫描, 可以等待几秒或者扫描完成事件到来获取结果
 */
-int wifi_scan_start(void);
+///int wifi_scan_start(void);
 
 void wifi_scan_stop(void *pri);
 

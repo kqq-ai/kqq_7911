@@ -50,7 +50,6 @@ bool has_saved_wifi()
 static int power_on_init(void)
 {
     init_time = timer_get_ms();
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     set_led_power_on();
 
@@ -64,7 +63,6 @@ static int power_on_init(void)
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         //增加音效提示
         play_system_music("reset_wifi.mp3");
-        lwl_app_mode_play_loop();
         mdelay(3000);
         system_reset(); //restart
         return 0;
@@ -104,9 +102,11 @@ void power_on_loop()
             lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
             set_led_ota_off();
         }
-        g_sensor_reset_alive_timer();
     }
-    if (btnCurrState == 0) return;
+    if (btnCurrState == 0) {
+        g_sensor_reset_alive_timer();
+        return;
+    }
     // 7016在6s内已经开机（亮紫灯），但未到8s进入device check模式，此时保持紫灯，进行7016C的OTA
     if (c_7016_power_on) {
         log_i("RELEASE OTA7016 KEY TO ENTER DEVICE CHECK MODE");
@@ -135,7 +135,6 @@ void app_power_on_mode(void)
 {
     power_on_init();
     while (1) {
-        lwl_app_mode_play_loop();
         if (lwl_app_mode_exitting()) {
             power_on_unint();
             return;
