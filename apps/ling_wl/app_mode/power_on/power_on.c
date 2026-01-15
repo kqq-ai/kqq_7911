@@ -50,7 +50,6 @@ bool has_saved_wifi()
 static int power_on_init(void)
 {
     init_time = timer_get_ms();
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     set_led_power_on();
 
@@ -103,9 +102,11 @@ void power_on_loop()
             lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
             set_led_ota_off();
         }
-        g_sensor_reset_alive_timer();
     }
-    if (btnCurrState == 0) return;
+    if (btnCurrState == 0) {
+        g_sensor_reset_alive_timer();
+        return;
+    }
     // 7016在6s内已经开机（亮紫灯），但未到8s进入device check模式，此时保持紫灯，进行7016C的OTA
     if (c_7016_power_on) {
         log_i("RELEASE OTA7016 KEY TO ENTER DEVICE CHECK MODE");

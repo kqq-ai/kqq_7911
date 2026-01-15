@@ -167,7 +167,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
 
         break;
     }
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+    case LWL_EVENT_TYPE_RST_KEY:
         // return to WORK_MODE_1
         os_mutex_pend(&g_mode_mutex, 0);
         g_new_mode = WORK_MODE_INIT;
@@ -235,7 +235,6 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
 static void devices_check_init(void)
 {
     init_time = timer_get_ms();
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_app_context_t *g_app_ctx = lwl_app_core_context_get_instance();
     

@@ -96,7 +96,6 @@ static int default_init(void)
     lwl_app_context_t *context = lwl_app_core_context_get_instance();
     /* 注册lwl事件处理回调 */
     init_time = timer_get_ms();
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(default_input_event_handler_cb);
 

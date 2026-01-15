@@ -96,6 +96,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
         break;
     case LWL_EVENT_TYPE_TOUCH_KEY:
+        g_sensor_reset_alive_timer();
         if (e->touch_key_cmd.touch_key_event_type == 0) {
             log_i("Touch key pressed down\n");
         } else {
@@ -104,6 +105,7 @@ void base_lwl_event_handler(lwl_event_t *e)
         // play 提示音
         break;
     case LWL_EVENT_TYPE_KEY:
+        g_sensor_reset_alive_timer();
         log_i("PRESS NORMAL KEY\n");
         break;
     case LWL_EVENT_TYPE_LOW_BATTERY:
@@ -113,8 +115,12 @@ void base_lwl_event_handler(lwl_event_t *e)
             set_led_red_low_power();
         }
         break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+    case LWL_EVENT_TYPE_RST_KEY:
+        g_sensor_reset_alive_timer();
         log_i("PRESS RESET KEY\n");
+        break;
+    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+        log_i("CLEAR_WIFI\n");
         // Reset WiFi SSID
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         uart_response_clear_wifi_ssid();

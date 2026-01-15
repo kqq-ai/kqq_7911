@@ -6,7 +6,7 @@
 #include "bt_ble/app_wifi_manage.h"
 #include "LED/LED.h"
 
-#define MOVE_TIMEOUT_MS 120000 // 2 minutes
+#define MOVE_TIMEOUT_MS 600000 // 10 minutes
 static u32 init_time = 0;
 int led_color = 0;
 int progress = 0;
@@ -20,7 +20,6 @@ static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 
 static int update_init(void)
 {
     init_time = timer_get_ms();
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     set_led_OTA_on();
     led_color = 0;
@@ -55,15 +54,12 @@ void update_loop()
     if (progress > 10 && progress < 40 && led_color < 1) {
         set_led_OTA_10();// OTA IN PROGRESS
         led_color = 1;
-        g_sensor_reset_alive_timer();
     } else if (progress >= 40 && progress < 70 && led_color < 2) {
         set_led_OTA_40();// OTA IN PROGRESS
         led_color = 2;
-        g_sensor_reset_alive_timer();
     } else if (progress >= 70 && progress < 100 && led_color < 3) {
         set_led_OTA_70();// OTA IN PROGRESS
         led_color = 3;
-        g_sensor_reset_alive_timer();
     }
     msleep(1000);
 }

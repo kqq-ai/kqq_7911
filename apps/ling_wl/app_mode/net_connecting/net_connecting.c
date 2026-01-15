@@ -103,7 +103,6 @@ static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
     set_led_connecting();
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
     wifi_manager_state = false;
@@ -143,7 +142,6 @@ static void handle_ble_connection_state()
     if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
         reset_ble_net();
         printf("BLE timeout,restart ble\n");
-        return;
     }
 
     /* BLE连接尝试 */

@@ -189,7 +189,7 @@ static void wss_handle_touch_key_event(bool press_down)
             g_device_state = APP_WAIT;
             multi_play_mode = true;
             g_mic_on = false;
-            last_req_time = g_curr_time;
+            wss_application_vailed();
         } else {
             // 短按触摸键，打断/切换对话状态
             if (g_device_state == APP_VAD) {// 按键前在说话，按键触发
@@ -213,7 +213,6 @@ static void wss_handle_touch_key_press(void)
     log_mqtt("👆👆 触摸键按下");
     g_on_touch_key = true;
     wss_handle_touch_key_event(true);
-    wss_application_vailed();
 }
 
 static void wss_handle_touch_key_release(void)
@@ -221,7 +220,6 @@ static void wss_handle_touch_key_release(void)
     log_mqtt("👇👇 触摸键释放");
     wss_handle_touch_key_event(false);
     g_on_touch_key = false;
-    wss_application_vailed();
 }
 
 // 事件回调：仅记录事件到队列，避免在回调中调用加锁函数
@@ -253,6 +251,10 @@ static void input_event_handler_cb(lwl_event_t *e)
         }
         break;
         
+    case LWL_EVENT_TYPE_RST_KEY:
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        break;
+
     case LWL_EVENT_TYPE_LOW_BATTERY:
         int voltage = get_vbat_level();
         if (voltage < LOW_BATT_VERY_SHUTDOWN) {
@@ -378,7 +380,6 @@ void wss_application_init()
 {
     log_i("[wss_application]Init WSS application\n");
     log_mqtt("🤖🤖🤖 初始化WSS应用");
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
     player = lwl_app_core_context_get_instance()->music_player;
 
@@ -447,7 +448,6 @@ void wss_application_reset()
     log_i("[wss_application]Reset WSS application\n");
     log_mqtt("🤖🤖🤖 重置WSS应用");
     os_mutex_pend(&g_wss_app_mutex, 0);
-    g_sensor_reset_alive_timer();
     g_sensor_set_alive_timeout(NO_REQ_TIMEOUT_MS);
 
     

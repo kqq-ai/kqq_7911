@@ -364,6 +364,7 @@ static void rst_key_loop(uint32_t current_time_ms)
 void g_sensor_set_alive_timeout(uint32_t timeout_ms)
 {
     g_gsensor_user_alive_timeout = timeout_ms;
+    g_gsensor_alive_timer = 0;
     log_i("G-Sensor: user alive timeout set to %u ms\n", timeout_ms);
 }
 static uint32_t g_gsensor_timer = 0;

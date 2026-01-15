@@ -108,7 +108,6 @@ void app_net_connected_loop()
     }
     if (wss_connect()) {
         lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-        play_system_music("NetCfgSucc.mp3");
     } else {
         log_mqtt("❌❌❌ websockets init failed\n");
         set_led_connect_error();// WSS ERROR
