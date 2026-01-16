@@ -272,7 +272,6 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 if (status) {
                     // 开启高占空比定向回连广播时，若在持续的1.28秒内没有成功回连，则会进入此判断分支
                     log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
-                    log_i("【debug】BLE连接失败(HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE): status=0x%02x, restart adv", status);
                     set_ble_work_state(BLE_ST_DISCONN);
                     bt_ble_adv_enable(1);
                     break;
@@ -281,7 +280,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 log_info("HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE : %0x\n", server_con_handle);
                 log_info("[blee-ble] BLE connection successful, handle: 0x%04x\n", server_con_handle);
 
-                log_i("【debug】BLE连接成功(HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE): handle=0x%04x", server_con_handle);
+                log_i("【wifi-ble】BLE连接成功: handle=0x%04x", server_con_handle);
 
                 connection_update_cnt = 0;
                 ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
@@ -296,7 +295,6 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 if (status) {
                     // 开启高占空比定向回连广播时，若在持续的1.28秒内没有成功回连，则会进入此判断分支
                     log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
-                    log_i("【debug】BLE连接失败(HCI_SUBEVENT_LE_CONNECTION_COMPLETE): status=0x%02x, restart adv", status);
                     set_ble_work_state(BLE_ST_DISCONN);
                     bt_ble_adv_enable(1);
                     break;
@@ -305,7 +303,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                 log_info("HCI_SUBEVENT_LE_CONNECTION_COMPLETE: %0x\n", server_con_handle);
                 log_info("[blee-ble] BLE connection successful, handle: 0x%04x\n", server_con_handle);
 
-                log_i("【debug】BLE连接成功(HCI_SUBEVENT_LE_CONNECTION_COMPLETE): handle=0x%04x", server_con_handle);
+                log_i("【wifi-ble】BLE连接成功: handle=0x%04x", server_con_handle);
 
                 connection_update_cnt = 0;
                 ble_op_multi_att_send_conn_handle(server_con_handle, 0, MULTI_ROLE_SERVER);
@@ -343,7 +341,7 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
             }
 
             log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
-            log_i("【debug】BLE断开连接: handle=0x%04x reason=0x%02x", tmp_handle, packet[5]);
+            log_i("【wifi-ble】BLE断开连接: handle=0x%04x", tmp_handle);
             multi_att_clear_ccc_config(tmp_handle);
             server_con_handle = INVALID_HANDLE;
             // 重置初始列表推送标志，下次连接时可以再次推送
@@ -475,7 +473,7 @@ static int att_write_callback(hci_con_handle_t connection_handle, uint16_t att_h
         // 这是连接后首次推送，让小程序获取初始列表
         if (buffer[0] != 0 && !initial_wifi_list_pushed)
         {
-            log_i("【debug】BLE通知已开启(CCC=0x%02x), 推送初始WiFi列表", buffer[0]);
+            log_i("【wifi-ble】BLE通知已开启(CCC=0x%02x), 推送初始WiFi列表", buffer[0]);
             log_info("CCC enabled, pushing initial WiFi list to app\n");
             initial_wifi_list_pushed = true;
             // 延迟一小段时间确保通知已完全启用
@@ -671,8 +669,6 @@ static void advertisements_setup_init()
     uint8_t adv_channel = ADV_CHANNEL_ALL;
     int   ret = 0;
 
-    log_i("【debug】BLE广播参数初始化: interval_min=%u(type=%u, ch=%u)", (unsigned)ADV_INTERVAL_MIN, adv_type, adv_channel);
-
     ble_op_set_adv_param(ADV_INTERVAL_MIN, adv_type, adv_channel);
 
     ret |= make_set_adv_data();
@@ -692,7 +688,6 @@ static int set_adv_enable(void *priv, u32 en)
     // }
 
     if (server_con_handle != INVALID_HANDLE) {
-        log_i("【debug】BLE广播设置失败: already connected(handle=0x%04x)", server_con_handle);
         return APP_BLE_OPERATION_ERROR;
     }
 
@@ -703,8 +698,6 @@ static int set_adv_enable(void *priv, u32 en)
     }
 
     cur_state = get_ble_work_state();
-
-    log_i("【debug】BLE广播使能切换: en=%lu cur_state=0x%x next_state=0x%x", (unsigned long)en, cur_state, next_state);
 
     switch (cur_state) {
     case BLE_ST_ADV:
@@ -734,7 +727,6 @@ static int set_adv_enable(void *priv, u32 en)
 
 void bt_ble_adv_enable(u8 enable)
 {
-    log_i("【debug】BLE广播开关请求: enable=%u", enable);
     set_adv_enable(0, enable);
 }
 
@@ -826,7 +818,6 @@ void server_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
 void server_profile_init(void)
 {
     log_info("***** wifimgr ble profile init******\n");
-    log_i("【debug】BLE GATT/ATT server init: server_profile_init");
     /* setup ATT server */
     att_server_init(profile_data, att_read_callback, att_write_callback);
     att_server_register_packet_handler(server_cbk_packet_handler);
@@ -853,7 +844,6 @@ void ble_simple_server_module_enable(u8 en)
 {
     os_mutex_pend(&mutex, 0);
     log_info("mode_en:%d\n", en);
-    log_i("【debug】BLE server module enable=%u", en);
     if (en) {
         adv_ctrl_en = 1;
         bt_ble_adv_enable(1);
@@ -869,7 +859,6 @@ void ble_simple_server_adv_enable(u8 en)
 {
     os_mutex_pend(&mutex, 0);
     log_info("mode_en:%d\n", en);
-    log_i("【debug】BLE server adv enable=%u", en);
     if (en) {
         adv_ctrl_en = 1;
         bt_ble_adv_enable(1);
@@ -883,7 +872,6 @@ void ble_simple_server_adv_enable(u8 en)
 void ble_simple_server_name_enable(u8 idle_busy)
 {
     log_info("***** wifimgr_ble_name_enable******\n");
-    log_i("【debug】BLE更新广播名并重启广播: idle_busy=%u", idle_busy);
     assert(os_mutex_valid(&mutex));
     os_mutex_pend(&mutex, 0);
     ble_simple_server_module_enable(0);
@@ -913,21 +901,20 @@ void ble_simple_server_name_enable(u8 idle_busy)
 
     
     log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
-    log_i("【debug】BLE广播名已设置: %s", gap_device_name);
     set_ble_work_state(BLE_ST_INIT_OK);
     ble_simple_server_module_enable(1);
+
+    log_i("【wifi-ble】BLE配网广播已开启");
     os_mutex_post(&mutex);
 }
 
 void ble_simple_server_init(void)
 {
     log_info("***** wifimgr_ble_init******\n");
-    log_i("【debug】蓝牙初始化: ble_simple_server_init");
 
     if (!os_mutex_valid(&mutex)) {
         os_mutex_create(&mutex);
     }
-    ble_simple_server_name_enable(0);
 }
 
 void ble_simple_server_exit(void)

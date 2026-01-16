@@ -5,6 +5,7 @@
 static int g_mode_7_wifi_checked = 0;
 static int g_mode_7_last_wifi_status = -1;
 static int g_mode_7_wifi_connected = 0;
+static int g_mode_7_ble_started = 0;
 
 bool mode7_is_wifi_connected()
 {
@@ -66,6 +67,12 @@ void process_mode_7(void)
             wifi_status == WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT ||
             wifi_status == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT) {
         // 连接失败
+        if (!g_mode_7_ble_started) {
+            g_mode_7_ble_started = 1;
+            log_i("【wifi-ble】mode7: wifi明确连接失败(%d), 开启BLE配网广播", wifi_status);
+            ble_simple_server_init();
+            ble_simple_server_name_enable(0);
+        }
         if (!g_mode_7_wifi_checked || g_mode_7_wifi_connected) {
             g_mode_7_wifi_connected = 0;
             g_mode_7_wifi_checked = 1;
@@ -78,6 +85,10 @@ void process_mode_7(void)
         }
     } else if ((wifi_status == WIFI_STA_CONNECT_SUCC && ip_is_ready()) || wifi_status == WIFI_STA_NETWORK_STACK_DHCP_SUCC) {
             // 连接成功
+        if (g_mode_7_ble_started) {
+            log_i("【wifi-ble】mode7: wifi已连上, 关闭BLE配网广播");
+            ble_simple_server_module_enable(0);
+        }
         if (!g_mode_7_wifi_checked || !g_mode_7_wifi_connected) {
             g_mode_7_wifi_connected = 1;
             g_mode_7_wifi_checked = 1;
@@ -98,8 +109,9 @@ void process_mode_7(void)
 void mode7_init()
 {
     wifi_and_network_on();
+    g_mode_7_ble_started = 0;
     ble_simple_server_init();
-    ble_simple_server_name_enable(1);
+    ble_simple_server_module_enable(0);
 
     g_mode_7_wifi_checked = 0;
     g_mode_7_wifi_connected = 0;

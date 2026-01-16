@@ -74,8 +74,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_MODULE_INIT:
         puts("|network_user_callback->WIFI_EVENT_MODULE_INIT\n");
 
-        log_i("【debug】wifi模块初始化事件: WIFI_EVENT_MODULE_INIT");
-
         struct wifi_store_info wifi_default_mode_parm;
         memset(&wifi_default_mode_parm, 0, sizeof(struct wifi_store_info));
         wifi_default_mode_parm.mode = STA_MODE;
@@ -90,7 +88,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         // TODO READ ssid pwd from VM
             log_i("🚀🚀🚀 stored ssid %s, pwd %s\n", app_wifi_stored_ssid[0].ssid, app_wifi_stored_ssid[0].pwd);
 
-            log_i("【debug】wifi使用已存储账号连接: ssid=%s", app_wifi_stored_ssid[0].ssid);
+            log_i("【wifi-ble】wifi使用已存储账号连接: ssid=%s", app_wifi_stored_ssid[0].ssid);
             memcpy(wifi_default_mode_parm.ssid[0], app_wifi_stored_ssid[0].ssid, strlen((const char *)app_wifi_stored_ssid[0].ssid));
             memcpy(wifi_default_mode_parm.pwd[0], app_wifi_stored_ssid[0].pwd, strlen((const char *)app_wifi_stored_ssid[0].pwd));
 
@@ -99,7 +97,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
             log_i("no stored ssid\n");
             get_wifi_config(wifi_default_mode_parm.ssid[0],wifi_default_mode_parm.pwd[0]);
 
-            log_i("【debug】wifi无存储账号, 读取默认配置并尝试连接: ssid=%s", wifi_default_mode_parm.ssid[0]);
+            log_i("【wifi-ble】wifi无存储账号, 读取默认配置并尝试连接: ssid=%s", wifi_default_mode_parm.ssid[0]);
             wifi_set_sta_connect_timeout(5);
             wifi_set_default_mode(&wifi_default_mode_parm, 5, 0);
         }
@@ -109,8 +107,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_MODULE_START:
         puts("|network_user_callback->WIFI_EVENT_MODULE_START\n");
-
-        log_i("【debug】wifi模块启动事件: WIFI_EVENT_MODULE_START");
         u32 tx_rate_control_tab = // 不需要哪个速率就删除掉,可以动态设定
             0 | BIT(0)            // 0:CCK 1M
             | BIT(1)              // 1:CCK 2M
@@ -156,8 +152,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_START:
         puts("|network_user_callback->WIFI_EVENT_STA_START\n");
 
-        log_i("【debug】wifi开始连接: WIFI_EVENT_STA_START");
-
         /*hzx add*/
 
         set_wifi_manager_mode(WIFI_STA_MODE);
@@ -181,15 +175,11 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
     case WIFI_EVENT_STA_SCAN_COMPLETED:
         puts("|network_user_callback->WIFI_STA_SCAN_COMPLETED\n");
-
-        log_i("【debug】wifi扫描完成: WIFI_EVENT_STA_SCAN_COMPLETED");
         store_wifi_scan_result(NULL);
         break;
 
     case WIFI_EVENT_STA_CONNECT_SUCC:
         puts("|network_user_callback->WIFI_STA_CONNECT_SUCC\n");
-
-        log_i("【debug】wifi关联成功(未必已DHCP): WIFI_EVENT_STA_CONNECT_SUCC");
         break;
 
     case WIFI_EVENT_MP_TEST_START:
@@ -203,7 +193,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID:
         puts("|network_user_callback->WIFI_STA_CONNECT_TIMEOUT_NOT_FOUND_SSID\n");
 
-        log_i("【debug】wifi连接失败: 找不到SSID (TIMEOUT_NOT_FOUND_SSID)");
+        log_i("【wifi-ble】wifi连接失败: 找不到SSID (TIMEOUT_NOT_FOUND_SSID)");
         net.arg = "net";
         net.event = NET_CONNECT_TIMEOUT_NOT_FOUND_SSID;
         net_event_notify(NET_EVENT_FROM_USER, &net);
@@ -232,7 +222,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_FAIL:
         puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_FAIL\n");
 
-        log_i("【debug】wifi连接失败: 关联失败(多为密码错误) (ASSOCIAT_FAIL)");
+        log_i("【wifi-ble】wifi连接失败: 关联失败(多为密码错误) (ASSOCIAT_FAIL)");
         net.arg = "net";
         net.event = NET_CONNECT_ASSOCIAT_FAIL;
         net_event_notify(NET_EVENT_FROM_USER, &net);
@@ -265,7 +255,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_CONNECT_ASSOCIAT_TIMEOUT:
         puts("|network_user_callback->WIFI_STA_CONNECT_ASSOCIAT_TIMEOUT .....\n");
 
-        log_i("【debug】wifi连接失败: 关联超时 (ASSOCIAT_TIMEOUT)");
+        log_i("【wifi-ble】wifi连接失败: 关联超时 (ASSOCIAT_TIMEOUT)");
 
         /*hzx add*/
 
@@ -289,7 +279,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC:
         puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_SUCC\n");
 
-        log_i("【debug】wifi连接成功: WIFI_EVENT_STA_NETWORK_STACK_DHCP_SUCC");
+        log_i("【wifi-ble】wifi连接成功: DHCP_SUCC");
         net.arg = "net";
         net.event = NET_EVENT_CONNECTED;
         net_event_notify(NET_EVENT_FROM_USER, &net);
@@ -334,7 +324,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_DISCONNECT:
         puts("|network_user_callback->WIFI_STA_DISCONNECT\n");
 
-        log_i("【debug】wifi断开: WIFI_EVENT_STA_DISCONNECT");
+        log_i("【wifi-ble】wifi断开: WIFI_STA_DISCONNECT");
         net.arg = "net";
         net.event = NET_EVENT_DISCONNECTED;
         net_event_notify(NET_EVENT_FROM_USER, &net);
@@ -351,7 +341,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT:
         puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_TIMEOUT\n");
 
-        log_i("【debug】wifi连接失败: DHCP超时 (NETWORK_STACK_DHCP_TIMEOUT)");
+        log_i("【wifi-ble】wifi连接失败: DHCP超时 (NETWORK_STACK_DHCP_TIMEOUT)");
 
         set_wifi_cmd_status(WIFI_CMD_IDLE);
         set_wifi_connect_status(WIFI_CONNECT_STA_DISCONNECT);
