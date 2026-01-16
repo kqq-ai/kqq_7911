@@ -101,6 +101,8 @@ static u8 scan_rsp_data[ADV_RSP_PACKET_MAX];//max is 31
 
 static char gap_device_name[BT_NAME_LEN_MAX+1] = "wl80";
 static u8 gap_device_name_len = 0; //名字长度，不包含结束符
+// 广播 Manufacturer data 末尾标记：t=0, m=1（给小程序 advertisData 用）
+static u8 adv_tm_flag = 0;
 static u8 ble_work_state = 0;      //ble 状态变化
 static u8 adv_ctrl_en;             //广播控制
 static OS_MUTEX mutex;             //
@@ -597,6 +599,8 @@ static int make_set_adv_data(void)
     /* offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x18, 1); */
     /* offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x1A, 1); */
     offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_FLAGS, 0x06, 1);
+    // 把 UUID 字段放在前面，确保最后 1 字节是 t/m 标记（给小程序 advertisData 取“最后一字节”用）
+    offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_16BIT_SERVICE_UUIDS, 0xAF30, 2);
     /*
     * Put SN into manufacturer specific data (AD type 0xFF) so the mini-program can read it from advertisData.
     *
@@ -605,21 +609,22 @@ static int make_set_adv_data(void)
     *   [1] 0xFA
     *   [2] ctrl/state (1 byte, reserved; set to 0 for now)
     *   [3..18] SN (16 bytes: 15 ASCII chars + '\0')
+    *   [19] t/m flag (t=0, m=1)
     */
     {
         char sn[16] = {0};
-        if (get_SN(sn)) {
-            u8 mfg[3 + 16] = {0};
-            mfg[0] = 0xE3;
-            mfg[1] = 0xFA;
-            mfg[2] = 0x00;
-            memcpy(&mfg[3], sn, 16);
-            offset += make_eir_packet_data(&buf[offset], offset,
-                                            HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA,
-                                            mfg, sizeof(mfg));
-        }
+        // 即便 SN 获取失败也照样广播结构，避免小程序解析缺字段
+        get_SN(sn);
+        u8 mfg[3 + 16 + 1] = {0};
+        mfg[0] = 0xE3;
+        mfg[1] = 0xFA;
+        mfg[2] = 0x00;
+        memcpy(&mfg[3], sn, 16);
+        mfg[3 + 16] = adv_tm_flag; // 末尾追加：t=0, m=1
+        offset += make_eir_packet_data(&buf[offset], offset,
+                                        HCI_EIR_DATATYPE_MANUFACTURER_SPECIFIC_DATA,
+                                        mfg, sizeof(mfg));
     }
-    offset += make_eir_packet_val(&buf[offset], offset, HCI_EIR_DATATYPE_COMPLETE_16BIT_SERVICE_UUIDS, 0xAF30, 2);
 
     if (offset > ADV_RSP_PACKET_MAX) {
         log_info("***adv_data overflow!!!!!!\n");
@@ -872,6 +877,8 @@ void ble_simple_server_name_enable(u8 idle_busy)
     char *name_p = bt_get_local_name();
     const char* ext_name = idle_busy ? ble_ext_busy : ble_ext_idle;
     u8 ext_name_len = 3;
+    // 同步广播末尾标记：t=0, m=1
+    adv_tm_flag = idle_busy ? 1 : 0;
 
     memset(gap_device_name, 0, BT_NAME_LEN_MAX+1);
     
