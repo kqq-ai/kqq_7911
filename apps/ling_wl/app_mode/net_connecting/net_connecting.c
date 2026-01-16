@@ -135,33 +135,6 @@ static int net_connecting_unint(void)
     return 0;
 }
 
-/* 处理BLE连接状态的辅助函数 */
-static void handle_ble_connection_state()
-{
-    /* BLE连接超时处理 */
-    if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS && get_ble_app_disconnect_flag()) {
-        reset_ble_net();
-        printf("BLE timeout,restart ble\n");
-    }
-
-    /* BLE连接尝试 */
-    if (!ble_connecting && key_press_time_ms > 0) {
-        set_led_confirm_on();
-        ble_connecting = true;
-        ble_simple_server_name_enable(1);
-        printf("try to connect ble\n");
-    }
-
-    /* BLE连接成功处理 */
-    if (!get_ble_app_disconnect_flag() && !ble_connected) {
-        set_led_confirm_off();
-        set_led_connected();
-        play_system_music("bt_conneted.mp3");
-        ble_connected = true;
-        printf("BLE connected\n");
-    }
-}
-
 void app_net_connecting_loop()
 {
     enum wifi_sta_connect_state state = wifi_get_sta_connect_state();
@@ -187,11 +160,33 @@ void app_net_connecting_loop()
         state == WIFI_STA_NETWORK_STACK_DHCP_TIMEOUT
     );
 
-    /* BLE连接处理 */
-    if (wifi_manager_state && key_press_time_ms > 0) {
-        handle_ble_connection_state();
+    /* BLE连接成功处理 */
+    if (!get_ble_app_disconnect_flag()) {
+        if (!ble_connected) {
+            set_led_confirm_off();
+            set_led_connected();
+            play_system_music("bt_conneted.mp3");
+            ble_connected = true;
+            printf("BLE connected\n");
+        }
+        g_sensor_reset_alive_timer();
+    } else if (wifi_manager_state && key_press_time_ms > 0) {
+        ble_connected = false;
+        /* BLE连接尝试 */
+        if (!ble_connecting) {
+            set_led_confirm_on();
+            ble_connecting = true;
+            ble_simple_server_name_enable(1);
+            printf("try to connect ble\n");
+        }
+        /* BLE配网超时处理 */
+        if (timer_get_ms() - key_press_time_ms > MODE_BLE_TIMEOUT_MS) {
+            reset_ble_net();
+            printf("BLE timeout,restart ble\n");
+        }
         g_sensor_reset_alive_timer();
     }
+
 
     /* 超时处理 */
     if (timer_get_ms() - init_time > MODE_TIMEOUT_MS) {
