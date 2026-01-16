@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Serial Live Log (SSE)</title>
+  <style>
+    body { margin: 0; height: 100vh; display: flex; flex-direction: column; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+    header { padding: 10px 12px; background: #111827; color: #e5e7eb; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    header input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid #374151; background: #0b1220; color: #e5e7eb; }
+    header button { padding: 6px 10px; border-radius: 6px; border: 1px solid #374151; background: #0b1220; color: #e5e7eb; cursor: pointer; }
+    #status { opacity: 0.85; font-size: 12px; }
+    pre { margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-word; overflow: auto; background: #0b1220; color: #e5e7eb; flex: 1; }
+    .dim { color: #9ca3af; }
+    #toBottom { display: none; font-weight: 700; }
+    #toBottom.attention { border-color: #f59e0b; color: #fbbf24; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25); }
+    #filterChips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .chip { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 999px; border: 1px solid #374151; background: #0b1220; color: #e5e7eb; font-size: 12px; }
+    .chip button { padding: 0 6px; border-radius: 999px; border: 1px solid #374151; background: transparent; color: #9ca3af; }
+    .chip button:hover { color: #e5e7eb; }
+  </style>
+</head>
+<body>
+  <header>
+    <div id="status">connecting…</div>
+    <div id="filterChips" aria-label="filters"></div>
+    <input id="filter" placeholder="type filter and press Enter (multi) …" />
+    <button id="pause">pause</button>
+    <button id="clear">clear</button>
+    <button id="toBottom" title="Scroll to bottom">⬇</button>
+  </header>
+  <pre id="log"></pre>
+  <script>
+    const elLog = document.getElementById('log');
+    const elStatus = document.getElementById('status');
+    const elFilter = document.getElementById('filter');
+    const elFilterChips = document.getElementById('filterChips');
+    const elPause = document.getElementById('pause');
+    const elClear = document.getElementById('clear');
+    const elToBottom = document.getElementById('toBottom');
+    // Keep a stable text node so appending logs won't reset user selection.
+    const logNode = document.createTextNode('');
+    elLog.appendChild(logNode);
+    // Prevent the page from freezing: cap total log size and batch DOM updates.
+    // 2MB is a safe default for long-running sessions in most browsers.
+    const MAX_CHARS = 2_000_000;
+    const TRIM_TO_CHARS = 1_500_000;
+    const FLUSH_INTERVAL_MS = 50; // batch updates ~20fps max
+    let paused = false;
+    let filters = [];
+    function escapeHtml(s) {
+      return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    }
+    function renderFilters() {
+      elFilterChips.innerHTML = '';
+      for (let i = 0; i < filters.length; i++) {
+        const token = filters[i];
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.innerHTML = `<span>${escapeHtml(token)}</span><button title="remove" aria-label="remove">×</button>`;
+        chip.querySelector('button').addEventListener('click', () => {
+          filters.splice(i, 1);
+          renderFilters();
+        });
+        elFilterChips.appendChild(chip);
+      }
+      elFilter.placeholder = filters.length ? 'add another filter and press Enter…' : 'type filter and press Enter (multi) …';
+    }
+    function addFilter(token) {
+      const t = (token || '').trim();
+      if (!t) return;
+      if (filters.includes(t)) return;
+      filters.push(t);
+      renderFilters();
+    }
+    function matchesFilters(line) {
+      if (!filters.length) return true;
+      // OR semantics: show line if it matches any filter token.
+      return filters.some(t => line.includes(t));
+    }
+    renderFilters();
+
+    elFilter.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addFilter(elFilter.value);
+        elFilter.value = '';
+        return;
+      }
+      // Convenience: backspace with empty input removes last filter
+      if (e.key === 'Backspace' && !elFilter.value && filters.length) {
+        filters.pop();
+        renderFilters();
+      }
+    });
+    elPause.addEventListener('click', () => { paused = !paused; elPause.textContent = paused ? 'resume' : 'pause'; });
+    elClear.addEventListener('click', () => { logNode.data = ''; });
+    function isAtBottom() {
+      // Consider "near bottom" as bottom to avoid jitter from fractional pixels.
+      const threshold = 4;
+      return (elLog.scrollTop + elLog.clientHeight) >= (elLog.scrollHeight - threshold);
+    }
+    function setToBottomHint(visible) {
+      if (visible) {
+        elToBottom.style.display = 'inline-block';
+        elToBottom.classList.add('attention');
+      } else {
+        elToBottom.style.display = 'none';
+        elToBottom.classList.remove('attention');
+      }
+    }
+    // Start hidden; becomes visible when user scrolls away from bottom while logs keep coming.
+    setToBottomHint(false);
+
+    elLog.addEventListener('scroll', () => {
+      // If user scrolls back to bottom manually, hide the hint.
+      if (isAtBottom()) setToBottomHint(false);
+    });
+
+    elToBottom.addEventListener('click', () => {
+      // Jump to bottom and resume follow (unless user pressed pause).
+      elLog.scrollTop = elLog.scrollHeight;
+      setToBottomHint(false);
+    });
+
+    // Batch append to reduce layout thrash (important when logs are fast).
+    let pending = '';
+    let flushTimer = null;
+    let pendingWasAtBottom = true;
+    let pendingShowDownHint = false;
+
+    function trimIfNeeded() {
+      if (logNode.length <= MAX_CHARS) return;
+      // NOTE: This rewrites the node's data; it can disrupt selection, but prevents tab freeze.
+      logNode.data = logNode.data.slice(-TRIM_TO_CHARS);
+    }
+
+    function flushPending() {
+      flushTimer = null;
+      if (!pending) return;
+
+      // Append to the existing text node without rewriting DOM (keeps selection stable).
+      logNode.appendData(pending);
+      pending = '';
+      trimIfNeeded();
+
+      if (pendingWasAtBottom) {
+        elLog.scrollTop = elLog.scrollHeight;
+        setToBottomHint(false);
+      } else if (pendingShowDownHint) {
+        setToBottomHint(true);
+      }
+      pendingShowDownHint = false;
+    }
+
+    function appendLine(line) {
+      if (paused) return;
+      if (!matchesFilters(line)) return;
+
+      const atBottomNow = isAtBottom();
+      // If any message arrives while user is not at bottom, we keep hint on.
+      if (!atBottomNow) pendingShowDownHint = true;
+      // If user was at bottom at any point during the batch, keep auto-follow.
+      pendingWasAtBottom = pendingWasAtBottom && atBottomNow;
+
+      pending += line + "\n";
+      if (!flushTimer) {
+        pendingWasAtBottom = atBottomNow; // reset per batch
+        flushTimer = setTimeout(flushPending, FLUSH_INTERVAL_MS);
+      }
+    }
+    const es = new EventSource('/events');
+    es.onopen = () => { elStatus.textContent = 'connected'; elStatus.className = ''; };
+    es.onerror = () => { elStatus.textContent = 'disconnected (retrying…)'; elStatus.className = 'dim'; };
+    es.onmessage = (ev) => { appendLine(ev.data); };
+  </script>
+</body>
+</html>
+
