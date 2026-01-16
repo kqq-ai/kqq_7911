@@ -233,6 +233,8 @@ static void app_cookie_main(void)
 
     wifi_set_pwr(6);                                     // 设置 WiFi 发射功率为最大
 
+    log_i("【debug】boot: init BLE dev task scheduler");
+
     ble_dev_task_scheduler_init();                          // 启动 BLE 任务调度器，管理扫描/连接
 
     /* 创建线程池 */
@@ -240,6 +242,8 @@ static void app_cookie_main(void)
     context->threadpool = pool;                             // 保存线程池实例供异步任务复用
 
     /*wifi manager 所需要的一些初始化*/
+
+    log_i("【debug】boot: init wifi_manage");
     wifi_manage_init(NULL);                                 // 初始化 WiFi 管理器（STA/BLE 共存配置）
 
     /* 初始化RSSI测距 */
