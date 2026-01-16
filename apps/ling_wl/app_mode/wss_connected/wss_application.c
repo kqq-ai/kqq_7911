@@ -36,9 +36,9 @@ static bool g_on_touch_key = false;
 static bool g_power_key_retry = false;
 static bool g_exit = false;
 
-u32 last_E_found_time = 0;
-u32 last_move_time = 0;
-u32 last_mem_stats_time = 0;
+int last_E_found_time = 0;
+int last_move_time = 0;
+int last_mem_stats_time = 0;
 
 /* Task state */
 typedef enum {
