@@ -37,7 +37,7 @@ static int ip_is_ready()
     }
 
     u32 temp_ip = htonl(g_netip_info.ip);
-    snprintf(g_wifi_ip, 32, "%d.%d.%d.%d",
+    snprintf(g_wifi_ip, sizeof(g_wifi_ip), "%d.%d.%d.%d",
             (temp_ip >> 24) & 0xFF, // 第一字节
             (temp_ip >> 16) & 0xFF, // 第二字节
             (temp_ip >> 8) & 0xFF,  // 第三字节

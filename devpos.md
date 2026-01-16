@@ -1,8 +1,9 @@
 # 切换调试模式模式
 
 ```shell
+
 搜索关键词
-#define TEST_LOCOL_SERVER
+#define TEST_LOCOL_SERVER  
 ```
 
 版本号
@@ -16,6 +17,15 @@ LOCAL_VERSION_CODE
 ```sh
 .app_wifi_config = {
 ```
+
+
+快捷跳转注释
+
+```sh
+// See: app_cookie.c:548-553 
+```
+
+
 
 
 ## 烧录流程

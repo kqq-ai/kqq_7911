@@ -945,6 +945,7 @@ int notify_app_wifi_ip_succ(void *pri)
     char sta_localip[WIFI_IP_LEN] = {0};
     char return_errstr[32] = {0};
     char return_json_data[BUFFER_SIZE] = {0};
+    cJSON *root = NULL;
 
     get_wifi_ip_info(sta_localip);
 
@@ -955,9 +956,8 @@ int notify_app_wifi_ip_succ(void *pri)
     memcpy(cmd_name, "wifi_connect", strlen("wifi_connect"));
 
     // 封装return_json_data
-    cJSON *root = cJSON_CreateObject();
-    if (root == NULL)
-    {
+    root = cJSON_CreateObject();
+    if (root == NULL) {
         ret = 1;
         log_info("Error: Failed to create cJSON object\n");
         goto cleanup;
@@ -972,20 +972,22 @@ int notify_app_wifi_ip_succ(void *pri)
     cJSON_AddStringToObject(root, "ip_address", sta_localip);
 
     char *return_json_str = cJSON_PrintUnformatted(root);
-    if (return_json_str == NULL)
-    {
+    if (return_json_str == NULL) {
         ret = 1;
         log_info("Error: Failed to print cJSON object\n");
-        cJSON_Delete(root);
         goto cleanup;
     }
 
-    memcpy(return_json_data, return_json_str, strlen(return_json_str));
+    // Copy and guarantee '\0' termination for downstream string APIs
+    strncpy(return_json_data, return_json_str, sizeof(return_json_data) - 1);
     send_return_json_data(return_json_data);
 
+    log_info("notify app wifi ip succ: %s\r\n", return_json_data);
     free(return_json_str);
-    log_info("notify  app  the wifi ip is ok   return_json_str:%s\r\n",return_json_str);
 cleanup:
+    if (root) {
+        cJSON_Delete(root);
+    }
     return ret;
 }
  

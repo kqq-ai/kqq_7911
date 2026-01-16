@@ -10,7 +10,26 @@
 #include "event/net_event.h"
 #include "wifi/wifi_connect.h"
 #include "app_cookie.h"
+#include "asm/wdt.h"
 
+
+static void log_test_thread(void *priv)
+{
+    u32 index = 0;
+
+    puts("------------- serial log stress test (index) -------------\r\n");
+    while (1) {
+        printf("LOG_TEST index=%u\r\n", index++);
+        /*
+         * 注意：
+         * - 如果把压力打印跑在 app_main(init) 里，可能会饿死 app_core，导致 sys_event 等待超时触发断言复位
+         * - 放到低优先级线程里，sys_event/app_core 仍能及时调度响应
+         */
+        if ((index & 0xFF) == 0) {
+            os_time_dly(1);
+        }
+    }
+}
 
 /*中断列表 */
 const struct irq_info irq_info_table[] = {
@@ -179,7 +198,7 @@ void app_default_event_handler(struct sys_event *event)
     case SYS_BT_EVENT:
         break;
     default:
-        ASSERT(0, "unknow event type: %s\n", __func__);
+        ASSERT(0, "unknow event type: %s\n", (char *)__func__);
         break;
     }
 }
@@ -190,6 +209,22 @@ void app_default_event_handler(struct sys_event *event)
  */
 void app_main()
 {
+#if 1
+    /*
+     * 串口日志压力测试：
+     * - 入口不执行任何业务逻辑（不 start_app / 不初始化 BT 等）
+     * - 持续打印带 index 的日志，用于验证串口输出是否会丢日志
+     */
+    /* 防止高频打印占满CPU导致看门狗复位 */
+    wdt_close();
+
+    /*
+     * 让压力打印在低优先级线程中运行，避免 init/app_main 任务优先级过高时饿死 app_core
+     * priority: 0-31 数字越小优先级越高，因此这里使用更低的优先级（更大的数字）
+     */
+    thread_fork("log_test", 31, 1024, 0, 0, log_test_thread, NULL);
+    return;
+#else
     struct intent it;
 
     puts("------------- cookie wl app main-------------\n");
@@ -202,6 +237,7 @@ void app_main()
 #if defined CONFIG_BT_ENABLE && CONFIG_BT_ENABLE == 1
     extern void bt_ble_module_init(void);
     bt_ble_module_init();
+#endif
 #endif
 }
 

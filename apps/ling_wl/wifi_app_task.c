@@ -33,21 +33,19 @@
 
 static wifi_connect_succ_cb wifi_connect_succ_cb_func_pri = NULL;
 static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
+static void *wifi_connect_succ_cb_pri = NULL;
+static void *wifi_connect_fail_cb_pri = NULL;
 
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
 {
-    if (NULL != wifi_connect_succ_cb_func_pri)
-    {
-        wifi_connect_succ_cb_func_pri = callback;
-    }
+    wifi_connect_succ_cb_func_pri = callback;
+    wifi_connect_succ_cb_pri = pri;
 }
 
 void register_wifi_connect_fail_func(wifi_connect_fail_cb callback, void *pri)
 {
-    if (NULL != wifi_connect_fail_cb_func_pri)
-    {
-        wifi_connect_fail_cb_func_pri = callback;
-    }
+    wifi_connect_fail_cb_func_pri = callback;
+    wifi_connect_fail_cb_pri = pri;
 }
 
 /* 包装函数：将 notify_app_wifi_ip_succ 适配为线程池需要的函数签名 */
@@ -86,9 +84,20 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         log_i("wifi_get_stored_sta_info: %d\n", ret);
         if (ret > 0) {
         // TODO READ ssid pwd from VM
-            log_i("🚀🚀🚀 stored ssid %s, pwd %s\n", app_wifi_stored_ssid[0].ssid, app_wifi_stored_ssid[0].pwd);
-            memcpy(wifi_default_mode_parm.ssid[0], app_wifi_stored_ssid[0].ssid, strlen((const char *)app_wifi_stored_ssid[0].ssid));
-            memcpy(wifi_default_mode_parm.pwd[0], app_wifi_stored_ssid[0].pwd, strlen((const char *)app_wifi_stored_ssid[0].pwd));
+            // IMPORTANT: wifi_stored_sta_info 的 ssid/pwd 是定长 u8 数组，可能不以 '\0' 结尾。
+            // 直接 strlen() 会越界读，进而 memcpy 越界写，造成内存破坏（信号量/RTOS结构被破坏后就会出现各种随机崩溃）。
+            char ssid_tmp[sizeof(app_wifi_stored_ssid[0].ssid)] = {0};
+            char pwd_tmp[sizeof(app_wifi_stored_ssid[0].pwd)] = {0};
+            size_t ssid_len = strnlen((const char *)app_wifi_stored_ssid[0].ssid, sizeof(app_wifi_stored_ssid[0].ssid));
+            size_t pwd_len  = strnlen((const char *)app_wifi_stored_ssid[0].pwd,  sizeof(app_wifi_stored_ssid[0].pwd));
+            memcpy(ssid_tmp, app_wifi_stored_ssid[0].ssid, ssid_len);
+            memcpy(pwd_tmp,  app_wifi_stored_ssid[0].pwd,  pwd_len);
+            log_i("🚀🚀🚀 stored ssid %s, pwd %s\n", ssid_tmp, pwd_tmp);
+
+            memcpy(wifi_default_mode_parm.ssid[0], ssid_tmp, strnlen(ssid_tmp, sizeof(wifi_default_mode_parm.ssid[0]) - 1));
+            memcpy(wifi_default_mode_parm.pwd[0],  pwd_tmp,  strnlen(pwd_tmp,  sizeof(wifi_default_mode_parm.pwd[0])  - 1));
+            wifi_default_mode_parm.ssid[0][sizeof(wifi_default_mode_parm.ssid[0]) - 1] = 0;
+            wifi_default_mode_parm.pwd[0][sizeof(wifi_default_mode_parm.pwd[0]) - 1] = 0;
 
             wifi_set_default_mode(&wifi_default_mode_parm, 0, 1);
         } else {
@@ -204,6 +213,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         block_connect_sem_post(NULL); // 通知连接函数
 
+        if (wifi_connect_fail_cb_func_pri) {
+            wifi_connect_fail_cb_func_pri(wifi_connect_fail_cb_pri);
+        }
+
         {
             lwl_app_context_t *ctx_timeout = lwl_app_core_context_get_instance();
             /* 通知 APP(小程序) WiFi连接失败 */
@@ -230,9 +243,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         block_connect_sem_post(NULL); // 通知连接函数
 
-        if (NULL != wifi_connect_fail_cb_func_pri)
-        {
-            wifi_connect_fail_cb_func_pri(NULL);
+        if (wifi_connect_fail_cb_func_pri) {
+            wifi_connect_fail_cb_func_pri(wifi_connect_fail_cb_pri);
         }
 
         {
@@ -256,6 +268,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_manager_mode(WIFI_IDLE_MODE);
         set_wifi_info_status(WIFI_INFO_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
+
+        if (wifi_connect_fail_cb_func_pri) {
+            wifi_connect_fail_cb_func_pri(wifi_connect_fail_cb_pri);
+        }
 
         {
             lwl_app_context_t *ctx_associat_timeout = lwl_app_core_context_get_instance();
@@ -284,6 +300,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
         block_connect_sem_post(NULL); // 通知连接函数
 
+        if (wifi_connect_succ_cb_func_pri) {
+            wifi_connect_succ_cb_func_pri(wifi_connect_succ_cb_pri);
+        }
+
         // set_wifi_connect_end_time_ms(timer_get_ms()); // 为了计算连接时间的函数 （计算时间差）
 
         struct wifi_mode_info info = {0};
@@ -293,12 +313,16 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         printf("the event callback get the current connected ssid: %s  pwd: %s\n", info.ssid, info.pwd);
         if (info.mode != NONE_MODE) {
             app_wifi_info_t app_wifi_info;
-            memcpy(app_wifi_info.ssid, info.ssid, sizeof(app_wifi_info.ssid));
-            memcpy(app_wifi_info.pwd, info.pwd, sizeof(app_wifi_info.pwd));
+            memset(&app_wifi_info, 0, sizeof(app_wifi_info));
+            if (info.ssid) {
+                strncpy(app_wifi_info.ssid, info.ssid, sizeof(app_wifi_info.ssid) - 1);
+            }
+            if (info.pwd) {
+                strncpy(app_wifi_info.pwd, info.pwd, sizeof(app_wifi_info.pwd) - 1);
+            }
             set_app_wifi_info(&app_wifi_info);
             /* 存储到VM */
-            wifi_store_mode_info(STA_MODE, info.ssid, info.pwd);
-            free(&app_wifi_info);
+            wifi_store_mode_info(STA_MODE, (char *)(info.ssid ? info.ssid : ""), (char *)(info.pwd ? info.pwd : ""));
         }
 
         /* 存储 IP*/
@@ -326,6 +350,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
         block_connect_sem_post(NULL); // 通知连接函数
 
+        if (wifi_connect_fail_cb_func_pri) {
+            wifi_connect_fail_cb_func_pri(wifi_connect_fail_cb_pri);
+        }
+
         break;
 
     case WIFI_EVENT_STA_NETWORK_STACK_DHCP_TIMEOUT:
@@ -337,6 +365,10 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
 
         block_connect_sem_post(NULL); // 通知连接函数
+
+        if (wifi_connect_fail_cb_func_pri) {
+            wifi_connect_fail_cb_func_pri(wifi_connect_fail_cb_pri);
+        }
 
         lwl_app_context_t *ctx_dhcp = lwl_app_core_context_get_instance();
         /* 通知 APP(小程序) WiFi连接失败 */
@@ -430,6 +462,8 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
 
 static void wifi_app_task(void *priv) // 主要是create wifi 线程的
 {
+    // Ensure WiFi manager semaphores are created before any WiFi events that may post/pend them.
+    wifi_manage_init(NULL);
     wifi_set_store_ssid_cnt(NETWORK_SSID_INFO_CNT);
     // wifi_set_smp_cfg_just_monitor_mode(true);
     // wifi_set_sta_connect_best_ssid(0);
@@ -442,6 +476,7 @@ void wifi_and_network_on(void)
     if (wifi_is_on()) {
         return;
     }
+    wifi_manage_init(NULL);
     wifi_on();
 }
 
@@ -456,6 +491,8 @@ void wifi_and_network_off(void)
 static int wireless_net_init(void) // 主要是create wifi 线程的
 {
     puts("wireless_net_init \n\n");
+    // LOG_TEST/stress-test boot path doesn't start app_cookie_main(), so init WiFi manager here too.
+    wifi_manage_init(NULL);
     wifi_app_task(NULL);
     puts("wireless_net_init end \n\n");
 } 

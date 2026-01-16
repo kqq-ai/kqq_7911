@@ -71,6 +71,12 @@ static void init_app_context(lwl_app_context_t* context)
 
 lwl_app_context_t* lwl_app_core_context_get_instance()
 {
+    // In some boot paths (e.g. LOG_TEST stress test), lwl_app_core_init() may not be called.
+    // Ensure the mutex is valid before using it, otherwise os_mutex_pend() on an invalid mutex
+    // can corrupt kernel structures and lead to random crashes (often showing up in idle/wdt).
+    if (!os_mutex_valid(&g_mutex)) {
+        os_mutex_create(&g_mutex);
+    }
     if (s_app_context == NULL) { 
         os_mutex_pend(&g_mutex, 0);
         if (s_app_context == NULL) {

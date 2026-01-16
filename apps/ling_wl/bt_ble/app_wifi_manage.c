@@ -1,4 +1,5 @@
 #include "app_wifi_manage.h"
+#include "system/includes.h"
 #include "wifi/wifi_connect.h"
 #include "os/os_api.h"
 #include "app_lfs.h"
@@ -9,6 +10,7 @@
 #include "sys_time.h" // 用于 timer_get_ms()
 #include <stdint.h> // 用于 uint32_t
 #include <stdbool.h> // 用于 bool 类型
+#include <string.h> // memcpy/memset/strcmp/strncpy
 
 
 /*-------------------------------------------------本文件的 变量及其 所有函数的定义-----------------------------------*/
@@ -108,7 +110,8 @@ static void rebuild_wifi_hash_table(void)
 }
 
 static struct netif_info g_netip_info = {0};
-static char *g_wifi_ip[WIFI_IP_LEN] = {0};
+// IPv4 string, max "255.255.255.255" (15 chars) + '\0' => 16
+static char g_wifi_ip[WIFI_IP_LEN] = {0};
 
 static app_wifi_info_t g_app_wifi_info = {0};
 
@@ -270,6 +273,9 @@ WIFI_connect_STATUES wifi_disconnect_block(void *pri)
 int block_connect_sem_creat(void *pri)
 {
     int ret = 0;
+    if (os_sem_valid(&g_block_connect_sem)) {
+        return 0;
+    }
     ret = os_sem_create(&g_block_connect_sem, 0);
     if (0 != ret)
     {
@@ -280,6 +286,10 @@ int block_connect_sem_creat(void *pri)
 int block_connect_sem_pend(void *pri)
 {
     int ret = 0;
+    if (!os_sem_valid(&g_block_connect_sem)) {
+        printf("[wifi] g_block_connect_sem invalid, recreate\r\n");
+        os_sem_create(&g_block_connect_sem, 0);
+    }
     ret = os_sem_pend(&g_block_connect_sem, 0);
     if (0 != ret)
     {
@@ -290,6 +300,11 @@ int block_connect_sem_pend(void *pri)
 int block_connect_sem_post(void *pri)
 {
     int ret = 0;
+    if (!os_sem_valid(&g_block_connect_sem)) {
+        // 如果初始化顺序异常/被破坏，先尝试重建，避免内核对象被非法操作进一步损坏
+        printf("[wifi] g_block_connect_sem invalid, recreate\r\n");
+        os_sem_create(&g_block_connect_sem, 0);
+    }
     ret = os_sem_post(&g_block_connect_sem);
     if (0 != ret)
     {
@@ -302,6 +317,9 @@ int block_connect_sem_post(void *pri)
 int disconnect_sem_creat(void *pri)
 {
     int ret = 0;
+    if (os_sem_valid(&g_disconnect_sem)) {
+        return 0;
+    }
     ret = os_sem_create(&g_disconnect_sem, 0);
     if (0 != ret)
     {
@@ -312,6 +330,10 @@ int disconnect_sem_creat(void *pri)
 int disconnect_sem_pend(void *pri)
 {
     int ret = 0;
+    if (!os_sem_valid(&g_disconnect_sem)) {
+        printf("[wifi] g_disconnect_sem invalid, recreate\r\n");
+        os_sem_create(&g_disconnect_sem, 0);
+    }
     ret = os_sem_pend(&g_disconnect_sem, 0);
     if (0 != ret)
     {
@@ -322,6 +344,10 @@ int disconnect_sem_pend(void *pri)
 int disconnect_sem_post(void *pri)
 {
     int ret = 0;
+    if (!os_sem_valid(&g_disconnect_sem)) {
+        printf("[wifi] g_disconnect_sem invalid, recreate\r\n");
+        os_sem_create(&g_disconnect_sem, 0);
+    }
     ret = os_sem_post(&g_disconnect_sem);
     if (0 != ret)
     {
@@ -489,7 +515,7 @@ void store_wifi_ip_info(void *pri)
     memset(&g_netip_info, 0, sizeof(g_netip_info));
     lwip_get_netif_info(1, &g_netip_info);
     u32 temp_ip = htonl(g_netip_info.ip);
-    snprintf(g_wifi_ip, 32, "%d.%d.%d.%d",
+    snprintf(g_wifi_ip, sizeof(g_wifi_ip), "%d.%d.%d.%d",
              (temp_ip >> 24) & 0xFF, // 第一字节
              (temp_ip >> 16) & 0xFF, // 第二字节
              (temp_ip >> 8) & 0xFF,  // 第三字节
@@ -502,7 +528,8 @@ void store_wifi_ip_info(void *pri)
 /*获取 wifi ip 信息*/
 void get_wifi_ip_info(char *ip)
 {
-    memcpy(ip, g_wifi_ip, strlen(g_wifi_ip));
+    // Caller should provide a buffer of at least WIFI_IP_LEN bytes.
+    memcpy(ip, g_wifi_ip, sizeof(g_wifi_ip));
 }
 
 void get_wifi_scan_result(struct wifi_scan_ssid_info **ssid_info, int *num)

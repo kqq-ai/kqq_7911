@@ -26,6 +26,22 @@ uint32_t g_wifi_connect_timeout_ms = 0;
 uint32_t g_wifi_scan_timeout = 0;
 uint32_t g_wifi_scan_flag = 1;
 
+static void ble_wifi_connect_succ_cb(void *pri)
+{
+    (void)pri;
+    set_wifi_connect_end_time_ms(timer_get_ms());
+    printf("[blee] ✅ wifi_connect_succ_cb: DHCP_SUCC, elapsed=%u ms\r\n",
+           (unsigned int)(g_wifi_connect_end_time_ms - g_wifi_connect_start_time_ms));
+}
+
+static void ble_wifi_connect_fail_cb(void *pri)
+{
+    (void)pri;
+    set_wifi_connect_end_time_ms(timer_get_ms());
+    printf("[blee] ❌ wifi_connect_fail_cb: connect failed, elapsed=%u ms\r\n",
+           (unsigned int)(g_wifi_connect_end_time_ms - g_wifi_connect_start_time_ms));
+}
+
 
 static void set_led_wifi_scan(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在扫描网络 蓝色 */
 
@@ -529,8 +545,8 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     memcpy(wifi_connect_params->ssid, ssid, sizeof(wifi_connect_params->ssid));
     memcpy(wifi_connect_params->pwd, password, sizeof(wifi_connect_params->pwd));
     wifi_connect_params->timeout_s = connect_timeout_s;
-    wifi_connect_params->connect_succ_func = NULL;
-    wifi_connect_params->connect_fail_func = NULL;
+    wifi_connect_params->connect_succ_func = ble_wifi_connect_succ_cb;
+    wifi_connect_params->connect_fail_func = ble_wifi_connect_fail_cb;
     /* 将WiFi 连接任务添加到线程池中 */
     if (!threadpool_add_task(ctx->threadpool, wifi_connect_task, wifi_connect_params))
     {
