@@ -56,6 +56,10 @@ static int power_on_init(void)
     u16 voltage = get_vbat_level();
     c_7016_power_on = 0;
 
+#if TEST_PI_MODE
+    log_i("TEST PI MODE ENABLED, GO TO DEFAULT MODE");
+    lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+#endif
     
     if(system_reset_reason_get() == 0x80) { // SYS_RST_LONG_PRESS,长按复位清除wifi并再次复位
         log_i("Long press reset detected, clear wifi and  Reset.\n");

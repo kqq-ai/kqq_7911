@@ -175,9 +175,6 @@ void wss_handle_key_event(void)
 // 处理触摸按键事件（按下/释放）
 static void wss_handle_touch_key_event(bool press_down)
 {
-#if TOUCH_KEY_AVAILABLE == 0
-    return;
-#endif
     os_mutex_pend(&g_wss_app_mutex, 0);
     if (press_down) {
     } else {
