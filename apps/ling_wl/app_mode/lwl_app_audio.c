@@ -43,7 +43,6 @@ extern void bdo_enable(void);
 static void lwl_app_audio_play_cb(void *priv)
 {
     log_i("[AUDIO_LOCAL]lwl_app_audio_play_cb");
-    os_mutex_pend(&g_audio_mutex, 0);
     
     g_play_voice_prompt = 0;
     
@@ -52,7 +51,6 @@ static void lwl_app_audio_play_cb(void *priv)
     }
     
     gpio_direction_output(IO_PORTA_00, 0);  // Disable C speaker
-    os_mutex_post(&g_audio_mutex);
 }
 
 /**
@@ -105,7 +103,7 @@ static void lwl_app_audio_stream_end_cb(void *priv)
 /**
  * @brief 播放本地提示音文件（同步等待前一个播放完成，然后启动新播放）
  * @param fname 音频文件名
- * @param priv  播放完成时的回调函数
+ * @param priv  播放完成时的回调函数（播放和回调不能都加锁）
  */
 void lwl_app_audio_play(const char *fname, void *priv)
 {

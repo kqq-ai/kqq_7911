@@ -296,7 +296,6 @@ void *wss_condition_monitor_thread(void *arg)
 
     log_i("[wss_application]Starting WSS condition monitor thread...");
     while (monitor_thread_running && lwl_app_mode_get_current_mode() == APP_WSS_CONNECTED_MODE) {
-        g_curr_time = timer_get_ms();
         
         // 检查E设备
         if (get_5m_edev_count() > 0) {  // 检测到E设备
@@ -345,7 +344,6 @@ void *wss_condition_monitor_thread(void *arg)
         // 打印NO_E_TIMEOUT_MS
         // log_i("[wss_application]NO_E_TIMEOUT_MS: %d", NO_E_TIMEOUT_MS);
 
-        g_curr_time = timer_get_ms();
         if (g_curr_time - last_req_time > NO_REQ_TIMEOUT_MS) {
 
             // 检查超时条件
