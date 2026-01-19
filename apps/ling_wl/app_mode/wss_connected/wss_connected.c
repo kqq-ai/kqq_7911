@@ -71,10 +71,10 @@ void app_wss_connected_mode(void)
             return;
         }
         mdelay(10);
-        if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
-            dump_all_eend_info();
-            g_heat_timer = timer_get_ms();
-        }
+        // if (timer_get_ms() - g_heat_timer >= HEAT_TIMEOUT) {
+        //     dump_all_eend_info();
+        //     g_heat_timer = timer_get_ms();
+        // }
         // 应用代码
         if (wss_application_loop()) {
             if (wifi_get_sta_connect_state() == WIFI_STA_DISCONNECT) {

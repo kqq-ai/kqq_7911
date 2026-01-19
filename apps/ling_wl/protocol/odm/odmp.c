@@ -860,7 +860,6 @@ void odmp_rsp_handler(u8 *buf, u32 len)
             if (ret == PARSE_Success) {
                 if (g_odmp_cbk != NULL) {
                     log_i("odmp_rsp_handler: event %s, type %d", pkg.event, entry->type);
-                    log_i("odmp_rsp_handler: %s", buf);
                     g_odmp_cbk(entry->type, &pkg);
                 } else {
                     log_e("【dg】[odmp_rsp_handler] event %s g_odmp_cbk is NULL, cannot process event", pkg.event);

@@ -24,7 +24,7 @@
   <header>
     <div id="status">connecting…</div>
     <div id="filterChips" aria-label="filters"></div>
-    <input id="filter" placeholder="type filter and press Enter (multi) …" />
+    <input id="filter" placeholder="type text to exclude and press Enter (multi) …" />
     <button id="pause">pause</button>
     <button id="clear">clear</button>
     <button id="toBottom" title="Scroll to bottom">⬇</button>
@@ -64,7 +64,7 @@
         });
         elFilterChips.appendChild(chip);
       }
-      elFilter.placeholder = filters.length ? 'add another filter and press Enter…' : 'type filter and press Enter (multi) …';
+      elFilter.placeholder = filters.length ? 'add another text to exclude and press Enter…' : 'type text to exclude and press Enter (multi) …';
     }
     function addFilter(token) {
       const t = (token || '').trim();
@@ -75,8 +75,8 @@
     }
     function matchesFilters(line) {
       if (!filters.length) return true;
-      // OR semantics: show line if it matches any filter token.
-      return filters.some(t => line.includes(t));
+      // Exclude semantics: hide line if it matches any filter token.
+      return !filters.some(t => line.includes(t));
     }
     renderFilters();
 
