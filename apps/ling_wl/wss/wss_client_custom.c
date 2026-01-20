@@ -1456,7 +1456,7 @@ int ws_client_connect(ws_client_t client, const char *url,
     client->thread_running = true;
     
     // 启动接收线程
-    thread_fork("ws_custom_io", 10, 2048, 0, &client->recv_thread_id,
+    thread_fork("ws_custom_io", 10, 2048, 10, &client->recv_thread_id,
                 ws_recv_thread, client);
     
     os_mutex_post(&client->mutex);

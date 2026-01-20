@@ -738,56 +738,7 @@ static void message_text_timeout_callback(void *priv)
 
 void mqtt_print_pkg_content(const cJSON *nroot, const char *event)
 {
-    const cJSON *ndata = cjson_get_object(nroot, "data");
-    if (ndata == NULL) {
-        return;
-    }
-
-    if (strcmp(event, "message_text") == 0) {
-        int type = 0;
-        cjson_get_integer_value(ndata, "type", &type);
-        char *text = cjson_get_string_value(ndata, "text");
-        
-        if (type == 1) {
-            // type=1: 直接打印"用户说"
-            log_mqtt("🗿🗿🗿 [MESSAGE_TEXT] 用户说：%s", text);
-        } else if (type == 2) {
-            // type=2: 累加文本到缓冲区
-            if (text != NULL) {
-                // 如果是第一条 type=2 消息，保存 send_id
-                if (g_message_text_buffer_len == 0) {
-                    char *send_id = cjson_get_string_value(ndata, "send_id");
-                    if (send_id != NULL) {
-                        int send_id_len = strlen(send_id);
-                        int copy_len = (send_id_len < MESSAGE_TEXT_SEND_ID_SIZE - 1) ? send_id_len : (MESSAGE_TEXT_SEND_ID_SIZE - 1);
-                        memcpy(g_message_text_send_id, send_id, copy_len);
-                        g_message_text_send_id[copy_len] = '\0';
-                    } else {
-                        g_message_text_send_id[0] = '\0';
-                    }
-                }
-                
-                int text_len = strlen(text);
-                int remaining = MESSAGE_TEXT_BUFFER_SIZE - g_message_text_buffer_len - 1;
-                
-                if (remaining > 0) {
-                    // 如果缓冲区为空，这是第一条 type=2 消息，启动定时器
-                    // 如果已有定时器，删除并重新启动（重置超时）
-                    if (g_message_text_timeout_id != 0) {
-                        sys_timeout_del(g_message_text_timeout_id);
-                    }
-                    // 启动新的1秒超时定时器
-                    g_message_text_timeout_id = sys_timeout_add(NULL, message_text_timeout_callback, 1000);
-                    
-                    // 累加文本（追加到缓冲区）
-                    int copy_len = (text_len < remaining) ? text_len : remaining;
-                    memcpy(g_message_text_buffer + g_message_text_buffer_len, text, copy_len);
-                    g_message_text_buffer_len += copy_len;
-                    g_message_text_buffer[g_message_text_buffer_len] = '\0';
-                }
-            }
-        }
-    }
+    return;
 }
 
 void odmp_register_rsp_cbk(g_odmp_cbk_t odmp_cbk)
