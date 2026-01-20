@@ -48,6 +48,35 @@
     const FLUSH_INTERVAL_MS = 50; // batch updates ~20fps max
     let paused = false;
     let filters = [];
+    const FILTERS_STORAGE_KEY = `serial_sse_logger.filters.v1:${location.pathname}`;
+    function loadFiltersFromStorage() {
+      try {
+        const raw = localStorage.getItem(FILTERS_STORAGE_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        // Keep only non-empty strings, de-dup while preserving order.
+        const out = [];
+        const seen = new Set();
+        for (const v of arr) {
+          const t = (typeof v === 'string' ? v : '').trim();
+          if (!t) continue;
+          if (seen.has(t)) continue;
+          seen.add(t);
+          out.push(t);
+        }
+        return out;
+      } catch (_) {
+        return [];
+      }
+    }
+    function saveFiltersToStorage() {
+      try {
+        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+      } catch (_) {
+        // ignore quota/blocked storage
+      }
+    }
     function escapeHtml(s) {
       return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
     }
@@ -58,10 +87,7 @@
         const chip = document.createElement('span');
         chip.className = 'chip';
         chip.innerHTML = `<span>${escapeHtml(token)}</span><button title="remove" aria-label="remove">×</button>`;
-        chip.querySelector('button').addEventListener('click', () => {
-          filters.splice(i, 1);
-          renderFilters();
-        });
+        chip.querySelector('button').addEventListener('click', () => removeFilter(token));
         elFilterChips.appendChild(chip);
       }
       elFilter.placeholder = filters.length ? 'add another text to exclude and press Enter…' : 'type text to exclude and press Enter (multi) …';
@@ -71,6 +97,16 @@
       if (!t) return;
       if (filters.includes(t)) return;
       filters.push(t);
+      saveFiltersToStorage();
+      renderFilters();
+    }
+    function removeFilter(token) {
+      const t = (token || '').trim();
+      if (!t) return;
+      const idx = filters.indexOf(t);
+      if (idx < 0) return;
+      filters.splice(idx, 1);
+      saveFiltersToStorage();
       renderFilters();
     }
     function matchesFilters(line) {
@@ -78,6 +114,7 @@
       // Exclude semantics: hide line if it matches any filter token.
       return !filters.some(t => line.includes(t));
     }
+    filters = loadFiltersFromStorage();
     renderFilters();
 
     elFilter.addEventListener('keydown', (e) => {
@@ -90,6 +127,7 @@
       // Convenience: backspace with empty input removes last filter
       if (e.key === 'Backspace' && !elFilter.value && filters.length) {
         filters.pop();
+        saveFiltersToStorage();
         renderFilters();
       }
     });

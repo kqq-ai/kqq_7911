@@ -161,13 +161,14 @@ static int recorder_enc_init(recorder_hdl *recorder, int sample_rate, u8 channel
     req.enc.vfs_ops = &recorder_vfs_ops;
     req.enc.file = (FILE *)recorder;
     if (channel == 1 && !strcmp(recorder->sample_source, "mic") && (sample_rate == 8000 || sample_rate == 16000)) {
-        req.enc.use_vad = 1; //打开VAD断句功能
-        req.enc.dns_enable = 1; //打开降噪功能
-        req.enc.vad_auto_refresh = 1; //VAD自动刷新
-    }
-    if (req.enc.use_vad == 1) {
-        req.enc.vad_start_threshold = VAD_START_THRESHOLD;    //ms
-        req.enc.vad_stop_threshold  = VAD_STOP_THRESHOLD;    //ms
+        /*
+         * Push-to-talk product requirement:
+         * - Do NOT use device-side VAD (it causes frequent [VAD] start/stop logs and sentence splitting).
+         * - Recording/upload is controlled by key press/release in upper layer.
+         */
+        req.enc.use_vad = 0;
+        req.enc.vad_auto_refresh = 0;
+        req.enc.dns_enable = 1; // keep noise suppression
     }
     if (req.enc.dns_enable == 1) //降噪的配置
     {
