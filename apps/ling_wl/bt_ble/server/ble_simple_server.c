@@ -1007,13 +1007,35 @@ int notify_app_wifi_connect_fail(void *pri)
     // 设置命令名称
     memcpy(cmd_name, "wifi_connect", strlen("wifi_connect"));
 
-    // 只区分密码错误
-    if (connect_status == WIFI_CONNECT_ASSOCIAT_FAIL) {
-        // 密码错误
+    /*
+     * 只要是“错误/失败”状态就通知小程序，并带上错误码给小程序做分支处理
+     * - return_code: 1 表示失败（保持兼容）
+     * - wifi_connect_status: 直接透传内部枚举值，作为稳定错误码
+     * - return_errstr: 便于日志/可读性，给小程序也可选用
+     */
+    switch (connect_status) {
+    case WIFI_CONNECT_ASSOCIAT_FAIL:
         memcpy(return_errstr, "WIFI_CONNECT_CODE_PASSWORD_ERROR", strlen("WIFI_CONNECT_CODE_PASSWORD_ERROR"));
         ret = 1;
-    }else {
-        // 如果不是错误状态，不发送通知
+        break;
+    case WIFI_CONNECT_ASSOCIAT_TIMEOUT:
+        memcpy(return_errstr, "WIFI_CONNECT_CODE_ASSOCIAT_TIMEOUT", strlen("WIFI_CONNECT_CODE_ASSOCIAT_TIMEOUT"));
+        ret = 1;
+        break;
+    case WIFI_CONNECT_TIMEOUT_NO_SSID:
+        memcpy(return_errstr, "WIFI_CONNECT_CODE_NO_SSID", strlen("WIFI_CONNECT_CODE_NO_SSID"));
+        ret = 1;
+        break;
+    case WIFI_CONNECT_DHCP_TIMEOUT:
+        memcpy(return_errstr, "WIFI_CONNECT_CODE_DHCP_TIMEOUT", strlen("WIFI_CONNECT_CODE_DHCP_TIMEOUT"));
+        ret = 1;
+        break;
+    case WIFI_CONNECT_STA_DISCONNECT:
+        memcpy(return_errstr, "WIFI_CONNECT_CODE_DISCONNECT", strlen("WIFI_CONNECT_CODE_DISCONNECT"));
+        ret = 1;
+        break;
+    default:
+        // 非失败状态不发送
         log_info("Not an error status, skip notification: %d\n", connect_status);
         return 0;
     }

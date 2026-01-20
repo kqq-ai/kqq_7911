@@ -332,7 +332,7 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         puts("|network_user_callback->WIFI_EVENT_STA_NETWPRK_STACK_DHCP_TIMEOUT\n");
 
         set_wifi_cmd_status(WIFI_CMD_IDLE);
-        set_wifi_connect_status(WIFI_CONNECT_STA_DISCONNECT);
+        set_wifi_connect_status(WIFI_CONNECT_DHCP_TIMEOUT);
         set_wifi_manager_mode(WIFI_STA_MODE);
         set_wifi_info_status(WIFI_INFO_STA_MODE_IDLE);
 
