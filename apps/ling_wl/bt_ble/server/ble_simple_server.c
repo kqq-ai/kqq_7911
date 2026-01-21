@@ -681,6 +681,7 @@ static void advertisements_setup_init()
 static int set_adv_enable(void *priv, u32 en)
 {
     ble_state_e next_state, cur_state;
+    static u8 adv_enabled;
 
     // if (!adv_ctrl_en && en) {
     //     return APP_BLE_OPERATION_ERROR;
@@ -713,6 +714,22 @@ static int set_adv_enable(void *priv, u32 en)
     if (cur_state == next_state) {
         return APP_BLE_NO_ERROR;
     }
+
+    /*
+     * Idempotent / defensive disable:
+     * Some boot flows call adv_disable repeatedly while controller is already torn down,
+     * which triggers "[LL_ADV]LL Adv already destroy". Only issue LL disable when we are
+     * actually in ADV state; otherwise resync flags and return silently.
+     */
+    if (!en) {
+        if (!adv_enabled) {
+            return APP_BLE_NO_ERROR;
+        }
+        if (cur_state != BLE_ST_ADV) {
+            adv_enabled = 0;
+            return APP_BLE_NO_ERROR;
+        }
+    }
     log_info("adv_en:%d\n", en);
     set_ble_work_state(next_state);
 
@@ -720,6 +737,7 @@ static int set_adv_enable(void *priv, u32 en)
         advertisements_setup_init();
     }
     ble_op_adv_enable(en);
+    adv_enabled = en ? 1 : 0;
 
     return APP_BLE_NO_ERROR;
 }

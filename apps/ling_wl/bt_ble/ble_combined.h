@@ -20,5 +20,8 @@ void ble_module_enable(u8 en);
 void ble_app_disconnect(void);
 void bt_ble_exit(void);
 
+// Scan/Adv 统一管理接口
+void ble_combined_request_scan(u8 en);  // 请求 scan 状态 (0=关闭, 1=开启)
+void ble_combined_apply(void);          // 应用请求的状态到实际硬件
 
 #endif

@@ -16,7 +16,7 @@
  * MODE_3       循环播放音频（C端播放）
  * MODE_4       麦克风VAD检测
  * MODE_5       加速度传感器测试
- * MODE_6       串行状态机（E端设备音频循环播放，含多子状态）
+ * MODE_6       BLE 基本连接测试（扫描附近设备→连接→2s后断开）
  * MODE_7       联网测试
  * MODE_8       获取SN号，进入时播放test_snkey.mp3
  * 
@@ -112,7 +112,7 @@ static const char *mode_names[] = {
     "MODE_3_AUDIO_LOOP_C",
     "MODE_4_MIC_VAD",
     "MODE_5_GSENSOR_TEST",
-    "MODE_6_AUDIO_LOOP_E",
+    "MODE_6_BLE_BASIC_CONN_TEST",
     "MODE_7_WIFI_CONNECT",
     "MODE_8_SNKEY",
 };

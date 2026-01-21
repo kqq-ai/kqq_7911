@@ -14,8 +14,14 @@ void client_deal_passkey_input(u32 *key);
 void client_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size);
 
+// Raw packet handler hook registration
+void ble_simple_client_set_raw_packet_handler(void (*handler)(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size));
 
 void ble_simple_client_scan_enable(u8 en, int interval, int window);
+// Default scan enable/disable (uses module default interval/window)
+void ble_simple_client_scan_default(u8 en);
+// Whether scan has been enabled at least once (for idempotent stop)
+u8 ble_simple_client_scan_is_enabled(void);
 void ble_simple_client_module_enable(u8 en);
 void ble_simple_client_init(void);
 void ble_simple_client_exit(void);

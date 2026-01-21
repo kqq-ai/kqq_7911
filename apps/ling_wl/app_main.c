@@ -209,7 +209,18 @@ void app_default_event_handler(struct sys_event *event)
  */
 void app_main()
 {
-#if 1
+    /*
+     * NOTE:
+     * 默认不要启用“串口日志压力测试”，否则会持续输出 `LOG_TEST index=...`
+     * 并且直接 return，导致应用主流程（start_app/BT 初始化/自检模式等）都不会运行。
+     *
+     * 如需手动开启压力测试，请将 APP_SERIAL_LOG_STRESS_TEST 置 1。
+     */
+#ifndef APP_SERIAL_LOG_STRESS_TEST
+#define APP_SERIAL_LOG_STRESS_TEST 0
+#endif
+
+#if APP_SERIAL_LOG_STRESS_TEST
     /*
      * 串口日志压力测试：
      * - 入口不执行任何业务逻辑（不 start_app / 不初始化 BT 等）

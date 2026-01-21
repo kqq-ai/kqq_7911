@@ -87,6 +87,13 @@ static int power_on_unint(void)
 
 void power_on_loop()
 {
+    // ========== BLE 基础测试模式（放最前面，跳过所有其他逻辑） ==========
+    // 测试完成后删除这3行
+    log_i("[BLE_TEST] Force enter DEVICE_CHECK_MODE for BLE testing");
+    lwl_app_mode_switch_to(APP_DEVICE_CHECK_MODE);
+    return;
+    // ========== 以下为原始逻辑 ==========
+    
     uint8_t btnCurrState = gpio_read(KEY_IO_PORT);
     extern uint8_t g_disable_turn_off;
     if (btnCurrState == 0 && g_disable_turn_off == 2) {

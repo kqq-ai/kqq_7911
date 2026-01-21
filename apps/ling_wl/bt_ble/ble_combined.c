@@ -252,3 +252,24 @@ void bt_ble_exit(void)
     ble_simple_client_exit();
 }
 
+//=============================================================================
+// Scan/Adv 统一管理（用于协调 client scan 和 server adv）
+//=============================================================================
+static u8 g_combined_scan_request = 0;  // 0=关闭, 1=开启
+
+void ble_combined_request_scan(u8 en)
+{
+    g_combined_scan_request = en ? 1 : 0;
+}
+
+void ble_combined_apply(void)
+{
+    // 应用 scan 请求到 client（如果 client 已启用）
+    // 注意：这里只管理 scan，adv 由 server 自己管理
+    if (g_combined_scan_request) {
+        // 使用默认参数开启 scan
+        ble_simple_client_scan_enable(1, ADV_SCAN_MS(23), ADV_SCAN_MS(13));
+    } else {
+        ble_simple_client_scan_enable(0, 0, 0);
+    }
+}

@@ -193,7 +193,8 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
-                bdo_disable(1); // 发送暂停uart指令
+                // MODE_6 已改为 BLE 基本连接测试：不再发送任何 UART/串口指令
+                log_i("[MODE6][BLE] touch down ignored");
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {
@@ -214,7 +215,8 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
-                bdo_enable(); // 发送暂停uart指令
+                // MODE_6 已改为 BLE 基本连接测试：不再发送任何 UART/串口指令
+                log_i("[MODE6][BLE] touch up ignored");
             }
         }
         break;
@@ -259,8 +261,10 @@ static void devices_check_init(void)
     srand(timer_get_ms());
 
 
-    // 初始化模式系统，进入初始模式（红灯常亮）
-    switch_to_mode(WORK_MODE_INIT);
+    // 直接进入 Mode6 BLE 基础测试（跳过其他模式）
+    // 如需恢复正常流程，改回 switch_to_mode(WORK_MODE_INIT);
+    switch_to_mode(WORK_MODE_6);
+    g_new_mode = WORK_MODE_6;  // 同步设置，防止主循环再次切换
 
     // wifi_and_network_off();
     os_mutex_post(&g_mode_mutex);

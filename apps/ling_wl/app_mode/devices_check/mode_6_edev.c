@@ -1,201 +1,373 @@
 /**
- * @author luotianyu
- * @brief 
- * 
- * ── MODE_6 串行状态子状态机 ──
- * 
- *   +-------------------+
- *   |                   v
- * [IDLE] -> [PLAY_PROMPT] -> [CONNECT_1] -> [PLAY_1] -> [CONNECT_2] -> [PLAY_2]
- *    ^                                                      |
- *    +------------------------------------------------------+
- * 
- * 说明：
- *   - IDLE         ：空闲
- *   - PLAY_PROMPT  ：播放提示音
- *   - CONNECT_1    ：连接第1个E端设备
- *   - PLAY_1       ：第1设备连接成功后播放音频
- *   - CONNECT_2    ：连接第2个E端设备
- *   - PLAY_2       ：第2设备连接成功后播放音频
- *   - PLAY_2后回到CONNECT_1，循环
+ * @brief MODE_6 - 极简 BLE 基础功能测试
+ *
+ * 测试流程：
+ *   1. 扫描附近 BLE 设备
+ *   2. 找到第一个可连接设备后发起连接
+ *   3. 连接成功后发送测试数据
+ *   4. 2秒后主动断开
+ *
+ * 所有日志以 [BLE_TEST] 前缀输出，方便过滤查看
  */
 
 #include "mode_list.h"
-#include "gpio.h"
-#include "bt_ble/client/ble_dev_task_scheduler.h"
-#include "../../LED/LED.h"
-#include "app_cookie.h"
- 
-static u8 g_mode6_playing_prompt = 1; // 模式6状态：1=播放提示音，0=循环播放测试音
+#include "bt_ble/client/ble_simple_client.h"
+#include "btstack/le/ble_api.h"
+#include "btstack/le/le_common_define.h"
+#include "btstack/btstack_typedef.h"
+#include "system/timer.h"
+#include "os/os_api.h"
+#include <string.h>
 
-// 模式6 E端设备相关变量
-static int g_current_e_device_index = -1;      // 当前E端设备索引
-lwl_eend_dev_t *target_pdev = NULL; // 当前目标E端设备指针
-lwl_eend_dev_t *current_pdev = NULL; // 当前连接的E端设备指针
-// ========== 模式6 串行状态机重构 ===========
+//=============================================================================
+// 配置参数
+//=============================================================================
+#define BLE_TEST_SCAN_INTERVAL      ADV_SCAN_MS(50)   // 扫描间隔 50ms
+#define BLE_TEST_SCAN_WINDOW        ADV_SCAN_MS(30)   // 扫描窗口 30ms
+#define BLE_TEST_CONN_INTERVAL      24                // 连接间隔 30ms (24*1.25)
+#define BLE_TEST_CONN_LATENCY       0
+#define BLE_TEST_CONN_TIMEOUT       400               // 超时 4s (400*10ms)
+#define BLE_TEST_DISCONNECT_DELAY   2000              // 连接后2s断开
+#define BLE_TEST_CONNECT_TIMEOUT    5000              // 连接超时 5s
+
+//=============================================================================
+// 测试状态
+//=============================================================================
 typedef enum {
-    MODE6_IDLE = 0,        // 空闲状态，未进行任何操作
-    MODE6_PLAY_PROMPT,     // 播放提示音（如开机提示、操作提示）
-    MODE6_CONNECT_1,       // 尝试连接第一个目标设备
-    MODE6_PLAY_1,          // 第一个设备连接成功后，进入播放状态
-    MODE6_CONNECT_2,       // 尝试连接第二个目标设备
-    MODE6_PLAY_2,          // 第二个设备连接成功后，进入播放状态
-    // 移除DISCONNECT状态 // 该状态已废弃，不再使用
-} mode6_state_e;
+    BLE_TEST_IDLE = 0,
+    BLE_TEST_SCANNING,
+    BLE_TEST_CONNECTING,
+    BLE_TEST_CONNECTED,
+    BLE_TEST_DONE,
+} ble_test_state_e;
 
-static mode6_state_e g_mode6_state = MODE6_IDLE;
-static int g_mode6_e_index = 0; // 0:第1设备, 1:第2设备
-// 标志“模式6”相关动作是否正在进行
-// 1：有动作在执行（如连接、播放等），防止重复或并发操作
-// 0：无动作，允许推进新流程
-static u8 g_mode6_action_in_progress = 0;
-static void set_led_tts_on(void)    { set_rgb_ON(COLOR_BLUE,3); }
-static void set_led_tts_off(void)   { set_rgb_OFF(COLOR_BLUE,3); }
+static volatile ble_test_state_e g_test_state = BLE_TEST_IDLE;
+static u8  g_target_addr[6];
+static u8  g_target_addr_type;
+static u16 g_conn_handle = 0;
+static u16 g_disconnect_timer = 0;
+static u16 g_connect_timer = 0;
 
-// 音频播放回调
-void mode6_audio_callback(void *priv)
+// 测试数据
+static const u8 g_test_data[] = {0x01, 0x02, 0x03, 0x04, 0x05};
+
+//=============================================================================
+// 内部函数
+//=============================================================================
+static void ble_test_stop_scan(void)
 {
-    // 检查当前模式，如果不是模式6，则忽略回调
-    if (get_current_mode() != WORK_MODE_6) {
-        log_i("MODE 6: Audio callback ignored - not in mode 6 (current mode: %d)", get_current_mode());
+    log_i("[BLE_TEST] stop scan");
+    ble_op_scan_enable2(0, 0);
+}
+
+static void ble_test_start_scan(void)
+{
+    log_i("[BLE_TEST] start scan...");
+    ble_op_set_scan_param(SCAN_ACTIVE, BLE_TEST_SCAN_INTERVAL, BLE_TEST_SCAN_WINDOW);
+    ble_op_scan_enable2(1, 0);
+    g_test_state = BLE_TEST_SCANNING;
+}
+
+static void ble_test_connect_timeout_cb(void *priv)
+{
+    (void)priv;
+    g_connect_timer = 0;
+
+    if (g_test_state == BLE_TEST_CONNECTING) {
+        log_w("[BLE_TEST] connect timeout, cancel and rescan");
+        ble_op_create_connection_cancel();
+        g_test_state = BLE_TEST_SCANNING;
+        ble_test_start_scan();
+    }
+}
+
+static void ble_test_create_connection(void)
+{
+    struct create_conn_param_t param;
+
+    memset(&param, 0, sizeof(param));
+    param.conn_interval = BLE_TEST_CONN_INTERVAL;
+    param.conn_latency = BLE_TEST_CONN_LATENCY;
+    param.supervision_timeout = BLE_TEST_CONN_TIMEOUT;
+    param.peer_address_type = g_target_addr_type;
+    memcpy(param.peer_address, g_target_addr, 6);
+    
+    log_i("[BLE_TEST] connecting to %02X:%02X:%02X:%02X:%02X:%02X (type=%d)",
+          g_target_addr[5], g_target_addr[4], g_target_addr[3],
+          g_target_addr[2], g_target_addr[1], g_target_addr[0],
+          g_target_addr_type);
+    
+    g_test_state = BLE_TEST_CONNECTING;
+    int ret = ble_op_create_connection(&param);
+    if (ret) {
+        log_w("[BLE_TEST] create_connection failed ret=%d, rescan", ret);
+        g_test_state = BLE_TEST_SCANNING;
+        ble_test_start_scan();
         return;
     }
-    set_led_tts_off();
 
-    if (g_mode6_playing_prompt) {
-        // 提示音播放完成，开始播放循环音频
-        log_i("MODE 6: Prompt audio callback - finished, starting loop audio");
-        g_mode6_playing_prompt = 0;
-        g_audio_playing = 0;
+    if (g_connect_timer) {
+        sys_timeout_del(g_connect_timer);
+    }
+    g_connect_timer = sys_timeout_add(NULL, ble_test_connect_timeout_cb, BLE_TEST_CONNECT_TIMEOUT);
+}
+
+static void ble_test_send_data(void)
+{
+    if (g_conn_handle == 0) {
+        log_w("[BLE_TEST] send_data: no connection");
+        return;
+    }
+    
+    // 使用通用的ATT写入（handle=0x0003是常见的特征值句柄，实际可能需要调整）
+    // 这里用 write without response 方式发送测试数据
+    log_i("[BLE_TEST] sending %d bytes test data...", sizeof(g_test_data));
+    
+    // 注意：如果对方没有对应的特征值，写入会失败，但不影响测试连接是否正常
+    int ret = ble_op_multi_att_send_data(g_conn_handle, 0x0003, (u8 *)g_test_data, sizeof(g_test_data), ATT_OP_WRITE_WITHOUT_RESPOND);
+    if (ret == 0) {
+        log_i("[BLE_TEST] send OK");
     } else {
-        // 循环音频播放完成，准备重新播放
-        log_i("MODE 6: Loop audio callback - finished, will restart");
-        g_audio_playing = 0;
-        
-        // 播放结束后，先关闭当前已连接的E端设备（如果有）
-        if (current_pdev) {
-            char sn_string[SN_SIZE+1] = "(NULL)";
-            current_pdev->get_string(current_pdev, sn_string, sizeof(sn_string));
-            log_i("MODE 6: Turn OFF current E device: %s", sn_string);
-            uint cmd_id;
-            target_pdev = NULL; // 清空目标设备指针
-            bdo_turn_off(current_pdev);
-            current_pdev = NULL; // 清空当前连接设备指针
+        log_w("[BLE_TEST] send failed: %d (handle may not exist, ignore)", ret);
+    }
+}
+
+static void ble_test_disconnect(void)
+{
+    if (g_conn_handle == 0) {
+        return;
+    }
+    log_i("[BLE_TEST] disconnect...");
+    ble_op_disconnect(g_conn_handle);
+}
+
+static void ble_test_disconnect_timer_cb(void *priv)
+{
+    (void)priv;
+    g_disconnect_timer = 0;
+    
+    if (g_test_state == BLE_TEST_CONNECTED) {
+        log_i("[BLE_TEST] 2s elapsed, disconnecting...");
+        ble_test_disconnect();
+    }
+}
+
+//=============================================================================
+// BLE 事件处理 - 由协议栈回调
+//=============================================================================
+
+// 广播报告回调 - 找设备
+static void ble_test_adv_report_handler(adv_report_t *report)
+{
+    if (g_test_state != BLE_TEST_SCANNING) {
+        return;
+    }
+    
+    // 只接受可连接广播 (ADV_IND=0, ADV_DIRECT_IND=1)
+    if (report->event_type > 1) {
+        return;
+    }
+    
+    // 找到设备，停止扫描并连接
+    memcpy(g_target_addr, report->address, 6);
+    g_target_addr_type = report->address_type;
+    
+    log_i("[BLE_TEST] found device: %02X:%02X:%02X:%02X:%02X:%02X rssi=%d",
+          report->address[5], report->address[4], report->address[3],
+          report->address[2], report->address[1], report->address[0],
+          report->rssi);
+    
+    ble_test_stop_scan();
+    ble_test_create_connection();
+}
+
+// 连接完成回调
+static void ble_test_connection_complete_handler(u16 handle)
+{
+    if (g_test_state != BLE_TEST_CONNECTING) {
+        return;
+    }
+    
+    g_conn_handle = handle;
+    g_test_state = BLE_TEST_CONNECTED;
+    
+    log_i("[BLE_TEST] === CONNECTED === handle=0x%04X", handle);
+    
+    // 连接成功后立即发送测试数据
+    ble_test_send_data();
+    
+    // 启动2s后断开的定时器
+    if (g_disconnect_timer) {
+        sys_timeout_del(g_disconnect_timer);
+    }
+    g_disconnect_timer = sys_timeout_add(NULL, ble_test_disconnect_timer_cb, BLE_TEST_DISCONNECT_DELAY);
+}
+
+// 断开连接回调
+static void ble_test_disconnection_complete_handler(u16 handle, u8 reason)
+{
+    (void)handle;
+    
+    log_i("[BLE_TEST] === DISCONNECTED === reason=0x%02X", reason);
+    
+    if (g_disconnect_timer) {
+        sys_timeout_del(g_disconnect_timer);
+        g_disconnect_timer = 0;
+    }
+    
+    g_conn_handle = 0;
+    g_test_state = BLE_TEST_DONE;
+    
+    log_i("[BLE_TEST] ========== TEST COMPLETE ==========");
+}
+
+// 连接失败回调
+static void ble_test_connection_failed_handler(void)
+{
+    log_w("[BLE_TEST] connection failed, restart scan");
+    g_test_state = BLE_TEST_SCANNING;
+    ble_test_start_scan();
+}
+
+//=============================================================================
+// 注册到 ble_simple_client 的回调（复用现有框架的事件分发）
+//=============================================================================
+static void mode6_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
+{
+    if (get_current_mode() != WORK_MODE_6) return;
+
+    // Debug: log first few packets to verify hook is working
+    static int debug_pkt_count = 0;
+    if (debug_pkt_count < 5) {
+        log_i("[BLE_TEST] hook recv pkt type=%d", packet_type);
+        debug_pkt_count++;
+    }
+
+    if (packet_type == HCI_EVENT_PACKET) {
+        switch (hci_event_packet_get_type(packet)) {
+        case GAP_EVENT_ADVERTISING_REPORT:
+            if (g_test_state == BLE_TEST_SCANNING) {
+                adv_report_t *report = (adv_report_t *)&packet[2];
+                ble_test_adv_report_handler(report);
+            }
+            break;
+            
+        case HCI_EVENT_LE_META:
+            switch (hci_event_le_meta_get_subevent_code(packet)) {
+            case HCI_SUBEVENT_LE_ENHANCED_CONNECTION_COMPLETE:
+            case HCI_SUBEVENT_LE_CONNECTION_COMPLETE: {
+                if (g_test_state == BLE_TEST_CONNECTING) {
+                    u8 status = hci_subevent_le_connection_complete_get_status(packet);
+                    if (status) {
+                        // ble_test_connection_failed_handler();
+                        log_w("[BLE_TEST] connection failed status=0x%x", status);
+                        g_test_state = BLE_TEST_SCANNING;
+                        ble_test_start_scan();
+                    } else {
+                        u16 handle = little_endian_read_16(packet, 3);
+                        // ble_test_connection_complete_handler(handle);
+                        g_conn_handle = handle;
+                        g_test_state = BLE_TEST_CONNECTED;
+                        log_i("[BLE_TEST] === CONNECTED === handle=0x%04X", handle);
+                        ble_test_send_data();
+                        if (g_connect_timer) {
+                            sys_timeout_del(g_connect_timer);
+                            g_connect_timer = 0;
+                        }
+                        if (g_disconnect_timer) sys_timeout_del(g_disconnect_timer);
+                        g_disconnect_timer = sys_timeout_add(NULL, ble_test_disconnect_timer_cb, BLE_TEST_DISCONNECT_DELAY);
+                    }
+                }
+            } break;
+            }
+            break;
+
+        case HCI_EVENT_DISCONNECTION_COMPLETE: {
+            u16 handle = little_endian_read_16(packet, 3);
+            u8 reason = packet[5];
+            if (handle == g_conn_handle) {
+                // ble_test_disconnection_complete_handler(handle, reason);
+                log_i("[BLE_TEST] === DISCONNECTED === reason=0x%02X", reason);
+                if (g_connect_timer) {
+                    sys_timeout_del(g_connect_timer);
+                    g_connect_timer = 0;
+                }
+                if (g_disconnect_timer) { sys_timeout_del(g_disconnect_timer); g_disconnect_timer = 0; }
+                g_conn_handle = 0;
+                g_test_state = BLE_TEST_DONE;
+                log_i("[BLE_TEST] ========== TEST COMPLETE ==========");
+            }
+        } break;
         }
     }
 }
 
-// ========== 模式6回调函数声明 ===========
-static void mode6_e_connect_cb(bdo_code_e code, void *priv)
+//=============================================================================
+// 对外接口
+//=============================================================================
+void mode6_init(void)
 {
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
-    char sn_string[SN_SIZE+1] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    }
-    log_i("bdo_turn_on code %d %s\n", code, sn_string);
-
-    if (BDOCode_Ready_to_Play == code) {
-        current_pdev = pdev; // 设置当前连接的E端设备指针
-        log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    } else if (BDOCode_Success == code) {
-        bdo_enable();
-    } else if (BDOCode_Success != code) {
-        if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
-        current_pdev = NULL; // 设置当前连接的E端设备指针
-        g_mode6_playing_prompt = 1;
-        lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"SwFailed.mp3", mode6_audio_callback);
-    }
-}
-static void switch_to_e_target(lwl_eend_dev_t* pdev)
-{
-    if (pdev == NULL) return;
-    char sn_string[SN_SIZE+1] = "(NULL)";
-    pdev->get_string(pdev, sn_string, sizeof(sn_string));
-    log_i("Switching to target: %s", sn_string);
+    log_i("[BLE_TEST] ========================================");
+    log_i("[BLE_TEST] BLE Basic Test Start");
+    log_i("[BLE_TEST] Flow: Scan -> Connect -> Send Data -> Disconnect");
+    log_i("[BLE_TEST] ========================================");
     
-    // 设置新的目标设备
-    target_pdev = pdev;
-    bdo_turn_on(pdev, 500, 5000, mode6_e_connect_cb, pdev);
+    g_test_state = BLE_TEST_IDLE;
+    g_conn_handle = 0;
+    g_disconnect_timer = 0;
+    g_connect_timer = 0;
+    memset(g_target_addr, 0, sizeof(g_target_addr));
+    
+    // 注册底层 HCI 事件回调
+    ble_simple_client_set_raw_packet_handler(mode6_packet_handler);
+
+    // 确保模块启用 (可能需要它来初始化某些状态)
+    ble_simple_client_module_enable(1);
+
+    // 停止框架的自动扫描，使用手动控制
+    ble_combined_request_scan(0);
+    ble_combined_apply();
+    
+    // 启动扫描
+    ble_test_start_scan();
 }
 
-// 模式6处理函数
+void mode6_uninit(void)
+{
+    log_i("[BLE_TEST] uninit");
+    
+    if (g_connect_timer) {
+        sys_timeout_del(g_connect_timer);
+        g_connect_timer = 0;
+    }
+    if (g_disconnect_timer) {
+        sys_timeout_del(g_disconnect_timer);
+        g_disconnect_timer = 0;
+    }
+    
+    // 如果还在连接中，断开
+    if (g_conn_handle) {
+        ble_op_disconnect(g_conn_handle);
+        g_conn_handle = 0;
+    }
+    
+    ble_test_stop_scan();
+    
+    // 取消回调注册
+    ble_simple_client_set_raw_packet_handler(NULL);
+    
+    // 恢复默认
+    ble_simple_client_module_enable(0);
+
+    g_test_state = BLE_TEST_IDLE;
+}
+
 void process_mode_6(void)
 {
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    
-    // 如果不在播放提示音阶段，且当前没有音频在播放，则开始播放循环音频
-    if (!g_mode6_playing_prompt && !g_audio_playing && (target_pdev == current_pdev && target_pdev != NULL)) {
-        log_i("MODE 6: Starting loop audio playback");
-        
-        // 播放循环测试音频，使用回调
-        set_dec_volume(context->music_player, 70); // 保护E的电池，需要设置最高默认音量为50
-        bdo_enable();
-        int err = 0;
-        if((g_mode6_e_index&1) == 0 ){
-            err = app_music_play_local_music_with_callback(
-            context->music_player, 
-            CONFIG_CP_VOICE_FILE_PATH"test_dev1.mp3", 
-            mode6_audio_callback, NULL);
-        }else{
-            err = app_music_play_local_music_with_callback(
-            context->music_player, 
-            CONFIG_CP_VOICE_FILE_PATH"test_dev2.mp3", 
-            mode6_audio_callback, NULL);
-        }
-        set_led_tts_on();
-        
-            
-        if (err == 0) {
-            g_audio_playing = 1;
-            log_i("MODE 6: Loop audio started successfully");
-        } else {
-            log_i("MODE 6: Loop audio start failed, error: %d", err);
-        }
+    // 周期性打印状态，方便调试
+    static u32 last_print = 0;
+    if (timer_get_ms() - last_print > 1000) {
+        last_print = timer_get_ms();
+        log_i("[BLE_TEST] State: %d (0=IDLE, 1=SCAN, 2=CONNECTING, 3=CONNECTED, 4=DONE)", g_test_state);
     }
-    if (!target_pdev && !current_pdev) {
-        // 没有目标设备，尝试设置一个
-        if (pdev_list_count > 0) {
-            switch_to_e_target(pdev_list[g_mode6_e_index]);
-            g_mode6_e_index++;
-            if (g_mode6_e_index >= pdev_list_count) g_mode6_e_index = 0;
-        } else {
-            log_i("MODE 6: No devices in pdev_list, cannot set target");
-        }
-    }
-}
-
-void mode6_init()
-{
-    ble_simple_client_module_enable(1); // enable BLE client to connect E device
-    ble_dev_task_scheduler_start();
-    lwl_peri_dev_7016_on(true);  // 开启 7016
-    // msleep(2000); // 等待7016开机完成，但实际执行到lwl_app_mode_play会等待音频播放结束，超过2s
-    g_mode6_state = MODE6_PLAY_PROMPT;
-    g_mode6_e_index = 0;
-    lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"test_edev.mp3", mode6_audio_callback);
-    g_mode6_action_in_progress = 1;
-    g_mode6_playing_prompt = 1;
-    log_i("MODE 6: 串行状态机启动");
-}
-
-void mode6_uninit()
-{
-    log_i("Cleaning up MODE 6 audio functionality");
-    ble_simple_client_module_enable(0);
-    lwl_peri_dev_7016_on(false);  // 关闭 7016
-    g_audio_playing = 0;
-    g_mode6_playing_prompt = 0;
-    g_mode6_action_in_progress = 0;  // 重置模式6动作进行标志
-    g_mode6_state = MODE6_IDLE;      // 重置模式6状态机
-    target_pdev = NULL;              // 清空目标设备指针
-    current_pdev = NULL;             // 清空当前设备指针
-    // 停止当前播放的音频
-    lwl_app_context_t *context = lwl_app_core_context_get_instance();
-    set_dec_volume(context->music_player, INIT_VOLUME_VALUE); // 恢复默认音量
-    if (context && context->music_player) {
-        // 这里可能需要调用停止音频的函数，但先尝试重置状态
-        // app_music_stop(context->music_player);
-    }
-    log_i("MODE 6: All state variables reset");
 }

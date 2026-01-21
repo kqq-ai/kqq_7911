@@ -4,6 +4,7 @@
 
 #include "btstack/btstack_task.h"
 #include "btstack/bluetooth.h"
+#include "btstack/btstack_event.h"
 #include "btstack/le/le_user.h"
 #include "bt_common.h"
 
@@ -31,6 +32,9 @@ extern void printf_buf(u8 *buf, u32 len);
 #define log_info_hexdump(...)
 #endif
 
+// Used for bounded waits to avoid cancel/create overlap races.
+extern u32 timer_get_ms(void);
+
 //---------------
 #define SEARCH_PROFILE_BUFSIZE    (512)                   //note:
 static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
@@ -52,12 +56,16 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 #define SET_CONN_INTERVAL   (40) //(unit:1.25ms)
 //连接latency
 #define SET_CONN_LATENCY    0  //(unit:conn_interval)
-//连接超时
-#define SET_CONN_TIMEOUT    30 //(unit:10ms)
+// Connection supervision timeout (unit: 10ms).
+// NOTE: 30 => 300ms is extremely aggressive and will frequently trigger LL supervision timeouts under load.
+// Align with other BLE client examples in this repo (typically 400 => 4s).
+#define SET_CONN_TIMEOUT    400 //(unit:10ms)
 
 //----------------------------------------------------------------------------
 static u8 scan_ctrl_en;
 static u8 ble_work_state = BLE_ST_NULL;
+// Avoid redundant scan disable calls before scan ever started (prevents LL_SCAN "already destroy" noise)
+static u8 scan_enabled; //0:off, 1:on
 static void (*app_ble_state_callback)(void *priv, ble_state_e state) = NULL;
 static u8 sm_master_pair_redo = 0;//keymiss,是否重新执行配对
 //-------------------------------------------------------------------------------
@@ -67,6 +75,11 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window);
 static int client_operation_send(u16 handle, u8 *data, u16 len, u8 att_op_type);
 int ble_enable_new_dev_scan(void);
 //---------------------------------------------------------------------------
+
+// HCI LE Create Connection Cancel opcode (OGF=0x08, OCF=0x000E)
+#ifndef HCI_OPCODE_LE_CREATE_CONNECTION_CANCEL
+#define HCI_OPCODE_LE_CREATE_CONNECTION_CANCEL 0x200E
+#endif
 
 static const struct conn_update_param_t connection_param_table[] = {
     {16, 24, 0, 600},//11
@@ -82,6 +95,63 @@ static const char *const phy_result[] = {
     "2M",
     "Coded",
 };
+
+// Upper-layer decode for HCI disconnection reason (so we don't rely on LL debug prints).
+static inline const char *hci_disc_reason_str(u8 reason)
+{
+    switch (reason) {
+    case 0x08: return "Connection Timeout (supervision timeout)";
+    case 0x13: return "Remote User Terminated Connection";
+    case 0x14: return "Remote Device Terminated (Low Resources)";
+    case 0x15: return "Remote Device Terminated (Power Off)";
+    case 0x16: return "Connection Terminated by Local Host";
+    case 0x1A: return "Unsupported Remote Feature";
+    case 0x3E: return "Connection Failed to be Established";
+    default:   return "Unknown";
+    }
+}
+
+// Track last connection timing/timeout to produce a clear upper-layer timeout log.
+static u32 g_last_conn_start_ms;
+static u16 g_last_supervision_timeout_10ms;
+
+// Track last disconnect request for correlating with disconnection complete.
+static u32 g_last_disc_req_ms;
+static u16 g_last_disc_req_handle;
+static u8  g_last_disc_req_state;
+static const char *g_last_disc_req_tag;
+
+#ifndef LTO_KEEP_SYMBOL
+#if defined(__GNUC__)
+// Force LLVM/GCC LTO to keep and export these symbols (the build uses an internalize step).
+#define LTO_KEEP_SYMBOL __attribute__((used)) __attribute__((externally_visible))
+#else
+#define LTO_KEEP_SYMBOL
+#endif
+#endif
+
+static inline const char *ble_state_str(ble_state_e st)
+{
+    switch (st) {
+    case BLE_ST_NULL: return "NULL";
+    case BLE_ST_INIT_OK: return "INIT_OK";
+    case BLE_ST_IDLE: return "IDLE";
+    case BLE_ST_CONNECT: return "CONNECT";
+    case BLE_ST_SEND_DISCONN: return "SEND_DISCONN";
+    case BLE_ST_DISCONN: return "DISCONN";
+    case BLE_ST_CONNECT_FAIL: return "CONNECT_FAIL";
+    case BLE_ST_CONNECTION_UPDATE_OK: return "CONN_UPDATE_OK";
+    case BLE_ST_ADV: return "ADV";
+    case BLE_ST_NOTIFY_IDICATE: return "NOTIFY_INDICATE";
+    case BLE_ST_SCAN: return "SCAN";
+    case BLE_ST_CREATE_CONN: return "CREATE_CONN";
+    case BLE_ST_SEND_CREATE_CONN_CANNEL: return "SEND_CREATE_CONN_CANCEL";
+    case BLE_ST_SEARCH_COMPLETE: return "SEARCH_COMPLETE";
+    case BLE_ST_SEND_STACK_EXIT: return "SEND_STACK_EXIT";
+    case BLE_ST_STACK_EXIT_COMPLETE: return "STACK_EXIT_COMPLETE";
+    default: return "UNKNOWN";
+    }
+}
 
 
 static int client_create_connect_api(u8 *addr, u8 addr_type);
@@ -190,6 +260,27 @@ static void set_ble_work_state(ble_state_e state)
 static ble_state_e get_ble_work_state()
 {
     return ble_work_state;
+}
+
+LTO_KEEP_SYMBOL ble_state_e ble_simple_client_get_work_state(void)
+{
+    return get_ble_work_state();
+}
+
+int ble_simple_client_wait_create_cancel_done(u32 timeout_ms)
+{
+    u32 start = timer_get_ms();
+    while (1) {
+        ble_state_e st = get_ble_work_state();
+        if (st != BLE_ST_CREATE_CONN && st != BLE_ST_SEND_CREATE_CONN_CANNEL) {
+            return 0;
+        }
+        if ((timer_get_ms() - start) >= timeout_ms) {
+            log_info("wait_cancel_done timeout, st=%d\n", st);
+            return -1;
+        }
+        os_time_dly(1);
+    }
 }
 
 //协议栈内部调用
@@ -413,7 +504,8 @@ static void client_report_adv_data(adv_report_t *report_pt, u16 len)
         log_info("\n*********create_connection***********\n");
         log_info("***remote type %d,addr:", report_pt->address_type);
         log_info_hexdump(report_pt->address, 6);
-        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+        ble_combined_request_scan(0);
+        ble_combined_apply();
         client_create_connect_api(report_pt->address, report_pt->address_type);
         log_info("*create_finish\n");
     }
@@ -451,21 +543,43 @@ static void client_create_connection_cannel(void)
     }
 }
 
-int ble_simple_client_disconnect(void)
+LTO_KEEP_SYMBOL int ble_simple_client_disconnect_ex(const char *tag)
 {
     if (client_con_handle != INVALID_HANDLE) {
         if (BLE_ST_SEND_DISCONN != get_ble_work_state()) {
+            g_last_disc_req_ms = timer_get_ms();
+            g_last_disc_req_handle = client_con_handle;
+            g_last_disc_req_state = (u8)get_ble_work_state();
+            g_last_disc_req_tag = tag;
+            log_info("[BLE][DISC_REQ] tag=%s handle=%04x st=%02x(%s) scan_en=%d\n",
+                     tag ? tag : "NULL",
+                     client_con_handle,
+                     get_ble_work_state(),
+                     ble_state_str(get_ble_work_state()),
+                     scan_enabled ? 1 : 0);
             log_info(">>>ble send disconnect\n");
             set_ble_work_state(BLE_ST_SEND_DISCONN);
             ble_cmd_ret_e r = ble_op_disconnect(client_con_handle);
             log_info("disconnect: %d", r);
         } else {
+            log_info("[BLE][DISC_REQ] tag=%s already in SEND_DISCONN, handle=%04x\n",
+                     tag ? tag : "NULL",
+                     client_con_handle);
             log_info(">>>ble wait disconnect...\n");
         }
         return APP_BLE_NO_ERROR;
     } else {
+        log_info("[BLE][DISC_REQ] tag=%s rejected: no valid handle (st=%02x:%s)\n",
+                 tag ? tag : "NULL",
+                 get_ble_work_state(),
+                 ble_state_str(get_ble_work_state()));
         return APP_BLE_OPERATION_ERROR;
     }
+}
+
+int ble_simple_client_disconnect(void)
+{
+    return ble_simple_client_disconnect_ex("ble_simple_client_disconnect()");
 }
 
 static void connection_update_complete_success(u16 conn_handle, u8 *packet)
@@ -476,6 +590,8 @@ static void connection_update_complete_success(u16 conn_handle, u8 *packet)
     conn_latency = hci_subevent_le_connection_update_complete_get_conn_latency(packet);
     conn_timeout = hci_subevent_le_connection_update_complete_get_supervision_timeout(packet);
 
+    // Note: supervision timeout unit is 10ms.
+    g_last_supervision_timeout_10ms = (u16)conn_timeout;
     log_info("c = %04x, i = %d, l = %d, t = %d\n", conn_handle, conn_interval, conn_latency, conn_timeout);
 }
 
@@ -559,8 +675,21 @@ void client_cbk_sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t
 }
 
 /* LISTING_START(packetHandler): Packet Handler */
+// Raw packet handler hook
+static void (*g_raw_packet_handler)(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size) = NULL;
+
+void ble_simple_client_set_raw_packet_handler(void (*handler)(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size))
+{
+    g_raw_packet_handler = handler;
+}
+
 void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
 {
+    // Forward to raw handler if registered
+    if (g_raw_packet_handler) {
+        g_raw_packet_handler(packet_type, channel, packet, size);
+    }
+
     int mtu;
     u32 tmp;
     u8 status;
@@ -571,6 +700,27 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
         /* case DAEMON_EVENT_HCI_PACKET_SENT: */
         /* break; */
+        case HCI_EVENT_COMMAND_COMPLETE: {
+            // Close the loop for LE Create Connection Cancel:
+            // - During CANCEL in-flight (BLE_ST_SEND_CREATE_CONN_CANNEL), we must not re-enable scan.
+            // - Once the controller acks the cancel, we can transition back to IDLE and apply desired scan.
+            u16 opcode = hci_event_command_complete_get_command_opcode(packet);
+            if (opcode == HCI_OPCODE_LE_CREATE_CONNECTION_CANCEL) {
+                const u8 *ret = hci_event_command_complete_get_return_parameters(packet);
+                u8 cancel_status = ret ? ret[0] : 0xff;
+                log_info("LE_CREATE_CONN_CANCEL complete: %02x\n", cancel_status);
+
+                // Only resolve CANCEL->IDLE when we are not connected.
+                if (client_con_handle == INVALID_HANDLE &&
+                    get_ble_work_state() == BLE_ST_SEND_CREATE_CONN_CANNEL &&
+                    cancel_status == 0x00) {
+                    set_ble_work_state(BLE_ST_IDLE);
+                    // Re-apply desired scan/adv state (deferred by ble_combined while cancel was in-flight).
+                    ble_combined_apply();
+                }
+            }
+        } break;
+
         case ATT_EVENT_CAN_SEND_NOW:
             can_send_now_wakeup();
             break;
@@ -619,7 +769,8 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                     log_info("LE_MASTER CREATE CONNECTION FAIL!!! %0x\n", packet[3]);
                     set_ble_work_state(BLE_ST_DISCONN);
                     //auto to do
-                    bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+                    ble_combined_request_scan(1);
+                    ble_combined_apply();
                     break;
                 }
 
@@ -636,6 +787,7 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
                 connection_update_complete_success(handle, packet + 8);
 
+                g_last_conn_start_ms = timer_get_ms();
                 set_ble_work_state(BLE_ST_CONNECT);
                 
                 ble_conn_user_handler(packet); /* process user handler */
@@ -661,9 +813,31 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
             break;
 
         case HCI_EVENT_DISCONNECTION_COMPLETE: {
-            log_info("HCI_EVENT_DISCONNECTION_COMPLETE: %0x\n", packet[5]);
-
+            // HCI Disconnection Complete:
+            // [2]=status, [3..4]=handle, [5]=reason (Bluetooth spec)
             u16 handle = little_endian_read_16(packet, 3);
+            u8 reason = packet[5];
+            log_info("HCI_EVENT_DISCONNECTION_COMPLETE: handle=%04x reason=%02x (%s)\n",
+                     handle, reason, hci_disc_reason_str(reason));
+
+            // Correlate with last disconnect request (if any).
+            if (g_last_disc_req_ms) {
+                u32 now = timer_get_ms();
+                log_info("[BLE][DISC_DONE] last_req: tag=%s handle=%04x st=%02x(%s) age=%u ms\n",
+                         g_last_disc_req_tag ? g_last_disc_req_tag : "NULL",
+                         g_last_disc_req_handle,
+                         g_last_disc_req_state,
+                         ble_state_str((ble_state_e)g_last_disc_req_state),
+                         (u32)(now - g_last_disc_req_ms));
+            }
+
+            if (reason == 0x08) {
+                u32 now = timer_get_ms();
+                u32 dur_ms = g_last_conn_start_ms ? (now - g_last_conn_start_ms) : 0;
+                u32 sup_ms = (u32)g_last_supervision_timeout_10ms * 10;
+                log_info("[BLE] disconnect by supervision timeout: dur=%u ms, supervision_timeout=%u ms\n",
+                         dur_ms, sup_ms);
+            }
             if (client_con_handle != handle) {
                 log_info("unknown_handle:%04x\n", handle);
                 break;
@@ -678,10 +852,18 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 if (BLE_ST_SCAN == get_ble_work_state() || BLE_ST_CREATE_CONN == get_ble_work_state()) {
                     //由于连上一台和未连接的时候scan参数可能不一致，所以有链路断开时，则先关闭已有scan再打开;
                     log_info("doing\n");
-                    bt_ble_scan_enable(NULL, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+                    ble_combined_request_scan(0);
+                    ble_combined_apply();
                 }
             }
-            bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+            ble_combined_request_scan(1);
+            ble_combined_apply();
+
+            // If scan is actually enabled, keep work_state consistent to avoid dropping/printing adv_report
+            // while disconnected (common after late connect+disconnect).
+            if (scan_enabled) {
+                set_ble_work_state(BLE_ST_SCAN);
+            }
 
             ble_disconn_user_handler(packet);
         }
@@ -712,7 +894,8 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
         case GAP_EVENT_ADVERTISING_REPORT:
             /* putchar('@'); */
-            if (BLE_ST_SCAN == get_ble_work_state()) {
+            // Prefer scan_enabled; work_state can transiently be DISCONN/SEND_DISCONN while controller still reports adv.
+            if (scan_enabled || (BLE_ST_SCAN == get_ble_work_state())) {
                 // client_report_adv_data((void *)&packet[2], packet[1]);
                 ble_adv_report_user_handler((void *)&packet[2], packet[1]); /* process user handler */
             } else {
@@ -833,6 +1016,15 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
     }
 
     cur_state =  get_ble_work_state();
+
+    // Professional gate: never enable scan while initiating or canceling a connection.
+    // The controller is busy with Initiator state; enabling scan here can trigger btctrler asserts
+    // and undefined state (e.g. "LL Init already destroy").
+    if (en && (cur_state == BLE_ST_CREATE_CONN || cur_state == BLE_ST_SEND_CREATE_CONN_CANNEL)) {
+        log_info("[BLE][SCAN] reject enable: st=%02x(%s)\n", cur_state, ble_state_str(cur_state));
+        return APP_BLE_OPERATION_ERROR;
+    }
+
     switch (cur_state) {
     case BLE_ST_SCAN:
     case BLE_ST_IDLE:
@@ -840,7 +1032,6 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
     case BLE_ST_NULL:
     case BLE_ST_DISCONN:
     case BLE_ST_CONNECT_FAIL:
-    case BLE_ST_SEND_CREATE_CONN_CANNEL:
         break;
     default:
         return APP_BLE_OPERATION_ERROR;
@@ -851,6 +1042,23 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
         return APP_BLE_NO_ERROR;
     }
 
+    /*
+     * Idempotent / defensive disable:
+     * - Controller may already have destroyed scan (e.g. boot-time apply/teardown races),
+     *   while upper-layer `scan_enabled` or desired state is stale.
+     * - Only issue LL scan disable when we are actually in SCAN state; otherwise just
+     *   resync flags and return silently to avoid "[LL_SCAN]LL Scan already destroy".
+     */
+    if (!en) {
+        if (!scan_enabled) {
+            return APP_BLE_NO_ERROR;
+        }
+        if (cur_state != BLE_ST_SCAN) {
+            scan_enabled = 0;
+            return APP_BLE_NO_ERROR;
+        }
+    }
+
     log_info("scan_en:%d\n", en);
     set_ble_work_state(next_state);
 
@@ -858,6 +1066,7 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
         ble_op_set_scan_param(SET_SCAN_TYPE, interval, window);
     }
     ble_op_scan_enable2(en, 0);
+    scan_enabled = en ? 1 : 0;
 
     return APP_BLE_NO_ERROR;
 }
@@ -869,6 +1078,14 @@ static int client_create_connect_api(u8 *addr, u8 addr_type)
 {
     u8 cur_state =  get_ble_work_state();
 
+    // Hard gate: never start a new create_connection while cancel is in-flight.
+    // This prevents controller slot leaks and btctrler asserts ("BLE HW NUM limit",
+    // "LL Init already destroy") caused by cancel/create overlap races.
+    if (cur_state == BLE_ST_SEND_CREATE_CONN_CANNEL) {
+        log_info("create_conn rejected: cancel in progress\n");
+        return APP_BLE_OPERATION_ERROR;
+    }
+
     switch (cur_state) {
     case BLE_ST_SCAN:
     case BLE_ST_IDLE:
@@ -876,7 +1093,6 @@ static int client_create_connect_api(u8 *addr, u8 addr_type)
     case BLE_ST_NULL:
     case BLE_ST_DISCONN:
     case BLE_ST_CONNECT_FAIL:
-    case BLE_ST_SEND_CREATE_CONN_CANNEL:
         break;
     default:
         return APP_BLE_OPERATION_ERROR;
@@ -885,7 +1101,8 @@ static int client_create_connect_api(u8 *addr, u8 addr_type)
 
     if (cur_state == BLE_ST_SCAN) {
         log_info("stop scan\n");
-        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+        ble_combined_request_scan(0);
+        ble_combined_apply();
     }
 
     log_info("addr to creat!\n");
@@ -896,7 +1113,13 @@ static int client_create_connect_api(u8 *addr, u8 addr_type)
 
 static int client_create_cannel_api(void)
 {
-    if (get_ble_work_state() == BLE_ST_CREATE_CONN) {
+    ble_state_e st = get_ble_work_state();
+
+    // Idempotent cancel: if cancel is already in progress, treat as success.
+    if (st == BLE_ST_SEND_CREATE_CONN_CANNEL) {
+        return 0;
+    }
+    if (st == BLE_ST_CREATE_CONN) {
         client_create_connection_cannel();
         return 0;
     }
@@ -918,19 +1141,28 @@ void ble_simple_client_scan_enable(u8 en, int interval, int window)
     bt_ble_scan_enable(0, en, interval, window);
 }
 
+void ble_simple_client_scan_default(u8 en)
+{
+    bt_ble_scan_enable(0, en, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+}
+
+u8 ble_simple_client_scan_is_enabled(void)
+{
+    return scan_enabled ? 1 : 0;
+}
+
 //模块开关
 void ble_simple_client_module_enable(u8 en)
 {
+    // Scheme B: module_enable only expresses desire; actual scan start/stop is owned by ble_combined.
     log_info("mode_en:%d\n", en);
-
-    if (en) {
-        scan_ctrl_en = 1;
-        bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
-    } else {
-        scan_ctrl_en = 0;
-        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
-        ble_simple_client_disconnect();
+    scan_ctrl_en = en ? 1 : 0;
+    if (!en) {
+        // It's still reasonable to disconnect on disable request.
+        ble_simple_client_disconnect_ex("module_enable(0)");
     }
+    ble_combined_request_scan(en ? 1 : 0);
+    ble_combined_apply();
 }
 
 void client_profile_init(void)
@@ -948,7 +1180,9 @@ void ble_simple_client_init(void)
     client_con_handle = INVALID_HANDLE;
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_client_module_enable(0);
+    // Scheme B: init must not actively stop controller resources; just default to disabled desire.
+    scan_ctrl_en = 0;
+    ble_combined_request_scan(0);
 }
 
 void ble_simple_client_exit(void)
