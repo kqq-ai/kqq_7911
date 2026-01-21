@@ -8,6 +8,7 @@
 #include "log.h"
 #include "net_music_play_my.h"
 #include "os/os_api.h"
+#include "system/timer.h"
 #include "util/threadpool_tasks.h"
 
 /* 本地文件播放控制 */
@@ -49,7 +50,9 @@ static void lwl_app_audio_play_cb(void *priv) {
     g_prompt_cb_priv();
   }
 
-  gpio_direction_output(IO_PORTA_00, 0); // Disable C speaker
+  if (!LWL_C_SPEAKER_ALWAYS_ON) {
+    gpio_direction_output(IO_PORTA_00, 0); // Disable C speaker
+  }
 }
 
 /**
@@ -77,7 +80,9 @@ static void set_stream_speaker(void) {
   // 先关闭本地播放
   lwl_app_audio_stop_playing();
 
-  gpio_direction_output(IO_PORTA_00, 0); // Disable C speaker
+  if (!LWL_C_SPEAKER_ALWAYS_ON) {
+    gpio_direction_output(IO_PORTA_00, 0); // Disable C speaker
+  }
   gpio_direction_output(IO_PORTB_02, 1); // Enable E speaker
   set_dec_volume(g_app_ctx->music_player, g_volume);
 }
@@ -102,17 +107,23 @@ static void lwl_app_audio_stream_end_cb(void *priv) {
  * @param priv  播放完成时的回调函数（播放和回调不能都加锁）
  */
 void lwl_app_audio_play(const char *fname, void *priv) {
+  u32 t0 = timer_get_ms();
   os_mutex_pend(&g_audio_mutex, 0);
-  log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s", fname);
+  log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s (t=%u)", fname, t0);
 
   // 先停止所有其他播放
   lwl_app_audio_stop_playing();
   lwl_app_audio_stream_stop();
+  log_i("[TIMING]audio_play stop_all done: %u ms",
+        timer_get_ms() - t0);
 
   // 启动本地文件播放
+  u32 t1 = timer_get_ms();
   set_local_speaker();
-  int err = app_music_play_local_music_with_callback(
+  int err = app_music_play_local_music_async_with_callback(
       g_app_ctx->music_player, fname, lwl_app_audio_play_cb, NULL);
+  log_i("[TIMING]audio_play local_start done: %u ms, err=%d",
+        timer_get_ms() - t1, err);
 
   if (!err) {
     g_play_voice_prompt = 1;

@@ -275,6 +275,10 @@
 #else
 #define CONFIG_VOICE_PROMPT_FILE_PATH       "mnt/sdfile/res/audlogo/"
 #define CONFIG_CP_VOICE_FILE_PATH CONFIG_VOICE_PROMPT_FILE_PATH
+
+// Keep C-side speaker powered on after prompt playback.
+// Set to 0 to restore auto-off behavior.
+#define LWL_C_SPEAKER_ALWAYS_ON 1
 #endif
 #endif
 

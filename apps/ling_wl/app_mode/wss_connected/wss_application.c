@@ -143,15 +143,22 @@ static void wss_handle_touch_key_event(bool press_down) {
   os_mutex_pend(&g_wss_app_mutex, 0);
   if (press_down) {
     // ========== 触摸键按下事件 ==========
+    u32 t0 = timer_get_ms();
     log_mqtt("【flow】触摸键按下,等待500ms后开始上传音频");
+    log_i("[TIMING]touch_key press start=%u", t0);
     send_btn_tap(BTN_TAP_TYPE_PRESS, 0);
     g_touch_key_press_time = timer_get_ms();
     // 停止音频播放
     wss_ble_audio_stop();
+    log_i("[TIMING]touch_key after ble_stop: %u ms",
+          timer_get_ms() - t0);
     // 1.开启音频上传，等500ms
     wss_mic_upload_start();
+    log_i("[TIMING]touch_key after mic_start: %u ms",
+          timer_get_ms() - t0);
     play_prompt_sound("t_key.mp3");
-
+    log_i("[TIMING]touch_key after prompt: %u ms",
+          timer_get_ms() - t0);
   } else {
     // ========== 触摸键释放事件 ==========
     log_mqtt("【flow】触摸键释放,停止音频上传(会有延时)");

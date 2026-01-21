@@ -12,6 +12,7 @@
 #include "system/timer.h"
 #include <stdbool.h>
 #include <string.h>
+#include <pthread.h>
 #include "errno.h"
 #include "netdb.h"
 #include "lfs.h"
@@ -20,6 +21,7 @@ static const struct music_dec_ops local_music_dec_ops;
 static const struct music_dec_ops net_music_dec_ops;
 static const struct music_dec_ops lfs_music_dec_ops;
 static const struct music_dec_ops cbuf_music_dec_ops;
+static const struct music_dec_ops local_stream_dec_ops;
 // 定义文件系统的全局句柄
 extern lfs_t g_lfs;
 
@@ -27,6 +29,30 @@ extern lfs_t g_lfs;
 static OS_MUTEX audio_play_mutex;
 
 static volatile u8 g_t_key_first_pcm_pending;
+
+// Local prompt async stream context
+typedef struct {
+    RingQueue *queue;
+    volatile int *done;
+    volatile int *abort;
+} local_stream_ctx_t;
+
+typedef struct {
+    music_player *player;
+    char *path;
+} local_stream_task_t;
+
+static local_stream_ctx_t g_local_stream_ctx;
+static volatile int g_local_stream_abort = 0;
+static volatile int g_local_stream_done = 0;
+static volatile int g_local_stream_thread_running = 0;
+static pthread_t g_local_stream_thread;
+
+#define LOCAL_STREAM_PREFILL_SIZE (0x3000)
+#define LOCAL_STREAM_CHUNK_SIZE 1024
+
+static void *local_stream_worker(void *arg);
+static int local_stream_dec_start(music_player *player, local_stream_ctx_t *ctx);
 
 static void first_play_timer_cb(void *priv);
 
@@ -372,6 +398,35 @@ static const struct audio_vfs_ops cbuf_audio_dec_vfs_ops = {
     .flen  = my_stream_download_get_file_len,
 };
 
+static int my_local_stream_read(void *file, void *buf, u32 len)
+{
+    local_stream_ctx_t *ctx = (local_stream_ctx_t *)file;
+    int ret = ring_queue_try_read_timeout(ctx->queue, buf, len, 1000);
+    if (ret == RINGQUEUE_Is_Empty) {
+        if (*ctx->done || *ctx->abort) {
+            return 0; // EOF
+        }
+        return -1;
+    }
+    return ret;
+}
+
+static int my_local_stream_seek(void *file, u32 offset, int origin)
+{
+    return -1;
+}
+
+static int my_local_stream_get_file_len(void *file)
+{
+    return -1;
+}
+
+static const struct audio_vfs_ops local_stream_audio_dec_vfs_ops = {
+    .fread = my_local_stream_read,
+    .fseek = my_local_stream_seek,
+    .flen  = my_local_stream_get_file_len,
+};
+
 static int __stream_download_ready(void *priv)
 {
     music_player *player = (music_player *)priv;
@@ -486,6 +541,71 @@ static int stream_music_dec_file(music_player *player)
     return 0;
 }
 
+static int local_stream_dec_start(music_player *player, local_stream_ctx_t *ctx)
+{
+    int err;
+    union audio_req req = {0};
+
+    os_mutex_pend(&audio_play_mutex, 0);
+    app_music_play_stop(player);
+
+    req.dec.dec_type = "mp3";
+    req.dec.cmd = AUDIO_DEC_OPEN;
+    req.dec.volume = player->volume;
+    req.dec.output_buf = NULL;
+    req.dec.output_buf_len = DEC_BUF_LEN;
+    req.dec.file = (void *)ctx;
+    req.dec.channel = 0;
+    req.dec.sample_rate = 0;
+    req.dec.priority = 1;
+    req.dec.vfs_ops = &local_stream_audio_dec_vfs_ops;
+    req.dec.sample_source = "dac";
+
+#if TCFG_EQ_ENABLE
+#if defined EQ_CORE_V1
+    req.dec.attr |= AUDIO_ATTR_EQ_EN;
+#if TCFG_LIMITER_ENABLE
+    req.dec.attr |= AUDIO_ATTR_EQ32BIT_EN;
+#endif
+#if TCFG_DRC_ENABLE
+    req.dec.attr |= AUDIO_ATTR_DRC_EN;
+#endif
+#else
+    struct eq_s_attr eq_attr = {0};
+    extern void set_eq_req_attr_parm(struct eq_s_attr * eq_attr);
+    set_eq_req_attr_parm(&eq_attr);
+    if (!player->play_voice_prompt)
+    {
+        req.dec.eq_attr = &eq_attr;
+        req.dec.eq_hdl = player->eq_hdl;
+    }
+#endif
+#endif
+
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    if (err) {
+        log_e("local_stream_dec open failed: %d\n", err);
+        os_mutex_post(&audio_play_mutex);
+        return err;
+    }
+
+    player->play_time = req.dec.play_time;
+    player->total_time = req.dec.total_time;
+
+    req.dec.cmd = AUDIO_DEC_START;
+    err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    if (err) {
+        log_e("local_stream_dec start failed: %d\n", err);
+        os_mutex_post(&audio_play_mutex);
+        return err;
+    }
+
+    player->cmp_file = (void *)ctx;
+    player->dec_ops = &local_stream_dec_ops;
+    os_mutex_post(&audio_play_mutex);
+    return 0;
+}
+
 static int stream_music_dec_stop(music_player *player)
 {
     int err = 0;
@@ -515,11 +635,125 @@ static int stream_music_dec_stop(music_player *player)
     return 0;
 }
 
+static void *local_stream_worker(void *arg)
+{
+    local_stream_task_t *task = (local_stream_task_t *)arg;
+    music_player *player = task->player;
+    const char *path = task->path;
+    int read_len;
+    int prefill = 0;
+    u8 buf[LOCAL_STREAM_CHUNK_SIZE];
+
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        log_e("[LOCAL_STREAM]open failed: %s\n", path);
+        goto out;
+    }
+
+    g_local_stream_ctx.queue = &player->queue;
+    g_local_stream_ctx.done = &g_local_stream_done;
+    g_local_stream_ctx.abort = &g_local_stream_abort;
+    g_local_stream_done = 0;
+
+    while (!g_local_stream_abort && prefill < LOCAL_STREAM_PREFILL_SIZE) {
+        read_len = fread(buf, 1, sizeof(buf), file);
+        if (read_len <= 0) {
+            break;
+        }
+        int written = 0;
+        while (written < read_len && !g_local_stream_abort) {
+            int ret = ring_queue_try_write(&player->queue,
+                                           (const char *)buf + written,
+                                           read_len - written);
+            if (ret == RINGQUEUE_Is_Full) {
+                msleep(2);
+                continue;
+            }
+            if (ret < 0) {
+                msleep(2);
+                continue;
+            }
+            written += ret;
+            prefill += ret;
+        }
+    }
+
+    if (!g_local_stream_abort) {
+        if (local_stream_dec_start(player, &g_local_stream_ctx) != 0) {
+            goto out_close;
+        }
+    }
+
+    while (!g_local_stream_abort) {
+        read_len = fread(buf, 1, sizeof(buf), file);
+        if (read_len <= 0) {
+            break;
+        }
+        int written = 0;
+        while (written < read_len && !g_local_stream_abort) {
+            int ret = ring_queue_try_write(&player->queue,
+                                           (const char *)buf + written,
+                                           read_len - written);
+            if (ret == RINGQUEUE_Is_Full) {
+                msleep(2);
+                continue;
+            }
+            if (ret < 0) {
+                msleep(2);
+                continue;
+            }
+            written += ret;
+        }
+    }
+
+out_close:
+    if (file) {
+        fclose(file);
+    }
+out:
+    g_local_stream_done = 1;
+    g_local_stream_thread_running = 0;
+    if (task) {
+        free(task->path);
+        free(task);
+    }
+    return NULL;
+}
+
+static int local_stream_dec_stop(music_player *player)
+{
+    union audio_req req;
+
+    log_i("[AUDIO_DECODER]local_stream_dec_stop\n");
+    g_local_stream_abort = 1;
+    g_local_stream_done = 1;
+
+    if (player->dec_server)
+    {
+        req.dec.cmd = AUDIO_DEC_STOP;
+        server_request(player->dec_server, AUDIO_REQ_DEC, &req);
+    }
+
+    int argv[2];
+    argv[0] = AUDIO_SERVER_EVENT_END;
+    argv[1] = (int)&g_local_stream_ctx;
+    server_event_handler_del(player->dec_server, 2, argv);
+
+    ring_queue_clear(&player->queue);
+    return 0;
+}
+
 static const struct music_dec_ops cbuf_music_dec_ops = {
     .dec_file = stream_music_dec_file,
     // .dec_volume     = cbuf_music_dec_volume,
     // .dec_progress   = cbuf_musci_dec_progress,
     .dec_stop = stream_music_dec_stop,
+    .dec_status = __get_dec_status,
+};
+
+static const struct music_dec_ops local_stream_dec_ops = {
+    .dec_file = NULL,
+    .dec_stop = local_stream_dec_stop,
     .dec_status = __get_dec_status,
 };
 
@@ -534,16 +768,25 @@ static int local_music_dec_file(music_player *player, void *fname)
     union audio_req req = {0};
     const char *base = audio_basename((const char *)fname);
     bool is_t_key = (strcmp(base, "t_key.mp3") == 0);
+    u32 t0 = timer_get_ms();
 
     /* serialize decoder open/close to avoid concurrent allocations in audio server */
     os_mutex_pend(&audio_play_mutex, 0);
+    log_i("[TIMING]local_dec mutex_wait: %u ms (file=%s)",
+          timer_get_ms() - t0, base);
     app_music_play_stop(player);
+    log_i("[TIMING]local_dec after stop: %u ms (file=%s)",
+          timer_get_ms() - t0, base);
 
     FILE *file = fopen(fname, "r");
     if (!file) {
+        log_w("[TIMING]local_dec fopen failed: %u ms (file=%s)",
+              timer_get_ms() - t0, base);
         os_mutex_post(&audio_play_mutex);
         return -1;
     }
+    log_i("[TIMING]local_dec fopen ok: %u ms (file=%s)",
+          timer_get_ms() - t0, base);
     log_i("[AUDIO_DECODER]app_music_dec_local_file %s\n", (char *)fname);
 
     req.dec.cmd             = AUDIO_DEC_OPEN;
@@ -587,11 +830,15 @@ static int local_music_dec_file(music_player *player, void *fname)
 
     err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
     if (err) {
+        log_w("[TIMING]local_dec open err=%d: %u ms (file=%s)",
+              err, timer_get_ms() - t0, base);
         log_e("audio_dec_open: err = %d\n", err);
         fclose((FILE *)file);
         os_mutex_post(&audio_play_mutex);
         return err;
     }
+    log_i("[TIMING]local_dec open ok: %u ms (file=%s)",
+          timer_get_ms() - t0, base);
 
     player->play_time = req.dec.play_time;
     player->total_time = req.dec.total_time;
@@ -600,11 +847,15 @@ static int local_music_dec_file(music_player *player, void *fname)
 
     err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
     if (err) {
+        log_w("[TIMING]local_dec start err=%d: %u ms (file=%s)",
+              err, timer_get_ms() - t0, base);
         log_e("audio_dec_start: err = %d\n", err);
         fclose((FILE *)file);
         os_mutex_post(&audio_play_mutex);
         return err;
     }
+    log_i("[TIMING]local_dec start ok: %u ms (file=%s)",
+          timer_get_ms() - t0, base);
     player->file = (FILE *)file;
     player->cmp_file = (void *)file;
     mark_first_play_start(player);
@@ -984,6 +1235,58 @@ int app_music_play_stream_write(music_player *player, void *buf, uint32_t len)
     if (player->dec_ops == &cbuf_music_dec_ops) {
         assert(player->queue.capacity > len);
         return ring_queue_write(&player->queue, buf, len);
+    }
+    return 0;
+}
+
+int app_music_play_local_music_async_with_callback(music_player *player, void *fname,
+                                                   app_music_play_end_cb_t cb,
+                                                   void *priv)
+{
+    if (!player || !fname) {
+        return -EINVAL;
+    }
+
+    g_local_stream_abort = 1;
+    // 这里不应该等待太久不超过60ms
+    if (g_local_stream_thread_running) {
+        for (int i = 0; i < 30 && g_local_stream_thread_running; i++) {
+            msleep(2);
+        }
+    }
+    g_local_stream_abort = 0;
+    g_local_stream_done = 0;
+    ring_queue_clear(&player->queue);
+
+    player->dec_end_cb = cb;
+    player->dec_end_cb_priv = priv;
+    player->dec_with_cb = 1;
+
+    local_stream_task_t *task = (local_stream_task_t *)malloc(sizeof(local_stream_task_t));
+    if (!task) {
+        return -ENOMEM;
+    }
+    task->player = player;
+    size_t path_len = strlen((const char *)fname) + 1;
+    task->path = (char *)malloc(path_len);
+    if (!task->path) {
+        free(task);
+        return -ENOMEM;
+    }
+    memcpy(task->path, fname, path_len);
+
+    g_local_stream_thread_running = 1;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    // Increase stack size to avoid pthread stack overflow on small defaults.
+    pthread_attr_setstacksize(&attr, 8 * 1024);
+    int th_err = pthread_create(&g_local_stream_thread, &attr, local_stream_worker, task);
+    pthread_attr_destroy(&attr);
+    if (th_err != 0) {
+        g_local_stream_thread_running = 0;
+        free(task->path);
+        free(task);
+        return -EFAULT;
     }
     return 0;
 }
