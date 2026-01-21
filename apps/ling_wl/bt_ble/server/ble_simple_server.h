@@ -15,6 +15,13 @@ void ble_simple_server_disconnect(void);
 void ble_simple_server_module_enable(u8 en);
 void ble_simple_server_adv_enable(u8 en);
 void ble_simple_server_name_enable(u8 en);
+// Default ADV enable/disable (applies current adv/rsp data and params)
+void ble_simple_server_adv_default(u8 en);
+// Whether adv has been enabled at least once (for idempotent stop)
+u8 ble_simple_server_adv_is_enabled(void);
+// Mark adv data/name updated; combined layer may restart adv if currently enabled
+void ble_simple_server_mark_adv_restart_pending(void);
+u8 ble_simple_server_take_adv_restart_pending(void);
 void ble_simple_server_init(void);
 void ble_simple_server_exit(void);
 

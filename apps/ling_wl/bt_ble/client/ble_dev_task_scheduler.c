@@ -357,7 +357,8 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     if (os_sem_pend(&g_conn_sem, MS2TICK(op->active.conn_timeout)) == OS_TIMEOUT) {
         g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
         ble_simple_client_create_cannel();
-        log_e("[BDO]Error ble connection timeout!!!");
+        log_e("[BDO]Error ble connection timeout!!! expected=%dms(%d ticks)",
+              op->active.conn_timeout, MS2TICK(op->active.conn_timeout));
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Connection_Timeout);
         // 增加延迟确保BLE栈完全取消连接
@@ -465,7 +466,8 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         if (os_sem_pend(&g_conn_sem, MS2TICK(op->turnon.conn_timeout)) == OS_TIMEOUT) {
             g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
             ble_simple_client_create_cannel();
-            log_e("[BDO]Error ble connection timeout!!!");
+            log_e("[BDO]Error ble connection timeout!!! expected=%dms(%d ticks)",
+                  op->turnon.conn_timeout, MS2TICK(op->turnon.conn_timeout));
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_Connection_Timeout);
             // 增加延迟确保BLE栈完全取消连接

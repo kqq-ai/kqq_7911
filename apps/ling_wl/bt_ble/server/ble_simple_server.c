@@ -105,6 +105,9 @@ static u8 gap_device_name_len = 0; //名字长度，不包含结束符
 static u8 adv_tm_flag = 0;
 static u8 ble_work_state = 0;      //ble 状态变化
 static u8 adv_ctrl_en;             //广播控制
+// Avoid redundant adv disable calls before adv ever started (prevents LL_ADV "already destroy" noise)
+static u8 adv_enabled;             //0:off, 1:on
+static u8 adv_restart_pending;     //0:no, 1:need restart to apply new adv/rsp data (e.g. name)
 static OS_MUTEX mutex;             //
 static void (*app_ble_state_callback)(void *priv, ble_state_e state) = NULL;
 static void (*ble_resume_send_wakeup)(void) = NULL;
@@ -275,7 +278,8 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                     // 开启高占空比定向回连广播时，若在持续的1.28秒内没有成功回连，则会进入此判断分支
                     log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
                     set_ble_work_state(BLE_ST_DISCONN);
-                    bt_ble_adv_enable(1);
+                    ble_combined_request_adv(1);
+                    ble_combined_apply();
                     break;
                 }
                 server_con_handle = hci_subevent_le_enhanced_connection_complete_get_connection_handle(packet);
@@ -296,7 +300,8 @@ static void server_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uin
                     // 开启高占空比定向回连广播时，若在持续的1.28秒内没有成功回连，则会进入此判断分支
                     log_info("LE_SLAVE CONNECTION FAIL!!! %0x\n", status);
                     set_ble_work_state(BLE_ST_DISCONN);
-                    bt_ble_adv_enable(1);
+                    ble_combined_request_adv(1);
+                    ble_combined_apply();
                     break;
                 }
                 server_con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
@@ -552,7 +557,8 @@ static int send_return_json_data(const uint8_t * return_json_data)
 
     // 构建并发送每个分包
     for (size_t i = 0; i < num_packets; ++i) {
-        unsigned char packet[total_packet_size] = {0};
+        unsigned char packet[MAX_PACKET_SIZE];
+        memset(packet, 0, sizeof(packet));
 
         // 设置当前分包号，格式化为两位字符（例如：01, 08, 11）
         snprintf((char *)packet, 3, "%02d", (int)(i + 1));
@@ -713,6 +719,13 @@ static int set_adv_enable(void *priv, u32 en)
     if (cur_state == next_state) {
         return APP_BLE_NO_ERROR;
     }
+
+    // If adv was never enabled, don't call controller disable (it may already be destroyed)
+    if (!en && !adv_enabled) {
+        set_ble_work_state(next_state);
+        return APP_BLE_NO_ERROR;
+    }
+
     log_info("adv_en:%d\n", en);
     set_ble_work_state(next_state);
 
@@ -720,13 +733,36 @@ static int set_adv_enable(void *priv, u32 en)
         advertisements_setup_init();
     }
     ble_op_adv_enable(en);
+    adv_enabled = en ? 1 : 0;
 
     return APP_BLE_NO_ERROR;
 }
 
-void bt_ble_adv_enable(u8 enable)
+static void bt_ble_adv_enable(u8 enable)
 {
     set_adv_enable(0, enable);
+}
+
+void ble_simple_server_adv_default(u8 en)
+{
+    bt_ble_adv_enable(en);
+}
+
+u8 ble_simple_server_adv_is_enabled(void)
+{
+    return adv_enabled ? 1 : 0;
+}
+
+void ble_simple_server_mark_adv_restart_pending(void)
+{
+    adv_restart_pending = 1;
+}
+
+u8 ble_simple_server_take_adv_restart_pending(void)
+{
+    u8 v = adv_restart_pending;
+    adv_restart_pending = 0;
+    return v ? 1 : 0;
 }
 
 //=BLE CONN===============================================================================================
@@ -841,31 +877,29 @@ void ble_simple_server_disconnect(void)
 
 void ble_simple_server_module_enable(u8 en)
 {
+    // Scheme B: module_enable only expresses desire; actual adv start/stop is owned by ble_combined.
     os_mutex_pend(&mutex, 0);
     log_info("mode_en:%d\n", en);
-    if (en) {
-        adv_ctrl_en = 1;
-        bt_ble_adv_enable(1);
-    } else {
-        adv_ctrl_en = 0;
+    adv_ctrl_en = en ? 1 : 0;
+    if (!en) {
         ble_simple_server_disconnect();
-        bt_ble_adv_enable(0);
     }
     os_mutex_post(&mutex);
+
+    ble_combined_request_adv(en ? 1 : 0);
+    ble_combined_apply();
 }
 
 void ble_simple_server_adv_enable(u8 en)
 {
+    // Keep API, but route through combined ownership.
     os_mutex_pend(&mutex, 0);
     log_info("mode_en:%d\n", en);
-    if (en) {
-        adv_ctrl_en = 1;
-        bt_ble_adv_enable(1);
-    } else {
-        adv_ctrl_en = 0;
-        bt_ble_adv_enable(0);
-    }
+    adv_ctrl_en = en ? 1 : 0;
     os_mutex_post(&mutex);
+
+    ble_combined_request_adv(en ? 1 : 0);
+    ble_combined_apply();
 }
 
 void ble_simple_server_name_enable(u8 idle_busy)
@@ -873,7 +907,7 @@ void ble_simple_server_name_enable(u8 idle_busy)
     log_info("***** wifimgr_ble_name_enable******\n");
     assert(os_mutex_valid(&mutex));
     os_mutex_pend(&mutex, 0);
-    ble_simple_server_module_enable(0);
+    // Scheme B: only update name/adv content here. Restart (if needed) is owned by ble_combined.
     char *name_p = bt_get_local_name();
     const char* ext_name = idle_busy ? ble_ext_busy : ble_ext_idle;
     u8 ext_name_len = 3;
@@ -903,8 +937,12 @@ void ble_simple_server_name_enable(u8 idle_busy)
     
     log_info("ble name(%d): %s \n", gap_device_name_len, gap_device_name);
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_server_module_enable(1);
+    adv_ctrl_en = 1;
+    adv_restart_pending = 1;
     os_mutex_post(&mutex);
+
+    ble_combined_request_adv(1);
+    ble_combined_apply();
 }
 
 void ble_simple_server_init(void)

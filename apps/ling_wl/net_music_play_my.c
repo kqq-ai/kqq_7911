@@ -383,8 +383,19 @@ static int stream_music_dec_file(music_player *player)
      * 异步等待网络下载ready，防止网络阻塞导致app卡住
      */
     player->wait_download_suspend = 0;
-    player->wait_download = wait_completion(__stream_download_ready,
-                                            (int (*)(void *))__stream_music_dec_file, (void *)player, player);
+    /*
+     * NOTE:
+     * wait_completion()/server 事件回调依赖“任务消息队列(taskq)”来投递执行。
+     * 这里的 stream 播放经常由 pthread 线程(例如 threadpool)触发，pthread 没有 taskq，
+     * 会导致日志: [WAIT_COMPLETION]wait pthread ... taskq not exist
+     *
+     * 因此固定投递到 app_core（具备 taskq 且在主循环中接收队列消息）。
+     */
+    player->wait_download = wait_completion_add_to_task("app_core",
+                                                        (int (*)(void *))__stream_download_ready,
+                                                        (int (*)(void *))__stream_music_dec_file,
+                                                        (void *)player,
+                                                        player);
 
     // if (!player->play_voice_prompt)
     // {

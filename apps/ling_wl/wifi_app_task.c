@@ -36,16 +36,16 @@ static wifi_connect_fail_cb wifi_connect_fail_cb_func_pri = NULL;
 
 void register_wifi_connect_succ_func(wifi_connect_succ_cb callback, void *pri)
 {
-    if (NULL != wifi_connect_succ_cb_func_pri)
-    {
+    (void)pri;
+    if (callback) {
         wifi_connect_succ_cb_func_pri = callback;
     }
 }
 
 void register_wifi_connect_fail_func(wifi_connect_fail_cb callback, void *pri)
 {
-    if (NULL != wifi_connect_fail_cb_func_pri)
-    {
+    (void)pri;
+    if (callback) {
         wifi_connect_fail_cb_func_pri = callback;
     }
 }
@@ -298,7 +298,6 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
             set_app_wifi_info(&app_wifi_info);
             /* 存储到VM */
             wifi_store_mode_info(STA_MODE, info.ssid, info.pwd);
-            free(&app_wifi_info);
         }
 
         /* 存储 IP*/

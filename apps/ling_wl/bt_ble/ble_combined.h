@@ -17,6 +17,12 @@ extern u16 client_con_handle;
 
 //统一接口，关闭模块
 void ble_module_enable(u8 en);
+
+// --- Radio ownership (Scheme B): centralized ADV/SCAN arbitration ---
+// These APIs are the only place that should start/stop controller ADV/SCAN.
+void ble_combined_request_adv(u8 en);
+void ble_combined_request_scan(u8 en);
+void ble_combined_apply(void);
 void ble_app_disconnect(void);
 void bt_ble_exit(void);
 

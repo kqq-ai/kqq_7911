@@ -166,7 +166,27 @@ char* wss_url = NULL;
 static void wss_custom_recv_callback(u8 *buf, u32 len, u8 is_text)
 {
     if (is_text != 0) {
-        log_i("wbs recv msg : %.*s\n", len, buf);
+        /*
+         * 注意：很多嵌入式 printf/log 实现不完整，可能不支持 "%.*s" 的 precision，
+         * 会退化成 "%s" 导致把非 '\0' 结尾的 payload 越界打印，出现乱码(如“�~”)甚至把后续二进制帧带出来。
+         * 这里统一改成：拷贝 + 补 '\0' + 过滤控制字符 的安全日志。
+         */
+        char tmp[256];
+        u32 copy_len = len;
+        if (copy_len >= (u32)sizeof(tmp)) {
+            copy_len = (u32)sizeof(tmp) - 1;
+        }
+        if (copy_len > 0) {
+            memcpy(tmp, buf, copy_len);
+        }
+        tmp[copy_len] = '\0';
+        for (u32 i = 0; i < copy_len; i++) {
+            unsigned char c = (unsigned char)tmp[i];
+            if (c < 0x20 && c != '\r' && c != '\n' && c != '\t') {
+                tmp[i] = '.';
+            }
+        }
+        log_i("wbs recv msg : %s", tmp);
         odmp_rsp_handler(buf, len);
     } else {
         odmp_audio_data_handler(buf, len);

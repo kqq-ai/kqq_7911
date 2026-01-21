@@ -433,6 +433,7 @@ bool wss_application_loop()
         switch (event.event_type) {
         case LWL_EVENT_TYPE_KEY:
             wss_handle_key_event();
+            log_i("[wss_application]KEY event");
             break;
             
         case LWL_EVENT_TYPE_TOUCH_KEY:
@@ -445,9 +446,11 @@ bool wss_application_loop()
                 wss_handle_touch_key_event(false);
                 wss_application_vailed();
             }
+            log_i("[wss_application]TOUCH_KEY event",event.data.touch_key_event.is_press_down);
             break;
             
         default:
+            log_i("[wss_application]default event",event.event_type);
             break;
         }
         

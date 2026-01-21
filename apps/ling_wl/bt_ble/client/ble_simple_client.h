@@ -16,6 +16,10 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
 
 
 void ble_simple_client_scan_enable(u8 en, int interval, int window);
+// Default scan enable/disable (uses module default interval/window)
+void ble_simple_client_scan_default(u8 en);
+// Whether scan has been enabled at least once (for idempotent stop)
+u8 ble_simple_client_scan_is_enabled(void);
 void ble_simple_client_module_enable(u8 en);
 void ble_simple_client_init(void);
 void ble_simple_client_exit(void);

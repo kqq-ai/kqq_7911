@@ -6,9 +6,23 @@
 #include "btstack/bluetooth.h"
 #include "btstack/btstack_event.h"
 #include "le_common.h"
+#include "os/os_api.h"
 
 #include "server/ble_simple_server.h"
 #include "client/ble_simple_client.h"
+
+// Serialize ADV/SCAN enable/disable operations across tasks.
+// Without this, concurrent calls to ble_combined_apply() can race and issue
+// duplicate controller enable/disable commands, which may leak "BLE HW" slots
+// and trigger btctrler asserts ("BLE HW NUM limit", "LL Init already destroy").
+static OS_MUTEX g_ble_combined_mutex;
+
+static void ble_combined_lock_init_once(void)
+{
+    if (!os_mutex_valid(&g_ble_combined_mutex)) {
+        os_mutex_create(&g_ble_combined_mutex);
+    }
+}
 
 // LOG 暂时采用printf 而不是log.h的函数
 #if 1
@@ -34,6 +48,10 @@ static u8 multi_att_ram_buffer[MULTI_ATT_RAM_BUFSIZE] __attribute__((aligned(4))
 
 u16 server_con_handle = INVALID_HANDLE;
 u16 client_con_handle = INVALID_HANDLE;
+
+// Scheme B: centralized radio (ADV/SCAN) ownership.
+static u8 g_want_adv;
+static u8 g_want_scan;
 
 //----------------------------------------------------------------------------------------
 extern void reset_PK_cb_register_ext(void (*reset_pk)(u32 *, u16));
@@ -230,6 +248,62 @@ void ble_profile_init(void)
     log_info("ble_profile_init over\n");
 
     ble_op_multi_att_send_init(multi_att_ram_buffer, MULTI_ATT_RAM_BUFSIZE, MULTI_ATT_LOCAL_PAYLOAD_SIZE);
+}
+
+void ble_combined_request_adv(u8 en)
+{
+    ble_combined_lock_init_once();
+    os_mutex_pend(&g_ble_combined_mutex, 0);
+    g_want_adv = en ? 1 : 0;
+    os_mutex_post(&g_ble_combined_mutex);
+}
+
+void ble_combined_request_scan(u8 en)
+{
+    ble_combined_lock_init_once();
+    os_mutex_pend(&g_ble_combined_mutex, 0);
+    g_want_scan = en ? 1 : 0;
+    os_mutex_post(&g_ble_combined_mutex);
+}
+
+void ble_combined_apply(void)
+{
+    ble_combined_lock_init_once();
+    os_mutex_pend(&g_ble_combined_mutex, 0);
+
+    // If server updated adv/rsp content (e.g. name), restart adv (only if desired).
+    if (ble_simple_server_take_adv_restart_pending()) {
+        if (g_want_adv) {
+            if (ble_simple_server_adv_is_enabled()) {
+                ble_simple_server_adv_default(0);
+            }
+            ble_simple_server_adv_default(1);
+        }
+    }
+
+    // Apply ADV desired state.
+    if (g_want_adv) {
+        if (!ble_simple_server_adv_is_enabled()) {
+            ble_simple_server_adv_default(1);
+        }
+    } else {
+        if (ble_simple_server_adv_is_enabled()) {
+            ble_simple_server_adv_default(0);
+        }
+    }
+
+    // Apply SCAN desired state.
+    if (g_want_scan) {
+        if (!ble_simple_client_scan_is_enabled()) {
+            ble_simple_client_scan_default(1);
+        }
+    } else {
+        if (ble_simple_client_scan_is_enabled()) {
+            ble_simple_client_scan_default(0);
+        }
+    }
+
+    os_mutex_post(&g_ble_combined_mutex);
 }
 
 //统一接口，关闭模块

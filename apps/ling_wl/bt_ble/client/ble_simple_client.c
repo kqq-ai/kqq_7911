@@ -58,6 +58,8 @@ static u8 search_ram_buffer[SEARCH_PROFILE_BUFSIZE] __attribute__((aligned(4)));
 //----------------------------------------------------------------------------
 static u8 scan_ctrl_en;
 static u8 ble_work_state = BLE_ST_NULL;
+// Avoid redundant scan disable calls before scan ever started (prevents LL_SCAN "already destroy" noise)
+static u8 scan_enabled; //0:off, 1:on
 static void (*app_ble_state_callback)(void *priv, ble_state_e state) = NULL;
 static u8 sm_master_pair_redo = 0;//keymiss,是否重新执行配对
 //-------------------------------------------------------------------------------
@@ -413,7 +415,8 @@ static void client_report_adv_data(adv_report_t *report_pt, u16 len)
         log_info("\n*********create_connection***********\n");
         log_info("***remote type %d,addr:", report_pt->address_type);
         log_info_hexdump(report_pt->address, 6);
-        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+        ble_combined_request_scan(0);
+        ble_combined_apply();
         client_create_connect_api(report_pt->address, report_pt->address_type);
         log_info("*create_finish\n");
     }
@@ -619,7 +622,8 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                     log_info("LE_MASTER CREATE CONNECTION FAIL!!! %0x\n", packet[3]);
                     set_ble_work_state(BLE_ST_DISCONN);
                     //auto to do
-                    bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+                    ble_combined_request_scan(1);
+                    ble_combined_apply();
                     break;
                 }
 
@@ -678,10 +682,12 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 if (BLE_ST_SCAN == get_ble_work_state() || BLE_ST_CREATE_CONN == get_ble_work_state()) {
                     //由于连上一台和未连接的时候scan参数可能不一致，所以有链路断开时，则先关闭已有scan再打开;
                     log_info("doing\n");
-                    bt_ble_scan_enable(NULL, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+                    ble_combined_request_scan(0);
+                    ble_combined_apply();
                 }
             }
-            bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+            ble_combined_request_scan(1);
+            ble_combined_apply();
 
             ble_disconn_user_handler(packet);
         }
@@ -851,6 +857,11 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
         return APP_BLE_NO_ERROR;
     }
 
+    // If scan was never enabled, don't call controller disable (it may already be destroyed)
+    if (!en && !scan_enabled) {
+        return APP_BLE_NO_ERROR;
+    }
+
     log_info("scan_en:%d\n", en);
     set_ble_work_state(next_state);
 
@@ -858,6 +869,7 @@ static int bt_ble_scan_enable(void *priv, u32 en, int interval, int window)
         ble_op_set_scan_param(SET_SCAN_TYPE, interval, window);
     }
     ble_op_scan_enable2(en, 0);
+    scan_enabled = en ? 1 : 0;
 
     return APP_BLE_NO_ERROR;
 }
@@ -885,7 +897,8 @@ static int client_create_connect_api(u8 *addr, u8 addr_type)
 
     if (cur_state == BLE_ST_SCAN) {
         log_info("stop scan\n");
-        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+        ble_combined_request_scan(0);
+        ble_combined_apply();
     }
 
     log_info("addr to creat!\n");
@@ -918,19 +931,28 @@ void ble_simple_client_scan_enable(u8 en, int interval, int window)
     bt_ble_scan_enable(0, en, interval, window);
 }
 
+void ble_simple_client_scan_default(u8 en)
+{
+    bt_ble_scan_enable(0, en, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+}
+
+u8 ble_simple_client_scan_is_enabled(void)
+{
+    return scan_enabled ? 1 : 0;
+}
+
 //模块开关
 void ble_simple_client_module_enable(u8 en)
 {
+    // Scheme B: module_enable only expresses desire; actual scan start/stop is owned by ble_combined.
     log_info("mode_en:%d\n", en);
-
-    if (en) {
-        scan_ctrl_en = 1;
-        bt_ble_scan_enable(0, 1, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
-    } else {
-        scan_ctrl_en = 0;
-        bt_ble_scan_enable(0, 0, SET_SCAN_INTERVAL, SET_SCAN_WINDOW);
+    scan_ctrl_en = en ? 1 : 0;
+    if (!en) {
+        // It's still reasonable to disconnect on disable request.
         ble_simple_client_disconnect();
     }
+    ble_combined_request_scan(en ? 1 : 0);
+    ble_combined_apply();
 }
 
 void client_profile_init(void)
@@ -948,7 +970,9 @@ void ble_simple_client_init(void)
     client_con_handle = INVALID_HANDLE;
 
     set_ble_work_state(BLE_ST_INIT_OK);
-    ble_simple_client_module_enable(0);
+    // Scheme B: init must not actively stop controller resources; just default to disabled desire.
+    scan_ctrl_en = 0;
+    ble_combined_request_scan(0);
 }
 
 void ble_simple_client_exit(void)
