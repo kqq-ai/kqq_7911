@@ -25,6 +25,7 @@ static char g_edev_target_sn[SN_SIZE+1]; // 服务器维护
 static char g_edev_connected_sn[SN_SIZE+1]; // E 已连接
 static char g_stream_id[64]; // 保存 stream_id
 static int g_stream_id_len; // 保存 stream_id的长度
+static u32 g_tts_bind_start_time = 0; // TTS_BIND开始时间，用于计算切换耗时
 
 
 //=================================================================================================
@@ -89,8 +90,15 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         // 连接成功
         memcpy(g_edev_connected_sn, sn_string, SN_SIZE+1);
         if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的是目标E
-            log_mqtt("【flow】切换设备成功,发送bind_result成功消息给服务器: esn=%s, stream_id=%s", 
-                  g_edev_connected_sn, g_stream_id);
+            // 计算从TTS_BIND到切换成功的耗时
+            if (g_tts_bind_start_time != 0) {
+                u32 duration = timer_get_ms() - g_tts_bind_start_time;
+                log_mqtt("【flow】切换设备耗时: %u ms, esn=%s, stream_id=%s", 
+                      duration, g_edev_connected_sn, g_stream_id);
+                g_tts_bind_start_time = 0; // 清除时间戳
+            }
+            log_mqtt("【flow】发送bind_result成功消息给服务器: esn=%s, stream_id=%s", 
+                    g_edev_connected_sn, g_stream_id);
             // 检查所有必要条件
             if (g_edev_connected_sn[0] == 0) {
                 log_e("【flow】ERROR: g_edev_connected_sn is empty, cannot start audio");
@@ -106,7 +114,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             send_bind_result(g_edev_connected_sn, true, "connected", g_stream_id);
         } else {
             // 连接的不是目标设备，关闭连接
-            log_mqtt("【flow】连接的不是目标设备，关闭连接");
+            log_mqtt("[ERROR]【flow】连接的不是目标设备，关闭连接");
             turn_off_Pi_internal();
         }
         break;
@@ -126,7 +134,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         // 错误：所有其他错误情况
         const char* error_desc = get_bdo_code_desc(code);
         if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的目标E失败
-            log_mqtt("【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s, code=%d (%s)", 
+            log_mqtt("[ERROR]【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s, code=%d (%s)", 
                   g_edev_target_sn, g_stream_id, code, error_desc);
             
             play_prompt_sound("SwFailed.mp3");
@@ -135,6 +143,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
             g_edev_target_sn[0] = 0;
             g_edev_connected_sn[0] = 0;
             g_stream_id[0] = '\0';
+            g_tts_bind_start_time = 0; // 清除时间戳
             
             // 关闭可能已连接的设备
             bdo_disable(0);
@@ -169,7 +178,7 @@ void turn_on_Pi(const char *pdev_sn) {
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
         // log_mqtt("【flow】切换设备失败,设备不存在");
-        log_mqtt("【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s", 
+        log_mqtt("[ERROR]【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s", 
             g_edev_target_sn, g_stream_id);
         // send_bind_result(g_edev_target_sn, false, "device_not_found", g_stream_id);
         play_prompt_sound("SwFailed.mp3");
@@ -177,6 +186,7 @@ void turn_on_Pi(const char *pdev_sn) {
         g_edev_target_sn[0] = 0;
         g_edev_connected_sn[0] = 0;
         g_stream_id[0] = '\0';
+        g_tts_bind_start_time = 0; // 清除时间戳
         os_mutex_post(&g_request_mutex);
         return;
     }
@@ -186,7 +196,6 @@ void turn_on_Pi(const char *pdev_sn) {
         // 检查设备是否已连接且是目标设备
         if (pdev->adv_state == BDPAS_CONNECTED && 
             strcmp(g_edev_target_sn, pdev_sn) == 0) {
-            // 设备已连接且是目标设备，直接发送 bind_result，并启动音频播放
             log_mqtt("【flow】设备已连接，跳过重复连接: esn=%s, stream_id=%s", 
                 g_edev_connected_sn, g_stream_id);
             
@@ -204,7 +213,7 @@ void turn_on_Pi(const char *pdev_sn) {
             os_mutex_post(&g_request_mutex);
             return;
         }
-        log_mqtt("【debug】设备未连接或不是目标设备，继续执行连接流程");
+        log_mqtt("debug】设备未连接或不是目标设备，继续执行连接流程");
         // 如果设备未连接或不是目标设备，继续执行连接流程
     }
     
@@ -240,6 +249,7 @@ static void wss_rsp_cbk(int type, odmp_package_t *pkg)
         }
         //此处拿到目标E的SN，保存到g_edev_target_sn
         memcpy(g_edev_target_sn, pkg->tts_bind.sn, SN_SIZE+1);
+        g_tts_bind_start_time = timer_get_ms(); // 记录开始时间
         turn_on_Pi(g_edev_target_sn);
         play_prompt_sound("TTSBind.mp3");
         break;

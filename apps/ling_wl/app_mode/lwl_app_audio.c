@@ -205,7 +205,7 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
     while (wss_stream_on() == false && g_stream_audio_thread_running) {
         uint32_t elapsed = timer_get_ms() - wait_start_time;
         if (elapsed > STREAM_TIMEOUT_MS) {
-            log_w("【flow】音频播放线程等待服务器下发播放开始消息超时: %u ms, 退出", elapsed);
+            log_i("[ERROR]【flow】音频播放线程等待服务器下发播放开始消息超时: %u ms, 退出", elapsed);
             wss_audio_playback_cleanup();
             return; // 退出线程
         }
@@ -247,7 +247,7 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
             if (written > 0) {
                 log_mqtt("【flow】成功写入音频数据: %u bytes", written);
             } else {
-                log_mqtt("【flow】写入音频数据失败, 跳过");
+                log_mqtt("[ERROR]【flow】写入音频数据失败, 跳过");
             }
             
             os_mutex_post(&g_audio_mutex);
@@ -260,7 +260,7 @@ static void lwl_app_audio_stream_playback_thread(void *priv)
             } else {
                 uint32_t elapsed = timer_get_ms() - last_data_time;
                 if (elapsed > STREAM_TIMEOUT_MS) {
-                    log_w("[AUDIO_STREAM]stream timeout: no data for %u ms, exiting", elapsed);
+                    log_i("[ERROR]【flow】stream timeout: no data for %u ms, exiting", elapsed);
                     break;
                 }
             }
