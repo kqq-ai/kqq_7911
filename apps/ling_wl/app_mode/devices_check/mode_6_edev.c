@@ -97,9 +97,10 @@ static void mode6_e_connect_cb(bdo_code_e code, void *priv)
 
     if (BDOCode_Ready_to_Play == code) {
         current_pdev = pdev; // 设置当前连接的E端设备指针
-        log_i("[BDO]ble_dev_op_handler_turn_on send switch audio bc");
-    } else if (BDOCode_Success == code) {
         bdo_enable();
+        log_i("MODE 6: E device ready to play: %s", sn_string);
+    } else if (BDOCode_Success == code) {
+        log_i("MODE 6: E device connected successfully: %s", sn_string);
     } else if (BDOCode_Success != code) {
         if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
         current_pdev = NULL; // 设置当前连接的E端设备指针
@@ -129,7 +130,7 @@ void process_mode_6(void)
         log_i("MODE 6: Starting loop audio playback");
         
         // 播放循环测试音频，使用回调
-        set_dec_volume(context->music_player, 70); // 保护E的电池，需要设置最高默认音量为50
+        set_dec_volume(context->music_player, 100); // 保护E的电池，需要设置最高默认音量为50
         bdo_enable();
         int err = 0;
         if((g_mode6_e_index&1) == 0 ){

@@ -193,7 +193,8 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
-                bdo_disable(1); // 发送暂停uart指令
+                // bdo_disable(1); // 发送暂停uart指令
+                play_system_music("t_key.mp3");
             }
             // 特殊处理模式1的触摸按键检测
             else if (g_current_mode == WORK_MODE_1) {
@@ -214,7 +215,7 @@ static void devices_check_lwl_event_handler_cb(lwl_event_t *e)
             }
             // 特殊处理模式6的触摸按键检测
             if (g_current_mode == WORK_MODE_6) {
-                bdo_enable(); // 发送暂停uart指令
+                // bdo_enable(); // 发送暂停uart指令
             }
         }
         break;
@@ -261,6 +262,10 @@ static void devices_check_init(void)
 
     // 初始化模式系统，进入初始模式（红灯常亮）
     switch_to_mode(WORK_MODE_INIT);
+
+#if TEST_PI_MODE
+    g_new_mode = WORK_MODE_6;
+#endif
 
     // wifi_and_network_off();
     os_mutex_post(&g_mode_mutex);

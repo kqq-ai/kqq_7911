@@ -51,13 +51,14 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
 {
     music_player *player = (music_player *)priv;
 
+    os_mutex_pend(&audio_play_mutex, 0);
     switch (argv[0]) {
     case AUDIO_SERVER_EVENT_ERR:
-        log_i("app_music: AUDIO_SERVER_EVENT_ERR\n");
+        log_i("[AUDIO_DECODER]AUDIO_SERVER_EVENT_ERR\n");
     case AUDIO_SERVER_EVENT_END:
-        log_i("app_server, music: AUDIO_SERVER_EVENT_END\n");
+        log_i("[AUDIO_DECODER]AUDIO_SERVER_EVENT_END\n");
         if (player->cmp_file != (void *)argv[1]) {
-            printf("not the same file, may be closed! %p %p\n", player->cmp_file, (void *)argv[1]);
+            log_e("not the same file, may be closed! %p %p\n", player->cmp_file, (void *)argv[1]);
         }
         /* os_time_dly(3); */
         union audio_req r = {0};
@@ -66,21 +67,8 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
             server_request(player->dec_server, AUDIO_REQ_DEC, &r);
         }
         led_ui_post_msg("dec_end");
-
-        // if (player->play_voice_prompt) {
-        //     local_music_dec_ops.dec_stop(player);
-        //     player->play_voice_prompt = 0;
-        // }
         
-        if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
-            // 停止解码
-            player->dec_ops->dec_stop(player);
-            // 执行回调
-            if (player->dec_with_cb && player->dec_end_cb != NULL) {
-                player->dec_end_cb(player->dec_end_cb_priv);
-                player->dec_end_cb = NULL;
-            }
-        }
+        app_music_play_stop(player);
         /* player->play_time = 0; */
         break;
     case AUDIO_SERVER_EVENT_CURR_TIME:
@@ -91,6 +79,7 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
         /* player->dec_ops->dec_progress(argv[1]); */
         break;
     }
+    os_mutex_post(&audio_play_mutex);
 }
 
 /*======================================================================================================================
@@ -132,17 +121,10 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
     int err;
     union audio_req req = {0};
 
-    log_i("app_lfs_music_dec_lfs_file\n");
+    log_i("[AUDIO_DECODER]app_lfs_music_dec_lfs_file\n");
 
-    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
-        // 停止解码
-        player->dec_ops->dec_stop(player);
-        // 执行回调
-        if (player->dec_with_cb && player->dec_end_cb != NULL) {
-            player->dec_end_cb(player->dec_end_cb_priv);
-            player->dec_end_cb = NULL;
-        }
-    }
+    os_mutex_pend(&audio_play_mutex, 0);
+    app_music_play_stop(player);
 
     lfs_file_t *lfs_file = (lfs_file_t *)malloc(sizeof(lfs_file_t));
     // 打开文件系统中的MP3文件
@@ -150,6 +132,7 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
     if (err)
     {
         log_e("Failed to open file: %s, error: %d\n", file_path, err);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
     /* 打印 file变量 地址*/
@@ -193,6 +176,7 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
     {
         log_e("Failed to start playback: %d\n", err);
         lfs_file_close(&g_lfs, lfs_file);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
 
@@ -206,6 +190,7 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
     {
         log_e("Failed to start playback: %d\n", err);
         lfs_file_close(&g_lfs, lfs_file);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
     player->lfs_file = lfs_file;
@@ -218,7 +203,8 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
     player->dec_ops = &lfs_music_dec_ops;
 
     led_ui_post_msg("dec_start");
-    puts("play_music_file: suss\n");
+    log_i("[AUDIO_DECODER]play_music_file: suss\n");
+    os_mutex_post(&audio_play_mutex);
     return 0;
 }
 
@@ -233,7 +219,7 @@ static int lfs_music_dec_stop(music_player *player)
         return 0;
     }
 
-    log_i("lfs_music_dec_stop\n");
+    log_i("[AUDIO_DECODER]lfs_music_dec_stop\n");
 
     if (player->dec_server)
     {
@@ -247,9 +233,7 @@ static int lfs_music_dec_stop(music_player *player)
     server_event_handler_del(player->dec_server, 2, argv);
 
     /* 关闭文件 */
-    printf("lfs_music_dec_stop: close file\n");
     lfs_file_close(&g_lfs, player->lfs_file);
-    printf("lfs_music_dec_stop: suss\n");
 
     player->lfs_file = NULL;
 
@@ -309,15 +293,8 @@ static int __stream_music_dec_file(music_player *player)
     int err;
     union audio_req req = {0};
 
-    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
-        // 停止解码
-        player->dec_ops->dec_stop(player);
-        // 执行回调
-        if (player->dec_with_cb && player->dec_end_cb != NULL) {
-            player->dec_end_cb(player->dec_end_cb_priv);
-            player->dec_end_cb = NULL;
-        }
-    }
+    os_mutex_pend(&audio_play_mutex, 0);
+    app_music_play_stop(player);
 
     RingQueue *queue = &player->queue;
 
@@ -357,6 +334,7 @@ static int __stream_music_dec_file(music_player *player)
     err = server_request(player->dec_server, AUDIO_REQ_DEC, &req);
     if (err) {
         log_e("Failed to start playback: %d\n", err);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
 
@@ -369,15 +347,19 @@ static int __stream_music_dec_file(music_player *player)
     if (err)
     {
         log_e("Failed to start playback: %d\n", err);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
     player->cmp_file = queue;
+    os_mutex_post(&audio_play_mutex);
+    return 0;
 }
 
 static int stream_music_dec_file(music_player *player)
 {
     os_mutex_pend(&audio_play_mutex, 0);
-    log_i("app_stream_music_dec_file\n");
+    app_music_play_stop(player);
+    log_i("[AUDIO_DECODER]app_stream_music_dec_file\n");
 
     /*
      * 异步等待网络下载ready，防止网络阻塞导致app卡住
@@ -404,7 +386,7 @@ static int stream_music_dec_file(music_player *player)
     player->dec_ops = &cbuf_music_dec_ops;
 
     led_ui_post_msg("dec_start");
-    puts("play_music_file: suss\n");
+    log_i("[AUDIO_DECODER]play_music_file: suss\n");
     os_mutex_post(&audio_play_mutex);
     return 0;
 }
@@ -417,7 +399,7 @@ static int stream_music_dec_stop(music_player *player)
     int resume_play = 0;
 
 
-    log_i("cbuf_music_dec_stop\n");
+    log_i("[AUDIO_DECODER]cbuf_music_dec_stop\n");
 
     if (player->dec_server)
     {
@@ -431,7 +413,7 @@ static int stream_music_dec_stop(music_player *player)
     server_event_handler_del(player->dec_server, 2, argv);
 
     /* 关闭文件 */
-    printf("cbuf_music_dec_stop: suss\n");
+    log_i("[AUDIO_DECODER]cbuf_music_dec_stop: suss\n");
 
     ring_queue_clear(&player->queue);
 
@@ -456,26 +438,16 @@ static int local_music_dec_file(music_player *player, void *fname)
     int err;
     union audio_req req = {0};
 
-    log_i("app_music_dec_local_file\n");
-
     /* serialize decoder open/close to avoid concurrent allocations in audio server */
     os_mutex_pend(&audio_play_mutex, 0);
-
-    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
-        // 停止解码
-        player->dec_ops->dec_stop(player);
-        // 执行回调
-        if (player->dec_with_cb && player->dec_end_cb != NULL) {
-            player->dec_end_cb(player->dec_end_cb_priv);
-            player->dec_end_cb = NULL;
-        }
-    }
+    app_music_play_stop(player);
 
     FILE *file = fopen(fname, "r");
     if (!file) {
         os_mutex_post(&audio_play_mutex);
         return -1;
     }
+    log_i("[AUDIO_DECODER]app_music_dec_local_file %s\n", (char *)fname);
 
     req.dec.cmd             = AUDIO_DEC_OPEN;
     req.dec.volume          = player->volume;
@@ -544,7 +516,7 @@ static int local_music_dec_file(music_player *player, void *fname)
     player->dec_ops = &local_music_dec_ops;
 
     led_ui_post_msg("dec_start");
-    puts("play_music_file: suss\n");
+    log_i("[AUDIO_DECODER]play_music_file: suss\n");
 
     /* release mutex after decoder successfully started */
     os_mutex_post(&audio_play_mutex);
@@ -562,7 +534,7 @@ static int local_music_dec_stop(music_player *player)
         return 0;
     }
 
-    log_i("local_music_dec_stop\n");
+    log_i("[AUDIO_DECODER]local_music_dec_stop\n");
 
     if (player->dec_server) {
         req.dec.cmd = AUDIO_DEC_STOP;
@@ -624,7 +596,7 @@ static int net_music_dec_stop(music_player *player)
     int err;
     union audio_req r = {0};
 
-    log_i("net_music_dec_stop\n");
+    log_i("[AUDIO_DECODER]net_music_dec_stop\n");
 
     if (!player->net_file) {
         return 0;
@@ -677,6 +649,8 @@ static int __net_music_dec_file(void *priv)
 
     music_player *player = (music_player *)priv;
 
+    os_mutex_pend(&audio_play_mutex, 0);
+
     player->wait_download = 0;
     player->wait_download_suspend = 0;
 
@@ -693,11 +667,8 @@ static int __net_music_dec_file(void *priv)
     if (req.dec.dec_type == NULL) {
         goto __err;
     }
-    printf("urc_file_type: %s\n", req.dec.dec_type);
 
     net_download_set_read_timeout(player->net_file, 1000);
-
-    log_i("volume: %d\n", player->volume);
 
     req.dec.cmd             = AUDIO_DEC_OPEN;
     req.dec.volume          = player->volume;
@@ -747,10 +718,11 @@ static int __net_music_dec_file(void *priv)
 
     net_download_set_tmp_data_threshold(player->net_file, 80 * 1024);
 
+    os_mutex_post(&audio_play_mutex);
     return 0;
 
 __err:
-    puts("play_net_music_faild\n");
+    log_i("[AUDIO_DECODER]play_net_music_faild\n");
 
     net_download_buf_inactive(player->net_file);
 
@@ -767,6 +739,7 @@ __err:
     net_download_close(player->net_file);
     player->net_file = NULL;
 
+    os_mutex_post(&audio_play_mutex);
     return -EFAULT;
 }
 
@@ -820,19 +793,13 @@ static int net_music_dec_file(music_player *player, void *_url)
     int err;
     struct net_download_parm parm;
 
-    if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
-        // 停止解码
-        player->dec_ops->dec_stop(player);
-        // 执行回调
-        if (player->dec_with_cb && player->dec_end_cb != NULL) {
-            player->dec_end_cb(player->dec_end_cb_priv);
-            player->dec_end_cb = NULL;
-        }
-    }
+    os_mutex_pend(&audio_play_mutex, 0);
+    app_music_play_stop(player);
 
-    puts("net_download_open\n");
+    log_i("[AUDIO_DECODER]net_download_open\n");
 
     if (!_url) {
+        os_mutex_post(&audio_play_mutex);
         return -1;
     }
 
@@ -851,6 +818,7 @@ static int net_music_dec_file(music_player *player, void *_url)
     err = net_download_open(&player->net_file, &parm);
     if (err) {
         log_e("net_download_open: err = %d\n", err);
+        os_mutex_post(&audio_play_mutex);
         return err;
     }
     player->url = (const char *)_url;
@@ -864,6 +832,7 @@ static int net_music_dec_file(music_player *player, void *_url)
 
     player->dec_ops = &net_music_dec_ops;
 
+    os_mutex_post(&audio_play_mutex);
     return 0;
 }
 
@@ -930,18 +899,17 @@ int app_music_play_local_music_with_callback(music_player *player, void *fname, 
 
 int app_music_play_stop(music_player *player)
 {
-    log_i("app_music_play_stop");
+    log_i("[AUDIO_DECODER]app_music_play_stop");
+    int ret = 0;
     os_mutex_pend(&audio_play_mutex, 0);
     if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
         // 停止解码
-        int ret = player->dec_ops->dec_stop(player);
+        ret = player->dec_ops->dec_stop(player);
         // 执行回调
         if (player->dec_with_cb && player->dec_end_cb != NULL) {
             player->dec_end_cb(player->dec_end_cb_priv);
             player->dec_end_cb = NULL;
         }
-        os_mutex_post(&audio_play_mutex);
-        return ret;
     }
     os_mutex_post(&audio_play_mutex);
     return 0;
