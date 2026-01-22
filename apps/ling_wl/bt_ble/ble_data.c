@@ -544,6 +544,8 @@ int handle_wifi_connect(const char *cmd, cJSON *args, char *return_json_data)
     memcpy(return_errstr, "WIFI_CONNECT_CMD_GOT", strlen("WIFI_CONNECT_CMD_GOT"));
 
     set_wifi_cmd_status(WIFI_CMD_CONNECTING);
+    //播放提示音 NetConnting
+    play_system_music("NetConnting.mp3");
 
     // 保存连接信息
     app_wifi_info_t app_wifi_info;
