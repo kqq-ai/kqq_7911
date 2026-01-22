@@ -173,7 +173,9 @@ static void mode8_execute_sn_request(void)
     log_i("========================================== [MODE8] WIFI connected================================");
 
     // Build POST request to https://test.coolqq.com/api/sn
-    const char *url = "https://test.coolqq.com/api/sn";
+    //char *url是合并 "https://" 和 SERVER_DOMAIN 和"/api/sn"
+    char url[100];
+    snprintf(url, sizeof(url), "https://%s/api/sn", SERVER_DOMAIN);
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "C");
     char *post_data = cJSON_PrintUnformatted(root);

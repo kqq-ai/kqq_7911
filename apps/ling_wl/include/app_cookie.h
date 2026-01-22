@@ -14,7 +14,7 @@ void disable_gsensor();
 #define LOW_BATT_VERY_SHUTDOWN 350 
 
 #define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
-#define TOUCH_KEY_AVAILABLE 1// 设置触摸按键功能可用
+#define TEST_PI_MODE 0 // 设置为1以启用Pi测试模式
 
 // #define TEST_LOCOL_SERVER "junye"// 设置为1连接本地调试服务器
 
