@@ -22,6 +22,7 @@
 </head>
 <body>
   <header>
+    <input id="include" placeholder="type text to include (matches only) …" />
     <div id="status">connecting…</div>
     <div id="filterChips" aria-label="filters"></div>
     <input id="filter" placeholder="type text to exclude and press Enter (multi) …" />
@@ -33,6 +34,7 @@
   <script>
     const elLog = document.getElementById('log');
     const elStatus = document.getElementById('status');
+    const elInclude = document.getElementById('include');
     const elFilter = document.getElementById('filter');
     const elFilterChips = document.getElementById('filterChips');
     const elPause = document.getElementById('pause');
@@ -47,7 +49,9 @@
     const TRIM_TO_CHARS = 1_500_000;
     const FLUSH_INTERVAL_MS = 50; // batch updates ~20fps max
     let paused = false;
+    let includeText = '';
     let filters = [];
+    const INCLUDE_STORAGE_KEY = `serial_sse_logger.include.v1:${location.pathname}`;
     const FILTERS_STORAGE_KEY = `serial_sse_logger.filters.v1:${location.pathname}`;
     function loadFiltersFromStorage() {
       try {
@@ -73,6 +77,21 @@
     function saveFiltersToStorage() {
       try {
         localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
+      } catch (_) {
+        // ignore quota/blocked storage
+      }
+    }
+    function loadIncludeFromStorage() {
+      try {
+        const raw = localStorage.getItem(INCLUDE_STORAGE_KEY);
+        return (typeof raw === 'string' ? raw : '').trim();
+      } catch (_) {
+        return '';
+      }
+    }
+    function saveIncludeToStorage() {
+      try {
+        localStorage.setItem(INCLUDE_STORAGE_KEY, includeText);
       } catch (_) {
         // ignore quota/blocked storage
       }
@@ -110,10 +129,13 @@
       renderFilters();
     }
     function matchesFilters(line) {
+      if (includeText && !line.includes(includeText)) return false;
       if (!filters.length) return true;
       // Exclude semantics: hide line if it matches any filter token.
       return !filters.some(t => line.includes(t));
     }
+    includeText = loadIncludeFromStorage();
+    elInclude.value = includeText;
     filters = loadFiltersFromStorage();
     renderFilters();
 
@@ -130,6 +152,10 @@
         saveFiltersToStorage();
         renderFilters();
       }
+    });
+    elInclude.addEventListener('input', () => {
+      includeText = elInclude.value.trim();
+      saveIncludeToStorage();
     });
     elPause.addEventListener('click', () => { paused = !paused; elPause.textContent = paused ? 'resume' : 'pause'; });
     elClear.addEventListener('click', () => { logNode.data = ''; });

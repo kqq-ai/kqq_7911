@@ -437,15 +437,16 @@ bool wss_application_loop()
             break;
             
         case LWL_EVENT_TYPE_TOUCH_KEY:
+            // 增加打印当前时间戳
             if (event.data.touch_key_event.is_press_down) {
                 // 触摸键按下，
+                log_i("🔥🔥🔥🔥🔥🔥🔥🔥TOUCH_KEY 时间戳: %d", timer_get_ms());
                 wss_handle_touch_key_event(true);
-                wss_application_vailed();
             } else {
                 // 触摸键释放
                 wss_handle_touch_key_event(false);
-                wss_application_vailed();
             }
+            wss_application_vailed();
             log_i("[wss_application]TOUCH_KEY event",event.data.touch_key_event.is_press_down);
             break;
             
