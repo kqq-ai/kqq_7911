@@ -9,6 +9,7 @@
 #include "lwip.h"
 #include "app_wifi_manage.h"
 #include "app_mode/lwl_app_core.h"
+#include "app_mode/lwl_app_audio.h"
 #include "LED/LED.h"
 
 char current_connected_ssid[MAX_SSID_LEN] = {0};

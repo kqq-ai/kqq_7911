@@ -37,9 +37,11 @@ typedef void (*app_music_play_end_cb_t)(void *priv);
 
 typedef struct _music_player {
     u8 wait_download_suspend : 1;       /**< Flag: suspend while waiting for download */
+    u8 first_play_pending : 1;          /**< Flag: waiting for first playback time */
     int download_ready;                 /**< Download ready status flag */
     void *net_file;                     /**< Pointer to network file resource */
     u16 wait_download;                  /**< Download wait counter */
+    u16 first_play_timer;               /**< Timer id for first play polling */
     const struct music_dec_ops *dec_ops; /**< Decoder operations */
     const char *url;                    /**< Current playback URL */
 
@@ -48,6 +50,8 @@ typedef struct _music_player {
     void *cmp_file;                     /**< Pointer to compressed file */
     int play_time;                      /**< Current playback position (ms) */
     int total_time;                     /**< Total track duration (ms) */
+    u32 first_play_start_ms;            /**< Time when decode start requested (ms) */
+    u32 first_play_ms;                  /**< Time of first playback progress (ms) */
  
     FILE *file;                         /**< File pointer */
     lfs_file_t *lfs_file;               /**< LittleFS file pointer */

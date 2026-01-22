@@ -9,6 +9,9 @@
 #include "wait.h"
 #include "syscfg_id.h"
 #include "log.h"
+#include "system/timer.h"
+#include <stdbool.h>
+#include <string.h>
 #include "errno.h"
 #include "netdb.h"
 #include "lfs.h"
@@ -23,6 +26,83 @@ extern lfs_t g_lfs;
 /* Serialize audio decoder open/close to avoid concurrent allocations in decoder/audio server */
 static OS_MUTEX audio_play_mutex;
 
+static volatile u8 g_t_key_first_pcm_pending;
+
+static void first_play_timer_cb(void *priv);
+
+static void mark_first_play_start(music_player *player)
+{
+    if (!player) {
+        return;
+    }
+    player->first_play_pending = 1;
+    player->first_play_start_ms = timer_get_ms();
+    player->first_play_ms = 0;
+    if (!player->first_play_timer) {
+        player->first_play_timer = sys_timer_add(player, first_play_timer_cb, 10);
+    }
+}
+
+static void clear_first_play_pending(music_player *player)
+{
+    if (!player) {
+        return;
+    }
+    player->first_play_pending = 0;
+    if (player->first_play_timer) {
+        sys_timer_del(player->first_play_timer);
+        player->first_play_timer = 0;
+    }
+}
+
+static void first_play_timer_cb(void *priv)
+{
+    music_player *player = (music_player *)priv;
+    union audio_req req = {0};
+    u32 play_pos = 0;
+    int err;
+
+    if (!player || !player->first_play_pending || !player->dec_server) {
+        clear_first_play_pending(player);
+        return;
+    }
+
+    req.ioctl.cmd = AUDIO_IOCTRL_CMD_GET_PLAYPOS;
+    req.ioctl.priv = &play_pos;
+    err = server_request(player->dec_server, AUDIO_REQ_IOCTL, &req);
+    if (err) {
+        log_w("first_play_timer: get playpos err=%d\n", err);
+        clear_first_play_pending(player);
+        return;
+    }
+
+    if (play_pos > 0) {
+        player->first_play_pending = 0;
+        player->first_play_ms = timer_get_ms();
+        log_i("🔥🔥🔥🔥🔥🔥🔥🔥first_play_time: start=%u ms, first=%u ms, delta=%u ms",
+              player->first_play_start_ms,
+              player->first_play_ms,
+              player->first_play_ms - player->first_play_start_ms);
+        if (player->first_play_timer) {
+            sys_timer_del(player->first_play_timer);
+            player->first_play_timer = 0;
+        }
+    }
+}
+
+static const char *audio_basename(const char *path)
+{
+    const char *base = path;
+    if (!path) {
+        return "";
+    }
+    for (const char *p = path; *p; ++p) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+    return base;
+}
 
 static void led_ui_post_msg(const char *msg, ...) {
     // nothing to do
@@ -56,7 +136,8 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
     case AUDIO_SERVER_EVENT_ERR:
         log_i("[AUDIO_DECODER]AUDIO_SERVER_EVENT_ERR\n");
     case AUDIO_SERVER_EVENT_END:
-        log_i("[AUDIO_DECODER]AUDIO_SERVER_EVENT_END\n");
+        log_i("app_server, music: AUDIO_SERVER_EVENT_END\n");
+        clear_first_play_pending(player);
         if (player->cmp_file != (void *)argv[1]) {
             log_e("not the same file, may be closed! %p %p\n", player->cmp_file, (void *)argv[1]);
         }
@@ -74,6 +155,18 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
     case AUDIO_SERVER_EVENT_CURR_TIME:
         log_d("play_time: %d\n", argv[1]);
         player->play_time = argv[1];
+        if (player->first_play_pending && argv[1] > 0) {
+            player->first_play_pending = 0;
+            player->first_play_ms = timer_get_ms();
+            log_i("first_play_time: start=%u ms, first=%u ms, delta=%u ms",
+                  player->first_play_start_ms,
+                  player->first_play_ms,
+                  player->first_play_ms - player->first_play_start_ms);
+            if (player->first_play_timer) {
+                sys_timer_del(player->first_play_timer);
+                player->first_play_timer = 0;
+            }
+        }
 
         sys_power_auto_shutdown_clear();
         /* player->dec_ops->dec_progress(argv[1]); */
@@ -195,6 +288,7 @@ static int lfs_music_dec_file(music_player *player, const char *file_path)
     }
     player->lfs_file = lfs_file;
     player->cmp_file = lfs_file;
+    mark_first_play_start(player);
 
     // if (!player->play_voice_prompt)
     // {
@@ -352,6 +446,7 @@ static int __stream_music_dec_file(music_player *player)
     }
     player->cmp_file = queue;
     os_mutex_post(&audio_play_mutex);
+    mark_first_play_start(player);
     return 0;
 }
 
@@ -437,6 +532,8 @@ static int local_music_dec_file(music_player *player, void *fname)
 {
     int err;
     union audio_req req = {0};
+    const char *base = audio_basename((const char *)fname);
+    bool is_t_key = (strcmp(base, "t_key.mp3") == 0);
 
     /* serialize decoder open/close to avoid concurrent allocations in audio server */
     os_mutex_pend(&audio_play_mutex, 0);
@@ -459,6 +556,7 @@ static int local_music_dec_file(music_player *player, void *fname)
     req.dec.priority        = 1;
     req.dec.vfs_ops         = NULL;
     req.dec.sample_source   = "dac";
+    g_t_key_first_pcm_pending = is_t_key ? 1 : 0;
 
 #if TCFG_EQ_ENABLE
 #if defined EQ_CORE_V1
@@ -509,6 +607,7 @@ static int local_music_dec_file(music_player *player, void *fname)
     }
     player->file = (FILE *)file;
     player->cmp_file = (void *)file;
+    mark_first_play_start(player);
 
     // if (!player->play_voice_prompt) {
     //     player->dec_ops = &local_music_dec_ops;
@@ -715,6 +814,7 @@ static int __net_music_dec_file(void *priv)
     server_request(player->dec_server, AUDIO_REQ_DEC, &req);
 
     net_download_set_pp(player->net_file, 0);
+    mark_first_play_start(player);
 
     net_download_set_tmp_data_threshold(player->net_file, 80 * 1024);
 
@@ -902,6 +1002,7 @@ int app_music_play_stop(music_player *player)
     log_i("[AUDIO_DECODER]app_music_play_stop");
     int ret = 0;
     os_mutex_pend(&audio_play_mutex, 0);
+    clear_first_play_pending(player);
     if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
         // 停止解码
         ret = player->dec_ops->dec_stop(player);
