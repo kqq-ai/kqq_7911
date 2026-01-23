@@ -82,8 +82,7 @@ static int prompt_vfs_read(void *file, void *buf, u32 len) {
   // 1. 如果此日志在第二个文件播放时不出现 ->
   // 证明解码器内部状态未重置（它认为流已结束）
   // 2. 如果出现但无声 -> 证明ID3头被错误当做音频数据解析导致Sync错误
-  log_i("[PROMPT_VFS] read_req=%d, ret=%d, q_len=%d", len, ret,
-        ring_queue_len(queue));
+  log_i("[PROMPT_VFS] read_req=%d, ret=%d", len, ret);
 
   if (ret == RINGQUEUE_Is_Empty) {
     return -1; // 无数据，等待重试（解码器不会停止）
