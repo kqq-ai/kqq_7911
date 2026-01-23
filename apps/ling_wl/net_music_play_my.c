@@ -1489,13 +1489,14 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
 }
 
 static int prompt_music_dec_stop(music_player *player) {
-  log_i("[PROMPT_DEC]prompt_music_dec_stop (persistent mode)");
+  log_i("[PROMPT_DEC]prompt_music_dec_stop");
   ring_queue_clear(&g_prompt_player.queue);
   g_prompt_playing = 0;
   g_prompt_eof = 0;
 
+  // 必须使用 STOP 而不是 PAUSE，否则下次 OPEN 会断言失败
   union audio_req req = {0};
-  req.dec.cmd = AUDIO_DEC_PAUSE;
+  req.dec.cmd = AUDIO_DEC_STOP;
   server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
   return 0;
 }
