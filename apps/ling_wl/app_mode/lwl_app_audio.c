@@ -120,19 +120,15 @@ void lwl_app_audio_play(const char *fname, void *priv) {
   u32 t1 = timer_get_ms();
   set_local_speaker();
 
-  // 调用 Open-Hold 极速播放接口
-  app_music_play_prompt_fast(fname, priv);
+  // 调用 Open-Hold 极速播放接口 (同步版本)
+  int err = app_music_play_prompt_sync(fname, lwl_app_audio_play_cb, NULL);
+  log_i("[PROMPT][TIMING]audio_play prompt_sync done: %u ms, err=%d",
+        timer_get_ms() - t1, err);
 
-  // 注意：由于是 Fire-and-Forget，这里直接认为启动成功
-  // 之前的异步回调机制可能不再适用，或者 app_music_play_prompt_fast
-  // 内部需要触发回调？ 暂时保留 g_play_voice_prompt 标志，但要注意何时清除
-  // 提示音播放器是常驻的，它播放完会自动 PAUSE
-  // 我们可以利用 g_prompt_cb_priv 在 somewhere 触发吗？
-  // 实际上，短提示音通常不需要回调来驱动业务逻辑，如果有，需要仔细考虑
-  // 旧代码: g_play_voice_prompt = 1; g_prompt_cb_priv = priv;
-
-  g_play_voice_prompt = 1;
-  g_prompt_cb_priv = (music_cbk_t)priv;
+  if (!err) {
+    g_play_voice_prompt = 1;
+    g_prompt_cb_priv = (music_cbk_t)priv;
+  }
 
   log_i("[PROMPT][TIMING]audio_play trigger done: %u ms", timer_get_ms() - t1);
 
