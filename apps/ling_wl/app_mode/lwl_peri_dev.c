@@ -579,6 +579,7 @@ void touch_key_loop(uint32_t curr_time)
             e.touch_key_cmd.touch_key_event_type = 0x01;
             lwl_event_notify(&e);
         }
+        /* 如果上一帧为1，下一帧为0，表示触发touch_key释放 */
         else if (g_touch_key_event_active_priv == 1 && g_touch_key_event_active == 0)
         {
             log_i("Touch key press!");
@@ -589,7 +590,6 @@ void touch_key_loop(uint32_t curr_time)
             lwl_event_notify(&e);
         }
         g_touch_key_event_active_priv = g_touch_key_event_active;
-        g_touch_key_event_active = 0;
     }
 }
 //==Touch-key=========================================================================================

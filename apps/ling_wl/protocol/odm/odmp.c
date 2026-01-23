@@ -806,31 +806,22 @@ void odmp_rsp_handler(u8 *buf, u32 len)
         /*  Successful */
         if (entry->handler != NULL) {
             int ret = entry->handler(nroot, &pkg);
-            log_i("【dg】[odmp_rsp_handler] event %s, handler ret=%d, g_odmp_cbk=%p", 
-                  pkg.event, ret, g_odmp_cbk);
+
             if (ret == PARSE_Success) {
                 if (g_odmp_cbk != NULL) {
                     log_i("odmp_rsp_handler: event %s, type %d", pkg.event, entry->type);
                     g_odmp_cbk(entry->type, &pkg);
-                } else {
-                    log_e("【dg】[odmp_rsp_handler] event %s g_odmp_cbk is NULL, cannot process event", pkg.event);
-                }
-            } else {
-                log_e("【dg】[odmp_rsp_handler] event %s handler returned PARSE_Error", pkg.event);
-            }
+                } 
+            } 
         }
         if (entry->release != NULL) {
             entry->release(&pkg);
         }
     } else {
         /*  Error */
-        log_i("【dg】[odmp_rsp_handler] event %s, errno=%d, g_odmp_cbk=%p", 
-              pkg.event, pkg.errno, g_odmp_cbk);
         if (g_odmp_cbk != NULL) {
             g_odmp_cbk(entry->type, &pkg);
-        } else {
-            log_e("【dg】[odmp_rsp_handler] event %s g_odmp_cbk is NULL, cannot process error event", pkg.event);
-        }
+        } 
     }
 
 error_ret:

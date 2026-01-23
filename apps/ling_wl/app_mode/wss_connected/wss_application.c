@@ -140,7 +140,6 @@ void wss_handle_key_event(void) {
 
 // 处理触摸按键事件（按下/释放）
 static void wss_handle_touch_key_event(bool press_down) {
-  os_mutex_pend(&g_wss_app_mutex, 0);
   if (press_down) {
     // ========== 触摸键按下事件 ==========
     log_mqtt("【flow】触摸键按下,等待500ms后开始上传音频");
@@ -161,7 +160,6 @@ static void wss_handle_touch_key_event(bool press_down) {
     //  停止音频上传
     wss_upload_stop();
   }
-  os_mutex_post(&g_wss_app_mutex);
 }
 
 // 事件回调：仅记录事件到队列，避免在回调中调用加锁函数
