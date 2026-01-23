@@ -263,6 +263,8 @@ static void app_cookie_main(void)
     thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
     // 启动MQTT
     log_mqtt_start();
+    // 初始化提示音播放器
+    prompt_player_init();
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 512 * 4, 0, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机

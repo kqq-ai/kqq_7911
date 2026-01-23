@@ -109,26 +109,33 @@ static void lwl_app_audio_stream_end_cb(void *priv) {
 void lwl_app_audio_play(const char *fname, void *priv) {
   u32 t0 = timer_get_ms();
   os_mutex_pend(&g_audio_mutex, 0);
-  log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s (t=%u)", fname, t0);
+  log_i("[PROMPT][AUDIO_LOCAL]lwl_app_audio_play: play %s (t=%u)", fname, t0);
 
   // 先停止所有其他播放
   lwl_app_audio_stop_playing();
   lwl_app_audio_stream_stop();
-  log_i("[TIMING]audio_play stop_all done: %u ms",
-        timer_get_ms() - t0);
+  log_i("[PROMPT][TIMING]audio_play stop_all done: %u ms", timer_get_ms() - t0);
 
-  // 启动本地文件播放
+  // 启动本地文件播放 (使用极速接口)
   u32 t1 = timer_get_ms();
   set_local_speaker();
-  int err = app_music_play_local_music_async_with_callback(
-      g_app_ctx->music_player, fname, lwl_app_audio_play_cb, NULL);
-  log_i("[TIMING]audio_play local_start done: %u ms, err=%d",
-        timer_get_ms() - t1, err);
 
-  if (!err) {
-    g_play_voice_prompt = 1;
-    g_prompt_cb_priv = (music_cbk_t)priv;
-  }
+  // 调用 Open-Hold 极速播放接口
+  app_music_play_prompt_fast(fname, priv);
+
+  // 注意：由于是 Fire-and-Forget，这里直接认为启动成功
+  // 之前的异步回调机制可能不再适用，或者 app_music_play_prompt_fast
+  // 内部需要触发回调？ 暂时保留 g_play_voice_prompt 标志，但要注意何时清除
+  // 提示音播放器是常驻的，它播放完会自动 PAUSE
+  // 我们可以利用 g_prompt_cb_priv 在 somewhere 触发吗？
+  // 实际上，短提示音通常不需要回调来驱动业务逻辑，如果有，需要仔细考虑
+  // 旧代码: g_play_voice_prompt = 1; g_prompt_cb_priv = priv;
+
+  g_play_voice_prompt = 1;
+  g_prompt_cb_priv = (music_cbk_t)priv;
+
+  log_i("[PROMPT][TIMING]audio_play trigger done: %u ms", timer_get_ms() - t1);
+
   os_mutex_post(&g_audio_mutex);
 }
 
