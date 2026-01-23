@@ -1403,8 +1403,7 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
   os_mutex_pend(&audio_play_mutex, 0);
 
   // [DEBUG] 打印当前状态
-  log_i("[PROMPT_SYNC] Entry: dec=%p, q_len=%d, playing=%d",
-        g_prompt_player.dec_server, ring_queue_len(&g_prompt_player.queue),
+  log_i("[PROMPT_SYNC] Entry: dec=%p, playing=%d", g_prompt_player.dec_server,
         g_prompt_playing);
 
   // 1. 清空队列（丢弃旧数据）
@@ -1447,8 +1446,7 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
   fclose(file);
 
   // [DEBUG] 写入完成
-  log_i("[PROMPT_SYNC] Loaded: size=%u, q_len=%d", total_written,
-        ring_queue_len(&g_prompt_player.queue));
+  log_i("[PROMPT_SYNC] Loaded: size=%u", total_written);
 
   // 4. 如果是首次播放，需要OPEN+START解码器
   if (!g_prompt_player.dec_server) {
