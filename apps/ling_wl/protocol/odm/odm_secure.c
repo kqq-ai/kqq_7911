@@ -201,19 +201,25 @@ static char* https_post_gettk_task(const char post_url[], char* context)
     http_body_obj http_body_buf;
     char* Token = NULL;
 
+    log_i("[https_post_gettk_task] url=%s\n", post_url ? post_url : "(null)");
+    log_i("[https_post_gettk_task] req=%s\n", context ? context : "(null)");
     ret = http_request_with_body(post_url, context, &http_body_buf);
 
     if (ret != HERROR_OK) {
+        log_i("[https_post_gettk_task] ret=%d, resp=(null)\n", ret);
         if (http_body_buf.p) free(http_body_buf.p);
         return Token;
     } else {
         if (http_body_buf.recv_len > 0) {
+            log_i("[https_post_gettk_task] ret=%d, resp=%s\n", ret, http_body_buf.p ? http_body_buf.p : "(null)");
             const cJSON *nroot = cjson_parse(http_body_buf.p);
             const char* token_tmp = cjson_get_string_value(nroot, "token");
             if (token_tmp) {
                 Token = strdup(token_tmp); // 复制一份
             }
             cJSON_Delete(nroot); // 用完后释放
+        } else {
+            log_i("[https_post_gettk_task] ret=%d, resp_len=0\n", ret);
         }
     }
     if (http_body_buf.p) free(http_body_buf.p);
