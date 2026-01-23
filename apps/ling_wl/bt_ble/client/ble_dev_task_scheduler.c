@@ -238,7 +238,7 @@
 #define SET_PI_ADV_DURATION_S 600 // unit: s  range: 0 ~ 65535
 
 #define MAX_RECONNECTION_ATTEMPTS 5  // 最大重连次数
-#define CONNECTING_WAIT_TIMEOUT 800 // 等待CONNECTING状态的超时时间(毫秒)
+#define CONNECTING_WAIT_TIMEOUT 200 // 等待CONNECTING状态的超时时间(毫秒)
 
 // 0000fff0-0000-1000-8000-00805f9b34fb
 // 0000fff3-0000-1000-8000-00805f9b34fb
@@ -428,7 +428,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
 
 static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 {
-    log_i("[BDO]Turn on %s", op->sn);
+    log_i("[BDO]Turn on %s(%s)", op->sn, op->turnon.broadcast_code);
 
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     if (!dev) {
@@ -464,146 +464,96 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 // 尝试连接和启动的主循环
     int attempt = 0;
     bool success = false;
+    memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
+    os_sem_set(&g_e_connecting_sem, 0); // 清除之前可能存在的信号
+    os_sem_set(&g_e_connected_sem, 0);  // 清除之前可能存在的信号
+    process_cb(op, BDOCode_Success);
+
+    if (dev->adv_state == BDPAS_CONNECTING) {
+        os_sem_set(&g_e_connecting_sem, 1);
+    }
+    log_i("[BDO]Start BLE connection %s %d", broadcast_code, dev->adv_state == BDPAS_CONNECTING);
     
-    while (attempt < MAX_RECONNECTION_ATTEMPTS && !success) {
-        if (dev->adv_state == BDPAS_OFF) {
-            /* - 建立连接 */
-            log_i("[BDO]ble handshake_task %s (attempt %d/%d)\n", op->sn, attempt + 1, MAX_RECONNECTION_ATTEMPTS);
-            os_sem_set(&g_conn_sem, 0);
-            os_sem_set(&g_e_connected_sem, 0);
-            g_ble_conn_pending = 1;  // 标记有待处理的连接操作
-            if (ble_simple_client_create_connection(op->turnon.address, op->turnon.address_type) == APP_BLE_OPERATION_ERROR) {
-                g_ble_conn_pending = 0;  // 清除标记
-                log_e("[BDO]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
-                ble_simple_client_module_enable(1);
-                dev->op_state &= ~BDO_STATE_TURNNING_ON;
-                process_cb(op, BDOCode_BLE_Api_Error);
-                return;
-            }
-            if (os_sem_pend(&g_conn_sem, MS2TICK(op->turnon.conn_timeout)) == OS_TIMEOUT)
-            {
-#if 1
-                g_ble_conn_pending = 0; // 清除标记，防止迟到的连接回调被接受
-                ble_simple_client_create_cannel();
-                log_e("[BDO]Error ble connection timeout!!! (attempt %d/%d)", attempt + 1, MAX_RECONNECTION_ATTEMPTS);
-                // 增加延迟确保BLE栈完全取消连接
-                mdelay(100);
-                ble_simple_client_module_enable(1);
-                // 检查重连次数限制
-                if (attempt < MAX_RECONNECTION_ATTEMPTS - 1)
-                {
-                    attempt++;
-                    log_i("[BDO]Retrying connection due to timeout... (attempt %d)", attempt + 1);
-                    continue; // 重新开始循环
-                }
-                else
-                {
-                    log_e("[BDO]Max reconnection attempts reached due to timeout");
-                    dev->op_state &= ~BDO_STATE_TURNNING_ON;
-                    process_cb(op, BDOCode_Max_Reconnection_Attempts);
-                    return;
-                }
-#else
-                g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
-                ble_simple_client_create_cannel();
-                log_e("[BDO]Error ble connection timeout!!!");
-                dev->op_state &= ~BDO_STATE_TURNNING_ON;
-                process_cb(op, BDOCode_Connection_Timeout);
-                // 增加延迟确保BLE栈完全取消连接
-                mdelay(100);
-                ble_simple_client_module_enable(1);
-                return;
-#endif
-            }
-            g_ble_conn_pending = 0;  // 连接成功，清除标记
-            log_i("[BDO]ble connected");
-
-            /* - 关闭连接 */
-            os_sem_set(&g_disconn_sem, 0);
-            if (ble_simple_client_disconnect() == APP_BLE_OPERATION_ERROR) {
-                log_e("[BDO]Error failed to disconnect APP_BLE_OPERATION_ERROR!!!");
-                dev->op_state &= ~BDO_STATE_TURNNING_ON;
-                process_cb(op, BDOCode_BLE_Api_Error);
-                return;
-            }
-            if (os_sem_pend(&g_disconn_sem, MS2TICK(BLE_DISCONNECT_TIMEOUT)) == OS_TIMEOUT) {
-                log_e("[BDO]Error BLE disconnect timeout!!!");
-            }
-            log_i("[BDO]ble disconnected");
-        } else if (dev->adv_state == BDPAS_CONNECTED) {
-            log_i("[BDO]Error dev busy!");
-            dev->op_state &= ~BDO_STATE_TURNNING_ON;
-            process_cb(op, BDOCode_Dev_Busy);
-            return;
-        }
-
-        log_i("[BDO]Waiting adv state change...");
-        process_cb(op, BDOCode_Success);
-        // msleep(300);
-
+    for (attempt = 1; attempt <= MAX_RECONNECTION_ATTEMPTS; attempt++) {
+        // TODO 只等下一个广播，检查OFF还是CONNECTING状态
         if (!(dev->op_state & BDO_STATE_TURNNING_ON)) {
+            log_i("[BDO]op turnon canceled!");
+            process_cb(op, BDOCode_Skip);
             return; // 操作已被取消
         }
-
-        log_i("[BDO]Continue turn on...");
-        log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
-        memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
-        uart_send_set_ctrl(0x01);
-        uart_send_switch_audio_bc(broadcast_code, 0x01);
-        uart_send_set_ctrl(0x01);
-
-        os_sem_set(&g_e_connecting_sem, 0); // 清除之前可能存在的信号
-        os_sem_set(&g_e_connected_sem, 0); // 清除之前可能存在的信号
-
-        // TODO 只等下一个广播，检查OFF还是CONNECTING状态
-        // 等待CONNECTING状态
-        log_i("[BDO]Waiting for CONNECTING state (attempt %d/%d)...", attempt + 1, MAX_RECONNECTION_ATTEMPTS);
-        
-        if (os_sem_pend(&g_e_connecting_sem, MS2TICK(CONNECTING_WAIT_TIMEOUT)) == OS_TIMEOUT) {
-            log_e("[BDO]Timeout waiting for CONNECTING state (attempt %d/%d)", attempt + 1, MAX_RECONNECTION_ATTEMPTS);
-            
-            // 如果还没达到最大重连次数，增加尝试次数并重试
-            if (attempt < MAX_RECONNECTION_ATTEMPTS - 1) {
-                attempt++;
-                log_i("[BDO]Retrying connection... (attempt %d)", attempt + 1);
-                continue; // 重新开始循环
-            } else {
-                log_e("[BDO]Max reconnection attempts reached");
+        if (attempt > 1) {
+            log_i("[BDO]Waiting adv state change...");
+            if (os_sem_pend(&g_e_connected_sem, MS2TICK(10)) == OS_NO_ERR) {
+                log_e("[BDO]Error dev busy! %d", op->turnon.scan_timeout);
                 dev->op_state &= ~BDO_STATE_TURNNING_ON;
-                process_cb(op, BDOCode_Max_Reconnection_Attempts);
+                process_cb(op, BDOCode_Dev_Busy);
                 return;
+            } else if (os_sem_pend(&g_e_connecting_sem, MS2TICK(CONNECTING_WAIT_TIMEOUT)) == OS_NO_ERR) {
+                // 进入CONNECTING状态
+                break; // 成功连接，退出循环
             }
-        } else {
-            log_i("[BDO]Device entered CONNECTING state, now waiting for CONNECTED state");
+            uart_send_set_ctrl(0x01);
+            uart_send_switch_audio_bc(broadcast_code, 0x01);
         }
+        /* - 建立连接 */
+        log_i("[BDO](attempt %d/%d)ble handshake_task %s \n", attempt, MAX_RECONNECTION_ATTEMPTS, op->sn);
+        os_sem_set(&g_conn_sem, 0);
+        g_ble_conn_pending = 1;  // 标记有待处理的连接操作
+        if (ble_simple_client_create_connection(op->turnon.address, op->turnon.address_type) == APP_BLE_OPERATION_ERROR) {
+            g_ble_conn_pending = 0;  // 清除标记
+            log_e("[BDO]Error failed to create connection APP_BLE_OPERATION_ERROR!!!");
+            ble_simple_client_module_enable(1);
+            continue;
+        }
+        if (os_sem_pend(&g_conn_sem, MS2TICK(op->turnon.conn_timeout)) == OS_TIMEOUT)
+        {
+            g_ble_conn_pending = 0; // 清除标记，防止迟到的连接回调被接受
+            ble_simple_client_create_cannel();
+            log_e("[BDO](attempt %d/%d)Error ble connection timeout!!! ", attempt, MAX_RECONNECTION_ATTEMPTS);
+            ble_simple_client_module_enable(1);
+            continue;
+        }
+        g_ble_conn_pending = 0;  // 连接成功，清除标记
+        log_i("[BDO](attempt %d/%d)ble connected", attempt, MAX_RECONNECTION_ATTEMPTS);
 
-        // 现在等待设备变为CONNECTED状态
-        if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
-            log_e("[BDO]Error scan adv state timeout after connecting state!!! (attempt %d/%d)", 
-                  attempt + 1, MAX_RECONNECTION_ATTEMPTS);
-            
-            // 如果等待CONNECTED超时，也尝试重连
-            if (attempt < MAX_RECONNECTION_ATTEMPTS - 1) {
-                attempt++;
-                log_i("[BDO]Retrying connection after CONNECTED timeout... (attempt %d)", attempt + 1);
-                continue;
-            } else {
-                log_e("[BDO]Max reconnection attempts reached after timeout");
-                dev->op_state &= ~BDO_STATE_TURNNING_ON;
-                process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
-                return;
-            }
-        } else {
-            // 成功到达CONNECTED状态
-            success = true;
-            log_i("[BDO]Device successfully connected");
+        /* - 关闭连接 */
+        os_sem_set(&g_disconn_sem, 0);
+        if (ble_simple_client_disconnect() == APP_BLE_OPERATION_ERROR) {
+            log_e("[BDO](attempt %d/%d)Error failed to disconnect APP_BLE_OPERATION_ERROR!!!", attempt, MAX_RECONNECTION_ATTEMPTS);
+            continue;
         }
+        if (os_sem_pend(&g_disconn_sem, MS2TICK(BLE_DISCONNECT_TIMEOUT)) == OS_TIMEOUT) {
+            log_e("[BDO](attempt %d/%d)Error BLE disconnect timeout!!!", attempt, MAX_RECONNECTION_ATTEMPTS);
+            continue;
+        }
+        log_i("[BDO](attempt %d/%d)ble disconnected", attempt, MAX_RECONNECTION_ATTEMPTS);
+    }
+    
+    if (attempt > MAX_RECONNECTION_ATTEMPTS) {
+        log_i("[BDO](attempt %d/%d)Max reconnection attempts reached due to timeout", attempt, MAX_RECONNECTION_ATTEMPTS);
+        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        process_cb(op, BDOCode_Max_Reconnection_Attempts);
+        return;
     }
 
-    if (dev->op_state & BDO_STATE_TURNNING_ON) {
-        log_i("[BDO]Turn on end");
+    log_i("[BDO](attempt %d/%d)Continue turn on...", attempt, MAX_RECONNECTION_ATTEMPTS);
+    log_i("[BDO] switch_audio_bc %s -> %s ctrl(0x01)", broadcast_code, op->turnon.broadcast_code);
+    uart_send_switch_audio_bc(broadcast_code, 0x01);
+    uart_send_set_ctrl(0x01);
+
+    if (os_sem_pend(&g_e_connected_sem, MS2TICK(op->turnon.scan_timeout)) == OS_NO_ERR) {
+        log_i("[BDO]le audio connected");
+        success = true;
+        if (dev->op_state & BDO_STATE_TURNNING_ON) {
+            log_i("[BDO]Turn on end");
+            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            process_cb(op, BDOCode_Ready_to_Play);
+        }
+    } else {
+        log_e("[BDO](attempt %d/%d)Error scan adv state timeout after connecting state!!!", 
+                  attempt + 1, MAX_RECONNECTION_ATTEMPTS);
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
-        process_cb(op, BDOCode_Ready_to_Play);
+        process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
     }
 #else
     if (dev->adv_state == BDPAS_OFF) {
@@ -842,7 +792,6 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
     op.turnon.address_type = dev->address_type;
     memcpy(op.turnon.address, dev->address, sizeof(op.turnon.address));
     memcpy(op.turnon.broadcast_code, &dev->sn[10], sizeof(op.turnon.broadcast_code));
-    log_i("[BDO]bdo_turn_on %s(%s)", dev->sn, op.turnon.broadcast_code);
     op.cb = cb;
     op.cb_priv = priv;
     return my_blocking_queue_push_front(&g_ble_dev_op_queue, &op) == MYERROR_Success;
