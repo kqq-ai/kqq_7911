@@ -2,6 +2,7 @@
 #define __MUSIC_PLAY_MY__
 
 #include "cpu.h"
+#include "generic/typedef.h"
 #include "lfs.h"
 #include "server/audio_server.h"
 #include "util/ring_queue.h"
@@ -19,7 +20,6 @@
  * @brief Forward declaration of music player structure
  */
 typedef struct _music_player music_player;
-extern music_player;
 
 struct music_dec_ops {
   int (*dec_file)(music_player *player, void *file);
@@ -182,8 +182,14 @@ int app_music_play_local_music_with_callback(music_player *player, void *fname,
                                              app_music_play_end_cb_t cb,
                                              void *priv);
 
-// 极速提示音播放接口
-void app_music_play_prompt_fast(const char *fname, void *priv);
-int prompt_player_init(void);
+/**
+ * @brief 使用持久化解码器播放本地提示音（Open-Hold Strategy）
+ * @param fname 提示音文件路径
+ * @param cb 播放完成回调
+ * @param priv 回调私有数据
+ * @return 0 成功，负值失败
+ */
+int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
+                               void *priv);
 
 #endif
