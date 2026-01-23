@@ -1402,6 +1402,11 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
 
   os_mutex_pend(&audio_play_mutex, 0);
 
+  // [DEBUG] 打印当前状态
+  log_i("[PROMPT_SYNC] Entry: dec=%p, q_len=%d, playing=%d",
+        g_prompt_player.dec_server, ring_queue_len(&g_prompt_player.queue),
+        g_prompt_playing);
+
   // 1. 清空队列（丢弃旧数据）
   ring_queue_clear(&g_prompt_player.queue);
   g_prompt_playing = 1;
@@ -1441,9 +1446,13 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
 
   fclose(file);
 
+  // [DEBUG] 写入完成
+  log_i("[PROMPT_SYNC] Loaded: size=%u, q_len=%d", total_written,
+        ring_queue_len(&g_prompt_player.queue));
+
   // 4. 如果是首次播放，需要OPEN+START解码器
   if (!g_prompt_player.dec_server) {
-    log_i("[PROMPT_SYNC]First play, opening decoder...");
+    log_i("[PROMPT_SYNC] First play (dec=NULL), opening decoder...");
 
     // 打开解码服务
     g_prompt_player.dec_server = server_open("audio_server", "dec");
@@ -1496,6 +1505,8 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
 
     g_prompt_player.cmp_file = (void *)&g_prompt_player.queue;
     log_i("[PROMPT_SYNC]Decoder opened and started");
+  } else {
+    log_i("[PROMPT_SYNC] Reusing existing decoder, waiting for consumer...");
   }
 
   mark_first_play_start(&g_prompt_player);

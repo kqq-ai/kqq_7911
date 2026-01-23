@@ -150,15 +150,12 @@ static void wss_handle_touch_key_event(bool press_down) {
     g_touch_key_press_time = timer_get_ms();
     // 停止音频播放
     wss_ble_audio_stop();
-    log_i("[TIMING]touch_key after ble_stop: %u ms",
-          timer_get_ms() - t0);
+    log_i("[TIMING]touch_key after ble_stop: %u ms", timer_get_ms() - t0);
     // 1.开启音频上传，等500ms
     wss_mic_upload_start();
-    log_i("[TIMING]touch_key after mic_start: %u ms",
-          timer_get_ms() - t0);
+    log_i("[TIMING]touch_key after mic_start: %u ms", timer_get_ms() - t0);
     play_prompt_sound("t_key.mp3");
-    log_i("[TIMING]touch_key after prompt: %u ms",
-          timer_get_ms() - t0);
+    log_i("[TIMING]touch_key after prompt: %u ms", timer_get_ms() - t0);
   } else {
     // ========== 触摸键释放事件 ==========
     log_mqtt("【flow】触摸键释放,停止音频上传(会有延时)");
@@ -217,7 +214,7 @@ static void input_event_handler_cb(lwl_event_t *e) {
 //=================================================================================================
 void play_prompt(const char *fname) {
   lwl_app_audio_play(fname, NULL);
-  wss_ble_audio_stop();
+  // wss_ble_audio_stop();
 }
 
 //=================================================================================================
