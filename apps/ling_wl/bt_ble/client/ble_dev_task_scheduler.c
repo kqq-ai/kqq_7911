@@ -745,7 +745,7 @@ void ble_dev_task_scheduler_start()
     dev_task_is_on = true;
     max_rssi = -127;
     log_i("ble_dev_task_scheduler_start");
-    if (thread_fork("ble_dev_task_scheduler", 15, 512, 0, 0, ble_dev_task_scheduler, NULL)) {
+    if (thread_fork("ble_dev_task_scheduler", 15, 512, 4, 0, ble_dev_task_scheduler, NULL)) {
         log_e("Error: Failed to create task ble_dev_task_scheduler.");
     }
 }
