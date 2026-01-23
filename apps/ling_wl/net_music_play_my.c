@@ -33,12 +33,12 @@ static volatile u8 g_t_key_first_pcm_pending;
 
 // 独立的常驻提示音播放器实例
 static music_player g_prompt_player;
-static u8 g_prompt_queue_buffer[4 * 1024]
-    __attribute__((aligned(4))); // 4KB 队列
+static u8 g_prompt_queue_buffer[64 * 1024]
+    __attribute__((aligned(4))); // 64KB 队列，足够容纳大多数提示音
 static volatile int g_prompt_playing = 0;
 static volatile int g_prompt_eof = 0;
 
-#define PROMPT_QUEUE_SIZE (4 * 1024)
+#define PROMPT_QUEUE_SIZE (64 * 1024)
 
 // Local prompt async stream context
 typedef struct {
