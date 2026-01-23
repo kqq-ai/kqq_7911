@@ -798,7 +798,7 @@ void odmp_rsp_handler(u8 *buf, u32 len)
     }
 
     if (entry == NULL) {
-        log_i("Error: can't find event handler: %s", pkg.event);
+        log_i("⚠️ warning: can't find event handler: %s", pkg.event);
         goto error_ret;
     }
 
