@@ -560,6 +560,7 @@ static void scan_adv_process_task(void *priv)
         dev->address_type = adv_data.address_type;    // 其他任务会读，可能存在安全问题，也可能没问题
         memcpy(dev->address, adv_data.address, 6);    // 其他任务会读，可能存在安全问题，也可能没问题
 
+        bdo_notify_Pi_adv_report(sn);
         dev->max_rssi = (rssi > dev->max_rssi) ? rssi : dev->max_rssi;
 
         if (dev->has_deadline)
