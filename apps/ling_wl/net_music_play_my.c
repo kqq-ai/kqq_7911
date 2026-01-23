@@ -1504,7 +1504,15 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
     g_prompt_player.cmp_file = (void *)&g_prompt_player.queue;
     log_i("[PROMPT_SYNC]Decoder opened and started");
   } else {
-    log_i("[PROMPT_SYNC] Reusing existing decoder, waiting for consumer...");
+    log_i("[PROMPT_SYNC] Reusing existing decoder, sending START to wake it "
+          "up...");
+    // 尝试重新 START，不需要重新 OPEN
+    union audio_req req = {0};
+    req.dec.cmd = AUDIO_DEC_START;
+    int err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+    if (err) {
+      log_w("[PROMPT_SYNC] Re-START failed: %d (maybe it never stopped?)", err);
+    }
   }
 
   mark_first_play_start(&g_prompt_player);
