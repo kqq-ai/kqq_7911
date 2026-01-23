@@ -1387,68 +1387,47 @@ int app_music_play_local_music_async_with_callback(music_player *player,
 int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
                                void *priv) {
   FILE *file = NULL;
-  u8 buf[1024];
-  int read_len;
-  u32 total_written = 0;
   u32 t0 = timer_get_ms();
   const char *base = audio_basename(fname);
+  int err = 0;
+  int len = 0;
 
-  if (!fname) {
-    log_e("[PROMPT_SYNC]Invalid filename\n");
+  if (!fname)
     return -EINVAL;
-  }
 
   log_i("[PROMPT_SYNC]🎵 Playing: %s", base);
 
   os_mutex_pend(&audio_play_mutex, 0);
 
-  // [DEBUG] 打印当前状态
-  log_i("[PROMPT_SYNC] Entry: dec=%p, playing=%d", g_prompt_player.dec_server,
-        g_prompt_playing);
-
-  // 1. 清空队列（丢弃旧数据）
-  ring_queue_clear(&g_prompt_player.queue);
-  g_prompt_playing = 1;
-  clear_first_play_pending(&g_prompt_player);
-
-  // 2. 打开文件
+  // 1. 加载文件到全内存缓冲区
   file = fopen(fname, "r");
   if (!file) {
-    log_e("[PROMPT_SYNC]Failed to open file: %s", fname);
-    g_prompt_playing = 0;
+    log_e("Open failed: %s", fname);
+    g_prompt_mem_file.size = 0;
     os_mutex_post(&audio_play_mutex);
     return -ENOENT;
   }
 
-  // 3. 推送数据到队列
-  while ((read_len = fread(buf, 1, sizeof(buf), file)) > 0) {
-    int written = 0;
-    while (written < read_len) {
-      int ret =
-          ring_queue_try_write(&g_prompt_player.queue,
-                               (const char *)buf + written, read_len - written);
-      if (ret == RINGQUEUE_Is_Full) {
-        // 队列满，短暂等待解码器消费
-        os_mutex_post(&audio_play_mutex);
-        msleep(2);
-        os_mutex_pend(&audio_play_mutex, 0);
-        continue;
-      }
-      if (ret < 0) {
-        log_e("[PROMPT_SYNC]Queue write error: %d", ret);
-        break;
-      }
-      written += ret;
-      total_written += ret;
-    }
+  u32 file_size = 0;
+  fseek(file, 0, SEEK_END);
+  file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  if (file_size > sizeof(g_prompt_buffer)) {
+    log_w("Prompt file too large: %d > %d", file_size,
+          (int)sizeof(g_prompt_buffer));
+    file_size = sizeof(g_prompt_buffer);
   }
 
+  len = fread(g_prompt_buffer, 1, file_size, file);
   fclose(file);
 
-  // [DEBUG] 写入完成
-  log_i("[PROMPT_SYNC] Loaded: size=%u", total_written);
+  // 初始化内存 VFS 句柄
+  g_prompt_mem_file.data = g_prompt_buffer;
+  g_prompt_mem_file.size = len;
+  g_prompt_mem_file.read_ptr = 0;
 
-  // 4. 确保解码服务已创建（懒加载）
+  // 2. 确保解码服务已创建（懒加载）并处于 OPEN 状态
   u32 t_step = timer_get_ms();
   if (!g_prompt_player.dec_server) {
     log_i("[PROMPT_SYNC] Creating new audio_server instance...");
@@ -1463,64 +1442,63 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
     }
     server_register_event_handler(g_prompt_player.dec_server, &g_prompt_player,
                                   dec_server_event_handler);
-  } else {
-    log_i("[PROMPT_SYNC] Reusing audio_server: Force STOP -> OPEN...");
+
+    // 首次 OPEN (Only once!)
+    union audio_req req = {0};
+    req.dec.cmd = AUDIO_DEC_OPEN;
+    req.dec.dec_type = "mp3";
+    req.dec.volume = g_prompt_player.volume;
+    req.dec.output_buf = NULL;
+    req.dec.output_buf_len = DEC_BUF_LEN;
+    req.dec.file = (void *)&g_prompt_mem_file; // MemFile
+    req.dec.channel = 0;
+    req.dec.sample_rate = 0;
+    req.dec.priority = 1;
+    req.dec.vfs_ops = &prompt_audio_dec_vfs_ops;
+    req.dec.sample_source = "dac";
+
     t_step = timer_get_ms();
-    union audio_req stop_req = {0};
-    stop_req.dec.cmd = AUDIO_DEC_STOP;
-    server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &stop_req);
-    log_i("[PROMPT_PERF] Reuse STOP cost: %d ms", timer_get_ms() - t_step);
+    err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+    log_i("[PROMPT_PERF] FIRST_OPEN cost: %d ms", timer_get_ms() - t_step);
+
+    if (err) {
+      log_e("[PROMPT_SYNC]FIRST_OPEN failed: %d", err);
+      server_close(g_prompt_player.dec_server);
+      g_prompt_player.dec_server = NULL;
+      g_prompt_playing = 0;
+      os_mutex_post(&audio_play_mutex);
+      return err;
+    }
+  } else {
+    // 复用分支：不发 STOP/CLOSE/OPEN
+    // 仅尝试重置播放位置到 0 (以防解码器内部偏移未归零)
+    union audio_req req = {0};
+    u32 pos = 0;
+    req.ioctl.cmd = AUDIO_IOCTRL_CMD_SET_PLAYPOS;
+    req.ioctl.priv = &pos;
+    server_request(g_prompt_player.dec_server, AUDIO_REQ_IOCTL, &req);
   }
 
-  // 5. 统一执行 OPEN + START
+  // 5. 统一执行 START
   union audio_req req = {0};
-  req.dec.cmd = AUDIO_DEC_OPEN;
-  req.dec.dec_type = "mp3";
-  req.dec.volume = g_prompt_player.volume;
-  req.dec.output_buf = NULL;
-  req.dec.output_buf_len = DEC_BUF_LEN;
-  req.dec.file = (void *)&g_prompt_player.queue;
-  req.dec.channel = 0;
-  req.dec.sample_rate = 0;
-  req.dec.priority = 1;
-  req.dec.vfs_ops = &prompt_audio_dec_vfs_ops;
-  req.dec.sample_source = "dac";
-
-  t_step = timer_get_ms();
-  int err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
-  log_i("[PROMPT_PERF] DEC_OPEN cost: %d ms", timer_get_ms() - t_step);
-
-  if (err) {
-    log_e("[PROMPT_SYNC]Failed to OPEN decoder: %d", err);
-    server_close(g_prompt_player.dec_server);
-    g_prompt_player.dec_server = NULL;
-    g_prompt_playing = 0;
-    os_mutex_post(&audio_play_mutex);
-    return err;
-  }
-
-  // START解码器
   req.dec.cmd = AUDIO_DEC_START;
   t_step = timer_get_ms();
   err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
   log_i("[PROMPT_PERF] DEC_START cost: %d ms", timer_get_ms() - t_step);
 
   if (err) {
-    log_e("[PROMPT_SYNC]Failed to START decoder: %d", err);
-    req.dec.cmd = AUDIO_DEC_STOP;
-    server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+    log_e("[PROMPT_SYNC]START failed: %d", err);
+    // 失败时不发STOP，直接退出
     g_prompt_playing = 0;
     os_mutex_post(&audio_play_mutex);
     return err;
   }
 
-  g_prompt_player.cmp_file = (void *)&g_prompt_player.queue;
-  log_i("[PROMPT_SYNC]Decoder opened and started");
-
+  g_prompt_player.cmp_file = (void *)&g_prompt_mem_file;
   mark_first_play_start(&g_prompt_player);
 
   log_i("[TIMING]🚀 prompt_sync: %u ms, %u bytes (file=%s)",
-        timer_get_ms() - t0, total_written, base);
+        timer_get_ms() - t0, len, base);
 
   os_mutex_post(&audio_play_mutex);
   return 0;
