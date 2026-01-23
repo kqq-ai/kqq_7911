@@ -111,18 +111,16 @@ void lwl_app_audio_play(const char *fname, void *priv) {
   os_mutex_pend(&g_audio_mutex, 0);
   log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s (t=%u)", fname, t0);
 
-  // 先停止所有其他播放
-  lwl_app_audio_stop_playing();
+  // 停止流式播放（如果有）
   lwl_app_audio_stream_stop();
-  log_i("[TIMING]audio_play stop_all done: %u ms",
+  log_i("[TIMING]audio_play stop_stream done: %u ms",
         timer_get_ms() - t0);
 
-  // 启动本地文件播放
+  // 使用持久化解码器播放提示音（Open-Hold Strategy）
   u32 t1 = timer_get_ms();
   set_local_speaker();
-  int err = app_music_play_local_music_async_with_callback(
-      g_app_ctx->music_player, fname, lwl_app_audio_play_cb, NULL);
-  log_i("[TIMING]audio_play local_start done: %u ms, err=%d",
+  int err = app_music_play_prompt_sync(fname, lwl_app_audio_play_cb, NULL);
+  log_i("[TIMING]audio_play prompt_sync done: %u ms, err=%d",
         timer_get_ms() - t1, err);
 
   if (!err) {

@@ -172,5 +172,23 @@ int app_music_play_local_music_async_with_callback(music_player *player, void *f
  */
 int app_music_play_local_music_with_callback(music_player *player, void *fname, app_music_play_end_cb_t cb, void *priv);
 
+/**
+ * @brief Play local prompt sound using persistent decoder (Open-Hold Strategy)
+ * @param fname Local filename (e.g., "t_key.mp3", "NetCfgSucc.mp3")
+ * @param cb Callback to invoke when playback completes (optional, can be NULL)
+ * @param priv Private data to pass to callback (optional, can be NULL)
+ * @return 0 on success, negative error code on failure
+ * 
+ * Features:
+ * - Uses persistent decoder (no open/close overhead)
+ * - Fire-and-Forget playback (synchronous queue write)
+ * - Auto-pause on completion (ready for next prompt)
+ * - Significantly reduced latency (~25-50ms vs 110-230ms)
+ * 
+ * Note: This function is optimized for short prompt sounds.
+ * For long audio files, use app_music_play_local_music_with_callback instead.
+ */
+int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb, void *priv);
+
 
 #endif
