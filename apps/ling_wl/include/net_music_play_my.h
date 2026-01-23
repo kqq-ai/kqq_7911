@@ -151,18 +151,6 @@ int app_music_play_stream_music_with_callback(music_player *player, app_music_pl
 int app_music_play_stream_write(music_player *player, void *buf, uint32_t len);
 
 /**
- * @brief Play local prompt using async decode and ring buffer
- * @param player Pointer to music player instance
- * @param fname Local filename
- * @param cb Callback to invoke when playback completes
- * @param priv Private data to pass to callback
- * @return 0 on success, negative error code on failure
- */
-int app_music_play_local_music_async_with_callback(music_player *player, void *fname,
-                                                   app_music_play_end_cb_t cb,
-                                                   void *priv);
-
-/**
  * @brief Play music from local filesystem(VM) with completion callback
  * @param player Pointer to music player instance
  * @param fname Local filename

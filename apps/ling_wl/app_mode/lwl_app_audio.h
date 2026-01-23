@@ -5,7 +5,6 @@
 //播放音频大概需要等待100ms左右
 #define play_system_music(x) lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH x, NULL);
 
-
 /**
  * @brief 初始化统一音频管理模块
  * @details
