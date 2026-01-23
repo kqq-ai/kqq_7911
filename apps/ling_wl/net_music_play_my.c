@@ -252,6 +252,34 @@ static void dec_server_event_handler(void *priv, int argc, int *argv) {
   case AUDIO_SERVER_EVENT_END:
     log_i("app_server, music: AUDIO_SERVER_EVENT_END\n");
     clear_first_play_pending(player);
+
+    // 检查是否是提示音播放完成
+    if ((void *)argv[1] == (void *)&g_prompt_player.queue) {
+      log_i("[PROMPT]Prompt playback ended\n");
+
+      // 停止解码器
+      union audio_req r = {0};
+      r.dec.cmd = AUDIO_DEC_STOP;
+      if (g_prompt_player.dec_server) {
+        server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &r);
+      }
+
+      // 清空队列和状态
+      ring_queue_clear(&g_prompt_player.queue);
+      g_prompt_playing = 0;
+      g_prompt_eof = 0;
+
+      // 执行回调
+      if (g_prompt_player.dec_with_cb && g_prompt_player.dec_end_cb != NULL) {
+        g_prompt_player.dec_end_cb(g_prompt_player.dec_end_cb_priv);
+        g_prompt_player.dec_end_cb = NULL;
+        g_prompt_player.dec_with_cb = 0;
+      }
+
+      os_mutex_post(&audio_play_mutex);
+      return;
+    }
+
     if (player->cmp_file != (void *)argv[1]) {
       log_e("not the same file, may be closed! %p %p\n", player->cmp_file,
             (void *)argv[1]);
@@ -276,65 +304,6 @@ static void dec_server_event_handler(void *priv, int argc, int *argv) {
 
     sys_power_auto_shutdown_clear();
     /* player->dec_ops->dec_progress(argv[1]); */
-    break;
-  }
-  os_mutex_post(&audio_play_mutex);
-}
-
-/*======================================================================================================================
- * Persistent Prompt Decoder Event Handler (Auto-Pause Strategy)
- *======================================================================================================================*/
-static void prompt_dec_server_event_handler(void *priv, int argc, int *argv) {
-  music_player *player = (music_player *)priv;
-
-  os_mutex_pend(&audio_play_mutex, 0);
-  switch (argv[0]) {
-  case AUDIO_SERVER_EVENT_ERR:
-    log_i("[PROMPT_DEC]AUDIO_SERVER_EVENT_ERR\n");
-    // 继续执行 END 处理
-  case AUDIO_SERVER_EVENT_END:
-    log_i(
-        "[PROMPT_DEC]AUDIO_SERVER_EVENT_END - Auto-Pause (persistent mode)\n");
-    clear_first_play_pending(player);
-
-    // 官方建议：在 END 事件时调用 PAUSE 而不是 STOP
-    union audio_req r = {0};
-    r.dec.cmd = AUDIO_DEC_PAUSE;
-    if (player->dec_server) {
-      server_request(player->dec_server, AUDIO_REQ_DEC, &r);
-    }
-
-    // 清空队列和状态
-    ring_queue_clear(&g_prompt_player.queue);
-    g_prompt_playing = 0;
-    g_prompt_eof = 0;
-
-    // 执行回调
-    if (player->dec_with_cb && player->dec_end_cb != NULL) {
-      player->dec_end_cb(player->dec_end_cb_priv);
-      player->dec_end_cb = NULL;
-      player->dec_with_cb = 0;
-    }
-
-    log_i("[PROMPT_DEC]Paused and ready for next prompt\n");
-    break;
-
-  case AUDIO_SERVER_EVENT_CURR_TIME:
-    log_d("[PROMPT_DEC]play_time: %d\n", argv[1]);
-    player->play_time = argv[1];
-
-    if (player->first_play_pending && argv[1] > 0) {
-      player->first_play_pending = 0;
-      player->first_play_ms = timer_get_ms();
-      log_i("🔥🔥🔥🔥🔥🔥🔥🔥[PROMPT]first_play_time: start=%u ms, first=%u "
-            "ms, delta=%u ms",
-            player->first_play_start_ms, player->first_play_ms,
-            player->first_play_ms - player->first_play_start_ms);
-      if (player->first_play_timer) {
-        sys_timer_del(player->first_play_timer);
-        player->first_play_timer = 0;
-      }
-    }
     break;
   }
   os_mutex_post(&audio_play_mutex);
@@ -1423,14 +1392,8 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
 
   os_mutex_pend(&audio_play_mutex, 0);
 
-  // 1. 检查持久化解码器状态
-  union audio_req req = {0};
-  req.dec.cmd = AUDIO_DEC_GET_STATUS;
-  server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
-
-  log_i("[PROMPT_SYNC]Current decoder status: %d (0=OPEN, 1=START, 2=PAUSE, "
-        "3=STOP)",
-        req.dec.status);
+  // 1. 停止当前播放
+  app_music_play_stop(&g_prompt_player);
 
   // 2. 清空队列和状态
   ring_queue_clear(&g_prompt_player.queue);
@@ -1438,7 +1401,7 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
   g_prompt_eof = 0;
   clear_first_play_pending(&g_prompt_player);
 
-  // 3. 打开文件
+  // 3. 打开文件并加载到队列
   file = fopen(fname, "r");
   if (!file) {
     log_e("[PROMPT_SYNC]Failed to open file: %s", fname);
@@ -1446,14 +1409,7 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
     os_mutex_post(&audio_play_mutex);
     return -ENOENT;
   }
-  log_i("[TIMING]prompt_sync fopen: %u ms", timer_get_ms() - t0);
 
-  // 4. 设置回调
-  g_prompt_player.dec_end_cb = cb;
-  g_prompt_player.dec_end_cb_priv = priv;
-  g_prompt_player.dec_with_cb = (cb != NULL);
-
-  // 5. 同步写入文件数据到队列
   while ((read_len = fread(buf, 1, sizeof(buf), file)) > 0) {
     int written = 0;
     while (written < read_len) {
@@ -1478,28 +1434,56 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
   fclose(file);
   g_prompt_eof = 1;
 
-  log_i("[TIMING]prompt_sync data written: %u ms, size: %u bytes",
+  log_i("[TIMING]prompt_sync data loaded: %u ms, size: %u bytes",
         timer_get_ms() - t0, total_written);
 
-  // 6. 触发播放
-  if (req.dec.status == AUDIO_DEC_PAUSE || req.dec.status == AUDIO_DEC_OPEN) {
-    req.dec.cmd = AUDIO_DEC_START;
-    req.dec.dec_type = "mp3";
-    req.dec.sample_source = "dac";
-    int err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
-    if (err) {
-      log_e("[PROMPT_SYNC]Failed to start decoder: %d", err);
-      g_prompt_playing = 0;
-      g_prompt_eof = 0;
-      os_mutex_post(&audio_play_mutex);
-      return err;
-    }
-    log_i("[PROMPT_SYNC]Decoder started (was PAUSED/OPEN)");
-  } else {
-    log_i("[PROMPT_SYNC]Decoder already running");
+  // 4. 设置回调
+  g_prompt_player.dec_end_cb = cb;
+  g_prompt_player.dec_end_cb_priv = priv;
+  g_prompt_player.dec_with_cb = (cb != NULL);
+
+  // 5. OPEN 解码器
+  union audio_req req = {0};
+  req.dec.cmd = AUDIO_DEC_OPEN;
+  req.dec.dec_type = "mp3";
+  req.dec.volume = g_prompt_player.volume;
+  req.dec.output_buf = NULL;
+  req.dec.output_buf_len = DEC_BUF_LEN;
+  req.dec.file = (void *)&g_prompt_player.queue;
+  req.dec.channel = 0;
+  req.dec.sample_rate = 0;
+  req.dec.priority = 1;
+  req.dec.vfs_ops = &prompt_audio_dec_vfs_ops;
+  req.dec.sample_source = "dac";
+
+  int err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+  if (err) {
+    log_e("[PROMPT_SYNC]Failed to OPEN decoder: %d", err);
+    g_prompt_playing = 0;
+    g_prompt_eof = 0;
+    os_mutex_post(&audio_play_mutex);
+    return err;
   }
 
+  // 6. START 播放
+  req.dec.cmd = AUDIO_DEC_START;
+  err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+  if (err) {
+    log_e("[PROMPT_SYNC]Failed to START decoder: %d", err);
+    req.dec.cmd = AUDIO_DEC_STOP;
+    server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+    g_prompt_playing = 0;
+    g_prompt_eof = 0;
+    os_mutex_post(&audio_play_mutex);
+    return err;
+  }
+
+  g_prompt_player.cmp_file = (void *)&g_prompt_player.queue;
   mark_first_play_start(&g_prompt_player);
+
+  log_i("[TIMING]🚀 prompt_sync total: %u ms (file=%s)", timer_get_ms() - t0,
+        base);
+
   os_mutex_post(&audio_play_mutex);
   return 0;
 }
@@ -1592,63 +1576,17 @@ int music_player_init(music_player *player) {
    *======================================================================================================================*/
   log_i("[PROMPT_INIT]🚀 Initializing persistent prompt decoder...");
 
-  // 初始化提示音播放器
+  // 初始化提示音播放器（共享主播放器的 dec_server）
   memset(&g_prompt_player, 0, sizeof(g_prompt_player));
   ring_queue_init_static(&g_prompt_player.queue, g_prompt_queue_buffer,
                          PROMPT_QUEUE_SIZE);
   g_prompt_player.volume = player->volume;
   g_prompt_player.dec_ops = &prompt_music_dec_ops;
+  g_prompt_player.dec_server = player->dec_server; // 共享主播放器的服务器
   g_prompt_playing = 0;
   g_prompt_eof = 0;
 
-  // 打开独立的解码服务
-  g_prompt_player.dec_server = server_open("audio_server", "dec");
-  if (!g_prompt_player.dec_server) {
-    log_e("[PROMPT_INIT]Failed to open audio_server for prompt decoder!\n");
-    return -EPERM;
-  }
-
-  // 注册事件处理器
-  server_register_event_handler(g_prompt_player.dec_server, &g_prompt_player,
-                                prompt_dec_server_event_handler);
-
-  // 打开解码器 (OPEN)
-  union audio_req pre_req = {0};
-  pre_req.dec.cmd = AUDIO_DEC_OPEN;
-  pre_req.dec.dec_type = "mp3";
-  pre_req.dec.volume = g_prompt_player.volume;
-  pre_req.dec.output_buf = NULL;
-  pre_req.dec.output_buf_len = DEC_BUF_LEN;
-  pre_req.dec.file = (void *)&g_prompt_player.queue;
-  pre_req.dec.channel = 0;
-  pre_req.dec.sample_rate = 0;
-  pre_req.dec.priority = 1;
-  pre_req.dec.vfs_ops = &prompt_audio_dec_vfs_ops;
-  pre_req.dec.sample_source = "dac";
-
-  int pre_err =
-      server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &pre_req);
-  if (pre_err) {
-    log_e("[PROMPT_INIT]Failed to open prompt decoder: %d\n", pre_err);
-    server_close(g_prompt_player.dec_server);
-    g_prompt_player.dec_server = NULL;
-    return pre_err;
-  }
-
-  // 启动解码器 (START) - 进入空等数据状态
-  pre_req.dec.cmd = AUDIO_DEC_START;
-  pre_err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &pre_req);
-  if (pre_err) {
-    log_e("[PROMPT_INIT]Failed to start prompt decoder: %d\n", pre_err);
-    pre_req.dec.cmd = AUDIO_DEC_STOP;
-    server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &pre_req);
-    server_close(g_prompt_player.dec_server);
-    g_prompt_player.dec_server = NULL;
-    return pre_err;
-  }
-
-  g_prompt_player.cmp_file = (void *)&g_prompt_player.queue;
-  log_i("[PROMPT_INIT]✅ Persistent prompt decoder ready (Open-Hold mode)");
+  log_i("[PROMPT_INIT]✅ Prompt player ready (shared dec_server mode)");
 
   return 0;
 }
