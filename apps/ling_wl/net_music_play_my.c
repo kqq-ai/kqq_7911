@@ -13,7 +13,7 @@
 #include "syscfg_id.h"
 #include "system/timer.h"
 #include "wait.h"
-#include <pthread.h>
+#include <os/pthread.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -1245,6 +1245,15 @@ int app_music_play_stream_music_with_callback(music_player *player,
   player->dec_with_cb = 1;
   return 0;
 }
+int app_music_play_local_music_with_callback(music_player *player, void *fname,
+                                             app_music_play_end_cb_t cb,
+                                             void *priv) {
+  local_music_dec_file(player, fname);
+  player->dec_end_cb = cb;
+  player->dec_end_cb_priv = priv;
+  player->dec_with_cb = 1;
+  return 0;
+}
 int app_music_play_stream_write(music_player *player, void *buf, uint32_t len) {
   if (player->dec_ops == &cbuf_music_dec_ops) {
     assert(player->queue.capacity > len);
@@ -1413,8 +1422,6 @@ int music_player_init(music_player *player) {
     os_mutex_create(&audio_play_mutex);
   }
   return 0;
-}
-return 0;
 }
 
 // 初始化常驻提示音播放器
