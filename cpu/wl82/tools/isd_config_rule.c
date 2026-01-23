@@ -284,7 +284,7 @@ BTBOX_MIN_VER=1.2.4.f;
 //#升级之后需要保留VM数据，在生成升级文件时需要设置VM_OPT=1
 VM_ADR=0; [设置VM]
 VM_LEN=32K;
-VM_OPT=0;
+VM_OPT=1;
 
 BTIF_ADR=AUTO; [设置资源]
 BTIF_LEN=0x1000;
