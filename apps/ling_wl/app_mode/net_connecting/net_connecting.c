@@ -58,7 +58,6 @@ static void start_ble_net(){
 static void reset_ble_net(){
     if (wifi_manager_state) {
         set_led_confirm_off();
-        ble_simple_server_name_enable(0);
         clear_key_press_time_ms();
         printf("BLE timeout,restart ble\n");
     }
@@ -108,7 +107,6 @@ static int net_connecting_init(void)
     wifi_manager_state = false;
     clear_key_press_time_ms();
 
-    ble_simple_server_init();
     wifi_and_network_on();
     
     while (lwl_app_audio_playing()) {
@@ -118,7 +116,7 @@ static int net_connecting_init(void)
         }
     }
     printf("Network connection is failed!\n");
-    ble_simple_server_name_enable(0);
+    ble_simple_server_init();
     wifi_manager_state = true;
     play_system_music("NetCfgEnter.mp3");
 

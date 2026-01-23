@@ -722,7 +722,7 @@ void client_cbk_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *p
                 // client_report_adv_data((void *)&packet[2], packet[1]);
                 ble_adv_report_user_handler((void *)&packet[2], packet[1]); /* process user handler */
             } else {
-                log_info("drop adv_report!!!%02x\n", get_ble_work_state());
+                log_info("simple client drop adv_report!!!%02x\n", get_ble_work_state());
             }
             break;
 

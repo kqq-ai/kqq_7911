@@ -1014,6 +1014,11 @@ int notify_app_wifi_ip_succ(void *pri) {
   char return_errstr[32] = {0};
   char return_json_data[BUFFER_SIZE] = {0};
 
+  // Only notify when BLE is connected; avoid CCC errors when BLE is off
+  if (get_ble_app_disconnect_flag() != 0) {
+    log_info("BLE not connected, skip wifi ip success notification\n");
+    return 0;
+  }
   get_wifi_ip_info(sta_localip);
 
   // memcpy(return_errstr, "MCU_GET_IP_SUCC", strlen("MCU_GET_IP_SUCC"));
@@ -1050,9 +1055,9 @@ int notify_app_wifi_ip_succ(void *pri) {
   memcpy(return_json_data, return_json_str, strlen(return_json_str));
   send_return_json_data(return_json_data);
 
-  free(return_json_str);
   log_info("notify  app  the wifi ip is ok   return_json_str:%s\r\n",
            return_json_str);
+  free(return_json_str);
 cleanup:
   return ret;
 }
@@ -1151,6 +1156,11 @@ int notify_app_wifi_mqtt_succ(void *pri) {
   char return_errstr[32] = {0};
   char return_json_data[BUFFER_SIZE] = {0};
 
+  // Only notify when BLE is connected; avoid CCC errors when BLE is off
+  if (get_ble_app_disconnect_flag() != 0) {
+    log_info("BLE not connected, skip wifi ip success notification\n");
+    return 0;
+  }
   memcpy(return_errstr, "MCU_WIFI_TASK_SUCC", strlen("MCU_WIFI_TASK_SUCC"));
   memcpy(cmd_name, "mcu_notify_app_mqtt", strlen("mcu_notify_app_mqtt"));
 
@@ -1200,6 +1210,11 @@ static int notify_app_wifi_list_update_internal(void *pri, bool force_push) {
   char return_errstr[32] = {0};
   char return_json_data[BUFFER_SIZE] = {0};
 
+  // Only notify when BLE is connected; avoid CCC errors when BLE is off
+  if (get_ble_app_disconnect_flag() != 0) {
+    log_info("BLE not connected, skip wifi ip success notification\n");
+    return 0;
+  }
   log_info("notify_app_wifi_list_update called (force_push=%d)\n",
            force_push ? 1 : 0);
 

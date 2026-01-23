@@ -304,12 +304,15 @@ static int wifi_event_callback(void *network_ctx, enum WIFI_EVENT event)
         store_wifi_ip_info(NULL);
 
         lwl_app_context_t *ctx = lwl_app_core_context_get_instance();
-        /* 通知 APP(小程序) 我已经获取到 IP */
-        if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ_wrapper, NULL))
-        {
-            printf("Failed to add the notify_app_wifi_ip_succ task !\r\n");
+        /* 通知 APP(小程序) 我已经获取到 IP - 仅在蓝牙已连接时通知 */
+        if (get_ble_app_disconnect_flag() == 0) {
+            if (!threadpool_add_task(ctx->threadpool, notify_app_wifi_ip_succ_wrapper, NULL)) 
+            {
+                printf("Failed to add the notify_app_wifi_ip_succ task !\r\n");
+            }
+        } else {
+            printf("BLE not connected, skip notify_app_wifi_ip_succ\r\n");
         }
-
         break;
 
     case WIFI_EVENT_STA_DISCONNECT:
