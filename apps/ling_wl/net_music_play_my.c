@@ -1470,8 +1470,18 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
       return err;
     }
   } else {
-    // 复用分支：不发 STOP/CLOSE/OPEN
-    // 仅尝试重置播放位置到 0 (以防解码器内部偏移未归零)
+    // 复用分支：支持打断
+    // 即使是常开，如果上一次还在播放，必须先STOP一下让解码器逻辑复位
+    // 否则直接START可能无效，且底层Buffer更新会导致数据错乱
+    if (server_request(g_prompt_player.dec_server, AUDIO_REQ_GET_STATUS,
+                       NULL) == AUDIO_DEC_START) {
+      log_i("[PROMPT_SYNC] Interrupting previous playback (STOP)");
+      union audio_req stop_req = {0};
+      stop_req.dec.cmd = AUDIO_DEC_STOP;
+      server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &stop_req);
+    }
+
+    // 尝试重置播放位置到 0
     union audio_req req = {0};
     u32 pos = 0;
     req.ioctl.cmd = AUDIO_IOCTRL_CMD_SET_PLAYPOS;
