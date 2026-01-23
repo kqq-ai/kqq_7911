@@ -240,7 +240,7 @@ void *wss_condition_monitor_thread(void *arg) {
     }
 
     // 每60秒打印一次LwIP内存统计
-    if (g_curr_time - last_mem_stats_time > 60000) {
+    if (g_curr_time > last_mem_stats_time + 60000) {
       last_mem_stats_time = g_curr_time;
 
       log_i("=== LwIP Memory Stats Debug ===");
@@ -276,19 +276,20 @@ void *wss_condition_monitor_thread(void *arg) {
     // 打印NO_E_TIMEOUT_MS
     // log_i("[wss_application]NO_E_TIMEOUT_MS: %d", NO_E_TIMEOUT_MS);
 
-    if (g_curr_time - last_req_time > NO_REQ_TIMEOUT_MS) {
+    if (g_curr_time > last_req_time + NO_REQ_TIMEOUT_MS) {
 
       // 检查超时条件
-      bool e_timeout = ((g_curr_time - last_E_found_time) > NO_E_TIMEOUT_MS);
-
-      bool move_timeout = ((g_curr_time - last_move_time) > NO_MOVE_TIMEOUT_MS);
+      bool e_timeout = (g_curr_time > last_E_found_time + NO_E_TIMEOUT_MS);
+                      
+      bool move_timeout = (g_curr_time > last_move_time + NO_MOVE_TIMEOUT_MS);
+      
+      log_i("[wss_application]No E or movement timeout (e_to=%u, move_to=%u, last_req_delta=%u), switching to default mode.",
+              g_curr_time - last_E_found_time,
+              g_curr_time - last_move_time,
+              g_curr_time - last_req_time);
 
       // 任一超时条件满足就切换模式
       if (e_timeout || move_timeout) {
-        log_i("[wss_application]No E or movement timeout (e_to=%u, move_to=%u, "
-              "last_req_delta=%u), switching to default mode.",
-              g_curr_time - last_E_found_time, g_curr_time - last_move_time,
-              g_curr_time - last_req_time);
         lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
         monitor_thread_running = false;
         return NULL;
