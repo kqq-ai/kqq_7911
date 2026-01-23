@@ -1449,9 +1449,12 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
   log_i("[PROMPT_SYNC] Loaded: size=%u", total_written);
 
   // 4. 确保解码服务已创建（懒加载）
+  u32 t_step = timer_get_ms();
   if (!g_prompt_player.dec_server) {
     log_i("[PROMPT_SYNC] Creating new audio_server instance...");
     g_prompt_player.dec_server = server_open("audio_server", "dec");
+    log_i("[PROMPT_PERF] server_open cost: %d ms", timer_get_ms() - t_step);
+
     if (!g_prompt_player.dec_server) {
       log_e("[PROMPT_SYNC]Failed to open audio_server\n");
       g_prompt_playing = 0;
@@ -1461,11 +1464,15 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
     server_register_event_handler(g_prompt_player.dec_server, &g_prompt_player,
                                   dec_server_event_handler);
   } else {
-    // 即使服务存在，也可能处于STOP状态，通过重新OPEN来重置
-    log_i("[PROMPT_SYNC] Reusing audio_server instance (Re-OPEN)...");
+    log_i("[PROMPT_SYNC] Reusing audio_server: Force STOP -> OPEN...");
+    t_step = timer_get_ms();
+    union audio_req stop_req = {0};
+    stop_req.dec.cmd = AUDIO_DEC_STOP;
+    server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &stop_req);
+    log_i("[PROMPT_PERF] Reuse STOP cost: %d ms", timer_get_ms() - t_step);
   }
 
-  // 5. 统一执行 OPEN + START (Re-Open 会重置解码器内部状态和Buf指针)
+  // 5. 统一执行 OPEN + START
   union audio_req req = {0};
   req.dec.cmd = AUDIO_DEC_OPEN;
   req.dec.dec_type = "mp3";
@@ -1479,10 +1486,12 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
   req.dec.vfs_ops = &prompt_audio_dec_vfs_ops;
   req.dec.sample_source = "dac";
 
+  t_step = timer_get_ms();
   int err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+  log_i("[PROMPT_PERF] DEC_OPEN cost: %d ms", timer_get_ms() - t_step);
+
   if (err) {
     log_e("[PROMPT_SYNC]Failed to OPEN decoder: %d", err);
-    // 如果OPEN失败，说明Server状态不对，只能彻底杀掉重建（下次生效）
     server_close(g_prompt_player.dec_server);
     g_prompt_player.dec_server = NULL;
     g_prompt_playing = 0;
@@ -1492,12 +1501,14 @@ int app_music_play_prompt_sync(const char *fname, app_music_play_end_cb_t cb,
 
   // START解码器
   req.dec.cmd = AUDIO_DEC_START;
+  t_step = timer_get_ms();
   err = server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
+  log_i("[PROMPT_PERF] DEC_START cost: %d ms", timer_get_ms() - t_step);
+
   if (err) {
     log_e("[PROMPT_SYNC]Failed to START decoder: %d", err);
     req.dec.cmd = AUDIO_DEC_STOP;
     server_request(g_prompt_player.dec_server, AUDIO_REQ_DEC, &req);
-    // 这里也不 Close Server，保留它给下次尝试
     g_prompt_playing = 0;
     os_mutex_post(&audio_play_mutex);
     return err;
