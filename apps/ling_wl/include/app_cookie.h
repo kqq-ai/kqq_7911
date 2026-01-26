@@ -7,7 +7,7 @@
 struct app_cookie_hdl {};
 void disable_gsensor();
 
-#define LOCAL_VERSION_CODE "v0.0.99"
+#define LOCAL_VERSION_CODE "v0.0.100"
 #define LOW_BATT_VOLT 330
 #define LOW_BATT_VERY_SHUTDOWN 330
 
@@ -16,7 +16,7 @@ void disable_gsensor();
 
 // #define TEST_LOCOL_SERVER "junye"// 设置为1连接本地调试服务器
 
-#define SERVER_DOMAIN "dev.coolqq.com"
+#define SERVER_DOMAIN  "test.coolqq.com"
 // #define SERVER_DOMAIN  "pre.coolqq.com"
 // #define SERVER_DOMAIN  "coolqq.com"
 

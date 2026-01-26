@@ -144,9 +144,10 @@ static void mode4_vad_uninit(void)
     if (context && context->recorder) {
         // 停止录音器
         recorder_stop(context->recorder);
-        set_led_mic_off();
         // 清除VAD回调
         recorder_set_vad_cbk(context->recorder, NULL, NULL);
+        set_led_mic_off();
+        set_led_vad_off();
         log_i("[MODE 4 VAD] VAD functionality stopped - recorder stopped and callback cleared");
     } else {
         log_w("[MODE 4 VAD] Context or recorder is NULL during cleanup");

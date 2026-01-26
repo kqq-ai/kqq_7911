@@ -291,6 +291,7 @@ static double https_get_timestamp(char* url)
     double time_stamp_web = 0;
 
     if (ret != HERROR_OK) {
+        log_i("https_get_timestamp ERROR");
         if (http_body_buf.p) free(http_body_buf.p);
         return 0;
     } else {
@@ -345,6 +346,7 @@ static char* prepare_signature(const char server_url[])
         log_i("❌[prepare_signature] https_get_timestamp failed, aborting\n");
         return NULL;
     }
+    log_i("https_get_timestamp %.0f", time_web);
     char timestamp_str[21];   // 足够存储64位整数（最长20位数字+终止符）
     sprintf(timestamp_str, "%.0f", time_web);
     // 直接用strlen()获取实际长度（更简单）
