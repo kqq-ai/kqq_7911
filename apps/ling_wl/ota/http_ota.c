@@ -14,6 +14,7 @@
 #include "app_mode/lwl_app_core.h"
 #include "net_music_play_my.h"
 #include "LED/LED.h"
+#include "app_mode/lwl_app_framework.h"
 
 #define DEFAULT_RECV_BUF_SIZE   (256*1024)   //数据缓存BUF大小
 #define MAX_RECONNECT_CNT 10               //最大重连次数
@@ -48,6 +49,12 @@ static int http_user_cb(void *ctx, void *buf, unsigned int size, void *priv, htt
     return 0;
 }
 
+static void download_reboot()
+{
+    msleep(3000);
+    system_reset();
+}
+
 static void download_task(void *priv)
 {
     struct download_hdl *hdl = ota_hdl;
@@ -80,10 +87,15 @@ _reconnect_:
         }
     }
 
-    while (hdl->ctx.req_exit_flag == 0) {
+    while (hdl->ctx.req_exit_flag == 0 &&  lwl_app_mode_get_current_mode() == APP_UPDATE_MODE) {
         // 每600ms检查是否需要暂停下载并发送MQTT消息
         if (timer_get_ms() - last_report_time >= 600) {
             need_pause_for_mqtt = 1;  // 设置暂停标志
+        }
+
+        if (lwl_app_audio_playing()) {
+            mdelay(20);
+            continue;
         }
 
         // 如果需要暂停，跳过读取操作，让网络资源释放给MQTT使用
@@ -112,7 +124,11 @@ _reconnect_:
         }
 
         if (hdl->download_len >= hdl->file_size) {
-            goto _finish_;
+            log_i("download success.\n");
+            lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"OtaSucc.mp3", download_reboot);
+
+            net_fclose(update_fd, sock_err);
+            return;
         }
         
         if (!need_pause_for_mqtt) {
@@ -120,14 +136,9 @@ _reconnect_:
         }
     }
 
-_finish_:
-    printf("download success.\n");
-
-    net_fclose(update_fd, sock_err);
-    system_reset();
-
 _out_:
     //关闭网络连接
+    log_i("download failed.\n");
     hdl->download_ops->close(&hdl->ctx);
 
     net_fclose(update_fd, sock_err);
@@ -136,6 +147,9 @@ _out_:
     memset(hdl, 0, sizeof(struct download_hdl));
     free(hdl);
     hdl = NULL;
+    if (lwl_app_mode_get_current_mode() == APP_UPDATE_MODE) {
+        lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"OtaFailed.mp3", download_reboot);
+    }
 }
 
 int http_create_download_task(char *url)

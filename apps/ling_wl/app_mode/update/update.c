@@ -17,6 +17,28 @@ static void set_led_OTA_40(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 
 static void set_led_OTA_70(void)       { set_rgb_color(COLOR_GREEN); } /* 控制 led : 正在升级 绿色 */
 static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
+//=================================================================================================
+// LWL event callback
+//=================================================================================================
+static void update_event_handler_cb(lwl_event_t *e)
+{
+    static int en = 1;
+    lwl_eend_dev_t *p_eend_dev = e->distance_change.pdev;
+
+    switch (e->event_type) {
+    case LWL_EVENT_TYPE_KEY:
+        play_system_music("OtaInUpdate.mp3");
+        break;
+    case LWL_EVENT_TYPE_TOUCH_KEY:
+        if (e->touch_key_cmd.touch_key_event_type == 0) {
+            play_system_music("t_key.mp3");
+        } else {
+            play_system_music("OtaInUpdate.mp3");
+        }
+        break;
+    }
+}
+
 static int update_init(void)
 {
     init_time = timer_get_ms();
@@ -25,25 +47,27 @@ static int update_init(void)
     led_color = 0;
     progress = -1;
     play_system_music("OtaInUpdate.mp3");
+    lwl_event_handler_add(update_event_handler_cb);
     return 0;
 }
 
 static int update_unint(void)
 {
-    system_reset(); //restart
+    lwl_event_handler_remove(update_event_handler_cb);
+    play_system_music("OtaFailed.mp3");
     return 0;
 }
 void update_loop()
 {
-    log_i("update_loop init\n");
     if (WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL)) {
         lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
         set_led_connect_error();// WIFI CONNECT ERROR
-        printf("Network connection is WIFI_STA_DISCONNECT!\n");
+        log_i("Network connection is WIFI_STA_DISCONNECT!\n");
         play_system_music("NetCfgFail.mp3");
         return;
     }
-    if (timer_get_ms() - init_time < 3000 || lwl_app_audio_playing()) {
+    if (lwl_app_audio_playing()) {
+        msleep(100);
         return;
     }
     if (progress == -1) {
