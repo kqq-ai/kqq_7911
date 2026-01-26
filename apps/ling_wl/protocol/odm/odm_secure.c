@@ -350,7 +350,6 @@ static char* prepare_signature(const char server_url[])
         log_i("❌[prepare_signature] https_get_timestamp failed, aborting\n");
         return NULL;
     }
-    log_i("https_get_timestamp %.0f", time_web);
     char timestamp_str[21];   // 足够存储64位整数（最长20位数字+终止符）
     sprintf(timestamp_str, "%.0f", time_web);
     // 直接用strlen()获取实际长度（更简单）
@@ -359,6 +358,7 @@ static char* prepare_signature(const char server_url[])
     mbedtls_gcm_init(&ctx);
     mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
 
+    log_i("pt:%s %.0f", pt, time_web);
     
     int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
                                             pt_len,
@@ -377,11 +377,7 @@ static char* prepare_signature(const char server_url[])
     base64_buf[base64_len] = '|';
     memcpy(base64_buf + base64_len + 1, base64_iv, base64_len_iv);
         // 计算总长度：查找第一个零字节
-    int total_length = 0;
-    while (total_length < BUF_SIZE && base64_buf[total_length] != 0) {
-        total_length++;
-    }
-
+    log_i("base64_buf:%s", base64_buf);
     char post_sign_time[264];
     memset(&post_sign_time, 0x0, sizeof(post_sign_time));
     cJSON *root = cJSON_CreateObject();
