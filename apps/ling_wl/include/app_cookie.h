@@ -7,18 +7,25 @@
 struct app_cookie_hdl {};
 void disable_gsensor();
 
-#define LOCAL_VERSION_CODE "v0.0.100"
-#define LOW_BATT_VOLT 330
-#define LOW_BATT_VERY_SHUTDOWN 330
+#define TEST_SERVER // 用lfs的SN，连接Test服务器，如未定义则用OTP的SN，连接正式服务器
+
+#ifdef TEST_SERVER
+
+    #define LOCAL_VERSION_CODE "v0.0.99"
+    #define TEST_LOCOL_SERVER "test"// 设置为连接本地调试服务器
+    #define SERVER_DOMAIN  "test.coolqq.com"
+
+#else
+    #define LOCAL_VERSION_CODE "v1.0.0"
+    #define SERVER_DOMAIN  "coolqq.com"
+    // #define SERVER_DOMAIN  "pre.coolqq.com"
+#endif
+
+#define LOW_BATT_VOLT 350 
+#define LOW_BATT_VERY_SHUTDOWN 330 
 
 #define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 #define TEST_PI_MODE 0 // 设置为1以启用Pi测试模式
-
-// #define TEST_LOCOL_SERVER "junye"// 设置为1连接本地调试服务器
-
-#define SERVER_DOMAIN  "test.coolqq.com"
-// #define SERVER_DOMAIN  "pre.coolqq.com"
-// #define SERVER_DOMAIN  "coolqq.com"
 
 #define PRINT_RSSI_LOG 0 // 是否打印RSSI日志
 

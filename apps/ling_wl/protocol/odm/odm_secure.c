@@ -141,7 +141,11 @@ static void get_SN_from_OTP()
 }
 
 bool get_SN(char* SN){
+#ifdef TEST_SERVER
     if (snInVm[0] == 0) get_SN_from_lfs();
+#else
+    if (snInVm[0] == 0) get_SN_from_OTP();
+#endif
     if (snInVm[0] == 0 || strlen(snInVm) != SN_SIZE || WRITE_SN_KEY) {
         log_i("❌get_SN NULL\n");
         snInVm[0] = 0;

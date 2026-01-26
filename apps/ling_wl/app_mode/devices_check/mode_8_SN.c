@@ -85,13 +85,6 @@ void process_mode_8(void)
         int result = mode8_write_and_verify_sn_key(g_mode8_obtained_sn, g_mode8_obtained_key);
         
         log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
-        log_i("MODE 8: Write+Verify completed with result=%d", result);
         g_mode8_write_pending = 0;
         g_mode8_op_running = 0;
         g_mode8_sn_key_obtained = 0;
@@ -672,7 +665,11 @@ static int mode8_write_and_verify_sn_key(const char* sn, const char* key)
     log_i("MODE 8: Starting combined write and verify operation...");
     
     // 第一步：执行写入操作
+#ifdef TEST_SERVER
     int write_result = mode8_write_sn_key_to_lfs(sn, key);
+#else
+    int write_result = mode8_write_sn_key_to_otp(sn, key);
+#endif
     if (write_result != 0) {
         log_e("MODE 8: ========== SN/KEY WRITE FAILED ==========");
         log_e("MODE 8: Failed to write SN/Key to storage, error code: %d", write_result);
@@ -684,7 +681,11 @@ static int mode8_write_and_verify_sn_key(const char* sn, const char* key)
     log_i("MODE 8: SN/Key written to storage successfully!");
     
     // 验证写入的数据
+#ifdef TEST_SERVER
     int read_result = mode8_verify_written_sn_key_from_lfs(sn, key);
+#else
+    int read_result = mode8_verify_written_sn_key_from_otp(sn, key);
+#endif
     if (read_result != 0) {
         log_w("MODE 8: Read back verification failed, but write was successful");
         log_w("MODE 8: Read error code: %d", read_result);

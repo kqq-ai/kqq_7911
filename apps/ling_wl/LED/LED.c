@@ -23,9 +23,7 @@ static u32 timer_clk = 0;
 
 #define TSEC SEC_USED(.volatile_ram_code) //当中断1ms一下，建议使用函数放在内部ram
 //#define TSEC
-static u16 g_red___LED;     // 红色，0-10000，值越大越亮，外部进入时，做了10000-处理
-static u16 g_green_LED;     // 绿色，0-10000，值越大越亮
-static u16 g_blue__LED;     // 蓝色，0-10000，值越大越亮
+// 蓝色，0-100，值越大越亮
 
 static u16 g_priority_LED = 0; // 当前LED颜色优先级，初始为0
 
@@ -44,6 +42,13 @@ struct led_entry {
 };
 static struct led_entry led_entries[LED_MAX_ENTRIES];
 static u32 led_seq_counter = 0;
+
+void *pwm_dev_handl_r = NULL;
+struct pwm_platform_data pwm_r = {0};
+void *pwm_dev_handl_g = NULL;
+struct pwm_platform_data pwm_g = {0};
+void *pwm_dev_handl_b = NULL;
+struct pwm_platform_data pwm_b = {0};
 
 /* helper: find best entry index according to priority desc, seq desc */
 static int led_find_best_index(void)
@@ -178,44 +183,11 @@ static ___interrupt TSEC void timer_isr(void)//中断
         {
         case 0:
         case 1:
-            gpio_direction_output(LED_G_IO, 1);
-            gpio_direction_output(LED_B_IO, 1);
-            if( g_red___LED > 50 ){ // 红色   <     >
-                gpio_direction_output(LED_R_IO, 0);
-            }else {
-                gpio_direction_output(LED_R_IO, 1);
-            }
-            //判断是否只有红色
-            if( (g_green_LED <= 50) && (g_blue__LED <= 50) ){
-                ms_count = 0;
-            }
             break;
         case 2:
-            gpio_direction_output(LED_R_IO, 1);
-            gpio_direction_output(LED_B_IO, 1);
-            if( g_green_LED > 50 ){ // 绿色
-                gpio_direction_output(LED_G_IO, 0);
-            }else {
-                gpio_direction_output(LED_G_IO, 1);
-            }
-            //判断是否只有绿色
-            if( (g_red___LED <= 50) && (g_blue__LED <= 50) ){
-                ms_count = 1;
-            }
             break;
         case 3:
         case 4:
-            gpio_direction_output(LED_R_IO, 1);
-            gpio_direction_output(LED_G_IO, 1);
-            if( g_blue__LED > 50 ){ // 蓝色
-                gpio_direction_output(LED_B_IO, 0);
-            }else {
-                gpio_direction_output(LED_B_IO, 1);
-            }
-            //判断是否只有蓝色
-            if( (g_red___LED <= 50) && (g_green_LED <= 50) ){
-                ms_count = 3;
-            }
             break;
         }
     }
@@ -223,24 +195,21 @@ static ___interrupt TSEC void timer_isr(void)//中断
 
 // 控制RGB颜色
 void set_rgb_LED(u16 red, u16 green, u16 blue) {
-    g_red___LED = red;
-    g_green_LED = green;
-    g_blue__LED = blue;
     // log_i("Event set_rgb_color: %d  : %d  : %d \n", red, green, blue);
     
-    ///port_wakeup_reg(EVENT_PA8, IO_PORTA_08, EDGE_NEGATIVE, lwl_IO_key_active);
-    // struct pwm_platform_data pwm = {0};
-    // pwm.pwm_ch = PWM_TIMER2_OPCH2;
-    // pwm.duty = red;
-    // dev_ioctl(pwm_dev_handle, PWM_SET_DUTY, (u32)&pwm);
-    
-    // pwm.pwm_ch = PWM_TIMER3_OPCH3;
-    // pwm.duty = green;
-    // dev_ioctl(pwm_dev_handle, PWM_SET_DUTY, (u32)&pwm);
-    
-    // pwm.pwm_ch = PWM_TIMER3_OPCH3;
-    // pwm.duty = blue;
-    // dev_ioctl(pwm_dev_handle, PWM_SET_DUTY, (u32)&pwm);
+    if (pwm_dev_handl_r == NULL || pwm_dev_handl_g == NULL || pwm_dev_handl_b == NULL) {
+        return;
+    } else{
+        pwm_r.pwm_ch = PWMCH1_L;
+        pwm_r.duty = 100 - (red / 3);
+        dev_write(pwm_dev_handl_r, (void *)&pwm_r, 0);
+        pwm_g.pwm_ch = PWM_TIMER2_OPCH2;
+        pwm_g.duty = 100 - (green / 3);
+        dev_write(pwm_dev_handl_r, (void *)&pwm_g, 0);
+        pwm_b.pwm_ch = PWM_TIMER3_OPCH3;
+        pwm_b.duty = 100 - (blue / 3);
+        dev_write(pwm_dev_handl_r, (void *)&pwm_b, 0);
+    }
 }
 
 void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
@@ -288,24 +257,24 @@ void set_rgb_color(u16 red, u16 green, u16 blue) {
 //==LED LOOP=========================================================================================
 void led_init(void)
 {
-    
     timer_clk = clk_get("timer");//先获取定时器的时钟源
     request_irq(timer_irq, 3, timer_isr, 0);//注册中断函数定和中断优先级
 #if 1
-    timer_set(1 * 100); //初始化1ms进一次中断
+    timer_set(1 * 10000); //初始化1ms进一次中断
 #else
     //timer_freq_set(10000);//设置10K频率进中断
 #endif
-    set_rgb_color(10000, 10000, 0); // 黄色！这里，与外部定义不同
+    //set_rgb_color(10000, 10000, 0); // 黄色！这里，与外部定义不同
     // struct pwm_platform_data pwm = {0};
     // struct pwm_platform_data pwm1 = {0};
     // // 打开PWM设备
-    // pwm_dev_handle = dev_open("pwm0", &pwm);
-    // // pwm_dev_handle_g = dev_open("pwm1", &pwm);
-    // if (pwm_dev_handle == NULL) {
-    //     log_i("pwm open failed\n");
-    //     return;
-    // }
+    pwm_dev_handl_r = dev_open("pwm0", &pwm_r);
+    pwm_dev_handl_g = dev_open("pwm1", &pwm_g);
+    pwm_dev_handl_b = dev_open("pwm2", &pwm_b);
+    if (pwm_dev_handl_r == NULL || pwm_dev_handl_g == NULL || pwm_dev_handl_b == NULL) {
+        log_i("pwm open failed\n");
+        return;
+    }
 
     // // 添加三个LED通道
     // pwm.pwm_ch = PWM_TIMER2_OPCH2;

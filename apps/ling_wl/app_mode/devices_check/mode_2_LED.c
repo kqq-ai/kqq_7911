@@ -6,8 +6,26 @@
 static void set_led_white(void)      { set_rgb_color(COLOR_WHITE); }
 static void set_led_black(void)      { set_rgb_color(COLOR_BLACK); }
 static void set_led_red(void)        { set_rgb_color(COLOR_RED); }
+static void set_led_red1(void)        { set_rgb_color(5,0,0); }
+static void set_led_red2(void)        { set_rgb_color(10,0,0); }
+static void set_led_red3(void)        { set_rgb_color(15,0,0); }
+static void set_led_red4(void)        { set_rgb_color(25,0,0); }
+static void set_led_red5(void)        { set_rgb_color(50,0,0); }
+static void set_led_red6(void)        { set_rgb_color(75,0,0); }
 static void set_led_green(void)      { set_rgb_color(COLOR_GREEN); }
+static void set_led_green1(void)        { set_rgb_color(0,5,0); }
+static void set_led_green2(void)        { set_rgb_color(0,10,0); }
+static void set_led_green3(void)        { set_rgb_color(0,15,0); }
+static void set_led_green4(void)        { set_rgb_color(0,25,0); }
+static void set_led_green5(void)        { set_rgb_color(0,50,0); }
+
 static void set_led_blue(void)       { set_rgb_color(COLOR_BLUE); }
+static void set_led_blue1(void)        { set_rgb_color(0,0,5); }
+static void set_led_blue2(void)        { set_rgb_color(0,0,10); }
+static void set_led_blue3(void)        { set_rgb_color(0,0,15); }
+static void set_led_blue4(void)        { set_rgb_color(0,0,25); }
+static void set_led_blue5(void)        { set_rgb_color(0,0,50); }
+
 static void set_led_cyan(void)       { set_rgb_color(COLOR_CYAN); }
 static void set_led_yellow(void)     { set_rgb_color(COLOR_YELLOW); }
 static void set_led_purple(void)     { set_rgb_color(COLOR_PURPLE); }
@@ -66,8 +84,23 @@ void process_mode_2(void)
         void (*all_color_functions[])(void) = {
             set_led_white,         // 白色 = 红+绿+蓝
             set_led_red,           // 红色 
+            set_led_red1,           // 红色 
+            set_led_red2,           // 红色 
+            set_led_red3,           // 红色 
+            set_led_red4,           // 红色 
+            set_led_red5,           // 红色 
             set_led_green,         // 绿色 
+            set_led_green1,           // 红色 
+            set_led_green2,           // 红色 
+            set_led_green3,           // 红色 
+            set_led_green4,           // 红色 
+            set_led_green5,           // 红色 
             set_led_blue,          // 蓝色 
+            set_led_blue1,           // 红色 
+            set_led_blue2,           // 红色 
+            set_led_blue3,           // 红色 
+            set_led_blue4,           // 红色 
+            set_led_blue5,           // 红色 
             set_led_cyan,          // 青色
             set_led_yellow,        // 黄色
             set_led_purple,        // 紫色 

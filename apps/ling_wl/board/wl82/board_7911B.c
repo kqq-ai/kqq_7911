@@ -406,7 +406,13 @@ static const struct video_platform_data video0_data = {
     .num = ARRAY_SIZE(video0_subdev_data),
 };
 #endif
-
+PWM_PLATFORM_DATA_BEGIN(pwm_data0)
+    .port   = IO_PORTA_08,
+    .pwm_ch = PWMCH1_L,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
+    .freq   = 2000,//频率
+    .duty   = 30,//占空比
+    .point_bit = 2,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
+PWM_PLATFORM_DATA_END()
 // PWM_PLATFORM_DATA_BEGIN(pwm_data0)
 //     .port   = IO_PORTC_01,
 //     .pwm_ch = PWM_TIMER3_OPCH3 | PWMCH4_L,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
@@ -414,14 +420,21 @@ static const struct video_platform_data video0_data = {
 //     .duty   = 90,//占空比
 //     .point_bit = 0,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
 // PWM_PLATFORM_DATA_END()
-
-// PWM_PLATFORM_DATA_BEGIN(pwm_data1)
-//     .port   = IO_PORTC_06,//选择定时器的TIMER PWM任意IO，pwm_ch加上PWM_TIMER3_OPCH3或PWM_TIMER2_OPCH2有效,只支持2个PWM,占用output_channel2/3，其他外设使用output_channel需留意
-//     .pwm_ch = PWM_TIMER2_OPCH2,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
-//     .freq   = 32768,//频率
-//     .duty   = 50,//占空比
-//     .point_bit = 0,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
-// PWM_PLATFORM_DATA_END()
+// 
+PWM_PLATFORM_DATA_BEGIN(pwm_data1)
+    .port   = IO_PORTA_10,//选择定时器的TIMER PWM任意IO，pwm_ch加上PWM_TIMER3_OPCH3或PWM_TIMER2_OPCH2有效,只支持2个PWM,占用output_channel2/3，其他外设使用output_channel需留意
+    .pwm_ch = PWM_TIMER2_OPCH2,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
+    .freq   = 2000,//频率
+    .duty   = 50,//占空比
+    .point_bit = 2,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
+PWM_PLATFORM_DATA_END()
+PWM_PLATFORM_DATA_BEGIN(pwm_data2)
+    .port   = IO_PORTA_09,//选择定时器的TIMER PWM任意IO，pwm_ch加上PWM_TIMER3_OPCH3或PWM_TIMER2_OPCH2有效,只支持2个PWM,占用output_channel2/3，其他外设使用output_channel需留意
+    .pwm_ch = PWM_TIMER3_OPCH3,//初始化可选多通道,如:PWMCH0_H | PWMCH0_L | PWMCH1_H ... | PWMCH7_H | PWMCH7_L | PWM_TIMER2_OPCH2 | PWM_TIMER3_OPCH3 ,
+    .freq   = 2000,//频率
+    .duty   = 50,//占空比
+    .point_bit = 2,//根据point_bit值调节占空比小数点精度位: 0<freq<=4K,point_bit=2;4K<freq<=40K,point_bit=1; freq>40K,point_bit=0;
+PWM_PLATFORM_DATA_END()
 
 
 #if TCFG_USB_SLAVE_ENABLE || TCFG_USB_HOST_ENABLE
@@ -506,8 +519,9 @@ const struct gpcnt_platform_data gpcnt_data = {
 
 
 REGISTER_DEVICES(device_table) = {
-    // { "pwm0",   &pwm_dev_ops,  (void *)&pwm_data0},
-    // { "pwm1",   &pwm_dev_ops,  (void *)&pwm_data1},
+    { "pwm0",   &pwm_dev_ops,  (void *)&pwm_data0},
+    { "pwm1",   &pwm_dev_ops,  (void *)&pwm_data1},
+    { "pwm2",   &pwm_dev_ops,  (void *)&pwm_data2},
 
     { "iic0",  &iic_dev_ops, (void *)&sw_iic0_data },
     // { "iic1",  &iic_dev_ops, (void *)&hw_iic1_data },
