@@ -358,7 +358,7 @@ static char* prepare_signature(const char server_url[])
     mbedtls_gcm_init(&ctx);
     mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
 
-    log_mqtt("pt:%s %.0f", pt, time_web);
+    // log_mqtt("pt:%s %.0f", pt, time_web);
     
     int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
                                             pt_len,
@@ -377,7 +377,7 @@ static char* prepare_signature(const char server_url[])
     base64_buf[base64_len] = '|';
     memcpy(base64_buf + base64_len + 1, base64_iv, base64_len_iv);
         // 计算总长度：查找第一个零字节
-    log_mqtt("base64_buf:%s", base64_buf);
+    // log_mqtt("base64_buf:%s", base64_buf);
     char post_sign_time[264];
     memset(&post_sign_time, 0x0, sizeof(post_sign_time));
     cJSON *root = cJSON_CreateObject();
