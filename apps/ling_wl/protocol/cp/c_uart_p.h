@@ -108,9 +108,6 @@ int uart_send_move_detect_en(uint8_t en);
 // #define COLOR_PURPLE      (4980),  (10000), (4980)    // 紫色(128,0,128)
 // #define COLOR_GRAY        (4980),  (4980),  (4980)    // 灰色(128,128,128)
 
-/* 5. 7911申请软关机 发送函数 */
-int uart_send_apply_soft_poweroff(void);
-
 /* 6. 指定广播配对码重新打开Audio广播 */
 int uart_send_open_le_audio(uint8_t *mac);
 

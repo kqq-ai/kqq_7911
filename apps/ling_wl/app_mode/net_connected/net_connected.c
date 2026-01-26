@@ -60,6 +60,9 @@ static void net_connected_event_handler_cb(lwl_event_t *e)
             lwl_app_mode_switch_to(APP_DEFAULT_MODE);
         }
         break;
+    case LWL_EVENT_TYPE_RST_KEY:
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
+        break;
     }
 }
 

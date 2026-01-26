@@ -154,6 +154,9 @@ static void on_key_short_press(void)
 static void on_key_long_press(void)
 {
     // log_i("[KEY SCAN]Long press -> 7911 soft poweroff!\n");
+    lwl_peri_dev_7016_on(false);
+    disable_gsensor();
+    set_rgb_ON(COLOR_BLACK, 20);
     power_set_soft_poweroff(0);
     
 }
