@@ -369,48 +369,6 @@ int send_audio_status(int type, int event)
     return 0;
 }
 
-// 只在连接成功后发送一次
-int send_audio_format(int type) 
-{
-    os_mutex_pend(&g_wss_mutex, 0);
-    if (g_ws_client_custom == NULL) {
-        wss_mark_exception("send_audio_format ws_client NULL");
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-
-    char *send_data = odmp_set_audio_format(sn_c_id, type);
-    if (send_data == NULL) {
-        log_e("[wss_app_util]send_audio_format: odmp_set_audio_format returned NULL");
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    size_t send_len = strlen(send_data);
-    if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
-        log_e("[wss_app_util]send_audio_format: payload too large (%u), drop", (u32)send_len);
-        free(send_data);
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
-    wss_send_time = timer_get_ms();
-
-    if (ret < 0) {
-        log_e("[wss_app_utils]Error %s %d. type=%d ret=%d", __FILE__, __LINE__, type, ret);
-        free(send_data);
-        ws_client_disconnect(g_ws_client_custom);
-        ws_client_destroy(g_ws_client_custom);
-        g_ws_client_custom = NULL;
-        wss_mark_exception("send_audio_format send failed");
-        os_mutex_post(&g_wss_mutex);
-        return -1;
-    }
-    log_i("[wss_app_util]wbs send msg : %s", send_data);
-    free(send_data);
-    os_mutex_post(&g_wss_mutex);
-    return 0;
-}
-
 int send_req_message(const char *send_id, bool is_play, int event_type) 
 {
     os_mutex_pend(&g_wss_mutex, 0);

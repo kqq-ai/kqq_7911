@@ -1475,6 +1475,7 @@ int ws_client_send_text(ws_client_t client, const u8 *data, u32 len)
     os_mutex_pend(&client->mutex, 0);
 
     if (client->state != WS_STATE_CONNECTED) {
+        log_w("[ws_custom]WARNING: WebSocket not connected, state=%d", client->state);
         os_mutex_post(&client->mutex);
         return -1;
     }
@@ -1493,6 +1494,8 @@ int ws_client_send_text(ws_client_t client, const u8 *data, u32 len)
         return -1;
     }
     if (rb_available(&client->send_rb) > (client->send_rb.capacity / 2)) {
+        log_w("[ws_custom]WARNING: Send buffer > 50%% full (%d/%d). Dropping frame len=%d to prevent bloat.", 
+              rb_available(&client->send_rb), client->send_rb.capacity, frame_len);
         os_mutex_post(&client->mutex);
         return -1;
     }

@@ -248,7 +248,7 @@ static void lwl_app_audio_stream_playback_thread(void *priv) {
       } else {
         uint32_t elapsed = timer_get_ms() - last_data_time;
         if (elapsed > STREAM_TIMEOUT_MS) {
-          log_i("[ERROR]【flow】stream timeout: no data for %u ms, exiting",
+          log_i("[ERROR]【flow】❌ stream timeout: no data for %u ms, exiting",
                 elapsed);
           break;
         }

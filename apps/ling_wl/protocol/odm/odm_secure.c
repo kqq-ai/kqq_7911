@@ -185,6 +185,12 @@ static int http_request_with_body(const char* url, const char* context, http_bod
         ret = httpcli_get(ctx);
     }
 
+    // 打印原始响应内容
+    log_i("[http_request] url=%s, ret=%d, recv_len=%d\n", url, ret, http_body_buf->recv_len);
+    if (http_body_buf->recv_len > 0 && http_body_buf->p) {
+        log_i("[http_request] raw_resp=%s\n", http_body_buf->p);
+    }
+
     // 关闭连接
     if (ret == 0) httpcli_close(ctx);
 
@@ -335,6 +341,10 @@ static char* prepare_signature(const char server_url[])
 
     // 将时间戳直接转换为字符串
     double time_web = https_get_timestamp(server_url);
+    if (time_web == 0) {
+        log_i("❌[prepare_signature] https_get_timestamp failed, aborting\n");
+        return NULL;
+    }
     char timestamp_str[21];   // 足够存储64位整数（最长20位数字+终止符）
     sprintf(timestamp_str, "%.0f", time_web);
     // 直接用strlen()获取实际长度（更简单）
