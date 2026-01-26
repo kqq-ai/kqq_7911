@@ -39,6 +39,14 @@ static void update_event_handler_cb(lwl_event_t *e)
     }
 }
 
+static int update_shutdown(void)
+{
+    lwl_peri_dev_7016_on(false);
+    disable_gsensor();
+    set_rgb_ON(COLOR_BLACK, 20);
+    power_set_soft_poweroff(0);
+}
+
 static int update_init(void)
 {
     init_time = timer_get_ms();
@@ -54,9 +62,11 @@ static int update_init(void)
 static int update_unint(void)
 {
     lwl_event_handler_remove(update_event_handler_cb);
-    play_system_music("OtaFailed.mp3");
+    lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"OtaFailed.mp3", update_shutdown);
+    sleep(5000);
     return 0;
 }
+
 void update_loop()
 {
     if (WIFI_CONNECT_SUCC != get_wifi_connect_status(NULL)) {
