@@ -110,24 +110,23 @@ void lwl_app_audio_play(const char *fname, void *priv)
     os_mutex_pend(&g_audio_mutex, 0);
     log_i("[AUDIO_LOCAL]lwl_app_audio_play: play %s", fname);
 
-    // 先停止所有其他播放
-    lwl_app_audio_stop_playing();
-    lwl_app_audio_stream_stop();
-    
-    // 启动本地文件播放
-    set_local_speaker();
-    int err = app_music_play_local_music_with_callback(
-        g_app_ctx->music_player, 
-        fname, 
-        lwl_app_audio_play_cb, 
-        NULL
-    );
-    
-    if (!err) {
-        g_play_voice_prompt = 1;
-        g_prompt_cb_priv = (music_cbk_t)priv;
-    }
-    os_mutex_post(&g_audio_mutex);
+  // 先停止所有其他播放
+  lwl_app_audio_stop_playing();
+  lwl_app_audio_stream_stop();
+  g_prompt_cb_priv = NULL;
+
+  // 启动本地文件播放
+  set_local_speaker();
+  int err = app_music_play_local_music_with_callback(
+      g_app_ctx->music_player, fname, lwl_app_audio_play_cb, NULL);
+
+  if (!err) {
+    g_play_voice_prompt = 1;
+    g_prompt_cb_priv = (music_cbk_t)priv;
+  } else {
+    g_play_voice_prompt = 0;
+  }
+  os_mutex_post(&g_audio_mutex);
 }
 
 /**
