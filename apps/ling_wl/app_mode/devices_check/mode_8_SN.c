@@ -321,7 +321,7 @@ static void mode8_wrsn_audio_callback(void *priv)
     
     log_i("MODE 8: test_sn_s.mp3 playback completed");
     g_audio_playing = 0;
-    uart_send_apply_soft_poweroff(); // 播放完成后发送关机指令
+    lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
     
     log_i("MODE 8: WRSN audio playback finished");
 }
@@ -726,4 +726,5 @@ void mode8_init()
 void mode8_uninit()
 {
     rwlock_destroy(&g_lfs_rwlock);
+    lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
 }

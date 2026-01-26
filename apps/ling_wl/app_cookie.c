@@ -85,10 +85,6 @@ void base_lwl_event_handler(lwl_event_t *e)
     switch (e->event_type) {
     case LWL_EVENT_TYPE_SHUTDOWN:
         log_i("base_lwl_event_handler LWL_EVENT_TYPE_SHUTDOWN\r\n");
-        if (lwl_app_mode_get_current_mode() == APP_POWER_ON_MODE) {
-            log_i("Already in default mode, proceed to shutdown\r\n");
-            break;
-        }
         disable_gsensor();
         lwl_app_mode_switch_to(APP_POWER_OFF_MODE);
         break;
@@ -117,16 +113,20 @@ void base_lwl_event_handler(lwl_event_t *e)
         break;
     case LWL_EVENT_TYPE_RST_KEY:
         g_sensor_reset_alive_timer();
-        log_i("PRESS RESET KEY\n");
-        break;
-    case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
-        log_i("CLEAR_WIFI\n");
         // Reset WiFi SSID
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
-        uart_response_clear_wifi_ssid();
-        // uart_send_apply_soft_poweroff(); // TODO restart
-        system_reset(); //restart
+        wifi_off();
+        //增加音效提示
+        play_system_music("reset_wifi.mp3");
+        log_i("PRESS RESET KEY\n");
         break;
+    // case LWL_EVENT_TYPE_UART_CLEAR_WIFI_SSID:
+    //     log_i("CLEAR_WIFI\n");
+    //     // Reset WiFi SSID
+    //     app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
+    //     uart_response_clear_wifi_ssid();
+    //     system_reset(); //restart
+    //     break;
     //电量同步
     case LWL_EVENT_TYPE_UART_SYNC:
         log_i("7016 SYNC v=1; battery: %d \n", e->uart_cmd_sync.battery);

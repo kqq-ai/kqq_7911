@@ -66,7 +66,7 @@ static int power_on_init(void)
         // Reset WiFi SSID
         app_del_stored_wifi_ssid(); // 清除设备保存过的所有wifi
         //增加音效提示
-        play_system_music("reset_wifi.mp3");
+        // play_system_music("reset_wifi.mp3");
         mdelay(3000);
         system_reset(); //restart
         return 0;

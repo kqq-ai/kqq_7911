@@ -192,15 +192,6 @@ int uart_send_move_detect_en(uint8_t en)
     return uart_send_inquiry(send_payload, 2);
 }
 
-/* 5. 7911申请软关机 发送函数 */
-int uart_send_apply_soft_poweroff(void)
-{
-    uint8_t send_payload[1];
-    memset(send_payload, 0, sizeof(send_payload));
-    send_payload[0] = UART_CMD_APPLY_SOFT_POWEROFF;
-    return uart_send_inquiry(send_payload, 1);
-}
-
 int uart_send_open_le_audio(uint8_t *mac)
 {
     // uint8_t payload[1 + 6] = {0};
