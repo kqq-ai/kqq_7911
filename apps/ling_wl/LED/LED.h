@@ -37,5 +37,7 @@ void led_init(void);
 void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority);
 void set_rgb_OFF(u16 red, u16 green, u16 blue, u16 priority);
 void set_rgb_color(u16 red, u16 green, u16 blue) ;
+/* Remove all entries with given priority (used to clean up persistent effects) */
+void remove_entries_by_priority(u16 priority);
 
 #endif

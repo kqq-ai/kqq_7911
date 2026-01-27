@@ -18,8 +18,4 @@ void led_breath_deinit(void); // 删除LED呼吸灯互斥锁
 
 void led_set_color(uint8_t r, uint8_t g, uint8_t b);
 
-int led_breath_start(uint16_t color1_r, uint16_t color1_g, uint16_t color1_b,
-                     uint16_t color2_r, uint16_t color2_g, uint16_t color2_b,
-                     uint16_t cycle_count, uint16_t transition_time_ms, uint8_t step_delay_ms);
-
 #endif /* LED_BREATH_H */

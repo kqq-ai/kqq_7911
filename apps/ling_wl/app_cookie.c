@@ -210,7 +210,7 @@ static void app_cookie_main(void)
 
     lwl_event_handler_add(base_lwl_event_handler);
 
-    // led_breath_init(); // 初始化LED呼吸灯
+    led_breath_init(); // 初始化LED呼吸灯
     // pthread_t monitor_thread;
     // pthread_create(&monitor_thread, NULL, led_breath_thread, NULL);
     

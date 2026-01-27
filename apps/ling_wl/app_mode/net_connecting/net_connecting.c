@@ -28,6 +28,7 @@
 #include "net_music_play_my.h"
 #include "log.h"
 #include "LED/LED.h"
+#include "util/led_breath.h"
 
 #define MODE_TIMEOUT_MS 180000 // 180s
 #define MOVE_TIMEOUT_MS 60000 // 60s
@@ -38,8 +39,8 @@ bool wifi_manager_state = false; // wifi manager 状态
 bool ble_connecting = false; // wifi manager 状态
 bool ble_connected = false; // wifi manager 状态
 
-static void set_led_connecting(void)        { set_rgb_color(COLOR_GREEN); }
-static void set_led_connected(void)         { set_rgb_color(COLOR_BLUE); }
+static void set_led_connecting(void)        { led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 400, 50); }
+static void set_led_connected(void)         { led_set_color(COLOR_BLUE); }
 static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_GREEN,2); }
 static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_GREEN,2); }
 
@@ -163,6 +164,9 @@ void app_net_connecting_loop()
     if (!get_ble_app_disconnect_flag()) {
         if (!ble_connected) {
             set_led_confirm_off();
+            // stop breath and set blue with priority 6
+            // led_set_color will stop breath and unregister entries
+            led_set_color(0,0,0);
             set_led_connected();
             play_system_music("bt_conneted.mp3");
             ble_connected = true;

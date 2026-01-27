@@ -12,6 +12,7 @@
 
 
 #include "asm/clock.h"
+#include "os/os_api.h"
 static JL_TIMER_TypeDef *TMR = JL_TIMER4;//选择定时器4
 static u8 timer_irq = IRQ_TIMER4_IDX;//选择定时器4
 
@@ -42,6 +43,8 @@ struct led_entry {
 };
 static struct led_entry led_entries[LED_MAX_ENTRIES];
 static u32 led_seq_counter = 0;
+/* 保护 led_entries 的互斥锁 */
+static OS_MUTEX g_led_entries_mutex;
 
 void *pwm_dev_handl_r = NULL;
 struct pwm_platform_data pwm_r = {0};
@@ -82,6 +85,18 @@ static int led_insert_entry(u16 red, u16 green, u16 blue, u16 priority)
         led_entries[0].priority = priority;
         return 0;
     }
+    /* If an entry with same priority exists, update it (avoid duplicating entries) */
+    for (int i = 0; i < LED_MAX_ENTRIES; i++) {
+        if (led_entries[i].used && led_entries[i].priority == priority) {
+            led_entries[i].red = red;
+            led_entries[i].green = green;
+            led_entries[i].blue = blue;
+            led_entries[i].seq = ++led_seq_counter;
+            log_d("LED: updated existing entry idx=%d priority=%d", i, priority);
+            return 0;
+        }
+    }
+    /* Find empty slot */
     for (int i = 0; i < LED_MAX_ENTRIES; i++) {
         if (!led_entries[i].used) {
             led_entries[i].used = 1;
@@ -90,10 +105,32 @@ static int led_insert_entry(u16 red, u16 green, u16 blue, u16 priority)
             led_entries[i].blue = blue;
             led_entries[i].priority = priority;
             led_entries[i].seq = ++led_seq_counter;
+            log_d("LED: inserted entry idx=%d priority=%d", i, priority);
             return 0;
         }
     }
-    return -1; /* full */
+    /* Table full: try to replace the lowest-priority (and oldest) entry if new priority is higher */
+    int cand = -1;
+    u16 min_pri = 0xFFFF;
+    u32 min_seq = 0xFFFFFFFF;
+    for (int i = 0; i < LED_MAX_ENTRIES; i++) {
+        if (!led_entries[i].used) continue;
+        if (led_entries[i].priority < min_pri || (led_entries[i].priority == min_pri && led_entries[i].seq < min_seq)) {
+            min_pri = led_entries[i].priority;
+            min_seq = led_entries[i].seq;
+            cand = i;
+        }
+    }
+    if (cand != -1 && priority > min_pri) {
+        log_w("LED entries full, replacing idx=%d (pri=%d) with new pri=%d", cand, min_pri, priority);
+        led_entries[cand].red = red;
+        led_entries[cand].green = green;
+        led_entries[cand].blue = blue;
+        led_entries[cand].priority = priority;
+        led_entries[cand].seq = ++led_seq_counter;
+        return 0;
+    }
+    return -1; /* full and not replaceable */
 }
 
 /* helper: remove the most-recent entry that exactly matches r,g,b,priority. Return 0 if removed, -1 if not found */
@@ -115,6 +152,25 @@ static int led_remove_matching_entry(u16 red, u16 green, u16 blue, u16 priority)
         return 0;
     }
     return -1;
+}
+
+/* Remove all entries that match the given priority */
+void remove_entries_by_priority(u16 priority)
+{
+    int removed = 0;
+    os_mutex_pend(&g_led_entries_mutex, 0);
+    for (int i = 0; i < LED_MAX_ENTRIES; i++) {
+        if (led_entries[i].used && led_entries[i].priority == priority) {
+            led_entries[i].used = 0;
+            removed++;
+        }
+    }
+    os_mutex_post(&g_led_entries_mutex);
+    if (removed) {
+        log_i("Removed %d LED entries with priority %d", removed, priority);
+    } else {
+        log_d("No LED entries found with priority %d to remove", priority);
+    }
 }
 
 static AWINLINE TSEC void timer_cfg(u32 freq, u32 us)
@@ -205,18 +261,20 @@ void set_rgb_LED(u16 red, u16 green, u16 blue) {
         dev_write(pwm_dev_handl_r, (void *)&pwm_r, 0);
         pwm_g.pwm_ch = PWM_TIMER2_OPCH2;
         pwm_g.duty = 100 - (green / 3);
-        dev_write(pwm_dev_handl_r, (void *)&pwm_g, 0);
+        dev_write(pwm_dev_handl_g, (void *)&pwm_g, 0);
         pwm_b.pwm_ch = PWM_TIMER3_OPCH3;
         pwm_b.duty = 100 - (blue / 3);
-        dev_write(pwm_dev_handl_r, (void *)&pwm_b, 0);
+        dev_write(pwm_dev_handl_b, (void *)&pwm_b, 0);
     }
 }
 
 void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
     // 新行为：插入一条记录并按 (priority desc, seq desc) 选取第一位显示
     log_i("Event set_rgb_ON: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
+    os_mutex_pend(&g_led_entries_mutex, 0);
     if (led_insert_entry(red, green, blue, priority) != 0) {
         log_w("LED entries full, cannot insert new entry\n");
+        os_mutex_post(&g_led_entries_mutex);
         return;
     }
 
@@ -226,14 +284,16 @@ void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
         set_rgb_LED(led_entries[best].red, led_entries[best].green, led_entries[best].blue);
         g_priority_LED = led_entries[best].priority;
     }
+    os_mutex_post(&g_led_entries_mutex);
 }
 
 void set_rgb_OFF(u16 red, u16 green, u16 blue, u16 priority) {
     // 新行为：删除与 (r,g,b,priority) 完全匹配的最新一条记录
     log_i("Event set_rgb_OFF: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
-
+    os_mutex_pend(&g_led_entries_mutex, 0);
     if (led_remove_matching_entry(red, green, blue, priority) != 0) {
         log_w("No matching LED entry found to remove\n");
+        os_mutex_post(&g_led_entries_mutex);
         return;
     }
 
@@ -247,6 +307,7 @@ void set_rgb_OFF(u16 red, u16 green, u16 blue, u16 priority) {
         set_rgb_LED(0, 0, 0);
         g_priority_LED = 0;
     }
+    os_mutex_post(&g_led_entries_mutex);
 }
 
 void set_rgb_color(u16 red, u16 green, u16 blue) {
@@ -275,6 +336,8 @@ void led_init(void)
         log_i("pwm open failed\n");
         return;
     }
+    /* 初始化 led_entries 互斥锁 */
+    os_mutex_create(&g_led_entries_mutex);
 
     // // 添加三个LED通道
     // pwm.pwm_ch = PWM_TIMER2_OPCH2;
