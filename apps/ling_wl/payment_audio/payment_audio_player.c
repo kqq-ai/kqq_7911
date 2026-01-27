@@ -427,9 +427,33 @@ void payment_audio_open(void *priv)
         pend_msg = (struct payment_msg *)msg[1];
 
         memset(recv_buf, 0, sizeof(recv_buf));
-        integer_len = strchr(pend_msg->buf, '.') - pend_msg->buf;
-        strcpy(recv_buf, pend_msg->buf);
-        recv_buf[integer_len] = 'p';
+        // 修复：添加边界检查，防止缓冲区溢出
+        char *dot_pos = strchr(pend_msg->buf, '.');
+        if (dot_pos == NULL) {
+            log_e("[payment_audio]No '.' found in pend_msg->buf");
+            continue;
+        }
+        integer_len = dot_pos - pend_msg->buf;
+        
+        // 检查pend_msg->buf的长度
+        size_t pend_msg_len = strlen(pend_msg->buf);
+        size_t recv_buf_size = sizeof(recv_buf);
+        if (pend_msg_len >= recv_buf_size) {
+            log_e("[payment_audio]pend_msg->buf too long: %zu >= %zu, truncating", 
+                  pend_msg_len, recv_buf_size);
+            pend_msg_len = recv_buf_size - 1;
+        }
+        
+        strncpy(recv_buf, pend_msg->buf, recv_buf_size - 1);
+        recv_buf[recv_buf_size - 1] = '\0';  // 确保终止符
+        
+        // 确保integer_len在有效范围内
+        if (integer_len < recv_buf_size) {
+            recv_buf[integer_len] = 'p';
+        } else {
+            log_e("[payment_audio]integer_len %d >= recv_buf_size %zu", 
+                  integer_len, recv_buf_size);
+        }
         memset(pend_msg->buf, 0, sizeof(pend_msg->buf));
         buff_integration(pend_msg->buf, recv_buf, integer_len);
 

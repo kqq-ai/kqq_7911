@@ -12,8 +12,8 @@ void disable_gsensor();
 #ifdef TEST_SERVER
 
     #define LOCAL_VERSION_CODE "v2.0.100"
-    #define SERVER_DOMAIN  "test.coolqq.com"
-    // #define SERVER_DOMAIN  "dev.coolqq.com"
+    // #define SERVER_DOMAIN  "test.coolqq.com"
+    #define SERVER_DOMAIN  "dev.coolqq.com"
     // #define TEST_LOCOL_SERVER "test"// 设置为连接本地调试服务器
 
 #else

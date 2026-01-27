@@ -141,15 +141,25 @@ static void dec_server_event_handler(void *priv, int argc, int *argv)
         if (player->cmp_file != (void *)argv[1]) {
             log_e("not the same file, may be closed! %p %p\n", player->cmp_file, (void *)argv[1]);
         }
-        /* os_time_dly(3); */
-        union audio_req r = {0};
-        r.dec.cmd = AUDIO_DEC_PAUSE;
-        if (player->dec_server) {
-            server_request(player->dec_server, AUDIO_REQ_DEC, &r);
-        }
         led_ui_post_msg("dec_end");
-        
-        app_music_play_stop(player);
+
+        /*
+         * Fix decoder lifecycle:
+         * Correct flow is AUDIO_DEC_OPEN -> AUDIO_DEC_START -> (AUDIO_DEC_PAUSE optional) -> AUDIO_DEC_STOP.
+         * After END/ERR we must actively send AUDIO_DEC_STOP to release decoder resources,
+         * otherwise next AUDIO_DEC_OPEN may fail.
+         *
+         * Also avoid calling app_music_play_stop() here because we're already holding audio_play_mutex;
+         * app_music_play_stop() will pend the same mutex again.
+         */
+        if (player->dec_ops && AUDIO_DEC_STOP != player->dec_ops->dec_status(player)) {
+            player->dec_ops->dec_stop(player); // dec_stop() issues AUDIO_DEC_STOP and cleans up file/handler
+            // Execute end callback once
+            if (player->dec_with_cb && player->dec_end_cb != NULL) {
+                player->dec_end_cb(player->dec_end_cb_priv);
+                player->dec_end_cb = NULL;
+            }
+        }
         /* player->play_time = 0; */
         break;
     case AUDIO_SERVER_EVENT_CURR_TIME:

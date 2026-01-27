@@ -58,7 +58,9 @@ static u8 wifi_cmdq_tcb_stk_q[sizeof(struct thread_parm) + WIFI_CMDQ_STK_SIZE * 
 #define WIFI_MLME_STK_SIZE 700
 static u8 wifi_mlme_tcb_stk_q[sizeof(struct thread_parm) + WIFI_MLME_STK_SIZE * 4] ALIGNE(4);
 
-#define WIFI_RX_STK_SIZE 256
+// wl_rx_irq_thread 栈太小会触发 stackoverflow/随机 axi_* 复位（日志里 current_task: wl_rx_irq_thread）
+// WiFi RX 路径在高压（收包/协议栈/日志）场景下 2KB 仍可能不够，提升到 1024 => 4KB 先把“栈不够”排除。
+#define WIFI_RX_STK_SIZE 1024
 static u8 wifi_rx_tcb_stk_q[sizeof(struct thread_parm) + WIFI_RX_STK_SIZE * 4] ALIGNE(4);
 
 

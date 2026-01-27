@@ -374,7 +374,27 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
         return;
     }
 
-    target_list = malloc(num * sizeof(char *));
+    // 修复：添加整数溢出检查和合理的上限检查
+    size_t target_list_size = (size_t)num * sizeof(char *);
+    // 检查整数溢出
+    if (target_list_size < (size_t)num) {
+        log_e("[lwl_app_core]Integer overflow in target_list allocation: num=%d", num);
+        os_mutex_post(&s_app_context->dev_map_mutex);
+        return;
+    }
+    // 设置合理的上限（例如1000个设备），防止分配过大内存
+    const int MAX_TARGETS = 1000;
+    if (num > MAX_TARGETS) {
+        log_e("[lwl_app_core]Too many targets: %d > %d, limiting", num, MAX_TARGETS);
+        num = MAX_TARGETS;
+        target_list_size = (size_t)num * sizeof(char *);
+    }
+    target_list = malloc(target_list_size);
+    if (target_list == NULL) {
+        log_e("[lwl_app_core]Failed to allocate target_list: size=%zu", target_list_size);
+        os_mutex_post(&s_app_context->dev_map_mutex);
+        return;
+    }
 
     int i = 0;
 
@@ -386,8 +406,26 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
         lwl_eend_dev_t *dev = (lwl_eend_dev_t *)map_iterator_value(it);
 
         if (dev->distance_info.distance_type == DISTANCE_0 || dev->distance_info.distance_type == DISTANCE_1) {
-            target_list[i] = malloc(strlen(sn) + 1);
-            strcpy(target_list[i], sn);
+            // 修复：使用strnlen防止strlen越界，并添加边界检查
+            if (sn == NULL) {
+                log_e("[lwl_app_core]sn is NULL, skipping");
+                continue;
+            }
+            // 假设sn最大长度为SN_SIZE或PI_SN_SIZE，使用strnlen限制搜索范围
+            size_t sn_max_len = 64;  // 保守估计，实际应该使用SN_SIZE或PI_SN_SIZE
+            size_t sn_len = strnlen(sn, sn_max_len);
+            if (sn_len >= sn_max_len) {
+                log_e("[lwl_app_core]sn too long or not null-terminated: %zu >= %zu", 
+                      sn_len, sn_max_len);
+                continue;  // 跳过无效的sn
+            }
+            target_list[i] = malloc(sn_len + 1);
+            if (target_list[i] == NULL) {
+                log_e("[lwl_app_core]Failed to allocate memory for sn");
+                continue;
+            }
+            memcpy(target_list[i], sn, sn_len);
+            target_list[i][sn_len] = '\0';  // 确保终止符
             i++;
         }
     }

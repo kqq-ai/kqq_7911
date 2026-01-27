@@ -159,18 +159,25 @@ static int app_uart_task(void *arg)
         log_d("========uart recv len: %p %d =========\n", g_dev_uart_hdl, len);
         if (len > 0)
         {
-            // 数据拼接到缓存
+            // 修复：先检查边界，再复制数据，防止缓冲区溢出
+            size_t packet_buf_size = sizeof(packet_buf);
+            if (packet_idx + len > packet_buf_size) {
+                log_d("Packet buffer overflow detected (idx=%d, len=%d, max=%zu), clearing buffer.\n", 
+                      packet_idx, len, packet_buf_size);
+                packet_idx = 0;
+                memset(packet_buf, 0, sizeof(packet_buf));
+                // 如果单次接收的数据就超过缓冲区，截断处理
+                if (len > packet_buf_size) {
+                    log_d("Warning: single packet too large (%d > %zu), truncating\n", 
+                          len, packet_buf_size);
+                    len = packet_buf_size;
+                }
+            }
+            
+            // 数据拼接到缓存（边界已检查）
             memcpy(packet_buf + packet_idx, g_recv_buf, len);
             packet_idx += len;
             log_d("================the packet_idx : %d ==============\r\n", packet_idx);
-
-            // 检查是否超过最大缓冲区长度
-            if (packet_idx >= UART_RECV_BUF_SIZE) {
-                log_d("Packet buffer overflow, clearing buffer.\n");
-                packet_idx = 0;
-                memset(packet_buf, 0, sizeof(packet_buf));
-                continue; // 跳过本次循环，重新读取数据
-            }
 
 
             // 搜索包头并解析数据包

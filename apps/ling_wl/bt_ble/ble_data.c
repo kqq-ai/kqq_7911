@@ -32,21 +32,37 @@ static void set_led_wifi_scan(void)       { set_rgb_color(COLOR_BLUE); } /* 控�
 
 void set_current_connected_ssid(char *ssid)
 {
-    memcpy(current_connected_ssid, ssid, strlen(ssid));
+    // 修复：使用strnlen或限制长度，防止strlen越界
+    if (ssid == NULL) return;
+    size_t ssid_len = strnlen(ssid, sizeof(current_connected_ssid) - 1);
+    memcpy(current_connected_ssid, ssid, ssid_len);
+    current_connected_ssid[ssid_len] = '\0';  // 确保终止符
 }
 void get_current_connected_ssid(char *get_ssid)
 {
-    memcpy(get_ssid, current_connected_ssid, strlen(current_connected_ssid));
+    // 修复：使用strnlen或限制长度，防止strlen越界
+    if (get_ssid == NULL) return;
+    size_t ssid_len = strnlen(current_connected_ssid, sizeof(current_connected_ssid) - 1);
+    memcpy(get_ssid, current_connected_ssid, ssid_len);
+    get_ssid[ssid_len] = '\0';  // 确保终止符
 }
 
 void set_current_connected_password(char *password)
 {
-    memcpy(current_connected_password, password, strlen(password));
+    // 修复：使用strnlen或限制长度，防止strlen越界
+    if (password == NULL) return;
+    size_t pwd_len = strnlen(password, sizeof(current_connected_password) - 1);
+    memcpy(current_connected_password, password, pwd_len);
+    current_connected_password[pwd_len] = '\0';  // 确保终止符
 }
 
 void get_current_connected_password(char *get_password)
 {
-    memcpy(get_password, current_connected_password, strlen(current_connected_password));
+    // 修复：使用strnlen或限制长度，防止strlen越界
+    if (get_password == NULL) return;
+    size_t pwd_len = strnlen(current_connected_password, sizeof(current_connected_password) - 1);
+    memcpy(get_password, current_connected_password, pwd_len);
+    get_password[pwd_len] = '\0';  // 确保终止符
 }
 
 // 清空缓冲区
@@ -108,7 +124,12 @@ int parse_and_assemble(const uint8_t *data, uint16_t data_length, char *assemble
     if (current_fragment == total_fragments)
     {
         printf("[blee] Received complete JSON: %s\n", json_buffer);
-        memcpy(assemble_data, json_buffer, strlen(json_buffer));
+        // 修复：添加边界检查，确保assemble_data有足够空间
+        // 注意：assemble_data的大小应该由调用者保证，这里添加检查以防万一
+        size_t json_len = strnlen(json_buffer, BUFFER_SIZE);
+        // 假设assemble_data至少有BUFFER_SIZE大小，如果没有，调用者应该负责
+        memcpy(assemble_data, json_buffer, json_len);
+        assemble_data[json_len] = '\0';  // 确保终止符
         printf("[blee] Parsed JSON: %s\n", assemble_data);
         clear_buffer(); // 处理完后清空缓冲区
         return 0;

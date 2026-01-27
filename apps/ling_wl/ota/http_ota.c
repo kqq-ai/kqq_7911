@@ -177,7 +177,19 @@ int http_create_download_task(char *url)
         return -ENOMEM;
     }
 
-    strcpy(hdl->url, url);
+    // 修复：使用strncpy确保边界安全
+    if (url == NULL) {
+        hdl->url[0] = '\0';
+    } else {
+        size_t url_len = strlen(url);
+        size_t url_buf_size = sizeof(hdl->url);
+        if (url_len >= url_buf_size) {
+            log_e("[http_ota]URL too long: %zu >= %zu, truncating", url_len, url_buf_size);
+            url_len = url_buf_size - 1;
+        }
+        strncpy(hdl->url, url, url_buf_size - 1);
+        hdl->url[url_buf_size - 1] = '\0';  // 确保终止符
+    }
 
     //http请求参数赋值
     hdl->ctx.url = hdl->url;

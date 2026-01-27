@@ -31,7 +31,7 @@
 
 //debug
 //#define MBEDTLS_DEBUG_C
-//#define MBEDTLS_ERROR_C
+#define MBEDTLS_ERROR_C /* enable mbedtls_strerror() */
 
 //add
 #define MBEDTLS_SSL_PROTO_TLS1

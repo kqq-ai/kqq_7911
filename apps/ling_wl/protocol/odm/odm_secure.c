@@ -44,8 +44,14 @@ size_t hex2bytes(const char *hex_str, uint8_t *bytes)
 
     size_t byte_count = len / 2;
     for (size_t i = 0; i < byte_count; ++i) {
-        char hi = hex_str[i * 2];
-        char lo = hex_str[i * 2 + 1];
+        // 修复：添加边界检查，防止数组越界
+        size_t idx_hi = i * 2;
+        size_t idx_lo = i * 2 + 1;
+        if (idx_lo >= len) {
+            return 0;  // 越界，返回错误
+        }
+        char hi = hex_str[idx_hi];
+        char lo = hex_str[idx_lo];
 
         // 检查字符合法性
         if (!isxdigit((unsigned char)hi) || !isxdigit((unsigned char)lo))
@@ -141,11 +147,7 @@ static void get_SN_from_OTP()
 }
 
 bool get_SN(char* SN){
-#ifdef TEST_SERVER
     if (snInVm[0] == 0) get_SN_from_lfs();
-#else
-    if (snInVm[0] == 0) get_SN_from_OTP();
-#endif
     if (snInVm[0] == 0 || strlen(snInVm) != SN_SIZE || WRITE_SN_KEY) {
         log_i("❌get_SN NULL\n");
         snInVm[0] = 0;
@@ -154,6 +156,147 @@ bool get_SN(char* SN){
     }
     snprintf(SN, KEY_SIZE, "%s", snInVm);
     return true;
+}
+
+// 从URL中提取host和port
+static void extract_host_from_url(const char* url, char* host, size_t host_size, int* port) {
+    const char* http_protocol = "http://";
+    const char* https_protocol = "https://";
+    const char* host_start = NULL;
+    const char* protocol = NULL;
+    
+    if (strncmp(url, https_protocol, strlen(https_protocol)) == 0) {
+        protocol = https_protocol;
+        *port = 443;  // 默认HTTPS端口
+    } else if (strncmp(url, http_protocol, strlen(http_protocol)) == 0) {
+        protocol = http_protocol;
+        *port = 80;   // 默认HTTP端口
+    } else {
+        host[0] = '\0';
+        return;
+    }
+    
+    host_start = url + strlen(protocol);
+    const char* host_end = strpbrk(host_start, ":/");
+    
+    if (host_end == NULL) {
+        host_end = host_start + strlen(host_start);
+    }
+    
+    size_t host_len = host_end - host_start;
+    if (host_len >= host_size) {
+        host_len = host_size - 1;
+    }
+    memcpy(host, host_start, host_len);
+    host[host_len] = '\0';
+    
+    // 检查是否有端口号
+    if (*host_end == ':') {
+        *port = atoi(host_end + 1);
+    }
+}
+
+// 打印HTTP请求头信息（打印所有headers内容）
+static void print_http_headers(const char* url, const char* method, const char* context, httpcli_ctx* ctx) {
+    char host[128] = {0};
+    int port = 0;
+    const char* path = NULL;
+    
+    extract_host_from_url(url, host, sizeof(host), &port);
+    
+    // 提取路径
+    const char* path_start = strstr(url, host);
+    if (path_start) {
+        path_start += strlen(host);
+        if (*path_start == ':') {
+            path_start = strchr(path_start, '/');
+        } else if (*path_start != '/') {
+            path_start = strchr(path_start, '/');
+        }
+        path = path_start ? path_start : "/";
+    } else {
+        path = "/";
+    }
+    
+    log_i("========== HTTP Request Headers ==========\n");
+    log_i("Method: %s\n", method);
+    log_i("URL: %s\n", url);
+    log_i("Path: %s\n", path);
+    
+    // 打印 Host 头
+    log_i("Host: %s", host);
+    if ((port != 80 && port != 443) || (port == 80 && strstr(url, "https://") == NULL && strstr(url, "http://") != NULL)) {
+        log_i(":%d", port);
+    }
+    log_i("\n");
+    
+    // 打印 Connection 头
+    if (ctx->connection && strlen(ctx->connection) > 0) {
+        log_i("Connection: %s\n", ctx->connection);
+    }
+    
+    // 打印 Content-Type 和 Content-Length（如果是 POST 请求）
+    if (context && strlen(context) > 0) {
+        if (ctx->data_format && strlen(ctx->data_format) > 0) {
+            log_i("Content-Type: %s\n", ctx->data_format);
+        }
+        if (ctx->data_len > 0) {
+            log_i("Content-Length: %d\n", ctx->data_len);
+        }
+    }
+    
+    // 打印 Cookie（如果存在）
+    if (ctx->cookie && strlen(ctx->cookie) > 0) {
+        log_i("Cookie: %s\n", ctx->cookie);
+    }
+    
+    // 打印用户自定义的 HTTP 头（逐行解析并打印所有内容）
+    if (ctx->user_http_header && strlen(ctx->user_http_header) > 0) {
+        const char* header_ptr = ctx->user_http_header;
+        const char* line_start = header_ptr;
+        
+        while (*header_ptr != '\0') {
+            // 查找行结束符（\r\n 或 \n）
+            if (*header_ptr == '\r' && *(header_ptr + 1) == '\n') {
+                // 打印这一行（如果非空）
+                if (header_ptr > line_start) {
+                    size_t line_len = header_ptr - line_start;
+                    if (line_len > 0) {
+                        char line_buf[256];
+                        size_t copy_len = (line_len < sizeof(line_buf) - 1) ? line_len : sizeof(line_buf) - 1;
+                        memcpy(line_buf, line_start, copy_len);
+                        line_buf[copy_len] = '\0';
+                        log_i("%s\n", line_buf);
+                    }
+                }
+                header_ptr += 2;  // 跳过 \r\n
+                line_start = header_ptr;
+            } else if (*header_ptr == '\n') {
+                // 打印这一行（如果非空）
+                if (header_ptr > line_start) {
+                    size_t line_len = header_ptr - line_start;
+                    if (line_len > 0) {
+                        char line_buf[256];
+                        size_t copy_len = (line_len < sizeof(line_buf) - 1) ? line_len : sizeof(line_buf) - 1;
+                        memcpy(line_buf, line_start, copy_len);
+                        line_buf[copy_len] = '\0';
+                        log_i("%s\n", line_buf);
+                    }
+                }
+                header_ptr += 1;  // 跳过 \n
+                line_start = header_ptr;
+            } else {
+                header_ptr++;
+            }
+        }
+        
+        // 打印最后一行（如果没有以换行符结尾）
+        if (*line_start != '\0' && header_ptr > line_start) {
+            log_i("%s\n", line_start);
+        }
+    }
+    
+    log_i("==========================================\n");
 }
 
 // 通用HTTP请求函数，当context为空则用httpcli_get，否则用httpcli_post
@@ -176,7 +319,11 @@ static int http_request_with_body(const char* url, const char* context, http_bod
     }
 
     ctx->url = (char*)url;
-    ctx->timeout_millsec = 100;
+    /*
+     * HTTPS handshake + first response often exceeds 100ms on real networks.
+     * Too small timeout will cause mbedTLS recv to fail with -0x004c.
+     */
+    ctx->timeout_millsec = 8000;
     ctx->priv = http_body_buf;
     ctx->connection = "close";
 
@@ -184,8 +331,10 @@ static int http_request_with_body(const char* url, const char* context, http_bod
         ctx->post_data = (char*)context;
         ctx->data_len = strlen(ctx->post_data);
         ctx->data_format = "application/json";
+        print_http_headers(url, "POST", context, ctx);
         ret = httpcli_post(ctx);
     } else {
+        print_http_headers(url, "GET", NULL, ctx);
         ret = httpcli_get(ctx);
     }
 
@@ -295,7 +444,6 @@ static double https_get_timestamp(char* url)
     double time_stamp_web = 0;
 
     if (ret != HERROR_OK) {
-        log_i("https_get_timestamp ERROR");
         if (http_body_buf.p) free(http_body_buf.p);
         return 0;
     } else {
@@ -328,7 +476,6 @@ static char* prepare_signature(const char server_url[])
         0x75, 0x00, 0x52, 0x56, 0xdb, 0x21, 0xcc, 0xc7, 0x90, 0x55, 0x28, 0x1b  };
 
     const size_t pt_len = 29;
-    pt[SN_SIZE] = '|';
     unsigned char buf[BUF_SIZE];
     unsigned char tag_buf[BUF_SIZE];
     unsigned char base64_buf[BUF_SIZE];
@@ -337,12 +484,10 @@ static char* prepare_signature(const char server_url[])
     memset(tag_buf, 0, BUF_SIZE);
     memset(base64_buf, 0, BUF_SIZE);
     memset(base64_iv, 0, BUF_SIZE);
-
+    memset(pt, 0, sizeof(pt));  // 初始化pt数组
 
     mbedtls_gcm_context ctx;
     mbedtls_cipher_id_t cipher = MBEDTLS_CIPHER_ID_AES;
-
-    memcpy(pt , snInVm, SN_SIZE);
 
     // 将时间戳直接转换为字符串
     double time_web = https_get_timestamp(server_url);
@@ -350,15 +495,22 @@ static char* prepare_signature(const char server_url[])
         log_i("❌[prepare_signature] https_get_timestamp failed, aborting\n");
         return NULL;
     }
-    char timestamp_str[21];   // 足够存储64位整数（最长20位数字+终止符）
-    sprintf(timestamp_str, "%.0f", time_web);
-    // 直接用strlen()获取实际长度（更简单）
-    size_t actual_length = strlen(timestamp_str);
-    memcpy(pt + SN_SIZE + 1, timestamp_str, actual_length);  // SN + 1
+    // 修复：将double转换为long long再格式化，避免精度问题
+    long long timestamp_int = (long long)time_web;
+    // 使用snprintf直接构建完整的pt字符串，更安全可靠
+    int ret_snprintf = snprintf(pt, sizeof(pt), "%.*s|%lld", SN_SIZE, snInVm, timestamp_int);
+    if (ret_snprintf < 0 || ret_snprintf >= (int)sizeof(pt)) {
+        log_i("❌[prepare_signature] pt string construction failed, ret=%d, sizeof(pt)=%zu\n", ret_snprintf, sizeof(pt));
+        return NULL;
+    }
+    size_t actual_length = strlen(pt);
+    if (actual_length == 0) {
+        log_i("❌[prepare_signature] pt is empty, time_web=%.0f, timestamp_int=%lld\n", time_web, timestamp_int);
+        return NULL;
+    }
     mbedtls_gcm_init(&ctx);
     mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
-
-    // log_mqtt("pt:%s %.0f", pt, time_web);
+    log_i("pt:%s", pt);
     
     int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
                                             pt_len,
@@ -374,10 +526,17 @@ static char* prepare_signature(const char server_url[])
     size_t base64_len = 0;
     mbedtls_base64_encode(base64_buf, BUF_SIZE,  &base64_len,  buf, pt_len + KEY_SIZE);
 
+    // 修复：添加边界检查，防止缓冲区溢出
+    if (base64_len + 1 + base64_len_iv > BUF_SIZE) {
+        log_i("❌[prepare_signature] base64 buffer overflow: len=%zu, iv_len=%zu, max=%d\n", 
+              base64_len, base64_len_iv, BUF_SIZE);
+        return NULL;
+    }
     base64_buf[base64_len] = '|';
     memcpy(base64_buf + base64_len + 1, base64_iv, base64_len_iv);
         // 计算总长度：查找第一个零字节
-    // log_mqtt("base64_buf:%s", base64_buf);
+    log_i("base64_buf:%s", base64_buf);
+
     char post_sign_time[264];
     memset(&post_sign_time, 0x0, sizeof(post_sign_time));
     cJSON *root = cJSON_CreateObject();
@@ -387,7 +546,22 @@ static char* prepare_signature(const char server_url[])
     cJSON_AddNumberToObject(root, "timestamp", time_stamp_double );
     char *json_str = cJSON_PrintUnformatted(root);
 
-    memcpy(post_sign_time, json_str, strlen(json_str)); //整合结果，存储在  post_sign_time
+    // 修复：添加边界检查，防止JSON字符串溢出
+    if (json_str == NULL) {
+        log_i("❌[prepare_signature] cJSON_PrintUnformatted returned NULL\n");
+        cJSON_Delete(root);
+        return NULL;
+    }
+    size_t json_str_len = strlen(json_str);
+    if (json_str_len >= sizeof(post_sign_time)) {
+        log_i("❌[prepare_signature] JSON string too long: %zu >= %zu\n", 
+              json_str_len, sizeof(post_sign_time));
+        free(json_str);
+        cJSON_Delete(root);
+        return NULL;
+    }
+    memcpy(post_sign_time, json_str, json_str_len); //整合结果，存储在  post_sign_time
+    post_sign_time[json_str_len] = '\0';  // 确保终止符
 
     // 清理资源
     free(json_str);

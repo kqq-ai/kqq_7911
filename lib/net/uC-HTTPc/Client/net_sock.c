@@ -167,6 +167,39 @@ static void my_debug(void *ctx, int level,
     mbedtls_printf("%s", str);
 }
 
+/*
+ * Wrap mbedtls_net_{recv,send} so we can print underlying socket error on
+ * failures like MBEDTLS_ERR_NET_RECV_FAILED (-0x004c).
+ * This helps distinguish "server closed / protocol mismatch" vs "network down".
+ */
+static int tls_net_recv(void *ctx, unsigned char *buf, size_t len)
+{
+    int ret = mbedtls_net_recv(ctx, buf, len);
+    if (ret < 0) {
+        mbedtls_net_context *net_ctx = (mbedtls_net_context *)ctx;
+        int soerr = 0;
+        if (net_ctx && net_ctx->hdl) {
+            soerr = sock_get_error(net_ctx->hdl);
+        }
+        printf("[https][tls_net_recv2] ret=%d soerr=%d\r\n", ret, soerr);
+    }
+    return ret;
+}
+
+static int tls_net_send(void *ctx, const unsigned char *buf, size_t len)
+{
+    int ret = mbedtls_net_send(ctx, buf, len);
+    if (ret < 0) {
+        mbedtls_net_context *net_ctx = (mbedtls_net_context *)ctx;
+        int soerr = 0;
+        if (net_ctx && net_ctx->hdl) {
+            soerr = sock_get_error(net_ctx->hdl);
+        }
+        printf("[https][tls_net_send] ret=%d soerr=%d\r\n", ret, soerr);
+    }
+    return ret;
+}
+
 static void *ssl_connect(char *hostname, char *port, int to_ms, void *ctx, char *server_name);
 static int ssl_write(void *hdl, const void *buf, u32_t len, int flag);
 static int ssl_read(void *hdl, void *buf, u32_t len, int flag);
@@ -738,12 +771,11 @@ static void *ssl_connect(char *hostname, char *port, int to_ms, void *ctx, char 
         }
     }
 
-    const char *alpnProtocols[] = { "x-amzn-http-ca", NULL };
-    ret = mbedtls_ssl_conf_alpn_protocols(&(tls_ctx->conf), alpnProtocols);
-    if (ret < 0) {
-        mbedtls_printf(" failed\n  !  returne_ssl_conf_alpn_protocols returned %d\n\n", ret);
-        goto exit;
-    }
+    /*
+     * Do not force ALPN here.
+     * The previous value ("x-amzn-http-ca") is AWS-IoT-specific and may cause
+     * generic HTTPS servers to abort the handshake.
+     */
 
     if ((ret = mbedtls_ssl_setup(&tls_ctx->ssl, &tls_ctx->conf)) != 0) {
         mbedtls_printf(" failed\n  ! mbedtls_ssl_setup returned %d\n\n", ret);
@@ -755,7 +787,7 @@ static void *ssl_connect(char *hostname, char *port, int to_ms, void *ctx, char 
         goto exit;
     }
 
-    mbedtls_ssl_set_bio(&tls_ctx->ssl, &tls_ctx->server_fd, mbedtls_net_send, mbedtls_net_recv, NULL);
+    mbedtls_ssl_set_bio(&tls_ctx->ssl, &tls_ctx->server_fd, tls_net_send, tls_net_recv, NULL);
 
     /*
      * 4. Handshake
@@ -764,7 +796,13 @@ static void *ssl_connect(char *hostname, char *port, int to_ms, void *ctx, char 
 
     while ((ret = mbedtls_ssl_handshake(&tls_ctx->ssl)) != 0) {
         if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
-            mbedtls_printf(" failed\n  ! mbedtls_ssl_handshake returned -0x%x\n\n", -ret);
+            char error_buf[128] = {0};
+#if defined(MBEDTLS_ERROR_C)
+            mbedtls_strerror(ret, error_buf, sizeof(error_buf));
+#else
+            snprintf(error_buf, sizeof(error_buf), "mbedTLS error (enable MBEDTLS_ERROR_C for details)");
+#endif
+            mbedtls_printf(" failed\n  ! mbedtls_ssl_handshake returned -0x%x (%s)\n\n", -ret, error_buf);
             goto exit;
         }
     }

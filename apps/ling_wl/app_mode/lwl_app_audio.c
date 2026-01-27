@@ -3,12 +3,17 @@
 #include "LED/LED.h"
 #include "app_core.h"
 #include "app_mode/lwl_app_core.h"
+#include "app_mode/wss_connected/wss_request.h"
+#include "audio/recorder.h"
 #include "cpu.h"
 #include "gpio.h"
 #include "log.h"
 #include "net_music_play_my.h"
 #include "os/os_api.h"
 #include "util/threadpool_tasks.h"
+
+// 确保返回类型正确（避免隐式声明导致 stream_id 异常）
+extern const char *wss_request_get_stream_id(void);
 
 /* 本地文件播放控制 */
 static u8 g_play_voice_prompt = 0; // 本地文件播放中标志
@@ -227,7 +232,8 @@ static void lwl_app_audio_stream_playback_thread(void *priv) {
         set_led_tts_on();
         log_mqtt("【flow】检测到音频数据，开始播放，发送audio_play_"
                  "started消息给服务器");
-        send_audio_play_started(wss_request_get_stream_id(), "normal_playing",
+        const char *stream_id = (const char *)wss_request_get_stream_id();
+        send_audio_play_started(stream_id ? stream_id : "", "normal_playing",
                                 "normal");
       }
 
@@ -245,7 +251,8 @@ static void lwl_app_audio_stream_playback_thread(void *priv) {
       if (!wss_stream_on()) {
         log_mqtt("【flow】收到音频播放结束并且实际无数据，发送audio_play_"
                  "finished消息给服务器");
-        send_audio_play_finished(wss_request_get_stream_id(),
+        const char *stream_id = (const char *)wss_request_get_stream_id();
+        send_audio_play_finished(stream_id ? stream_id : "",
                                  "normal_complete");
         break;
       } else {
@@ -266,7 +273,8 @@ static void lwl_app_audio_stream_playback_thread(void *priv) {
         uint32_t elapsed = timer_get_ms() - last_data_time;
         if (elapsed > STREAM_TIMEOUT_MS) {
           log_mqtt("【flow】音频播放超时: %u ms, 退出", elapsed);
-          send_audio_play_finished(wss_request_get_stream_id(), "timeout");
+          const char *stream_id = (const char *)wss_request_get_stream_id();
+          send_audio_play_finished(stream_id ? stream_id : "", "timeout");
           break;
         }
       }
@@ -300,6 +308,21 @@ void lwl_app_audio_stream_stop(void) {
   log_i("[AUDIO_STREAM]lwl_app_audio_stream_stop");
 
   os_mutex_pend(&g_audio_mutex, 0);
+  
+  // 先停止录音器（如果正在运行），确保DNS编码器等完全停止
+  // 这可以防止在停止音频播放时，DNS编码器仍在运行并尝试写入已停止的缓冲区
+  if (g_app_ctx && g_app_ctx->recorder) {
+    if (recorder_get_play_pause_state(g_app_ctx->recorder) == 1) {
+      log_i("[AUDIO_STREAM]stopping recorder before stopping audio playback");
+      os_mutex_post(&g_audio_mutex);
+      recorder_stop(g_app_ctx->recorder);
+      // 等待足够长的时间，确保DNS编码器任务完全停止
+      // 增加等待时间，防止任务仍在运行时访问已释放的缓冲区
+      msleep(200);
+      os_mutex_pend(&g_audio_mutex, 0);
+    }
+  }
+  
   g_stream_audio_thread_running = false;
   if (g_stream_audio_on) {
     g_stream_audio_on = false;

@@ -516,6 +516,12 @@ s32 usb_cdc_output_handler(void *priv, u8 *buf, u32 len)
     printf("len = %d, buf = %s\n", len, buf);
 
 //将收到的数据发送至终端
+    // 修复：添加边界检查，防止缓冲区溢出
+    if (len > sizeof(rx_buf)) {
+        printf("Warning: received data length %u exceeds buffer size %zu, truncating\n", 
+               len, sizeof(rx_buf));
+        len = sizeof(rx_buf);
+    }
     rx_len = len;
     memcpy(rx_buf, buf, len);
     os_sem_post(&psem);

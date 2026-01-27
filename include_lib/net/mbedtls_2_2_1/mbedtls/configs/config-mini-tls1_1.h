@@ -41,7 +41,7 @@
  *
  * This module enables mbedtls_strerror().
  */
-//#define MBEDTLS_ERROR_C //MODIFY BY SHUNJIAN
+#define MBEDTLS_ERROR_C // enable mbedtls_strerror()
 
 /**
  * \def MBEDTLS_SELF_TEST

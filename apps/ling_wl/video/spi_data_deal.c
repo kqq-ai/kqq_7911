@@ -346,11 +346,22 @@ static void http_post_test_task(void *priv)
         json_object_array_add(img_obj2, json_object_new_string(buffer));
         json_object_object_add(img_obj, "images", img_obj2);
 
-        send_buf = calloc(1, strlen(json_object_get_string(img_obj)));
-        strcat(send_buf, json_object_to_json_string_ext(img_obj, JSON_C_TO_STRING_NOSLASHESCAPE));
-        if (send_buf == NULL) {
-            printf(">>>>>>>>>>>send_buf  = NULL");
+        // 修复：先获取JSON字符串，然后分配足够大的缓冲区
+        const char *json_str = json_object_to_json_string_ext(img_obj, JSON_C_TO_STRING_NOSLASHESCAPE);
+        if (json_str == NULL) {
+            printf(">>>>>>>>>>>json_object_to_json_string_ext returned NULL");
+            continue;
         }
+        size_t json_str_len = strlen(json_str);
+        // 分配足够大的缓冲区（包括终止符）
+        send_buf = calloc(1, json_str_len + 1);
+        if (send_buf == NULL) {
+            printf(">>>>>>>>>>>send_buf allocation failed, size=%zu", json_str_len + 1);
+            continue;
+        }
+        // 使用memcpy而不是strcat，因为send_buf是刚分配的
+        memcpy(send_buf, json_str, json_str_len);
+        send_buf[json_str_len] = '\0';  // 确保终止符
 
         httpcli_ctx *ctx;
         ctx = (httpcli_ctx *)calloc(1, sizeof(httpcli_ctx));

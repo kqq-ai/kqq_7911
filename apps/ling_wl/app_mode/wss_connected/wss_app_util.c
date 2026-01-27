@@ -468,6 +468,12 @@ int send_bin_data(uint8_t *data, uint32_t len)
         return -1;
     }
 
+    if (data == NULL || len == 0) {
+        log_e("[wss_app_util]send_bin_data invalid args: data=%p len=%u", data, len);
+        os_mutex_post(&g_wss_mutex);
+        return -1;
+    }
+
     // 检查连接状态
     ws_state_t state = ws_client_get_state(g_ws_client_custom);
     if (state != WS_STATE_CONNECTED) {
@@ -489,7 +495,8 @@ int send_bin_data(uint8_t *data, uint32_t len)
     }
     // log_i("[wss_app_util]wbs send bin : %d", len);
     os_mutex_post(&g_wss_mutex);
-    return 0;
+    // 修复：向上层返回真实发送结果
+    return (ret < 0) ? -1 : 0;
 }
 
 

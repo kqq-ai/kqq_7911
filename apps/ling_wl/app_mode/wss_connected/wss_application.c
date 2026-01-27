@@ -114,7 +114,7 @@ void wss_application_vailed() {
 
 void wss_disconnect_cbk(void) {
   log_i("[wss_application]odmp disconnect!!!");
-  // os_time_dly(100);      // 修正：延时 1000ms (假设 1 tick = 10ms)
+  wss_note_disconnect_reason("odmp_disconnect_cbk");
 }
 
 // 查询退出标志
@@ -148,9 +148,9 @@ static void wss_handle_touch_key_event(bool press_down) {
     g_touch_key_press_time = timer_get_ms();
     // 停止音频播放
     wss_ble_audio_stop();
+    play_prompt_sound("t_key.mp3");
     // 1.开启音频上传，等500ms
     wss_mic_upload_start();
-    play_prompt_sound("t_key.mp3");
 
   } else {
     // ========== 触摸键释放事件 ==========

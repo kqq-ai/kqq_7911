@@ -23,9 +23,18 @@ int my_blocking_queue_init(MyBlockingQueue *queue, int elementSize, int capacity
         return MYERROR_Null_Pointer;
     }
 
-    queue->data = (void **)malloc(elementSize * capacity);
+    // 修复：添加整数溢出检查和类型修正
+    size_t total_size = (size_t)elementSize * (size_t)capacity;
+    // 检查整数溢出
+    if (total_size < (size_t)elementSize || total_size < (size_t)capacity) {
+        printf("Error: Integer overflow in queue allocation: elementSize=%d, capacity=%d\n", 
+               elementSize, capacity);
+        return MYERROR_Malloc_Failed;
+    }
+    // 类型修正：应该是void*而不是void**
+    queue->data = (void *)malloc(total_size);
     if (queue->data == NULL) {
-        printf("Error: Failed to malloc queue->data, size = %d\n", elementSize * capacity);
+        printf("Error: Failed to malloc queue->data, size = %zu\n", total_size);
         return MYERROR_Malloc_Failed;
     }
 

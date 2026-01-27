@@ -55,7 +55,9 @@
 #endif
 
 #define CONFIG_DEBUG_ENABLE                     //打印开关
-#define RTOS_STACK_CHECK_ENABLE                 //是否启用定时检查任务栈
+// 临时关闭：当前固件出现 systimer 线程崩溃（axi_rd_inv），符号化落在 FreeRTOS xTaskGetHandle/prvSearchForNameWithinSingleList，
+// 与 init.c 中的 rtos_stack_check_func(每 60s 调 get_task_state/dump_cpu_irq_usage) 强相关。先关闭以排除该诊断功能引入的崩溃。
+// #define RTOS_STACK_CHECK_ENABLE               //是否启用定时检查任务栈
 // #define CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH   //保存异常打印信息到flash
 // #define MEM_LEAK_CHECK_ENABLE                //是否启用内存泄漏检查(需要包含mem_leak_test.h头文件)
 // #define CONFIG_AUTO_SHUTDOWN_ENABLE          //自动倒数关机
@@ -311,7 +313,8 @@
 #define TCFG_LIMITER_ENABLE                       0     //限幅器
 #endif
 #define TCFG_EQ_FILE_ENABLE                       1     //从bin文件读取eq配置数据
-#define TCFG_DRC_ENABLE                           TCFG_LIMITER_ENABLE
+// 临时关闭 DRC/limiter：用于验证 audio_mix 中 DRC 算法崩溃（axi_rd_inv）问题
+#define TCFG_DRC_ENABLE                           0
 //EQ在线调试通信类型
 #define TCFG_NULL_COMM                            0     //不支持通信
 #define TCFG_USB_COMM                             1     //USB通信

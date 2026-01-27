@@ -18,9 +18,18 @@ int my_ring_buffer_init(MyRingBuffer *ringbuffer, int elementSize, int capacity)
         return MYRBERROR_Null_Pointer;
     }
 
-    ringbuffer->data = (void **)malloc(elementSize * capacity);
+    // 修复：添加整数溢出检查和类型修正
+    size_t total_size = (size_t)elementSize * (size_t)capacity;
+    // 检查整数溢出
+    if (total_size < (size_t)elementSize || total_size < (size_t)capacity) {
+        printf("Error: Integer overflow in ringbuffer allocation: elementSize=%d, capacity=%d\n", 
+               elementSize, capacity);
+        return MYRBERROR_Malloc_Failed;
+    }
+    // 类型修正：应该是void*而不是void**
+    ringbuffer->data = (void *)malloc(total_size);
     if (ringbuffer->data == NULL) {
-        printf("Error: Failed to malloc ringbuffer->data, size = %d\n", elementSize * capacity);
+        printf("Error: Failed to malloc ringbuffer->data, size = %zu\n", total_size);
         return MYRBERROR_Malloc_Failed;
     }
 

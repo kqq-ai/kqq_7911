@@ -61,6 +61,7 @@ AR  := $(TOOL_DIR)/$(AR)
 # 输出文件设置
 OUT_ELF   := ../../../../cpu/wl82/tools/sdk.elf
 OBJ_FILE  := $(OUT_ELF).objs.txt
+OUT_MAP   := $(OUT_ELF:.elf=.map)
 # 编译路径设置
 BUILD_DIR := objs
 # 工程路径前缀
@@ -271,6 +272,7 @@ c_SRC_FILES := \
 	../../../../apps/ling_wl/net_music_play_my.c \
 	../../../../apps/ling_wl/wss/wss_client.c \
 	../../../../apps/ling_wl/wss/wss_client_custom.c \
+	../../../../lib/net/mbedtls_2_2_1/library/error.c \
 	../../../../apps/ling_wl/ota/http_ota.c \
 	../../../../apps/ling_wl/LED/LED.c \
 	../../../../apps/ling_wl/log/log_mqtt.c \
@@ -570,6 +572,8 @@ pre_build:
 
 clean:
 	$(QUITE) $(RM) $(OUT_ELF)
+	$(QUITE) $(RM) $(OUT_MAP)
+	$(QUITE) $(RM) $(OBJ_FILE)
 	$(QUITE) $(RM) $(BUILD_DIR)
 
 
@@ -579,12 +583,12 @@ $(OUT_ELF): $(OBJS)
 	$(info +LINK $@)
 	$(shell $(MKDIR) $(@D))
 	$(file >$(OBJ_FILE), $(OBJS))
-	$(QUITE) $(LD) -o $(OUT_ELF) @$(OBJ_FILE) $(LFLAGS) $(LIBPATHS) $(LIBS)
+	$(QUITE) $(LD) -o $(OUT_ELF) @$(OBJ_FILE) $(LFLAGS) -Map=$(OUT_MAP) $(LIBPATHS) $(LIBS)
 else
 $(OUT_ELF): $(OBJS)
 	$(info +LINK $@)
 	$(shell $(MKDIR) $(@D))
-	$(QUITE) $(LD) -o $(OUT_ELF) $(OBJS) $(LFLAGS) $(LIBPATHS) $(LIBS)
+	$(QUITE) $(LD) -o $(OUT_ELF) $(OBJS) $(LFLAGS) -Map=$(OUT_MAP) $(LIBPATHS) $(LIBS)
 endif
 
 

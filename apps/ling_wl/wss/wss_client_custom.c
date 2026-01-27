@@ -23,6 +23,50 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <errno.h>
+
+// 诊断：当传入 lwIP send()/mbedTLS BIO 的 buf 非 4 字节对齐时，打印关键信息用于定位“数据来源/是谁导致不对齐”。
+// 注意：这里只做日志，不改变发送行为。
+static void ws_hex16(const void *buf, size_t len, char out[3 * 16 + 1])
+{
+    static const char hex[] = "0123456789abcdef";
+    const u8 *p = (const u8 *)buf;
+    size_t n = (len > 16) ? 16 : len;
+    size_t j = 0;
+    for (size_t i = 0; i < n; i++) {
+        out[j++] = hex[(p[i] >> 4) & 0xF];
+        out[j++] = hex[p[i] & 0xF];
+        out[j++] = (i == n - 1) ? '\0' : ' ';
+    }
+    if (n == 0) out[0] = '\0';
+    out[3 * 16] = '\0';
+}
+
+static void ws_log_unaligned_send(const char *src, int fd, const void *buf, size_t len,
+                                  const char *func, int line)
+{
+    static u32 log_cnt = 0;
+    log_cnt++;
+    // 防刷屏：前 8 次必打，之后每 1024 次打一次
+    if (log_cnt > 8 && (log_cnt & 1023u) != 0u) {
+        return;
+    }
+    char hex16[3 * 16 + 1];
+    ws_hex16(buf, len, hex16);
+    log_e("[ws_custom][unalign]src=%s fd=%d ptr=%p align=%u len=%u @%s:%d head16=%s",
+          (src ? src : "?"),
+          fd,
+          buf,
+          (unsigned)((uintptr_t)buf & 0x3u),
+          (unsigned)len,
+          (func ? func : "?"),
+          line,
+          hex16);
+}
+
+#define WS_LOG_UNALIGNED_SEND(_src, _fd, _buf, _len) \
+    do { if (((uintptr_t)(_buf) & 0x3u) != 0u) ws_log_unaligned_send((_src), (_fd), (_buf), (_len), __func__, __LINE__); } while (0)
 
 static const char *ws_mbedtls_errstr(int err, char *buf, size_t buflen)
 {
@@ -47,13 +91,105 @@ extern unsigned int random32(int type);
 #define WS_RECV_TIMEOUT_MS 5000
 
 // 简单的字节流 RingBuffer
-typedef struct {
+typedef struct ws_ringbuffer {
     u8 *buffer;
     u32 capacity;
     u32 head; // 写索引
     u32 tail; // 读索引
     u32 count; // 数据量
 } ws_ringbuffer_t;
+
+static void ws_log_unaligned_rb_send(const char *src, int fd, const ws_ringbuffer_t *rb,
+                                     const void *buf, size_t len,
+                                     const char *func, int line)
+{
+    // 在 send_rb 的场景，额外打印 tail/head/count，直接定位“为何 peek 出来就不对齐”
+    char hex16[3 * 16 + 1];
+    ws_hex16(buf, len, hex16);
+    log_e("[ws_custom][unalign_rb]src=%s fd=%d ptr=%p align=%u len=%u rb{cap=%u head=%u tail=%u cnt=%u} @%s:%d head16=%s",
+          (src ? src : "?"),
+          fd,
+          buf,
+          (unsigned)((uintptr_t)buf & 0x3u),
+          (unsigned)len,
+          rb ? (unsigned)rb->capacity : 0u,
+          rb ? (unsigned)rb->head : 0u,
+          rb ? (unsigned)rb->tail : 0u,
+          rb ? (unsigned)rb->count : 0u,
+          (func ? func : "?"),
+          line,
+          hex16);
+}
+
+#define WS_LOG_UNALIGNED_RB_SEND(_src, _fd, _rb, _buf, _len) // do { if (((uintptr_t)(_buf) & 0x3u) != 0u) ws_log_unaligned_rb_send((_src), (_fd), (_rb), (_buf), (_len), __func__, __LINE__); } while (0)
+
+// 入队标注：在 rb_write 之前打印“来源/帧信息”，方便把 unalign_rb 和具体发送点关联起来
+static void ws_frame_meta(const u8 *frame, u32 frame_len, u8 *opcode, u32 *payload_len)
+{
+    if (!frame || frame_len < 2) {
+        if (opcode) *opcode = 0xFF;
+        if (payload_len) *payload_len = 0;
+        return;
+    }
+    if (opcode) *opcode = (u8)(frame[0] & 0x0F);
+
+    u8 len7 = (u8)(frame[1] & 0x7F);
+    u32 pl = 0;
+    int pos = 2;
+    if (len7 < 126) {
+        pl = len7;
+    } else if (len7 == 126) {
+        if (frame_len >= 4) {
+            pl = ((u32)frame[2] << 8) | frame[3];
+        }
+        pos = 4;
+    } else { // 127
+        if (frame_len >= 10) {
+            pl = ((u32)frame[6] << 24) | ((u32)frame[7] << 16) | ((u32)frame[8] << 8) | (u32)frame[9];
+        }
+        pos = 10;
+    }
+    // 客户端构建帧强制 MASK=1，因此这里按“有 mask key”推进
+    if ((frame[1] & 0x80) && frame_len >= (u32)(pos + 4)) {
+        pos += 4;
+    }
+    if (payload_len) *payload_len = pl;
+}
+
+static void ws_log_tx_enqueue(const char *src, int fd, const ws_ringbuffer_t *rb,
+                              const u8 *frame, u32 frame_len, u32 raw_payload_len,
+                              const char *func, int line)
+{
+    // 只标注会导致 tail/head 漂移（frame_len 不是 4 的倍数）的帧，避免刷屏
+    if ((frame_len & 0x3u) == 0u) return;
+
+    char hex16[3 * 16 + 1];
+    ws_hex16(frame, frame_len, hex16);
+    u8 opcode = 0xFF;
+    u32 payload_len = 0;
+    ws_frame_meta(frame, frame_len, &opcode, &payload_len);
+
+    log_mqtt("【ws_custom】【tx_enqueue】src=%s fd=%d ptr=%p align=%u raw_pl=%u pl=%u opcode=0x%02x frame_len=%u mod4=%u rb{cap=%u head=%u tail=%u cnt=%u} @%s:%d head16=%s",
+             (src ? src : "?"),
+             fd,
+             frame,
+             (unsigned)((uintptr_t)frame & 0x3u),
+             (unsigned)raw_payload_len,
+             (unsigned)payload_len,
+             (unsigned)opcode,
+             (unsigned)frame_len,
+             (unsigned)(frame_len & 0x3u),
+             rb ? (unsigned)rb->capacity : 0u,
+             rb ? (unsigned)rb->head : 0u,
+             rb ? (unsigned)rb->tail : 0u,
+             rb ? (unsigned)rb->count : 0u,
+             (func ? func : "?"),
+             line,
+             hex16);
+}
+
+#define WS_LOG_TX_ENQUEUE(_src, _fd, _rb, _frame, _frame_len, _raw_pl) \
+    do { ws_log_tx_enqueue((_src), (_fd), (_rb), (const u8 *)(_frame), (u32)(_frame_len), (u32)(_raw_pl), __func__, __LINE__); } while (0)
 
 static void rb_init(ws_ringbuffer_t *rb, u8 *buf, u32 cap) {
     rb->buffer = buf;
@@ -513,11 +649,24 @@ static int my_net_send(void *ctx, const unsigned char *buf, size_t len) {
     int fd = *(int *)ctx;
     if (fd < 0) return MBEDTLS_ERR_NET_INVALID_CONTEXT;
 
+    WS_LOG_UNALIGNED_SEND("mbedtls_bio_send", fd, buf, len);
     int ret = send(fd, buf, len, 0);
     if (ret < 0) {
+        int errno_snapshot = errno;
         if (errno == EWOULDBLOCK || errno == EAGAIN) return MBEDTLS_ERR_SSL_WANT_WRITE;
         if (errno == EPIPE || errno == ECONNRESET) return MBEDTLS_ERR_NET_CONN_RESET;
         if (errno == EINTR) return MBEDTLS_ERR_SSL_WANT_WRITE;
+        if (errno == 128) {  // pdFREERTOS_ERRNO_ENOTCONN - Socket is not connected
+            log_e("[ws_custom]my_net_send: Socket is not connected (errno=128)");
+            return MBEDTLS_ERR_NET_CONN_RESET;
+        }
+        // 走到这里就是最终会返回 NET_SEND_FAILED（-0x004E / -78）
+        // 打印 errno + SO_ERROR，方便定位底层失败原因（断链/资源不足/非法指针等）
+        int so_error = 0;
+        socklen_t so_len = sizeof(so_error);
+        int gs_ret = getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &so_len);
+        log_e("[ws_custom]my_net_send: NET_SEND_FAILED, fd=%d, errno=%d, getsockopt_ret=%d, so_error=%d, len=%u",
+              fd, errno_snapshot, gs_ret, so_error, (unsigned)len);
         return MBEDTLS_ERR_NET_SEND_FAILED;
     }
     return ret;
@@ -618,6 +767,7 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     }
     
     // 发送握手请求
+    WS_LOG_UNALIGNED_SEND("tcp_handshake_req", client->sock_fd, handshake_req, (size_t)req_len);
     int sent = send(client->sock_fd, handshake_req, req_len, 0);
     if (sent != req_len) {
         log_e("[ws_custom]Failed to send handshake request: sent=%d, expected=%d", sent, req_len);
@@ -661,6 +811,10 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
 static int do_ssl_handshake(ws_client_t client, const char *host, int port, const char *path)
 {
     int ret;
+    enum { WS_SSL_HS_IO_TMP_SIZE = 512 };
+    // 4 字节对齐的握手 IO 临时缓冲（避免 response+resp_len / req+sent 非对齐导致 misalign）
+    u32 hs_io_tmp_word[(WS_SSL_HS_IO_TMP_SIZE + 3) / 4];
+    unsigned char *hs_io_tmp = (unsigned char *)hs_io_tmp_word;
     
     // 初始化mbedTLS
     mbedtls_ssl_init(&client->ssl);
@@ -752,7 +906,14 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     // 通过SSL发送握手请求
     int sent = 0;
     while (sent < req_len) {
-        ret = mbedtls_ssl_write(&client->ssl, (unsigned char *)handshake_req + sent, req_len - sent);
+        unsigned char *p = (unsigned char *)handshake_req + sent;
+        int wlen = req_len - sent;
+        if (((uintptr_t)p & 0x3u) != 0u) {
+            if (wlen > (int)WS_SSL_HS_IO_TMP_SIZE) wlen = (int)WS_SSL_HS_IO_TMP_SIZE;
+            memcpy(hs_io_tmp, p, wlen);
+            p = hs_io_tmp;
+        }
+        ret = mbedtls_ssl_write(&client->ssl, p, wlen);
         if (ret <= 0) {
             if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
                 char ebuf[128];
@@ -769,7 +930,10 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     char response[2048];
     int resp_len = 0;
     while (resp_len < (int)sizeof(response) - 1) {
-        ret = mbedtls_ssl_read(&client->ssl, (unsigned char *)response + resp_len, sizeof(response) - resp_len - 1);
+        int rcap = (int)sizeof(response) - resp_len - 1;
+        int rlen = rcap;
+        if (rlen > (int)WS_SSL_HS_IO_TMP_SIZE) rlen = (int)WS_SSL_HS_IO_TMP_SIZE;
+        ret = mbedtls_ssl_read(&client->ssl, hs_io_tmp, rlen);
         if (ret <= 0) {
             if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
                 continue;
@@ -781,6 +945,8 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
             }
             goto cleanup;
         }
+        if (ret > rcap) ret = rcap; // 防御：不应发生
+        memcpy((unsigned char *)response + resp_len, hs_io_tmp, ret);
         resp_len += ret;
         response[resp_len] = '\0';
         
@@ -1062,18 +1228,28 @@ static void ws_recv_thread(void *param)
     // 临时缓冲区用于构建自动响应 (PING/CLOSE)
     u8 *resp_buf = malloc(1024);
 
+    // SSL/TLS 场景下的对齐 bounce buffer：
+    // WL82(AC791N) 上部分库/优化路径可能做 32-bit 访问，若传入/写入指针非 4 字节对齐会触发 misalign_err。
+    // RingBuffer 的 tail 会导致 peek 指针不对齐；recv_buf_len 也会导致 read 目标地址不对齐。
+    // 因此统一用对齐临时缓冲区做 ssl_read/ssl_write，再 memcpy 到业务缓冲区。
+    enum { WS_SSL_IO_TMP_SIZE = 2048 };
+    u8 *ssl_io_tmp_mem = malloc(WS_SSL_IO_TMP_SIZE + 8);
+    u8 *ssl_io_tmp = NULL;
+
     // 退出原因（传给上层，便于判断是服务端 CLOSE / EOF / 错误）
     char exit_reason[96] = "io_thread_exit";
 
-    if (!frame_buf || !resp_buf) {
+    if (!frame_buf || !resp_buf || !ssl_io_tmp_mem) {
         log_e("[ws_custom]Failed to allocate buffers");
         client->thread_running = false;
         strncpy(exit_reason, "alloc_failed", sizeof(exit_reason) - 1);
         exit_reason[sizeof(exit_reason) - 1] = '\0';
         if (frame_buf) free(frame_buf);
         if (resp_buf) free(resp_buf);
+        if (ssl_io_tmp_mem) free(ssl_io_tmp_mem);
         return;
     }
+    ssl_io_tmp = (u8 *)(((uintptr_t)ssl_io_tmp_mem + 3u) & ~(uintptr_t)3u);
 
     int ssl_read_error_count = 0;
     const int MAX_SSL_READ_RETRIES = 3;
@@ -1085,8 +1261,11 @@ static void ws_recv_thread(void *param)
 
     // P3: SSL场景下强制监听写事件（避免TLS read->WANT_WRITE 卡住）
     bool logged_ssl_watch_write = false;
+    bool ssl_need_write = false; // ssl_read 返回 WANT_WRITE 时置位：下一轮在“可写事件”上重试 ssl_read
 
     log_i("[ws_custom]IO thread started (Non-blocking)");
+
+    int send_fatal_err_count = 0;
 
     while (client->thread_running && (client->state == WS_STATE_CONNECTED || client->state == WS_STATE_CLOSING)) {
         fd_set read_fds, write_fds;
@@ -1104,12 +1283,12 @@ static void ws_recv_thread(void *param)
         bool has_data_to_send = (rb_available(&client->send_rb) > 0);
         os_mutex_post(&client->mutex);
 
-        // P3: SSL/TLS 读写耦合：即使应用层没有待发数据，TLS层也可能需要写才能继续读。
-        // 因此 use_ssl 场景下强制监听 write_fds，避免 WANT_WRITE 卡死导致被对端/链路踢掉。
-        if (client->use_ssl || has_data_to_send) {
+        // SSL/TLS 读写耦合：只有在“确实需要写(ssl_read WANT_WRITE)”或“应用层有待发数据”时才监听 write_fds。
+        // 否则 TCP socket 通常一直处于“可写”状态，会导致 select 立即返回 -> IO 线程空转抢占 CPU，最终触发 WDT。
+        if (has_data_to_send || (client->use_ssl && ssl_need_write)) {
             FD_SET(fd, &write_fds);
-            if (client->use_ssl && !logged_ssl_watch_write) {
-                log_mqtt("【debug】[ws_custom]select watch_write forced (ssl), fd=%d", fd);
+            if (client->use_ssl && ssl_need_write && !logged_ssl_watch_write) {
+                log_mqtt("【debug】[ws_custom]select watch_write enabled (ssl_need_write), fd=%d", fd);
                 logged_ssl_watch_write = true;
             }
         }
@@ -1135,8 +1314,18 @@ static void ws_recv_thread(void *param)
             if (data && len > 0) {
                 int sent = 0;
                 if (client->use_ssl) {
-                    sent = mbedtls_ssl_write(&client->ssl, data, len);
+                    // SSL 写：避免把非 4 字节对齐的 RingBuffer 指针直接传入 mbedTLS
+                    const u8 *write_ptr = data;
+                    u32 write_len = len;
+                    WS_LOG_UNALIGNED_RB_SEND("ws_io_ssl_write", client->sock_fd, &client->send_rb, write_ptr, write_len);
+                    if (((uintptr_t)write_ptr & 0x3u) != 0u) {
+                        write_len = (write_len > (u32)WS_SSL_IO_TMP_SIZE) ? (u32)WS_SSL_IO_TMP_SIZE : write_len;
+                        memcpy(ssl_io_tmp, write_ptr, write_len);
+                        write_ptr = ssl_io_tmp;
+                    }
+                    sent = mbedtls_ssl_write(&client->ssl, write_ptr, write_len);
                 } else {
+                    WS_LOG_UNALIGNED_RB_SEND("ws_io_tcp_send", client->sock_fd, &client->send_rb, data, len);
                     sent = send(client->sock_fd, data, len, 0);
                 }
                 
@@ -1145,12 +1334,17 @@ static void ws_recv_thread(void *param)
                     rb_advance(&client->send_rb, sent);
                     // 有实际写进展，解除“写需要读”的卡住标记
                     logged_write_want_read = false;
+                    send_fatal_err_count = 0;
+                    ssl_need_write = false; // 有写进展，TLS 层通常已满足
                 } else {
                     // 处理非阻塞错误
                     bool would_block = false;
                     if (client->use_ssl) {
                         if (sent == MBEDTLS_ERR_SSL_WANT_WRITE || sent == MBEDTLS_ERR_SSL_WANT_READ) {
                             would_block = true;
+                        }
+                        if (sent == MBEDTLS_ERR_SSL_WANT_WRITE) {
+                            ssl_need_write = true;
                         }
 
                         // P2: 观测TLS耦合：ssl_write 可能需要先读（WANT_READ）才能继续写
@@ -1168,32 +1362,60 @@ static void ws_recv_thread(void *param)
                     
                     if (!would_block) {
                         log_e("[ws_custom]Send error: %d", sent);
-                        // client->thread_running = false; // 暂时不退出，可能是临时错误
+                        // -0x004E: NET_SEND_FAILED，经常意味着底层 socket 已异常（ENOTCONN/断链等），继续死循环会导致系统状态进一步恶化
+                        send_fatal_err_count++;
+                        if (client->use_ssl &&
+                            (sent == MBEDTLS_ERR_NET_SEND_FAILED || sent == MBEDTLS_ERR_NET_CONN_RESET)) {
+                            snprintf(exit_reason, sizeof(exit_reason), "ssl_send_fatal=%d", sent);
+                            client->thread_running = false;
+                        } else if (!client->use_ssl) {
+                            snprintf(exit_reason, sizeof(exit_reason), "tcp_send_error=%d", errno);
+                            client->thread_running = false;
+                        } else if (send_fatal_err_count >= 3) {
+                            snprintf(exit_reason, sizeof(exit_reason), "ssl_send_error=%d", sent);
+                            client->thread_running = false;
+                        }
                     }
                 }
             }
             os_mutex_post(&client->mutex);
+            if (!client->thread_running) {
+                break;
+            }
         }
         
         // 处理读事件
         if (ret == 0) continue; // 超时，继续下一轮循环
         
-        if (ret > 0 && FD_ISSET(fd, &read_fds)) {
+        // SSL 模式下：当 ssl_read 返回 WANT_WRITE 时，需要在“可写事件”上重试 ssl_read，否则会卡死。
+        bool should_read =
+            (ret > 0 && FD_ISSET(fd, &read_fds)) ||
+            (client->use_ssl && ssl_need_write && ret > 0 && FD_ISSET(fd, &write_fds));
+
+        if (should_read) {
             // 读取数据
             int n = 0;
             if (client->use_ssl) {
-                n = mbedtls_ssl_read(&client->ssl, client->recv_buf + client->recv_buf_len,
-                                    WS_RECV_BUF_SIZE - client->recv_buf_len);
+                // SSL 读：避免直接写入到可能非对齐的 recv_buf+recv_buf_len
+                int want = (int)(WS_RECV_BUF_SIZE - client->recv_buf_len);
+                if (want > WS_SSL_IO_TMP_SIZE) want = WS_SSL_IO_TMP_SIZE;
+                if (want <= 0) {
+                    // 接收缓冲区已满，先交给上层解析/腾挪（本轮不再读）
+                    n = 0;
+                } else {
+                    n = mbedtls_ssl_read(&client->ssl, ssl_io_tmp, want);
+                }
                 if (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) {
                     // P2: 观测TLS耦合：ssl_read 可能需要先写（WANT_WRITE）才能继续读
                     if (n == MBEDTLS_ERR_SSL_WANT_WRITE && !logged_read_want_write) {
-                        // watch_write: 当前是否监听写事件（当前实现：仅send_rb有数据才监听write）
-                        bool watch_write = has_data_to_send;
+                        // watch_write: 当前是否监听写事件（当前实现：has_data_to_send 或 ssl_need_write 才监听）
+                        bool watch_write = has_data_to_send || ssl_need_write;
                         log_mqtt("【debug】[ws_custom]ssl_read WANT_WRITE (tls_coupling), state=%d, fd=%d, watch_write=%d, rb_avail=%d, rb_space=%d",
                                  (int)client->state, client->sock_fd, (int)watch_write,
                                  (int)rb_available(&client->send_rb), (int)rb_space(&client->send_rb));
                         logged_read_want_write = true;
                     }
+                    ssl_need_write = (n == MBEDTLS_ERR_SSL_WANT_WRITE);
                     n = 0; // 忽略
                 } else if (n == 0) {
                     // mbedTLS: 0 表示底层连接 EOF（对端可能直接断开，未必发送 close_notify）
@@ -1213,16 +1435,18 @@ static void ws_recv_thread(void *param)
                     exit_reason[sizeof(exit_reason) - 1] = '\0';
                     break;
                 } else if (n <= 0) {
-                    if (n == MBEDTLS_ERR_NET_RECV_FAILED) { // 处理 -0x004c 错误
+                    // 处理可重试的网络层错误：-0x004c (RECV_FAILED) 和 -0x0050 (CONN_RESET)
+                    // 这些错误可能是临时性的网络抖动，不应该立即断开连接
+                    if (n == MBEDTLS_ERR_NET_RECV_FAILED || n == MBEDTLS_ERR_NET_CONN_RESET) {
                         ssl_read_error_count++;
-                        log_w("[ws_custom]SSL read error -0x004c (temporary), retry %d/%d",
-                              ssl_read_error_count, MAX_SSL_READ_RETRIES);
+                        log_w("[ws_custom]SSL read error -0x%04x (temporary), retry %d/%d",
+                              -n, ssl_read_error_count, MAX_SSL_READ_RETRIES);
 
                         if (ssl_read_error_count < MAX_SSL_READ_RETRIES) {
                             msleep(SSL_READ_RETRY_DELAY);
                             continue; // 重试
                         } else {
-                            log_e("[ws_custom]SSL read error -0x004c (permanent), maximum retries reached");
+                            log_e("[ws_custom]SSL read error -0x%04x (permanent), maximum retries reached", -n);
                             snprintf(exit_reason, sizeof(exit_reason), "ssl_read_error=-0x%04x (retries_exhausted)", -n);
                             break;
                         }
@@ -1258,9 +1482,18 @@ static void ws_recv_thread(void *param)
             }
             
             if (n > 0) {
+                if (client->use_ssl) {
+                    // n 字节从对齐临时缓冲复制到业务接收缓冲
+                    if ((u32)n > (WS_RECV_BUF_SIZE - client->recv_buf_len)) {
+                        // 理论上不应发生（want 已限制），防御一下
+                        n = (int)(WS_RECV_BUF_SIZE - client->recv_buf_len);
+                    }
+                    memcpy(client->recv_buf + client->recv_buf_len, ssl_io_tmp, n);
+                }
                 client->recv_buf_len += n;
                 // 有实际读进展，解除“读需要写”的卡住标记
                 logged_read_want_write = false;
+                ssl_need_write = false;
                 
                 // 解析WebSocket帧
                 while (client->recv_buf_len > 0) {
@@ -1303,6 +1536,7 @@ static void ws_recv_thread(void *param)
                             os_mutex_pend(&client->mutex, 0);
                             int close_len = build_ws_frame(resp_buf, 1024, NULL, 0, WS_FRAME_CLOSE, true);
                             if (close_len > 0 && rb_space(&client->send_rb) >= close_len) {
+                                WS_LOG_TX_ENQUEUE("auto_close", client->sock_fd, &client->send_rb, resp_buf, close_len, 0);
                                 rb_write(&client->send_rb, resp_buf, close_len);
                             }
                             os_mutex_post(&client->mutex);
@@ -1316,6 +1550,7 @@ static void ws_recv_thread(void *param)
                             os_mutex_pend(&client->mutex, 0);
                             int pong_len = build_ws_frame(resp_buf, 1024, payload, payload_len, WS_FRAME_PONG, true);
                             if (pong_len > 0 && rb_space(&client->send_rb) >= pong_len) {
+                                WS_LOG_TX_ENQUEUE("auto_pong", client->sock_fd, &client->send_rb, resp_buf, pong_len, payload_len);
                                 rb_write(&client->send_rb, resp_buf, pong_len);
                             } else {
                                 log_e("[ws_custom]Failed to buffer PONG response");
@@ -1339,6 +1574,12 @@ static void ws_recv_thread(void *param)
                 }
             }
         }
+
+        // 防止 ssl_need_write 模式下 write-ready 立即返回导致的空转
+        if (client->use_ssl && ssl_need_write && !has_data_to_send &&
+            ret > 0 && FD_ISSET(fd, &write_fds) && !FD_ISSET(fd, &read_fds)) {
+            msleep(5);
+        }
     }
     
     log_i("[ws_custom]IO thread exited");
@@ -1350,6 +1591,7 @@ thread_exit:
           exit_reason);
     free(frame_buf);
     free(resp_buf);
+    free(ssl_io_tmp_mem);
 
     client->thread_running = false;
 
@@ -1456,7 +1698,8 @@ int ws_client_connect(ws_client_t client, const char *url,
     client->thread_running = true;
     
     // 启动接收线程
-    thread_fork("ws_custom_io", 10, 2048, 10, &client->recv_thread_id,
+    // mbedTLS + select + 日志在高压场景下 2KB 栈很容易溢出，溢出后常表现为 illeg_err / pc_limit_err（PC 跳到堆/栈区）
+    thread_fork("ws_custom_io", 10, 4096, 10, &client->recv_thread_id,
                 ws_recv_thread, client);
     
     os_mutex_post(&client->mutex);
@@ -1505,6 +1748,7 @@ int ws_client_send_text(ws_client_t client, const u8 *data, u32 len)
         os_mutex_post(&client->mutex);
         return -1;
     }
+    WS_LOG_TX_ENQUEUE("send_text", client->sock_fd, &client->send_rb, client->temp_send_buf, frame_len, len);
     rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     os_mutex_post(&client->mutex);
     return 0;
@@ -1552,9 +1796,16 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
         static const char hex[] = "0123456789abcdef";
         char dump_buf[256];
         int dump_len = (len > 127) ? 127 : (int)len; // 确保 2*dump_len + 1 <= 255
+        // 修复：添加边界检查，防止数组越界
+        if (dump_len * 2 + 1 > sizeof(dump_buf)) {
+            dump_len = (sizeof(dump_buf) - 1) / 2;
+        }
         for (int i = 0; i < dump_len; i++) {
-            dump_buf[i * 2]     = hex[(data[i] >> 4) & 0xF];
-            dump_buf[i * 2 + 1] = hex[data[i] & 0xF];
+            // 确保索引在有效范围内
+            if (i * 2 + 1 < sizeof(dump_buf) && (data[i] >> 4) < 16 && (data[i] & 0xF) < 16) {
+                dump_buf[i * 2]     = hex[(data[i] >> 4) & 0xF];
+                dump_buf[i * 2 + 1] = hex[data[i] & 0xF];
+            }
         }
         dump_buf[dump_len * 2] = '\0';
         log_i("[ws_custom]Data: %s", dump_buf);
@@ -1580,6 +1831,7 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
         return -1; // 发送缓冲区满，丢弃
     }
     
+    WS_LOG_TX_ENQUEUE("send_binary", client->sock_fd, &client->send_rb, client->temp_send_buf, frame_len, len);
     rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     
     os_mutex_post(&client->mutex);
@@ -1626,6 +1878,7 @@ int ws_client_send_ping(ws_client_t client)
          return -1;
     }
     
+    WS_LOG_TX_ENQUEUE("send_ping", client->sock_fd, &client->send_rb, client->temp_send_buf, frame_len, (u32)(sizeof(ping_payload) - 1));
     rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     
     os_mutex_post(&client->mutex);
@@ -1665,6 +1918,7 @@ void ws_client_disconnect(ws_client_t client)
                 log_e("[ws_custom]ERROR: Frame validation failed for CLOSE frame in ws_client_disconnect");
             } else {
                 if (rb_space(&client->send_rb) >= close_len) {
+                    WS_LOG_TX_ENQUEUE("send_close", client->sock_fd, &client->send_rb, client->temp_send_buf, close_len, 0);
                     rb_write(&client->send_rb, client->temp_send_buf, close_len);
                     log_mqtt("【debug】[ws_custom]ws_client_disconnect: buffered CLOSE frame, len=%d", close_len);
                 } else {
