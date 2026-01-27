@@ -12,8 +12,8 @@
 #include "app_mode/lwl_app_core.h"
 #include "asm/power_interface.h"
 
-static void set_led_touch_on(void)          { set_rgb_ON(COLOR_PURPLE,10);  }
-static void set_led_touch_off(void)         { set_rgb_OFF(COLOR_PURPLE,10); }
+static void set_led_touch_on(void)          { set_rgb_ON(COLOR_YELLOW,10);  }
+static void set_led_touch_off(void)         { set_rgb_OFF(COLOR_YELLOW,10); }
 static void set_led_normal_key_on(void)     { set_rgb_ON(COLOR_YELLOW,11);  }
 static void set_led_normal_key_off(void)    { set_rgb_OFF(COLOR_YELLOW,11); }
 static void set_led_rst_key_on(void)        { set_rgb_ON(COLOR_RED,15);     }

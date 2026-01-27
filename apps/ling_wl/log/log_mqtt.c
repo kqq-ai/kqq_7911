@@ -419,11 +419,6 @@ static void log_monitor_thread(void* arg) {
             break;  // 无法连接则退出循环
         }
         
-        // 定期调用 MQTTYield 处理心跳和接收消息
-        if (g_mqtt_client != NULL && log_mqtt_is_connected()) {
-            MQTTYield(g_mqtt_client, 50);  // 50ms超时，处理心跳和消息
-        }
-        
         uint32_t current_time = timer_get_ms();
         bool need_upload = false;
 

@@ -449,20 +449,13 @@ int store_wifi_scan_result(void *pri)
         WIFI_SCAN_STATUES scan_status = get_wifi_scan_status(NULL);
         printf("[blee] Checking cmd_status: %d (WIFI_CMD_SCANNING=%d), scan_status: %d (WIFI_SCAN_RUNNING=%d)\n", 
                cmd_status, WIFI_CMD_SCANNING, scan_status, WIFI_SCAN_RUNNING);
-        
-        // 如果命令状态是扫描中，或者扫描状态是运行中，都发送通知
-        if (cmd_status == WIFI_CMD_SCANNING || scan_status == WIFI_SCAN_RUNNING)
-        {
-            extern int notify_app_wifi_list_update(void *pri);
-            int notify_ret = notify_app_wifi_list_update(NULL);
-            printf("[blee] WiFi list changed (prev:%d, curr:%d, update:%d, new:%d), notified app, notify_ret=%d\n", 
-                   prev_count, g_all_wifi_info_num, has_update, has_new, notify_ret);
-        }
-        else
-        {
-            printf("[blee] WiFi list changed but not in scanning state (cmd=%d, scan=%d), skip notification\n", 
-                   cmd_status, scan_status);
-        }
+
+        extern int notify_app_wifi_list_update(void *pri);
+        int notify_ret = notify_app_wifi_list_update(NULL);
+        printf("[blee] WiFi list changed (prev:%d, curr:%d, update:%d, new:%d), notified app, notify_ret=%d\n", 
+               prev_count, g_all_wifi_info_num, has_update, has_new, notify_ret);
+
+
     }
     else
     {

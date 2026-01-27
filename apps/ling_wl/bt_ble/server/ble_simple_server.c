@@ -1226,25 +1226,6 @@ static int notify_app_wifi_list_update_internal(void *pri, bool force_push) {
     return -1;
   }
 
-  // 如果不是强制推送，检查是否在扫描状态（同时检查命令状态和扫描状态）
-  if (!force_push) {
-    WIFI_CMD_STATUES cmd_status = get_wifi_cmd_status(NULL);
-    WIFI_SCAN_STATUES scan_status = get_wifi_scan_status(NULL);
-    log_info("WiFi cmd_status=%d (WIFI_CMD_SCANNING=%d), scan_status=%d "
-             "(WIFI_SCAN_RUNNING=%d)\n",
-             cmd_status, WIFI_CMD_SCANNING, scan_status, WIFI_SCAN_RUNNING);
-
-    // 如果命令状态是扫描中，或者扫描状态是运行中，都发送通知
-    if (cmd_status != WIFI_CMD_SCANNING && scan_status != WIFI_SCAN_RUNNING) {
-      log_info("WiFi not scanning (cmd=%d, scan=%d), skip wifi list update "
-               "notification\n",
-               cmd_status, scan_status);
-      return -1;
-    }
-  } else {
-    log_info("Force push mode: skipping scan status check\n");
-  }
-
   log_info("All checks passed, sending wifi_list_update notification\n");
 
   memcpy(cmd_name, "wifi_list_update", strlen("wifi_list_update"));
