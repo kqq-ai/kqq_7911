@@ -85,15 +85,16 @@ void update_loop()
     }
     progress = get_download_progress();
     log_i("update_loop downloading >> %d%%\n", progress);
-    if (progress > 10 && progress < 40 && led_color < 1) {
-        set_led_OTA_10();// OTA IN PROGRESS
+// OTA灯效：0-10%红色，10-80%蓝色，80-100%绿色
+    if (progress <= 10 && led_color != 0) {
+        set_led_OTA_on();   // 红色
+        led_color = 0;
+    } else if (progress > 10 && progress <= 80 && led_color != 1) {
+        set_led_OTA_10();   // 蓝色
         led_color = 1;
-    } else if (progress >= 40 && progress < 70 && led_color < 2) {
-        set_led_OTA_40();// OTA IN PROGRESS
+    } else if (progress > 80 && led_color != 2) {
+        set_led_OTA_70();   // 绿色
         led_color = 2;
-    } else if (progress >= 70 && progress < 100 && led_color < 3) {
-        set_led_OTA_70();// OTA IN PROGRESS
-        led_color = 3;
     }
     msleep(1000);
 }

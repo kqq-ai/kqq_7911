@@ -38,7 +38,7 @@ bool wifi_manager_state = false; // wifi manager 状态
 bool ble_connecting = false; // wifi manager 状态
 bool ble_connected = false; // wifi manager 状态
 
-static void set_led_connecting(void)        { set_rgb_color(COLOR_CYAN); }
+static void set_led_connecting(void)        { set_rgb_color(COLOR_GREEN); }
 static void set_led_connected(void)         { set_rgb_color(COLOR_BLUE); }
 static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_GREEN,2); }
 static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_GREEN,2); }
