@@ -125,8 +125,7 @@ _reconnect_:
 
         if (hdl->download_len >= hdl->file_size) {
             log_i("download success.\n");
-            lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"OtaSucc.mp3", download_reboot);
-
+            play_system_music("OtaSucc.mp3");
             net_fclose(update_fd, sock_err);
             return;
         }
