@@ -11,10 +11,15 @@ static u32 init_time = 0;
 int led_color = 0;
 int progress = 0;
 
-static void set_led_OTA_on(void)       { set_rgb_color(COLOR_RED); } /* 控制 led : 正在升级 红色 */
-static void set_led_OTA_10(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
-static void set_led_OTA_40(void)       { set_rgb_color(COLOR_BLUE); } /* 控制 led : 正在升级 蓝色 */
-static void set_led_OTA_70(void)       { set_rgb_color(COLOR_GREEN); } /* 控制 led : 正在升级 绿色 */
+static void set_led_OTA_0(void){
+    led_breath_start(COLOR_RED, COLOR_BLACK, 0, 800, 50);
+    } /* 控制 led : 正在升级 红色 */
+static void set_led_OTA_10(void){
+    led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 800, 50);
+    } /* 控制 led : 正在升级 蓝色 */
+static void set_led_OTA_80(void){
+    led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 800, 50);
+    } /* 控制 led : 正在升级 绿色 */
 static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 
 //=================================================================================================
@@ -87,13 +92,13 @@ void update_loop()
     log_i("update_loop downloading >> %d%%\n", progress);
 // OTA灯效：0-10%红色，10-80%蓝色，80-100%绿色
     if (progress <= 10 && led_color != 0) {
-        set_led_OTA_on();   // 红色
+        set_led_OTA_0();   // 红色
         led_color = 0;
     } else if (progress > 10 && progress <= 80 && led_color != 1) {
         set_led_OTA_10();   // 蓝色
         led_color = 1;
     } else if (progress > 80 && led_color != 2) {
-        set_led_OTA_70();   // 绿色
+        set_led_OTA_80();   // 绿色
         led_color = 2;
     }
     msleep(1000);
