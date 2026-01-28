@@ -24,6 +24,7 @@ void disable_gsensor();
 
 #define LOW_BATT_VOLT 350 
 #define LOW_BATT_VERY_SHUTDOWN 330 
+#define BATT_80_PERCENT_VOLT 400  // 80%电量对应电压阈值（用于充电显示切换）
 
 #define WRITE_SN_KEY 0 // 设置为1以强制写入SN/Key，忽略已有SN
 #define TEST_PI_MODE 0 // 设置为1以启用Pi测试模式

@@ -30,10 +30,21 @@
 
 #include "./bt_ble/app_wifi_manage.h"
 #include "net_music_play_my.h"
+#include "util/led_breath.h"  // 添加呼吸灯头文件
+
 #define MODE_TIMEOUT_MS 5000 // 5s
 #define MOVE_TIMEOUT_MS 3000 // 3s
 static u32 init_time = 0;
 bool wait_for_button = false;
+
+// 充电LED状态追踪（避免重复设置）
+typedef enum {
+    CHARGE_LED_STATE_UNKNOWN = 0,
+    CHARGE_LED_STATE_BREATHING_YELLOW,  // 电量<80%，黄灯呼吸
+    CHARGE_LED_STATE_SOLID_GREEN,       // 电量>=80%，绿灯常亮
+} charge_led_state_t;
+
+static charge_led_state_t g_charge_led_state = CHARGE_LED_STATE_UNKNOWN;
 
 // 低电量显示红灯
 // 充电中显示黄灯（<80%），充电完成显示绿灯（>=80%）
@@ -48,6 +59,35 @@ static void set_led_low_batt(void)  { set_rgb_color(COLOR_RED); }      //低电�
 static void set_led_charging(void)  { set_rgb_color(COLOR_YELLOW); }   //充电中时灯光变黄色
 static void set_led_charged(void)   { set_rgb_color(COLOR_GREEN); }    //充电完成时灯光变绿色
 static void set_led_idle(void)      { set_rgb_color(COLOR_WHITE); }    //空闲时灯光变白色
+
+/**
+ * @brief 根据电压动态更新充电LED状态
+ * @param voltage 当前电池电压 (单位: 0.01V)
+ * 
+ * 逻辑:
+ *   - 电压 < BATT_80_PERCENT_VOLT (400): 黄灯呼吸 (表示充电中)
+ *   - 电压 >= BATT_80_PERCENT_VOLT (400): 绿灯常亮 (表示快充满或已充满)
+ */
+static void update_charging_led(u16 voltage)
+{
+    if (voltage < BATT_80_PERCENT_VOLT) {
+        // 电量 < 80%: 黄灯呼吸
+        if (g_charge_led_state != CHARGE_LED_STATE_BREATHING_YELLOW) {
+            g_charge_led_state = CHARGE_LED_STATE_BREATHING_YELLOW;
+            // 黄色呼吸: 从黄色渐变到黑色再回来, 无限循环, 每次过渡800ms
+            led_breath_start(COLOR_YELLOW, COLOR_BLACK, 0, 800, 50);
+            log_i("[default] Charging LED: Yellow breathing (voltage=%d < 400)", voltage);
+        }
+    } else {
+        // 电量 >= 80%: 绿灯常亮
+        if (g_charge_led_state != CHARGE_LED_STATE_SOLID_GREEN) {
+            g_charge_led_state = CHARGE_LED_STATE_SOLID_GREEN;
+            led_set_color(COLOR_GREEN);  // 停止呼吸并设为绿色
+            log_i("[default] Charging LED: Green solid (voltage=%d >= 400)", voltage);
+        }
+    }
+}
+
 //=================================================================================================
 // LWL event callback
 //=================================================================================================
@@ -73,19 +113,20 @@ static void default_input_event_handler_cb(lwl_event_t *e)
     case LWL_EVENT_TYPE_CHARGE:
         // 根据事件更新充电指示灯状态
         if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_IN) {
-            set_led_charging();
+            // 充电器插入：根据当前电量决定LED状态
+            u16 voltage = get_vbat_level();
+            g_charge_led_state = CHARGE_LED_STATE_UNKNOWN;  // 重置状态以触发更新
+            update_charging_led(voltage);
         }
         else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_OUT) {
-            set_led_idle();
-            // u16 voltage = get_vbat_level();
-            // if (voltage < LOW_BATT_VOLT) {
-            //     set_led_low_batt();
-            // } else {
-            //     set_led_idle();
-            // }
+            // 充电器拔出：停止呼吸，恢复白灯
+            g_charge_led_state = CHARGE_LED_STATE_UNKNOWN;
+            led_set_color(COLOR_WHITE);
         }
         else if (e->charge_cmd.charge_event_type == CHARGE_EVENT_TYPE_CHARGE_FULL) {
-            set_led_charged();
+            // 充满电：绿灯常亮
+            g_charge_led_state = CHARGE_LED_STATE_SOLID_GREEN;
+            led_set_color(COLOR_GREEN);
         }
         break;
     }
@@ -105,10 +146,12 @@ static int default_init(void)
     int charge_full = gpio_read(CHARGE_FULL_IO);
     log_i("[default_mode]voltage=%d, charge_in=%d, charge_full=%d", voltage, charge_in, charge_full);
     if (charge_in) {
+        g_charge_led_state = CHARGE_LED_STATE_UNKNOWN;  // 重置状态
         if (charge_full) {
-            set_led_charged();
+            g_charge_led_state = CHARGE_LED_STATE_SOLID_GREEN;
+            led_set_color(COLOR_GREEN);
         } else {
-            set_led_charging();
+            update_charging_led(voltage);  // 根据电压动态设置
         }
         play_system_music("Charging.mp3");
     } else {
@@ -129,6 +172,7 @@ static int default_unint(void)
 {
     /* 取消注册lwl事件处理回调 */
     lwl_event_handler_remove(default_input_event_handler_cb);
+    g_charge_led_state = CHARGE_LED_STATE_UNKNOWN;  // 重置充电LED状态
     return 0;
 }
 
@@ -147,6 +191,8 @@ void app_default_loop()
     }
     if (charge_in) {
         g_sensor_reset_alive_timer();
+        // 在充电过程中持续检测电压，动态更新LED
+        update_charging_led(voltage);
     } else { // 超时关机，低电量避免反复关机
         if (timer_get_ms() - init_time >= MODE_TIMEOUT_MS) {
             if (voltage < LOW_BATT_VERY_SHUTDOWN) {
