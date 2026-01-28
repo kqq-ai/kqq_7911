@@ -166,7 +166,6 @@ void app_net_connecting_loop()
             set_led_confirm_off();
             // stop breath and set blue with priority 6
             // led_set_color will stop breath and unregister entries
-            led_set_color(0,0,0);
             set_led_connected();
             play_system_music("bt_conneted.mp3");
             ble_connected = true;

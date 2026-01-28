@@ -92,7 +92,7 @@ static int led_insert_entry(u16 red, u16 green, u16 blue, u16 priority)
             led_entries[i].green = green;
             led_entries[i].blue = blue;
             led_entries[i].seq = ++led_seq_counter;
-            log_d("LED: updated existing entry idx=%d priority=%d", i, priority);
+            // log_d("LED: updated existing entry idx=%d priority=%d", i, priority);
             return 0;
         }
     }
@@ -105,7 +105,7 @@ static int led_insert_entry(u16 red, u16 green, u16 blue, u16 priority)
             led_entries[i].blue = blue;
             led_entries[i].priority = priority;
             led_entries[i].seq = ++led_seq_counter;
-            log_d("LED: inserted entry idx=%d priority=%d", i, priority);
+            // log_d("LED: inserted entry idx=%d priority=%d", i, priority);
             return 0;
         }
     }
@@ -270,7 +270,7 @@ void set_rgb_LED(u16 red, u16 green, u16 blue) {
 
 void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
     // 新行为：插入一条记录并按 (priority desc, seq desc) 选取第一位显示
-    log_i("Event set_rgb_ON: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
+    // log_i("Event set_rgb_ON: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
     os_mutex_pend(&g_led_entries_mutex, 0);
     if (led_insert_entry(red, green, blue, priority) != 0) {
         log_w("LED entries full, cannot insert new entry\n");
@@ -289,7 +289,7 @@ void set_rgb_ON(u16 red, u16 green, u16 blue, u16 priority){
 
 void set_rgb_OFF(u16 red, u16 green, u16 blue, u16 priority) {
     // 新行为：删除与 (r,g,b,priority) 完全匹配的最新一条记录
-    log_i("Event set_rgb_OFF: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
+    // log_i("Event set_rgb_OFF: %d  : %d  : %d , priority: %d\n", red, green, blue, priority);
     os_mutex_pend(&g_led_entries_mutex, 0);
     if (led_remove_matching_entry(red, green, blue, priority) != 0) {
         log_w("No matching LED entry found to remove\n");
