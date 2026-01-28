@@ -56,7 +56,7 @@ static int update_init(void)
 {
     init_time = timer_get_ms();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
-    set_led_OTA_on();
+    set_led_OTA_0();
     led_color = 0;
     progress = -1;
     play_system_music("OtaInUpdate.mp3");
