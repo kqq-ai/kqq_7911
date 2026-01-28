@@ -39,13 +39,25 @@ bool wifi_manager_state = false; // wifi manager 状态
 bool ble_connecting = false; // wifi manager 状态
 bool ble_connected = false; // wifi manager 状态
 
-static void set_led_connecting(void)        { led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 400, 50); }
-static void set_led_connected(void)         { led_set_color(COLOR_BLUE); }
+static void led_show_connecting(void) {
+    // led_breath_start 已支持平滑切换，无需手动停止
+    led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 400, 50); 
+}
+
+static void led_show_ble_connected(void) {
+    // led_breath_start 已支持平滑切换，无需手动停止
+    led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 400, 50); 
+}
+
+static void led_show_net_success(void) {
+    led_set_color(COLOR_WHITE); // 停掉所有呼吸并常亮
+}
+
 static void set_led_confirm_on(void)        { set_rgb_ON(COLOR_GREEN,2); }
 static void set_led_confirm_off(void)       { set_rgb_OFF(COLOR_GREEN,2); }
 
 void clear_key_press_time_ms(){
-    set_led_connecting();
+    led_show_connecting();
     ble_connecting = false;
     ble_connected = false;
     key_press_time_ms = 0;
@@ -102,7 +114,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
-    set_led_connecting();
+    led_show_connecting();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
     wifi_manager_state = false;
@@ -145,6 +157,7 @@ void app_net_connecting_loop()
         mdelay(200);
         log_i("【debug】wifi连接成功: DHCP_SUCC, switching to NET_CONNECTED");
         switch_rf_coexistence_config_table(3);
+        led_show_net_success();
         play_system_music("NetCfgSucc.mp3");
         lwl_app_mode_switch_to(APP_NET_CONNECTED_MODE);
         return;
@@ -164,9 +177,7 @@ void app_net_connecting_loop()
     if (!get_ble_app_disconnect_flag()) {
         if (!ble_connected) {
             set_led_confirm_off();
-            // stop breath and set blue with priority 6
-            // led_set_color will stop breath and unregister entries
-            set_led_connected();
+            led_show_ble_connected();
             play_system_music("bt_conneted.mp3");
             ble_connected = true;
             printf("BLE connected\n");
