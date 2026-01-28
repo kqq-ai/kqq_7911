@@ -52,12 +52,14 @@ static const char* get_bdo_code_desc(bdo_code_e code) {
 //=================================================================================================
 static void turn_off_Pi_internal() {
     if (g_edev_connected_sn[0] != 0) {
+        lwl_app_core_dev_map_lock();
         lwl_eend_dev_t *pdev = find_eend_dev_by_sn(g_edev_connected_sn);
         if (pdev) {
             bdo_turn_off(pdev);
         } else {
             log_i("[wss_request]turn_off_Pi find_eend_dev_by_sn %s NULL\n", g_edev_connected_sn);
         }
+        lwl_app_core_dev_map_unlock();
         g_edev_connected_sn[0] = 0;
     }
 }
@@ -74,15 +76,16 @@ void turn_off_Pi() {
 //=================================================================================================
 // E 开启回调函数
 //=================================================================================================
-static void e_turn_on_cb(bdo_code_e code, void *priv)
+static void e_turn_on_cb(bdo_code_e code, void *priv, const char *sn)
 {
     u32 callback_start_time = timer_get_ms();
     os_mutex_pend(&g_request_mutex, 0);
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    // lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv); // 不再直接使用指针，可能已失效
     
     char sn_string[SN_SIZE + 1] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    if (sn) {
+        strncpy(sn_string, sn, SN_SIZE);
+        sn_string[SN_SIZE] = '\0';
     }
     
     switch(code) {
@@ -134,7 +137,7 @@ static void e_turn_on_cb(bdo_code_e code, void *priv)
         // 错误：所有其他错误情况
         const char* error_desc = get_bdo_code_desc(code);
         if (strcmp(sn_string, g_edev_target_sn) == 0) { // 连接的目标E失败
-            log_mqtt("[ERROR]【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s, code=%d (%s)", 
+            log_mqtt("[ERROR]【flow】 ❌切换设备失败,E端无法连接: g_edev_target_sn=%s, g_stream_id=%s, code=%d (%s)", 
                   g_edev_target_sn, g_stream_id, code, error_desc);
             
             play_prompt_sound("SwFailed.mp3");
@@ -175,10 +178,11 @@ void turn_on_Pi(const char *pdev_sn) {
         turn_off_Pi_internal();
     }
     
+    lwl_app_core_dev_map_lock();
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(pdev_sn);
     if (pdev == NULL) {
         // log_mqtt("【flow】切换设备失败,设备不存在");
-        log_mqtt("[ERROR]【flow】切换设备失败: g_edev_target_sn=%s, g_stream_id=%s", 
+        log_mqtt("[ERROR]【flow】 ❌切换设备失败,E端不存在: g_edev_target_sn=%s, g_stream_id=%s", 
             g_edev_target_sn, g_stream_id);
         // send_bind_result(g_edev_target_sn, false, "device_not_found", g_stream_id);
         play_prompt_sound("SwFailed.mp3");
@@ -187,6 +191,7 @@ void turn_on_Pi(const char *pdev_sn) {
         g_edev_connected_sn[0] = 0;
         g_stream_id[0] = '\0';
         g_tts_bind_start_time = 0; // 清除时间戳
+        lwl_app_core_dev_map_unlock();
         os_mutex_post(&g_request_mutex);
         return;
     }
@@ -210,6 +215,7 @@ void turn_on_Pi(const char *pdev_sn) {
                 wss_ble_audio_start();
             }
             
+            lwl_app_core_dev_map_unlock();
             os_mutex_post(&g_request_mutex);
             return;
         }
@@ -221,6 +227,7 @@ void turn_on_Pi(const char *pdev_sn) {
     log_mqtt_set_battery_level(pdev->sn, (pdev->bat_level)*10);
     
     // 释放锁后再调用 bdo_turn_on，避免死锁（回调函数会再次获取锁）
+    lwl_app_core_dev_map_unlock();
     os_mutex_post(&g_request_mutex);
     
     //异步开启E，并等待回调结果

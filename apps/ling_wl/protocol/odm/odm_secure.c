@@ -476,10 +476,20 @@ static char* prepare_signature(const char server_url[])
         0x75, 0x00, 0x52, 0x56, 0xdb, 0x21, 0xcc, 0xc7, 0x90, 0x55, 0x28, 0x1b  };
 
     const size_t pt_len = 29;
-    unsigned char buf[BUF_SIZE];
-    unsigned char tag_buf[BUF_SIZE];
-    unsigned char base64_buf[BUF_SIZE];
-    unsigned char base64_iv[BUF_SIZE];
+    unsigned char *buf = (unsigned char *)malloc(BUF_SIZE);
+    unsigned char *tag_buf = (unsigned char *)malloc(BUF_SIZE);
+    unsigned char *base64_buf = (unsigned char *)malloc(BUF_SIZE);
+    unsigned char *base64_iv = (unsigned char *)malloc(BUF_SIZE);
+    
+    if (!buf || !tag_buf || !base64_buf || !base64_iv) {
+        log_e("prepare_signature malloc failed\n");
+        if (buf) free(buf);
+        if (tag_buf) free(tag_buf);
+        if (base64_buf) free(base64_buf);
+        if (base64_iv) free(base64_iv);
+        return NULL;
+    }
+
     memset(buf, 0, BUF_SIZE);
     memset(tag_buf, 0, BUF_SIZE);
     memset(base64_buf, 0, BUF_SIZE);
@@ -490,9 +500,10 @@ static char* prepare_signature(const char server_url[])
     mbedtls_cipher_id_t cipher = MBEDTLS_CIPHER_ID_AES;
 
     // 将时间戳直接转换为字符串
-    double time_web = https_get_timestamp(server_url);
+    double time_web = https_get_timestamp((char*)server_url);
     if (time_web == 0) {
         log_i("❌[prepare_signature] https_get_timestamp failed, aborting\n");
+        free(buf); free(tag_buf); free(base64_buf); free(base64_iv);
         return NULL;
     }
     // 修复：将double转换为long long再格式化，避免精度问题
@@ -501,22 +512,24 @@ static char* prepare_signature(const char server_url[])
     int ret_snprintf = snprintf(pt, sizeof(pt), "%.*s|%lld", SN_SIZE, snInVm, timestamp_int);
     if (ret_snprintf < 0 || ret_snprintf >= (int)sizeof(pt)) {
         log_i("❌[prepare_signature] pt string construction failed, ret=%d, sizeof(pt)=%zu\n", ret_snprintf, sizeof(pt));
+        free(buf); free(tag_buf); free(base64_buf); free(base64_iv);
         return NULL;
     }
     size_t actual_length = strlen(pt);
     if (actual_length == 0) {
         log_i("❌[prepare_signature] pt is empty, time_web=%.0f, timestamp_int=%lld\n", time_web, timestamp_int);
+        free(buf); free(tag_buf); free(base64_buf); free(base64_iv);
         return NULL;
     }
     mbedtls_gcm_init(&ctx);
-    mbedtls_gcm_setkey(&ctx, cipher, keyInVm, 128);
+    mbedtls_gcm_setkey(&ctx, cipher, (const unsigned char*)keyInVm, 128);
     log_i("pt:%s", pt);
     
     int ret = mbedtls_gcm_crypt_and_tag(&ctx, MBEDTLS_GCM_ENCRYPT,
                                             pt_len,
                                             iv, iv_len,
                                             NULL, 0,
-                                            pt, buf, KEY_SIZE, tag_buf);
+                                            (const unsigned char*)pt, buf, KEY_SIZE, tag_buf);
     memcpy(buf + pt_len, tag_buf, KEY_SIZE);
 
     mbedtls_gcm_free(&ctx);
@@ -530,17 +543,18 @@ static char* prepare_signature(const char server_url[])
     if (base64_len + 1 + base64_len_iv > BUF_SIZE) {
         log_i("❌[prepare_signature] base64 buffer overflow: len=%zu, iv_len=%zu, max=%d\n", 
               base64_len, base64_len_iv, BUF_SIZE);
+        free(buf); free(tag_buf); free(base64_buf); free(base64_iv);
         return NULL;
     }
     base64_buf[base64_len] = '|';
     memcpy(base64_buf + base64_len + 1, base64_iv, base64_len_iv);
         // 计算总长度：查找第一个零字节
-    log_i("base64_buf:%s", base64_buf);
+    log_i("base64_buf:%s", (char*)base64_buf);
 
     char post_sign_time[264];
     memset(&post_sign_time, 0x0, sizeof(post_sign_time));
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "sign", base64_buf);
+    cJSON_AddStringToObject(root, "sign", (char*)base64_buf);
     cJSON_AddStringToObject(root, "sn", snInVm);
     double time_stamp_double = time_web;
     cJSON_AddNumberToObject(root, "timestamp", time_stamp_double );
@@ -550,6 +564,7 @@ static char* prepare_signature(const char server_url[])
     if (json_str == NULL) {
         log_i("❌[prepare_signature] cJSON_PrintUnformatted returned NULL\n");
         cJSON_Delete(root);
+        free(buf); free(tag_buf); free(base64_buf); free(base64_iv);
         return NULL;
     }
     size_t json_str_len = strlen(json_str);
@@ -558,6 +573,7 @@ static char* prepare_signature(const char server_url[])
               json_str_len, sizeof(post_sign_time));
         free(json_str);
         cJSON_Delete(root);
+        free(buf); free(tag_buf); free(base64_buf); free(base64_iv);
         return NULL;
     }
     memcpy(post_sign_time, json_str, json_str_len); //整合结果，存储在  post_sign_time
@@ -566,6 +582,10 @@ static char* prepare_signature(const char server_url[])
     // 清理资源
     free(json_str);
     cJSON_Delete(root);
+    free(buf);
+    free(tag_buf);
+    free(base64_buf);
+    free(base64_iv);
 
 
     char post_url[BUF_SIZE];
@@ -611,8 +631,14 @@ char *get_wss_connection_url()
 {
     char server_url[BUF_SIZE] = "";
     char sn_c_id[SN_SIZE+1];
+    char * Token = NULL;
+    char * url_api = NULL;
+
     if (!get_SN(sn_c_id)) return NULL;
-    char * url_api = (char *)malloc(BUF_SIZE);
+    
+    url_api = (char *)malloc(BUF_SIZE);
+    if (!url_api) return NULL;
+
 #ifdef TEST_LOCOL_SERVER
     log_i("🚀🚀🚀 get_wss_connection_url DEBUG MODE\n");
     char* ip_port = https_get_test_ip_port(TEST_IP_GET);
@@ -620,17 +646,25 @@ char *get_wss_connection_url()
         snprintf(server_url, BUF_SIZE, TEST_SERVER_API, "http", ip_port);
         log_i("test server_url=%s", server_url);
     }
-    char * Token = prepare_signature(server_url);
-    if (Token) snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port, sn_c_id,  Token);
+    Token = prepare_signature(server_url);
+    if (Token) {
+        snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port ? ip_port : "", sn_c_id, Token);
+    }
+    if (ip_port) free(ip_port); // 释放ip_port
 #else
     log_i("🚀🚀🚀 get_wss_connection_url PROD MODE\n");
     snprintf(server_url, BUF_SIZE, SERVER_API, "https", SERVER_DOMAIN);
-    char * Token = prepare_signature(server_url);
-    if (Token) snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id,  Token);
+    Token = prepare_signature(server_url);
+    if (Token) {
+        snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id, Token);
+    }
 #endif
+
     if (!Token) {
         free(url_api);
         return NULL;
     }
+    
+    free(Token); // 使用完Token后必须释放，它是prepare_signature内部strdup出来的
     return url_api;
 }

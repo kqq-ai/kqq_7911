@@ -278,6 +278,9 @@ void clean_expired_eend();
  */
 lwl_eend_dev_t* find_eend_dev_by_sn(u8 *sn);
 
+void lwl_app_core_dev_map_lock(void);
+void lwl_app_core_dev_map_unlock(void);
+
 /**
  * @brief 查找信号最强的E端设备
  * @return 信号最强的设备对象引用，如果未找到返回 NULL

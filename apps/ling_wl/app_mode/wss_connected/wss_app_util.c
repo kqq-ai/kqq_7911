@@ -217,6 +217,11 @@ bool wss_connect(void) {
         g_ws_client_custom = NULL;
     }
     
+    if (wss_url != NULL) {
+        free(wss_url);
+        wss_url = NULL;
+    }
+    
     wss_url = get_wss_connection_url();
     if (wss_url == NULL) {
         log_e("[wss_app_util]❌❌❌ get_wss_connection_url failed wss_url=NULL");
@@ -289,6 +294,11 @@ bool wss_reconnect(void) {
         ws_client_destroy(g_ws_client_custom);
         g_ws_client_custom = NULL;
         context->websockets_info = NULL;
+    }
+    
+    if (wss_url != NULL) {
+        free(wss_url);
+        wss_url = NULL;
     }
     
     if (wss_url == NULL) {

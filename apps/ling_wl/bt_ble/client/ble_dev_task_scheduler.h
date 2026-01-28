@@ -24,7 +24,7 @@ typedef enum {
  * @param code 操作执行情况. @ref bdo_code_e
  * @param priv 用户参数.
  */
-typedef void (*ble_dev_op_cb_func_t)(uint8_t code, void *priv);
+typedef void (*ble_dev_op_cb_func_t)(bdo_code_e code, void *priv, const char *sn);
 
 typedef struct {
     int conn_timeout;               //!< 连接超时时间，单位 ms

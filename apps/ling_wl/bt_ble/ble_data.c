@@ -861,7 +861,11 @@ int parse_and_dispatch_json(const char *json_data, char *return_json_data)
     cJSON *cmd_args_item = cJSON_GetObjectItemCaseSensitive(root, "cmd_args");
 
     // 打印cmd_args_item
-    printf("[blee] cmd_args_item: %s\n", cJSON_Print(cmd_args_item));
+    char *printed_args = cJSON_Print(cmd_args_item);
+    if (printed_args) {
+        printf("[blee] cmd_args_item: %s\n", printed_args);
+        free(printed_args);
+    }
 
     if (cJSON_IsString(cmd_name_item) && cmd_name_item->valuestring != NULL && cJSON_IsObject(cmd_args_item))
     {

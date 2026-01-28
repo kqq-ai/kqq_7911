@@ -41,6 +41,14 @@ void set_ctrl_impl(void *__this, uint8_t on, uint8_t play)
     log_i("[EEND]set_ctrl_impl %s: on=%d play=%d ctrl=0x%02X", that->sn, on, play, that->ctrl_mask_flags);
 }
 
+void lwl_eend_dev_free(lwl_eend_dev_t *dev)
+{
+    if (dev) {
+        os_mutex_del(&dev->distance_info.mutex, 1);
+        free(dev);
+    }
+}
+
 void lwl_eend_dev_init(const u8 *sn, lwl_eend_dev_t *dev)
 {
     memcpy(dev->sn, sn, PI_SN_SIZE + 1);

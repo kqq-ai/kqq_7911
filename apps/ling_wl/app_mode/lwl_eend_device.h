@@ -171,6 +171,12 @@ void get_string_impl(const void *__this, char *buffer, const int size);
 void set_ctrl_impl(void *__this, uint8_t on, uint8_t play);
 
 /**
+ * @brief Free an LWL EEND device structure and its resources
+ * @param dev Pointer to the device structure to free
+ */
+void lwl_eend_dev_free(lwl_eend_dev_t *dev);
+
+/**
  * @brief Initialize an LWL EEND device structure
  * @param sn Serial number to assign to the device
  * @param dev Pointer to the device structure to initialize

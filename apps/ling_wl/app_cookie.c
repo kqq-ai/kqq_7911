@@ -265,7 +265,7 @@ static void app_cookie_main(void)
     log_mqtt_start();
 
     /* APP_MDOE 开始 */
-    thread_fork("lwl_app_task", 15, 512 * 4, 4, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
+    thread_fork("lwl_app_task", 15, 1024 * 4, 4, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
 
 }
 

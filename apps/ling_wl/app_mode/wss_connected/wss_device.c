@@ -48,8 +48,10 @@ bool update_edev_time(char* sn)
     }
 
     // 直接查找设备并验证有效性
+    lwl_app_core_dev_map_lock();
     lwl_eend_dev_t *pdev = find_eend_dev_by_sn(sn);
     if (!pdev) {
+        lwl_app_core_dev_map_unlock();
         log_i("[update_edev_time] Device sn=%s not found", sn);
         return false;
     }
@@ -59,8 +61,10 @@ bool update_edev_time(char* sn)
         pdev->distance_info.rssi_sample_count == 0) {
         log_i("[update_edev_time] Device sn=%s invalid: distance=%.2f, rssi_count=%d", 
               sn, pdev->distance_info.distance, pdev->distance_info.rssi_sample_count);
+        lwl_app_core_dev_map_unlock();
         return false;
     }
+    lwl_app_core_dev_map_unlock();
 
     return true;
 }
@@ -174,6 +178,7 @@ static void nearby_update_event_handler(lwl_event_t *e)
 
     // 第一次遍历:统计有效设备数量(有RSSI样本的设备)
     int valid_device_count = 0;
+    lwl_app_core_dev_map_lock();
     MapIterator it = map_begin(ctx->dev_map);
     MapIterator end = map_end(ctx->dev_map);
 
@@ -187,6 +192,7 @@ static void nearby_update_event_handler(lwl_event_t *e)
 
     // 如果没有有效设备,发送空列表
     if (valid_device_count == 0) {
+        lwl_app_core_dev_map_unlock();
         log_i("[nearby_update] No valid devices, sending empty list");
         send_nearby_update(NULL, 0);
         return;
@@ -195,6 +201,7 @@ static void nearby_update_event_handler(lwl_event_t *e)
     // 分配设备指针数组
     void **devices = (void **)malloc(valid_device_count * sizeof(void *));
     if (!devices) {
+        lwl_app_core_dev_map_unlock();
         log_e("[nearby_update] ERROR: malloc failed for device array");
         return;
     }
@@ -221,6 +228,7 @@ static void nearby_update_event_handler(lwl_event_t *e)
     if (ret != 0) {
         log_e("[nearby_update] Failed to send nearby_update message");
     }
+    lwl_app_core_dev_map_unlock();
 
     // 释放设备指针数组
     free(devices);

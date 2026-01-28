@@ -267,8 +267,8 @@ const uint8_t empty_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 uint8_t last_broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 uint8_t broadcast_code[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-static inline void process_cb(ble_dev_op_t *op, u8 code) {
-    if (op->cb) op->cb(code, op->cb_priv);
+static inline void process_cb(ble_dev_op_t *op, bdo_code_e code) {
+    if (op->cb) op->cb(code, op->cb_priv, op->sn);
 }
 
 void bdo_disable(bool mute)
@@ -336,8 +336,10 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
 {
     log_i("[BDO]Active start");
     /* - 查询当前设备状态，是否是一个 off stat，且有 broadcast code */
+    lwl_app_core_dev_map_lock();
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     if (!dev) {
+        lwl_app_core_dev_map_unlock();
         log_i("[BDO]Error dev not found!");
         return;
     }
@@ -347,6 +349,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
             log_i("[BDO]There are other pending tasks, skip this activation!");
             dev->op_state &= ~BDO_STATE_ACTIVATING;
             process_cb(op, BDOCode_Skip);
+            lwl_app_core_dev_map_unlock();
             return;
         }
     }
@@ -354,6 +357,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         log_i("[BDO]not the closest dev, ignore!");
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
+        lwl_app_core_dev_map_unlock();
         return;
     }
     max_rssi = -127;
@@ -362,6 +366,7 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         log_i("[BDO]Device already active, skip!");
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_Skip);
+        lwl_app_core_dev_map_unlock();
         return;
     }
 
@@ -375,15 +380,23 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
         ble_simple_client_module_enable(1);
         dev->op_state &= ~BDO_STATE_ACTIVATING;
         process_cb(op, BDOCode_BLE_Api_Error);
+        lwl_app_core_dev_map_unlock();
         return;
     }
+    lwl_app_core_dev_map_unlock();
+
     if (os_sem_pend(&g_conn_sem, MS2TICK(op->active.conn_timeout)) == OS_TIMEOUT) {
         g_ble_conn_pending = 0;  // 清除标记，防止迟到的连接回调被接受
         ble_simple_client_create_cannel();
         log_e("[BDO]Error ble connection timeout!!! expected=%dms(%d ticks)",
               op->active.conn_timeout, MS2TICK(op->active.conn_timeout));
-        dev->op_state &= ~BDO_STATE_ACTIVATING;
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (dev) {
+            dev->op_state &= ~BDO_STATE_ACTIVATING;
+        }
         process_cb(op, BDOCode_Connection_Timeout);
+        lwl_app_core_dev_map_unlock();
         // 增加延迟确保BLE栈完全取消连接
         mdelay(100);
         ble_simple_client_module_enable(1);
@@ -409,8 +422,13 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     // log_i_buf(active_data, sizeof(active_data));
     if (BLE_BUFFER_FULL == ble_simple_client_write_without_respond_send(NULL, write_handle, active_data, sizeof(active_data))) {
         log_e("[BDO]Failed to send cmd, ble buffer full.");
-        dev->op_state &= ~BDO_STATE_ACTIVATING;
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (dev) {
+            dev->op_state &= ~BDO_STATE_ACTIVATING;
+        }
         process_cb(op, BDOCode_BLE_Buffer_Full);
+        lwl_app_core_dev_map_unlock();
         return;
     } else {
         mdelay(120); // 等待3个连接事件(connection interval: 100ms)
@@ -420,8 +438,13 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     os_sem_set(&g_disconn_sem, 0);
     if (ble_simple_client_disconnect() == APP_BLE_OPERATION_ERROR) {
         log_e("[BDO]Error failed to disconnect APP_BLE_OPERATION_ERROR!!!");
-        dev->op_state &= ~BDO_STATE_ACTIVATING;
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (dev) {
+            dev->op_state &= ~BDO_STATE_ACTIVATING;
+        }
         process_cb(op, BDOCode_BLE_Api_Error);
+        lwl_app_core_dev_map_unlock();
         return;
     }
     if (os_sem_pend(&g_disconn_sem, MS2TICK(BLE_DISCONNECT_TIMEOUT)) == OS_TIMEOUT) {
@@ -433,16 +456,23 @@ static void ble_dev_op_handler_active(ble_dev_op_t* op)
     log_i("[BDO]ble disconnected");
 
     log_i("[BDO]Active end");
-    dev->op_state &= ~BDO_STATE_ACTIVATING;
+    lwl_app_core_dev_map_lock();
+    dev = find_eend_dev_by_sn(op->sn);
+    if (dev) {
+        dev->op_state &= ~BDO_STATE_ACTIVATING;
+    }
     process_cb(op, BDOCode_Success);
+    lwl_app_core_dev_map_unlock();
 }
 
 static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
 {
     log_i("[BDO]Turn on %s(%s)", op->sn, op->turnon.broadcast_code);
 
+    lwl_app_core_dev_map_lock();
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     if (!dev) {
+        lwl_app_core_dev_map_unlock();
         log_i("[BDO]Error dev not found!");
         process_cb(op, BDOCode_Null_Pointer);
         return;
@@ -451,10 +481,24 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     if (dev->distance_info.rssi_sample_count == 0) {
         log_i("[BDO]rssi_sample_count == 0 Waiting adv");
         os_sem_set(&g_e_adv_report_sem, 0);  // 清除之前可能存在的信号
+        lwl_app_core_dev_map_unlock();
         if (os_sem_pend(&g_e_adv_report_sem, MS2TICK(CONNECTING_WAIT_TIMEOUT)) == OS_TIMEOUT) {
             log_i("[BDO]Error dev lost!");
-            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            lwl_app_core_dev_map_lock();
+            dev = find_eend_dev_by_sn(op->sn);
+            if (dev) {
+                dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            }
             process_cb(op, BDOCode_Dev_Busy);
+            lwl_app_core_dev_map_unlock();
+            return;
+        }
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (!dev) {
+            lwl_app_core_dev_map_unlock();
+            log_i("[BDO]Error dev lost after wait!");
+            process_cb(op, BDOCode_Null_Pointer);
             return;
         }
     }
@@ -462,10 +506,23 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
     if (dev->adv_state == BDPAS_CONNECTED) {
         memcpy(broadcast_code, op->turnon.broadcast_code, sizeof(broadcast_code));
         os_sem_set(&g_e_adv_report_changed_sem, 0);
+        lwl_app_core_dev_map_unlock();
         if (os_sem_pend(&g_e_adv_report_changed_sem, MS2TICK(op->turnon.scan_timeout)) == OS_TIMEOUT) {
             log_e("[BDO]Error dev busy! %d", op->turnon.scan_timeout);
-            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            lwl_app_core_dev_map_lock();
+            dev = find_eend_dev_by_sn(op->sn);
+            if (dev) {
+                dev->op_state &= ~BDO_STATE_TURNNING_ON;
+            }
             process_cb(op, BDOCode_Dev_Busy);
+            lwl_app_core_dev_map_unlock();
+            return;
+        }
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (!dev) {
+            lwl_app_core_dev_map_unlock();
+            process_cb(op, BDOCode_Null_Pointer);
             return;
         }
     }
@@ -487,12 +544,21 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
             if (!(dev->op_state & BDO_STATE_TURNNING_ON)) {
                 log_i("[BDO]op turnon canceled!");
                 process_cb(op, BDOCode_Skip);
+                lwl_app_core_dev_map_unlock();
                 return; // 操作已被取消
             }
             if (attempt > 1) {
                 log_i("[BDO]Waiting adv state change...");
                 os_sem_set(&g_e_adv_report_sem, 0);  // 清除之前可能存在的信号
+                lwl_app_core_dev_map_unlock();
                 if (os_sem_pend(&g_e_adv_report_sem, MS2TICK(CONNECTING_WAIT_TIMEOUT)) == OS_NO_ERR) {
+                    lwl_app_core_dev_map_lock();
+                    dev = find_eend_dev_by_sn(op->sn);
+                    if (!dev) {
+                        lwl_app_core_dev_map_unlock();
+                        process_cb(op, BDOCode_Null_Pointer);
+                        return;
+                    }
                     if (dev->adv_state == BDPAS_CONNECTING) {
                         break;
                     }
@@ -500,9 +566,18 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
                         log_e("[BDO]Error dev busy! %d", op->turnon.scan_timeout);
                         dev->op_state &= ~BDO_STATE_TURNNING_ON;
                         process_cb(op, BDOCode_Dev_Busy);
+                        lwl_app_core_dev_map_unlock();
                         return;
                     } else {
                         log_e("[BDO][ERROR](attempt %d/%d)adv_report == OFF", attempt, MAX_RECONNECTION_ATTEMPTS);
+                    }
+                } else {
+                    lwl_app_core_dev_map_lock();
+                    dev = find_eend_dev_by_sn(op->sn);
+                    if (!dev) {
+                        lwl_app_core_dev_map_unlock();
+                        process_cb(op, BDOCode_Null_Pointer);
+                        return;
                     }
                 }
             }
@@ -516,12 +591,20 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
                 ble_simple_client_module_enable(1);
                 continue;
             }
+            lwl_app_core_dev_map_unlock();
             if (os_sem_pend(&g_conn_sem, MS2TICK(op->turnon.conn_timeout)) == OS_TIMEOUT)
             {
                 g_ble_conn_pending = 0; // 清除标记，防止迟到的连接回调被接受
                 ble_simple_client_create_cannel();
                 log_e("[BDO][ERROR]ble connection timeout!!! ");
                 ble_simple_client_module_enable(1);
+                lwl_app_core_dev_map_lock();
+                dev = find_eend_dev_by_sn(op->sn);
+                if (!dev) {
+                    lwl_app_core_dev_map_unlock();
+                    process_cb(op, BDOCode_Null_Pointer);
+                    return;
+                }
                 continue;
             }
             g_ble_conn_pending = 0;  // 连接成功，清除标记
@@ -531,13 +614,34 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
             os_sem_set(&g_disconn_sem, 0);
             if (ble_simple_client_disconnect() == APP_BLE_OPERATION_ERROR) {
                 log_e("[BDO][ERROR]failed to disconnect APP_BLE_OPERATION_ERROR!!!");
+                lwl_app_core_dev_map_lock();
+                dev = find_eend_dev_by_sn(op->sn);
+                if (!dev) {
+                    lwl_app_core_dev_map_unlock();
+                    process_cb(op, BDOCode_Null_Pointer);
+                    return;
+                }
                 continue;
             }
             if (os_sem_pend(&g_disconn_sem, MS2TICK(BLE_DISCONNECT_TIMEOUT)) == OS_TIMEOUT) {
                 log_e("[BDO][ERROR]BLE disconnect timeout!!!");
+                lwl_app_core_dev_map_lock();
+                dev = find_eend_dev_by_sn(op->sn);
+                if (!dev) {
+                    lwl_app_core_dev_map_unlock();
+                    process_cb(op, BDOCode_Null_Pointer);
+                    return;
+                }
                 continue;
             }
             log_i("[BDO]ble disconnected");
+            lwl_app_core_dev_map_lock();
+            dev = find_eend_dev_by_sn(op->sn);
+            if (!dev) {
+                lwl_app_core_dev_map_unlock();
+                process_cb(op, BDOCode_Null_Pointer);
+                return;
+            }
         }
     }
     
@@ -546,31 +650,47 @@ static void ble_dev_op_handler_turn_on(ble_dev_op_t* op)
         log_e("[BDO][ERROR]Max reconnection attempts reached due to timeout");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Max_Reconnection_Attempts);
+        lwl_app_core_dev_map_unlock();
         return;
     }
 
     os_sem_set(&g_e_adv_report_changed_sem, 0);  // 清除之前可能存在的信号
     bdo_set(broadcast_code, 0x01);
 
+    lwl_app_core_dev_map_unlock();
     if (os_sem_pend(&g_e_adv_report_changed_sem, MS2TICK(op->turnon.scan_timeout)) == OS_NO_ERR) {
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (!dev) {
+            lwl_app_core_dev_map_unlock();
+            process_cb(op, BDOCode_Null_Pointer);
+            return;
+        }
         log_i("[BDO]Turn on end op_state = %d adv_state = %d", dev->op_state, dev->adv_state);
         if (!(dev->op_state & BDO_STATE_TURNNING_ON)) {
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_Skip);
+            lwl_app_core_dev_map_unlock();
             return;
         }
         if (dev->adv_state != BDPAS_CONNECTED) {
             dev->op_state &= ~BDO_STATE_TURNNING_ON;
             process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+            lwl_app_core_dev_map_unlock();
             return;
         }
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
         process_cb(op, BDOCode_Ready_to_Play);
+        lwl_app_core_dev_map_unlock();
     } else {
-        log_e("[BDO][ERROR]scan adv state timeout after connecting state!!!", 
-                  attempt + 1, MAX_RECONNECTION_ATTEMPTS);
-        dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        log_e("[BDO][ERROR]scan adv state timeout after connecting state!!!");
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (dev) {
+            dev->op_state &= ~BDO_STATE_TURNNING_ON;
+        }
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+        lwl_app_core_dev_map_unlock();
     }
 }
 
@@ -578,8 +698,10 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
 {
     log_i("[BDO]Turn off %s", op->sn);
 
+    lwl_app_core_dev_map_lock();
     lwl_eend_dev_t *dev = find_eend_dev_by_sn(op->sn);
     if (!dev) {
+        lwl_app_core_dev_map_unlock();
         log_i("[BDO]Error dev not found!");
         process_cb(op, BDOCode_Null_Pointer);
         return;
@@ -587,6 +709,7 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
     if (dev->adv_state == BDPAS_OFF) {
         dev->op_state &= ~BDO_STATE_TURNNING_OFF;
         process_cb(op, BDOCode_Success);
+        lwl_app_core_dev_map_unlock();
         return;
     }
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
@@ -594,17 +717,28 @@ static void ble_dev_op_handler_turn_off(ble_dev_op_t* op)
     }
 
     os_sem_set(&g_e_adv_report_changed_sem, 0);
+    lwl_app_core_dev_map_unlock();
     /* - 扫描设备 ADV 状态变化 -> off */
     if (os_sem_pend(&g_e_adv_report_changed_sem, MS2TICK(op->turnoff.scan_timeout)) == OS_TIMEOUT) {
         log_e("[BDO]Error scan adv state timeout!!! %d", op->turnoff.scan_timeout);
-        dev->op_state &= ~BDO_STATE_TURNNING_OFF;
+        lwl_app_core_dev_map_lock();
+        dev = find_eend_dev_by_sn(op->sn);
+        if (dev) {
+            dev->op_state &= ~BDO_STATE_TURNNING_OFF;
+        }
         process_cb(op, BDOCode_Scan_Adv_Stat_Timeout);
+        lwl_app_core_dev_map_unlock();
         return;
     }
 
     log_i("[BDO]Turn off end");
-    dev->op_state &= ~BDO_STATE_TURNNING_OFF;
+    lwl_app_core_dev_map_lock();
+    dev = find_eend_dev_by_sn(op->sn);
+    if (dev) {
+        dev->op_state &= ~BDO_STATE_TURNNING_OFF;
+    }
     process_cb(op, BDOCode_Success);
+    lwl_app_core_dev_map_unlock();
 }
 
 static ble_dev_op_handler_func_t g_op_handler_entries[] = {
@@ -737,7 +871,9 @@ int bdo_turn_on(lwl_eend_dev_t *dev, int conn_timeout, int scan_timeout, ble_dev
 
 int bdo_turn_off(lwl_eend_dev_t *dev)
 {
+    if (!dev) return 0;
     log_i("[BDO]bdo_turn_off %s", dev->sn);
+    lwl_app_core_dev_map_lock();
     if (dev->op_state & BDO_STATE_TURNNING_ON) {
         log_i("[BDO]Turn on abort");
         dev->op_state &= ~BDO_STATE_TURNNING_ON;
@@ -750,5 +886,6 @@ int bdo_turn_off(lwl_eend_dev_t *dev)
     if (strcmp(broadcast_code, &dev->sn[10]) == 0) {
         bdo_set(broadcast_code, 0x00);
     }
+    lwl_app_core_dev_map_unlock();
     return 1;
 }

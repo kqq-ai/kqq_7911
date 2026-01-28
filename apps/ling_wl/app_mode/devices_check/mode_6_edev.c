@@ -86,23 +86,33 @@ void mode6_audio_callback(void *priv)
 }
 
 // ========== 模式6回调函数声明 ===========
-static void mode6_e_connect_cb(bdo_code_e code, void *priv)
+static void mode6_e_connect_cb(bdo_code_e code, void *priv, const char *sn)
 {
-    lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv);
+    // lwl_eend_dev_t *pdev = (lwl_eend_dev_t*)(priv); // 指针可能已失效
     char sn_string[SN_SIZE+1] = "(NULL)";
-    if (pdev) {
-        pdev->get_string(pdev, sn_string, sizeof(sn_string));
+    if (sn) {
+        strncpy(sn_string, sn, SN_SIZE);
+        sn_string[SN_SIZE] = '\0';
     }
     log_i("bdo_turn_on code %d %s\n", code, sn_string);
 
     if (BDOCode_Ready_to_Play == code) {
-        current_pdev = pdev; // 设置当前连接的E端设备指针
-        bdo_enable();
-        log_i("MODE 6: E device ready to play: %s", sn_string);
+        // 如果需要继续使用 pdev，应通过 sn 重新查找
+        lwl_app_core_dev_map_lock();
+        lwl_eend_dev_t *pdev = find_eend_dev_by_sn((u8*)sn_string);
+        current_pdev = pdev; // 设置当前连接的E端设备指针（可能为NULL）
+        lwl_app_core_dev_map_unlock();
+        if (current_pdev) {
+            bdo_enable();
+            log_i("MODE 6: E device ready to play: %s", sn_string);
+        }
     } else if (BDOCode_Success == code) {
         log_i("MODE 6: E device connected successfully: %s", sn_string);
     } else if (BDOCode_Success != code) {
-        if (pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
+        lwl_app_core_dev_map_lock();
+        lwl_eend_dev_t *pdev = find_eend_dev_by_sn((u8*)sn_string);
+        if (pdev && pdev == target_pdev) target_pdev = NULL; // 连接失败，清空当前设备指针
+        lwl_app_core_dev_map_unlock();
         current_pdev = NULL; // 设置当前连接的E端设备指针
         g_mode6_playing_prompt = 1;
         lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"SwFailed.mp3", mode6_audio_callback);

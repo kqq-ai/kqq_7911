@@ -283,7 +283,7 @@ void *wss_condition_monitor_thread(void *arg) {
                       
       bool move_timeout = (g_curr_time > last_move_time + NO_MOVE_TIMEOUT_MS);
       
-      log_i("[wss_application]No E or movement timeout (e_to=%u, move_to=%u, last_req_delta=%u), switching to default mode.",
+      log_i("[wss_application]⚠️ No E or movement timeout (e_to=%u, move_to=%u, last_req_delta=%u), switching to default mode.",
               g_curr_time - last_E_found_time,
               g_curr_time - last_move_time,
               g_curr_time - last_req_time);

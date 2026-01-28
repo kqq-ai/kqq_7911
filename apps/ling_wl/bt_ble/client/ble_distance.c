@@ -258,13 +258,18 @@ static void remove_all_dev_expired_rssi_samples()
     eend_dev_traverse(simple_expire_cleanup, NULL);
 }
 
-static void active_op_callback(uint8_t code, void *priv)
+static void active_op_callback(bdo_code_e code, void *priv, const char *sn)
 {
-    lwl_eend_dev_t *dev = (lwl_eend_dev_t *)priv;
+    // lwl_eend_dev_t *dev = (lwl_eend_dev_t *)priv;
 
     if (code == BDOCode_Success)
     {
-        dev->active_time = timer_get_ms();
+        lwl_app_core_dev_map_lock();
+        lwl_eend_dev_t *dev = find_eend_dev_by_sn((u8*)sn);
+        if (dev) {
+            dev->active_time = timer_get_ms();
+        }
+        lwl_app_core_dev_map_unlock();
         log_i("[BDO]Active success!");
     }
 }
@@ -527,6 +532,7 @@ static void scan_adv_process_task(void *priv)
         uint8_t has_deadline = (r == 23) ? 1 : 0;
         if (adv_state > 2) continue; // 过滤状态异常的广播
 
+        lwl_app_core_dev_map_lock();
         lwl_eend_dev_t *dev = find_eend_dev_by_sn(sn);
         if (dev == NULL)
         {
@@ -672,6 +678,7 @@ static void scan_adv_process_task(void *priv)
                 bdo_active(dev, 500, active_op_callback, dev);
             }
         }
+        lwl_app_core_dev_map_unlock();
 
         log_d("[MEASDIST]over");
     }

@@ -97,8 +97,8 @@ void lwl_app_context_free(lwl_app_context_t *ctx)
         map_destroy(ctx->dev_map);
         ctx->dev_map = NULL;
     }
-    pthread_mutex_destroy(&ctx->dev_map_mutex);
-    pthread_mutex_destroy(&ctx->event_handlers_mutex);
+    os_mutex_del(&ctx->dev_map_mutex, 1);
+    os_mutex_del(&ctx->event_handlers_mutex, 1);
     my_blocking_queue_destroy(&ctx->event_queue);
     free(ctx);
 }
@@ -143,6 +143,20 @@ lwl_eend_dev_t* find_eend_dev_by_sn(u8 *sn)
     return (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn);
 }
 
+void lwl_app_core_dev_map_lock(void)
+{
+    if (s_app_context) {
+        os_mutex_pend(&s_app_context->dev_map_mutex, 0);
+    }
+}
+
+void lwl_app_core_dev_map_unlock(void)
+{
+    if (s_app_context) {
+        os_mutex_post(&s_app_context->dev_map_mutex);
+    }
+}
+
 /**
  * @brief 遍历所有E端设备
  * 
@@ -154,6 +168,7 @@ void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv)
 {
     ASSERT(s_app_context != NULL);
 
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
@@ -162,6 +177,7 @@ void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv)
     }
     
     map_iterator_unlock(it); // 释放锁
+    os_mutex_post(&s_app_context->dev_map_mutex);
 }
 
 /**
@@ -193,7 +209,7 @@ void clear_all_eend_dev(void)
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
         if (pdev) {
             map_erase(s_app_context->dev_map, sn_list[i]);
-            free(pdev);
+            lwl_eend_dev_free(pdev);
         }
         free(sn_list[i]);
     }
@@ -270,7 +286,7 @@ void clean_expired_eend()
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
         if (pdev) {
             map_erase(s_app_context->dev_map, sn_list[i]);
-            free(pdev);
+            lwl_eend_dev_free(pdev);
         }
         free(sn_list[i]);
     }
@@ -291,6 +307,7 @@ lwl_eend_dev_t *find_eend_dev_closest(void)
     lwl_eend_dev_t *result = NULL;
     double distance = MAX_BLUE_DISTANCE;
 
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
@@ -302,6 +319,7 @@ lwl_eend_dev_t *find_eend_dev_closest(void)
         }
     }
     map_iterator_unlock(it); // 释放锁
+    os_mutex_post(&s_app_context->dev_map_mutex);
 
     return result;
 }
@@ -315,6 +333,7 @@ int get_2m_edev_count(void)
     ASSERT(s_app_context != NULL);
     
     int count = 0;
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
@@ -326,6 +345,7 @@ int get_2m_edev_count(void)
         }
     }
     map_iterator_unlock(it); // 释放锁
+    os_mutex_post(&s_app_context->dev_map_mutex);
     return count;
 }
 
@@ -338,6 +358,7 @@ int get_5m_edev_count()
     ASSERT(s_app_context != NULL);
     
     int count = 0;
+    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
     MapIterator end = map_end(s_app_context->dev_map);
 
@@ -350,6 +371,7 @@ int get_5m_edev_count()
         }
     }
     map_iterator_unlock(it); // 释放锁
+    os_mutex_post(&s_app_context->dev_map_mutex);
     return count;
 }
 

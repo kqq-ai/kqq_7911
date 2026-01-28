@@ -156,41 +156,6 @@ static void ws_frame_meta(const u8 *frame, u32 frame_len, u8 *opcode, u32 *paylo
     if (payload_len) *payload_len = pl;
 }
 
-static void ws_log_tx_enqueue(const char *src, int fd, const ws_ringbuffer_t *rb,
-                              const u8 *frame, u32 frame_len, u32 raw_payload_len,
-                              const char *func, int line)
-{
-    // 只标注会导致 tail/head 漂移（frame_len 不是 4 的倍数）的帧，避免刷屏
-    if ((frame_len & 0x3u) == 0u) return;
-
-    char hex16[3 * 16 + 1];
-    ws_hex16(frame, frame_len, hex16);
-    u8 opcode = 0xFF;
-    u32 payload_len = 0;
-    ws_frame_meta(frame, frame_len, &opcode, &payload_len);
-
-    log_mqtt("【ws_custom】【tx_enqueue】src=%s fd=%d ptr=%p align=%u raw_pl=%u pl=%u opcode=0x%02x frame_len=%u mod4=%u rb{cap=%u head=%u tail=%u cnt=%u} @%s:%d head16=%s",
-             (src ? src : "?"),
-             fd,
-             frame,
-             (unsigned)((uintptr_t)frame & 0x3u),
-             (unsigned)raw_payload_len,
-             (unsigned)payload_len,
-             (unsigned)opcode,
-             (unsigned)frame_len,
-             (unsigned)(frame_len & 0x3u),
-             rb ? (unsigned)rb->capacity : 0u,
-             rb ? (unsigned)rb->head : 0u,
-             rb ? (unsigned)rb->tail : 0u,
-             rb ? (unsigned)rb->count : 0u,
-             (func ? func : "?"),
-             line,
-             hex16);
-}
-
-#define WS_LOG_TX_ENQUEUE(_src, _fd, _rb, _frame, _frame_len, _raw_pl) \
-    do { ws_log_tx_enqueue((_src), (_fd), (_rb), (const u8 *)(_frame), (u32)(_frame_len), (u32)(_raw_pl), __func__, __LINE__); } while (0)
-
 static void rb_init(ws_ringbuffer_t *rb, u8 *buf, u32 cap) {
     rb->buffer = buf;
     rb->capacity = cap;
@@ -755,11 +720,16 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     if (client->sock_fd < 0) return -1;
     
     log_i("[ws_custom]TCP connected to %s:%d", host, port);
+
+    // 使用 heap 上的 client->temp_send_buf 和 client->recv_buf 替代栈上的大数组，防止 stack overflow
+    char *handshake_req = (char *)client->temp_send_buf;
+    char *response = (char *)client->recv_buf;
+    int handshake_req_size = 1024; // temp_send_buf is 16KB
+    int response_size = 2048;      // recv_buf is 32KB
     
     // 生成握手请求
     char ws_key[32];
-    char handshake_req[1024];
-    int req_len = generate_handshake_request(host, port, path, ws_key, handshake_req, sizeof(handshake_req));
+    int req_len = generate_handshake_request(host, port, path, ws_key, handshake_req, handshake_req_size);
     if (req_len < 0) {
         close(client->sock_fd);
         client->sock_fd = -1;
@@ -777,8 +747,7 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     }
     
     // 读取握手响应
-    char response[2048];
-    int resp_len = read_http_response(client->sock_fd, response, sizeof(response), WS_RECV_TIMEOUT_MS);
+    int resp_len = read_http_response(client->sock_fd, response, response_size, WS_RECV_TIMEOUT_MS);
     if (resp_len < 0) {
         log_e("[ws_custom]Failed to read handshake response");
         close(client->sock_fd);
@@ -1536,7 +1505,6 @@ static void ws_recv_thread(void *param)
                             os_mutex_pend(&client->mutex, 0);
                             int close_len = build_ws_frame(resp_buf, 1024, NULL, 0, WS_FRAME_CLOSE, true);
                             if (close_len > 0 && rb_space(&client->send_rb) >= close_len) {
-                                WS_LOG_TX_ENQUEUE("auto_close", client->sock_fd, &client->send_rb, resp_buf, close_len, 0);
                                 rb_write(&client->send_rb, resp_buf, close_len);
                             }
                             os_mutex_post(&client->mutex);
@@ -1550,7 +1518,6 @@ static void ws_recv_thread(void *param)
                             os_mutex_pend(&client->mutex, 0);
                             int pong_len = build_ws_frame(resp_buf, 1024, payload, payload_len, WS_FRAME_PONG, true);
                             if (pong_len > 0 && rb_space(&client->send_rb) >= pong_len) {
-                                WS_LOG_TX_ENQUEUE("auto_pong", client->sock_fd, &client->send_rb, resp_buf, pong_len, payload_len);
                                 rb_write(&client->send_rb, resp_buf, pong_len);
                             } else {
                                 log_e("[ws_custom]Failed to buffer PONG response");
@@ -1748,7 +1715,6 @@ int ws_client_send_text(ws_client_t client, const u8 *data, u32 len)
         os_mutex_post(&client->mutex);
         return -1;
     }
-    WS_LOG_TX_ENQUEUE("send_text", client->sock_fd, &client->send_rb, client->temp_send_buf, frame_len, len);
     rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     os_mutex_post(&client->mutex);
     return 0;
@@ -1831,7 +1797,6 @@ int ws_client_send_binary(ws_client_t client, const u8 *data, u32 len)
         return -1; // 发送缓冲区满，丢弃
     }
     
-    WS_LOG_TX_ENQUEUE("send_binary", client->sock_fd, &client->send_rb, client->temp_send_buf, frame_len, len);
     rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     
     os_mutex_post(&client->mutex);
@@ -1878,7 +1843,6 @@ int ws_client_send_ping(ws_client_t client)
          return -1;
     }
     
-    WS_LOG_TX_ENQUEUE("send_ping", client->sock_fd, &client->send_rb, client->temp_send_buf, frame_len, (u32)(sizeof(ping_payload) - 1));
     rb_write(&client->send_rb, client->temp_send_buf, frame_len);
     
     os_mutex_post(&client->mutex);
@@ -1918,7 +1882,6 @@ void ws_client_disconnect(ws_client_t client)
                 log_e("[ws_custom]ERROR: Frame validation failed for CLOSE frame in ws_client_disconnect");
             } else {
                 if (rb_space(&client->send_rb) >= close_len) {
-                    WS_LOG_TX_ENQUEUE("send_close", client->sock_fd, &client->send_rb, client->temp_send_buf, close_len, 0);
                     rb_write(&client->send_rb, client->temp_send_buf, close_len);
                     log_mqtt("【debug】[ws_custom]ws_client_disconnect: buffered CLOSE frame, len=%d", close_len);
                 } else {
