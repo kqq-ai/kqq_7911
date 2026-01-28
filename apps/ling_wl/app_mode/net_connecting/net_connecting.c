@@ -40,12 +40,12 @@ bool ble_connecting = false; // wifi manager 状态
 bool ble_connected = false; // wifi manager 状态
 
 static void led_show_connecting(void) {
-    led_set_color(COLOR_BLACK); // 彻底停掉之前的呼吸
+    // led_breath_start 已支持平滑切换，无需手动停止
     led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 400, 50); 
 }
 
 static void led_show_ble_connected(void) {
-    led_set_color(COLOR_BLACK); // 停掉绿闪
+    // led_breath_start 已支持平滑切换，无需手动停止
     led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 400, 50); 
 }
 
