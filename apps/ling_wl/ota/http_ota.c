@@ -146,6 +146,7 @@ _out_:
     memset(hdl, 0, sizeof(struct download_hdl));
     free(hdl);
     hdl = NULL;
+    ota_hdl = NULL;
     if (lwl_app_mode_get_current_mode() == APP_UPDATE_MODE) {
         lwl_app_audio_play(CONFIG_CP_VOICE_FILE_PATH"OtaFailed.mp3", download_reboot);
     }
@@ -153,9 +154,11 @@ _out_:
 
 int http_create_download_task(char *url)
 {
+    int ret = 0;
+    size_t url_len = 0;
+
     //申请堆内存
     ota_hdl = (struct download_hdl *)calloc(1, sizeof(struct download_hdl));
-
     if (ota_hdl == NULL) {
         return -ENOMEM;
     }
@@ -164,30 +167,22 @@ int http_create_download_task(char *url)
     hdl->download_ops = &http_ops;
     hdl->recv_buf_size = DEFAULT_RECV_BUF_SIZE;
 
-    hdl->url = (char *)calloc(1, strlen(url) + 1);
-
+    url_len = (url != NULL) ? strlen(url) : 0;
+    hdl->url = (char *)calloc(1, url_len + 1);
     if (hdl->url == NULL) {
-        return -ENOMEM;
+        ret = -ENOMEM;
+        goto fail;
+    }
+    if (url != NULL) {
+        memcpy(hdl->url, url, url_len + 1);
+    } else {
+        hdl->url[0] = '\0';
     }
 
     hdl->recv_buf = (u8 *)calloc(1, hdl->recv_buf_size);
-
     if (hdl->recv_buf == NULL) {
-        return -ENOMEM;
-    }
-
-    // 修复：使用strncpy确保边界安全
-    if (url == NULL) {
-        hdl->url[0] = '\0';
-    } else {
-        size_t url_len = strlen(url);
-        size_t url_buf_size = sizeof(hdl->url);
-        if (url_len >= url_buf_size) {
-            log_e("[http_ota]URL too long: %zu >= %zu, truncating", url_len, url_buf_size);
-            url_len = url_buf_size - 1;
-        }
-        strncpy(hdl->url, url, url_buf_size - 1);
-        hdl->url[url_buf_size - 1] = '\0';  // 确保终止符
+        ret = -ENOMEM;
+        goto fail;
     }
 
     //http请求参数赋值
@@ -197,7 +192,24 @@ int http_create_download_task(char *url)
     hdl->ctx.connection = "close";
 
     //创建下载线程
-    return thread_fork("download_task", 20,  2 * 1024, 0, NULL, download_task, hdl);
+    ret = thread_fork("download_task", 20,  2 * 1024, 0, NULL, download_task, hdl);
+    if (ret) {
+        goto fail;
+    }
+    return ret;
+
+fail:
+    if (ota_hdl) {
+        if (ota_hdl->url) {
+            free(ota_hdl->url);
+        }
+        if (ota_hdl->recv_buf) {
+            free(ota_hdl->recv_buf);
+        }
+        free(ota_hdl);
+        ota_hdl = NULL;
+    }
+    return ret;
 }
 
 int request_ota_info(char **pota_info)
