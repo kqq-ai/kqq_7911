@@ -38,6 +38,7 @@
 #define MQTT_MONITOR_SLEEP 150     // ms
 
 char sn[25];  // 设备序列号
+static char g_client_id[64] = "log-default";  // MQTT客户端ID缓存
 char reset_topic[64];  // 重置主题
 
 // 用于 log_mqtt() 函数的全局缓冲区（解决小栈线程调用问题）
@@ -63,7 +64,7 @@ typedef struct {
 static mqtt_log_config_t g_mqtt_config = {
     .server = "101.126.136.69",
     .port = 1883,
-    .client_id = "12345|securemode=3,signmethod=hmacsha1|",
+    .client_id = g_client_id,
     .username = "",
     .password = "",
     .topic = "h-log",
@@ -681,6 +682,12 @@ int log_mqtt_init(void) {
 
     // 获取SN（用于连接参数/日志字段）
     get_SN(sn);
+    if (sn[0] == '\0') {
+        snprintf(g_client_id, sizeof(g_client_id), "log-%08x", (unsigned int)rand());
+    } else {
+        snprintf(g_client_id, sizeof(g_client_id), "log-%s", sn);
+    }
+    g_mqtt_config.client_id = g_client_id;  // 确保使用带前缀的唯一ID
 
     // 初始化队列用于缓存MQTT日志消息（常驻）
     my_blocking_queue_init_static(&log_queue, log_queue_data, LOG_QUEUE_ITEM_MAX_LEN, LOG_QUEUE_MAX_COUNT);
