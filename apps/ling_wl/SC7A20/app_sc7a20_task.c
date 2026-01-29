@@ -42,7 +42,7 @@ void * app_sc7a20_init(void)
         return NULL;
     }
 
-    os_task_create(app_sc7a20_task, NULL, 10, 1000, 0, "app_sc7a20_task");
+    os_task_create(app_sc7a20_task, NULL, 10, 2048, 0, "app_sc7a20_task");
 
     return g_iic_hdl;
 

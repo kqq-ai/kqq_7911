@@ -82,12 +82,18 @@ static int net_connected_init(void)
         lwl_app_mode_switch_to(APP_UPDATE_MODE);
         return 1;
     }
-    if (wss_connect()) {
-        lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-    } else {
-        log_mqtt("❌ websockets init failed");
-        set_led_connect_error();// WSS ERROR
+
+    int retry_cnt = 3;
+    while (retry_cnt--) {
+        if (wss_connect()) {
+            lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+            return 0;
+        }
+        log_mqtt("❌ websockets init failed, retrying...");
+        msleep(1000);
     }
+    
+    set_led_connect_error();// WSS ERROR
     return 0;
 }
 
@@ -108,17 +114,21 @@ void app_net_connected_loop()
         play_system_music("NetCfgFail.mp3");
         return;
     }
-    if (wss_connect()) {
-        lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
-    } else {
-        log_mqtt("❌❌❌ websockets init failed");
-        set_led_connect_error();// WSS ERROR
+
+    int retry_cnt = 3;
+    while (retry_cnt--) {
+        if (wss_connect()) {
+            lwl_app_mode_switch_to(APP_WSS_CONNECTED_MODE);
+            return;
+        }
+        log_mqtt("❌❌❌ websockets init failed, retrying...");
         msleep(1000);
-        
-        // 无网络超时10s，进入配网
-        // if (timer_get_ms() - init_time >= 10000) {
-        //     lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
-        // }
+    }
+
+    set_led_connect_error();// WSS ERROR
+    // 无网络超时一段时间后，进入配网
+    if (timer_get_ms() - init_time >= 30000) {
+        lwl_app_mode_switch_to(APP_NET_CONNECTING_MODE);
     }
 }
 

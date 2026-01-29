@@ -260,7 +260,7 @@ static void app_cookie_main(void)
     app_sc7a20_init();                                      // 启动 SC7A20 加速度计任务，支持姿态/震动检测
 
     lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
-    thread_fork("peri_events", 15, 512 * 4, 0, 0, peri_events, NULL);
+    thread_fork("peri_events", 15, 1024 * 4, 0, 0, peri_events, NULL);
     // 启动MQTT
     log_mqtt_start();
 

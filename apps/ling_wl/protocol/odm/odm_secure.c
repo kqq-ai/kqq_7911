@@ -636,7 +636,7 @@ char *get_wss_connection_url()
 
     if (!get_SN(sn_c_id)) return NULL;
     
-    url_api = (char *)malloc(BUF_SIZE);
+    url_api = (char *)malloc(512);
     if (!url_api) return NULL;
 
 #ifdef TEST_LOCOL_SERVER
@@ -648,7 +648,7 @@ char *get_wss_connection_url()
     }
     Token = prepare_signature(server_url);
     if (Token) {
-        snprintf(url_api, BUF_SIZE, TEST_FORMAT_API, "ws", ip_port ? ip_port : "", sn_c_id, Token);
+        snprintf(url_api, 512, TEST_FORMAT_API, "ws", ip_port ? ip_port : "", sn_c_id, Token);
     }
     if (ip_port) free(ip_port); // 释放ip_port
 #else
@@ -656,7 +656,7 @@ char *get_wss_connection_url()
     snprintf(server_url, BUF_SIZE, SERVER_API, "https", SERVER_DOMAIN);
     Token = prepare_signature(server_url);
     if (Token) {
-        snprintf(url_api, BUF_SIZE, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id, Token);
+        snprintf(url_api, 512, FORMAT_API, "wss", SERVER_DOMAIN, sn_c_id, Token);
     }
 #endif
 

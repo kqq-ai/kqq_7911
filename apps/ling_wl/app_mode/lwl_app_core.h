@@ -219,12 +219,13 @@ typedef struct {
     lfs_t *lfs_hdl;                  /**< LittleFS filesystem handle */
 
     Map *dev_map;                    /**< Map<char *sn, lwl_eend_dev_t *dev> */
-    OS_SEM dev_map_mutex;
+    OS_MUTEX dev_map_mutex;
 
     MyBlockingQueue event_queue;     /**< Event queue (queue<lwl_event_t>) */
     lwl_event_handler_cb_t event_handlers[LWL_EVENT_HANDLER_MAX_CNT]; /**< Registered event handlers */
     MyBlockingQueue adv_queue;     /**< Adv queue (queue<lwl_cqueue_adv_data_t>) */
-    OS_SEM event_handlers_mutex;
+    OS_MUTEX event_handlers_mutex;
+    OS_SEM scheduler_exit_sem;      /**< Semaphore to signal scheduler thread exit */
 } lwl_app_context_t;
 
 /**

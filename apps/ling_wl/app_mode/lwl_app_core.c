@@ -42,41 +42,51 @@ static void lwl_simple_event_scheduler(void *priv)
         os_mutex_post(&s_app_context->event_handlers_mutex);
     }
     log_i("lwl_simple_event_scheduler thread exit.");
+    os_sem_post(&s_app_context->scheduler_exit_sem);
 }
 
 static void init_app_context(lwl_app_context_t* context)
 {
-    memset(s_app_context, 0, sizeof(lwl_app_context_t));
+    if (!context) return;
+    memset(context, 0, sizeof(lwl_app_context_t));
 
-    int ret = syscfg_read(CFG_USER_MAC, s_app_context->mac, 6);
+    int ret = syscfg_read(CFG_USER_MAC, context->mac, 6);
     if (ret < 0) {
-        wifi_get_mac(s_app_context->mac);
-        syscfg_write(CFG_USER_MAC, s_app_context->mac, 6);
+        wifi_get_mac(context->mac);
+        syscfg_write(CFG_USER_MAC, context->mac, 6);
     }
-    log_i("%02X %02X %02X %02X %02X %02X", s_app_context->mac[0], s_app_context->mac[1], s_app_context->mac[2]
-                                         , s_app_context->mac[3], s_app_context->mac[4], s_app_context->mac[5]);
+    log_i("%02X %02X %02X %02X %02X %02X", context->mac[0], context->mac[1], context->mac[2]
+                                         , context->mac[3], context->mac[4], context->mac[5]);
 
     g_event_scheduler_exit = 0;
     context->websockets_info = NULL;
 
-    s_app_context->dev_map = map_create();
-    os_mutex_create(&s_app_context->dev_map_mutex);
+    context->dev_map = map_create();
+    if (context->dev_map) {
+        os_mutex_create(&context->dev_map_mutex);
+    }
 
     ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->event_queue, sizeof(lwl_event_t), LWL_EVENT_QUEUE_CAPACITY));
     os_mutex_create(&s_app_context->event_handlers_mutex);
+    os_sem_create(&s_app_context->scheduler_exit_sem, 0);
     ASSERT(MYERROR_Success == my_blocking_queue_init(&s_app_context->adv_queue, sizeof(lwl_cqueue_adv_data_t), LWL_ADV_QUEUE_CAPACITY));
 
-    thread_fork("lwl_event_scheduler", 15, 512, 0, 0, lwl_simple_event_scheduler, NULL);
+    thread_fork("lwl_event_scheduler", 15, 2048, 0, 0, lwl_simple_event_scheduler, NULL);
 }
 
 lwl_app_context_t* lwl_app_core_context_get_instance()
 {
+    if (!os_mutex_valid(&g_mutex)) {
+        lwl_app_core_init();
+    }
+
     if (s_app_context == NULL) { 
         os_mutex_pend(&g_mutex, 0);
         if (s_app_context == NULL) {
             s_app_context = (lwl_app_context_t *)malloc(sizeof(lwl_app_context_t));
-
-            init_app_context(s_app_context);
+            if (s_app_context) {
+                init_app_context(s_app_context);
+            }
         }
         os_mutex_post(&g_mutex);
     }
@@ -99,15 +109,22 @@ void lwl_app_context_free(lwl_app_context_t *ctx)
     }
     os_mutex_del(&ctx->dev_map_mutex, 1);
     os_mutex_del(&ctx->event_handlers_mutex, 1);
+    os_sem_del(&ctx->scheduler_exit_sem, 1);
     my_blocking_queue_destroy(&ctx->event_queue);
     free(ctx);
 }
 
 void lwl_app_core_destroy()
 {
-    g_event_scheduler_exit = 1; // 通知事件线程退出
-    msleep(20); // 等待线程安全退出（可根据实际情况调整等待时间）
     if (s_app_context != NULL) {
+        g_event_scheduler_exit = 1; // 通知事件线程退出
+        // 发送一个空事件来唤醒可能阻塞在 dequeue 的线程
+        lwl_event_t dummy_event = {0};
+        lwl_event_notify(&dummy_event);
+        
+        // 等待线程安全退出
+        os_sem_pend(&s_app_context->scheduler_exit_sem, 0);
+
         lwl_app_context_free(s_app_context);
         s_app_context = NULL;
     }
@@ -186,36 +203,7 @@ void eend_dev_traverse(void (*callback)(lwl_eend_dev_t *, void *), void *priv)
 void clear_all_eend_dev(void)
 {
     ASSERT(s_app_context != NULL);
-
-    os_mutex_pend(&s_app_context->dev_map_mutex, 0);
-
-    MapIterator it = map_begin(s_app_context->dev_map);
-    MapIterator end = map_end(s_app_context->dev_map);
-
-    // 先收集所有key，防止遍历过程中修改map导致崩溃
-    int dev_count = map_size(s_app_context->dev_map);
-    char **sn_list = malloc(dev_count * sizeof(char *));
-    int idx = 0;
-    for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
-        char *sn = (char *)map_iterator_key(it);
-        sn_list[idx] = strdup(sn);
-        idx++;
-
-        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
-    }
-    map_iterator_unlock(it);
-    // 删除并释放所有pdev
-    for (int i = 0; i < idx; ++i) {
-        lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_find(s_app_context->dev_map, sn_list[i]);
-        if (pdev) {
-            map_erase(s_app_context->dev_map, sn_list[i]);
-            lwl_eend_dev_free(pdev);
-        }
-        free(sn_list[i]);
-    }
-    free(sn_list);
-
-    os_mutex_post(&s_app_context->dev_map_mutex);
+    map_clear(s_app_context->dev_map, (void (*)(void *))lwl_eend_dev_free);
 }
 
 void dump_all_eend_info()
@@ -266,7 +254,15 @@ void clean_expired_eend()
 
     // 先收集所有key，防止遍历过程中修改map导致崩溃
     int dev_count = map_size(s_app_context->dev_map);
+    if (dev_count == 0) {
+        os_mutex_post(&s_app_context->dev_map_mutex);
+        return;
+    }
     char **sn_list = malloc(dev_count * sizeof(char *));
+    if (!sn_list) {
+        os_mutex_post(&s_app_context->dev_map_mutex);
+        return;
+    }
     int idx = 0;
 
     MapIterator it = map_begin(s_app_context->dev_map); // 持有锁
@@ -277,7 +273,10 @@ void clean_expired_eend()
     for (; !map_iterator_equal(it, end); map_iterator_next(&it)) {
         lwl_eend_dev_t *pdev = (lwl_eend_dev_t *)map_iterator_value(it);
         if (pdev->update_time + LWL_EDEV_EXPIRE_TIME_MS < now) {
-            sn_list[idx++] = strdup((char *)pdev->sn);
+            char *sn_copy = strdup((char *)pdev->sn);
+            if (sn_copy) {
+                sn_list[idx++] = sn_copy;
+            }
         }
     }
     map_iterator_unlock(it); // 释放锁
@@ -399,7 +398,7 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
     // 修复：添加整数溢出检查和合理的上限检查
     size_t target_list_size = (size_t)num * sizeof(char *);
     // 检查整数溢出
-    if (target_list_size < (size_t)num) {
+    if (target_list_size / sizeof(char *) != (size_t)num) {
         log_e("[lwl_app_core]Integer overflow in target_list allocation: num=%d", num);
         os_mutex_post(&s_app_context->dev_map_mutex);
         return;
@@ -449,14 +448,19 @@ void make_5m_edev_targets(char ***targets, int *targets_num)
             memcpy(target_list[i], sn, sn_len);
             target_list[i][sn_len] = '\0';  // 确保终止符
             i++;
+            if (i >= num) break;
         }
     }
-    ASSERT(i == num);
+    
+    map_iterator_unlock(it); // 释放锁
+
+    if (i < num) {
+        log_w("[lwl_app_core]Actual targets found (%d) less than expected (%d)", i, num);
+        num = i;
+    }
 
     *targets = target_list;
     *targets_num = num;
-    
-    map_iterator_unlock(it); // 释放锁
 
     os_mutex_post(&s_app_context->dev_map_mutex);
 }

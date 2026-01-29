@@ -9,6 +9,7 @@ void rwlock_release_write(rwlock_t *rwlock);
 // 创建哨兵节点
 static RBTreeNode* create_nil_node() {
     RBTreeNode *node = (RBTreeNode*)malloc(sizeof(RBTreeNode));
+    if (!node) return NULL;
     node->color = BLACK;
     node->left = node->right = node->parent = NULL;
     node->key = NULL;
@@ -18,8 +19,14 @@ static RBTreeNode* create_nil_node() {
 
 // 创建新节点
 static RBTreeNode* create_node(const char *key, void *value, Color color, RBTreeNode *nil) {
+    if (!key) return NULL;
     RBTreeNode *node = (RBTreeNode*)malloc(sizeof(RBTreeNode));
+    if (!node) return NULL;
     node->key = strdup(key);
+    if (!node->key) {
+        free(node);
+        return NULL;
+    }
     node->value = value;
     node->color = color;
     node->left = node->right = node->parent = nil;
@@ -29,7 +36,12 @@ static RBTreeNode* create_node(const char *key, void *value, Color color, RBTree
 // 创建map
 Map* map_create() {
     Map *map = (Map*)malloc(sizeof(Map));
+    if (!map) return NULL;
     map->nil = create_nil_node();
+    if (!map->nil) {
+        free(map);
+        return NULL;
+    }
     map->root = map->nil;
     map->size = 0;
     rwlock_init(&map->rwlock);
@@ -165,6 +177,10 @@ bool map_insert(Map *map, const char *key, void *value) {
     }
     
     RBTreeNode *z = create_node(key, value, RED, map->nil);
+    if (!z) {
+        rwlock_release_write(&map->rwlock);
+        return false;
+    }
     z->parent = y;
     
     if (y == map->nil) {
@@ -340,6 +356,28 @@ size_t map_size(Map *map) {
     size_t size = map->size;
     rwlock_release_read(&map->rwlock);
     return size;
+}
+
+// 清空map (内部使用)
+static void clear_node(Map *map, RBTreeNode *node, void (*value_free_cb)(void *)) {
+    if (node != map->nil) {
+        clear_node(map, node->left, value_free_cb);
+        clear_node(map, node->right, value_free_cb);
+        if (value_free_cb) {
+            value_free_cb(node->value);
+        }
+        free(node->key);
+        free(node);
+    }
+}
+
+// 清空map
+void map_clear(Map *map, void (*value_free_cb)(void *)) {
+    rwlock_acquire_write(&map->rwlock);
+    clear_node(map, map->root, value_free_cb);
+    map->root = map->nil;
+    map->size = 0;
+    rwlock_release_write(&map->rwlock);
 }
 
 // 获取起始迭代器

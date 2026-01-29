@@ -22,13 +22,10 @@
 static OS_MUTEX g_wss_app_mutex;
 music_player *player;
 
-#define NO_REQ_TIMEOUT_MS (10 * 60 * 1000) // 连续10分钟无请求则超时
-#define NO_E_TIMEOUT_MS (5 * 60 * 1000)    // 触发超时，5分钟内无Pi则关机
-#define NO_MOVE_TIMEOUT_MS (5 * 60 * 1000) // 触发超时，5分钟内无移动则关机
-#define DEV_CALL_TIMEOUT_MS                                                    \
-  (3 * 1000) // 等待后端发送tts_bind，超过3s则回到靠近触发
-
-#define INPUT_EVENT_QUEUE_SIZE 32
+#define NO_REQ_TIMEOUT_MS LWL_NO_REQ_TIMEOUT_MS
+#define NO_E_TIMEOUT_MS LWL_NO_E_TIMEOUT_MS
+#define NO_MOVE_TIMEOUT_MS LWL_NO_MOVE_TIMEOUT_MS
+#define DEV_CALL_TIMEOUT_MS LWL_DEV_CALL_TIMEOUT_MS
 
 static u32 g_curr_time = 0;
 static u32 last_req_time = 0;
@@ -51,57 +48,6 @@ static u16 g_ble_audio_stop_timer_id = 0; // 停止蓝牙音频定时器ID
 u32 last_E_found_time = 0;
 u32 last_move_time = 0;
 u32 last_mem_stats_time = 0;
-
-/* 输入事件队列 */
-typedef struct {
-  LWL_EVENT_TYPE event_type;
-  union {
-    struct {
-      bool press_down;
-    } key_event;
-    struct {
-      bool is_press_down;
-    } touch_key_event;
-  } data;
-} input_event_t;
-
-static input_event_t g_event_queue[INPUT_EVENT_QUEUE_SIZE];
-static int g_event_queue_head = 0;
-static int g_event_queue_tail = 0;
-
-//=================================================================================================
-// 事件队列操作
-//=================================================================================================
-static bool input_event_queue_is_empty(void) {
-  return g_event_queue_head == g_event_queue_tail;
-}
-
-static bool input_event_queue_is_full(void) {
-  return (g_event_queue_tail + 1) % INPUT_EVENT_QUEUE_SIZE ==
-         g_event_queue_head;
-}
-
-static bool input_event_queue_push(const input_event_t *event) {
-  if (input_event_queue_is_full()) {
-    log_w("[wss_application]Event queue is full, drop event %d",
-          event->event_type);
-    return false;
-  }
-
-  g_event_queue[g_event_queue_tail] = *event;
-  g_event_queue_tail = (g_event_queue_tail + 1) % INPUT_EVENT_QUEUE_SIZE;
-  return true;
-}
-
-static bool input_event_queue_pop(input_event_t *event) {
-  if (input_event_queue_is_empty()) {
-    return false;
-  }
-
-  *event = g_event_queue[g_event_queue_head];
-  g_event_queue_head = (g_event_queue_head + 1) % INPUT_EVENT_QUEUE_SIZE;
-  return true;
-}
 
 //=================================================================================================
 // 联网有效工作状态维护
@@ -132,10 +78,12 @@ bool wss_application_check_power_key() {
 // 按键事件处理函数
 //=================================================================================================
 void wss_handle_key_event(void) {
+  os_mutex_pend(&g_wss_app_mutex, 0);
   log_mqtt("【butt】👆👆👆 电源键短按");
   if (g_exit) {
     g_power_key_retry = true;
   }
+  os_mutex_post(&g_wss_app_mutex);
 }
 
 // 处理触摸按键事件（按下/释放）
@@ -164,22 +112,26 @@ static void wss_handle_touch_key_event(bool press_down) {
   os_mutex_post(&g_wss_app_mutex);
 }
 
-// 事件回调：仅记录事件到队列，避免在回调中调用加锁函数
+// 事件回调：直接处理轻量级事件或转发给带锁的处理器
 static void input_event_handler_cb(lwl_event_t *e) {
   u32 callback_start_time = timer_get_ms();
-  input_event_t event = {0};
 
   switch (e->event_type) {
   case LWL_EVENT_TYPE_KEY:
-    event.event_type = LWL_EVENT_TYPE_KEY;
-    input_event_queue_push(&event);
+    wss_handle_key_event();
     break;
 
   case LWL_EVENT_TYPE_TOUCH_KEY:
-    event.event_type = LWL_EVENT_TYPE_TOUCH_KEY;
-    event.data.touch_key_event.is_press_down =
-        (e->touch_key_cmd.touch_key_event_type == 0);
-    input_event_queue_push(&event);
+    // 增加打印当前时间戳
+    if (e->touch_key_cmd.touch_key_event_type == 0) {
+      // 触摸键按下
+      log_i("🔥🔥🔥🔥🔥🔥🔥🔥TOUCH_KEY 时间戳: %d", timer_get_ms());
+      wss_handle_touch_key_event(true);
+    } else {
+      // 触摸键释放
+      wss_handle_touch_key_event(false);
+    }
+    wss_application_vailed();
     break;
 
   case LWL_EVENT_TYPE_RST_KEY:
@@ -323,8 +275,12 @@ void wss_application_init() {
   g_exit = false;
   // 检查线程是否已经在运行
   if (!monitor_thread_running) {
-    pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
     monitor_thread_running = true;
+    int ret = pthread_create(&monitor_thread, NULL, wss_condition_monitor_thread, NULL);
+    if (ret != 0) {
+        log_e("[wss_application]Failed to create monitor thread: %d", ret);
+        monitor_thread_running = false;
+    }
   }
 
   /* 重置 */
@@ -365,11 +321,16 @@ void wss_application_uninit() {
     g_ble_audio_stop_timer_id = 0;
   }
 
-  g_exit = false;
+  if (monitor_thread_running) {
+    monitor_thread_running = false;
+    // 等待监控线程退出
+    if (monitor_thread) {
+        pthread_join(monitor_thread, NULL);
+        monitor_thread = NULL;
+    }
+  }
 
-  /* 清空事件队列 */
-  g_event_queue_head = 0;
-  g_event_queue_tail = 0;
+  g_exit = false;
 
   wss_request_uninit();
   wss_audio_uninit();
@@ -397,10 +358,6 @@ void wss_application_reset() {
 
   g_exit = false;
 
-  /* 清空事件队列 */
-  g_event_queue_head = 0;
-  g_event_queue_tail = 0;
-
   /* 重置 */
   g_curr_time = timer_get_ms();
   last_req_time =
@@ -411,39 +368,6 @@ void wss_application_reset() {
 // 应用循环
 bool wss_application_loop() {
   g_curr_time = timer_get_ms();
-  // 处理队列中的输入事件
-  input_event_t event;
-  while (input_event_queue_pop(&event)) {
-    os_mutex_pend(&g_wss_app_mutex, 0);
-
-    switch (event.event_type) {
-    case LWL_EVENT_TYPE_KEY:
-      wss_handle_key_event();
-      log_i("[wss_application]KEY event");
-      break;
-
-    case LWL_EVENT_TYPE_TOUCH_KEY:
-      // 增加打印当前时间戳
-      if (event.data.touch_key_event.is_press_down) {
-        // 触摸键按下，
-        log_i("🔥🔥🔥🔥🔥🔥🔥🔥TOUCH_KEY 时间戳: %d", timer_get_ms());
-        wss_handle_touch_key_event(true);
-      } else {
-        // 触摸键释放
-        wss_handle_touch_key_event(false);
-      }
-      wss_application_vailed();
-      log_i("[wss_application]TOUCH_KEY event",
-            event.data.touch_key_event.is_press_down);
-      break;
-
-    default:
-      log_i("[wss_application]default event", event.event_type);
-      break;
-    }
-
-    os_mutex_post(&g_wss_app_mutex);
-  }
 
   if (wss_check_exit()) {
     if (g_exit == false) {

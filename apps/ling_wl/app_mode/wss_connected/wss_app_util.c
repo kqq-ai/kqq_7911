@@ -61,9 +61,12 @@ void add_target_sn(const char* sn) {
         os_mutex_post(&g_wss_mutex);
         return;
     }
-    target_sn_set[target_sn_count] = (char*)malloc(PI_SN_SIZE +1);
-    strncpy(target_sn_set[target_sn_count], sn, PI_SN_SIZE + 1);
-    target_sn_count++;
+    target_sn_set[target_sn_count] = (char*)malloc(PI_SN_SIZE + 1);
+    if (target_sn_set[target_sn_count]) {
+        strncpy(target_sn_set[target_sn_count], sn, PI_SN_SIZE);
+        target_sn_set[target_sn_count][PI_SN_SIZE] = '\0';
+        target_sn_count++;
+    }
     os_mutex_post(&g_wss_mutex);
 }
 
@@ -154,7 +157,7 @@ bool wss_check_exit(void)
     }
     os_mutex_pend(&g_wss_mutex, 0);
     if (timer_get_ms() - wss_send_time > WSS_SEND_TIMEOUT_MS) {
-        send_ping();
+        _send_ping_unlocked();
     }
     os_mutex_post(&g_wss_mutex);
     return g_exception_exit;
@@ -272,6 +275,8 @@ void wss_disconnect() {
         ws_client_destroy(g_ws_client_custom);
         g_ws_client_custom = NULL;
         context->websockets_info = NULL;
+    }
+    if (wss_url != NULL) {
         free(wss_url);
         wss_url = NULL;
     }
@@ -303,15 +308,15 @@ bool wss_reconnect(void) {
     
     if (wss_url == NULL) {
         wss_url = get_wss_connection_url();
-    } else {
-        msleep(100); // 断线后等待100ms再重连
     }
-    log_i("[wss_app_util]websockets reconnecting %s", wss_url);
-
+    
     if (wss_url == NULL) {
         os_mutex_post(&g_wss_mutex);
         return false;
     }
+    
+    msleep(100); // 重连前等待100ms
+    log_i("[wss_app_util]websockets reconnecting %s", wss_url);
     
     // 创建新的连接
     g_ws_client_custom = ws_client_create();
@@ -510,12 +515,10 @@ int send_bin_data(uint8_t *data, uint32_t len)
 }
 
 
-int send_ping()
+static int _send_ping_unlocked(void)
 {
-    os_mutex_pend(&g_wss_mutex, 0);
     if (g_ws_client_custom == NULL) {
         wss_mark_exception("send_ping ws_client NULL");
-        os_mutex_post(&g_wss_mutex);
         return -1;
     }
 
@@ -523,20 +526,19 @@ int send_ping()
     char *send_data = odmp_send_ping();
     if (send_data == NULL) {
         log_e("[wss_app_util]send_ping: odmp_send_ping returned NULL");
-        os_mutex_post(&g_wss_mutex);
         return -1;
     }
     size_t send_len = strlen(send_data);
     if (send_len > WSS_CUSTOM_WS_MAX_TEXT_PAYLOAD) {
         log_e("[wss_app_util]send_ping: payload too large (%u), drop", (u32)send_len);
         free(send_data);
-        os_mutex_post(&g_wss_mutex);
         return -1;
     }
     log_i("[wss_app_util]wbs send msg : %s", send_data);
 
     int ret = ws_client_send_text(g_ws_client_custom, (u8 *)send_data, send_len);
     wss_send_time = timer_get_ms();
+    
     if (ret < 0) {
         log_e("[wss_app_utils]Error %s %d. event_type=ping ret=%d", __FILE__, __LINE__, ret);
         free(send_data);
@@ -544,7 +546,6 @@ int send_ping()
         // ws_client_destroy(g_ws_client_custom);
         // g_ws_client_custom = NULL;
         // wss_mark_exception("send_ping send failed");
-        os_mutex_post(&g_wss_mutex);
         return -1;
     }
     free(send_data);
@@ -554,8 +555,15 @@ int send_ping()
     // 同时发送协议层 Ping 帧可显著降低 idle 被掐导致的 1006 unexpected EOF
     ws_client_send_ping(g_ws_client_custom);
     
-    os_mutex_post(&g_wss_mutex);
     return 0;
+}
+
+int send_ping()
+{
+    os_mutex_pend(&g_wss_mutex, 0);
+    int ret = _send_ping_unlocked();
+    os_mutex_post(&g_wss_mutex);
+    return ret;
 }
 
 /**

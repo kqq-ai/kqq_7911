@@ -126,8 +126,7 @@ _reconnect_:
         if (hdl->download_len >= hdl->file_size) {
             log_i("download success.\n");
             play_system_music("OtaSucc.mp3");
-            net_fclose(update_fd, sock_err);
-            return;
+            goto _out_;
         }
         
         if (!need_pause_for_mqtt) {

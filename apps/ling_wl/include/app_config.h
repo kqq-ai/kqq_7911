@@ -57,7 +57,7 @@
 #define CONFIG_DEBUG_ENABLE                     //打印开关
 // 临时关闭：当前固件出现 systimer 线程崩溃（axi_rd_inv），符号化落在 FreeRTOS xTaskGetHandle/prvSearchForNameWithinSingleList，
 // 与 init.c 中的 rtos_stack_check_func(每 60s 调 get_task_state/dump_cpu_irq_usage) 强相关。先关闭以排除该诊断功能引入的崩溃。
-// #define RTOS_STACK_CHECK_ENABLE               //是否启用定时检查任务栈
+#define RTOS_STACK_CHECK_ENABLE               //是否启用定时检查任务栈
 // #define CONFIG_SAVE_EXCEPTION_LOG_IN_FLASH   //保存异常打印信息到flash
 // #define MEM_LEAK_CHECK_ENABLE                //是否启用内存泄漏检查(需要包含mem_leak_test.h头文件)
 // #define CONFIG_AUTO_SHUTDOWN_ENABLE          //自动倒数关机
@@ -279,6 +279,14 @@
 #define CONFIG_CP_VOICE_FILE_PATH CONFIG_VOICE_PROMPT_FILE_PATH
 #endif
 #endif
+
+//*********************************************************************************//
+//                                  LWL 应用超时配置                                //
+//*********************************************************************************//
+#define LWL_NO_REQ_TIMEOUT_MS (10 * 60 * 1000) // 连续10分钟无请求则超时
+#define LWL_NO_E_TIMEOUT_MS (5 * 60 * 1000)    // 触发超时，5分钟内无Pi则关机
+#define LWL_NO_MOVE_TIMEOUT_MS (5 * 60 * 1000) // 触发超时，5分钟内无移动则关机
+#define LWL_DEV_CALL_TIMEOUT_MS (3 * 1000)     // 等待后端发送tts_bind超时
 
 #if __FLASH_SIZE__ > (2 * 1024 * 1024)
 #define CONFIG_DOUBLE_BANK_ENABLE           1//双备份方式升级

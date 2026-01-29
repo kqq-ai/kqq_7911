@@ -218,7 +218,9 @@ int sc7a20_clear_interrupt(void * iic_hdl)
     if (iic_write_one_byte(iic_hdl, SC7A20H_AOI1_SRC, 0x00) != 0)
     {
         printf("Failed to clear interrupt\r\n");
+        return -1;
     }
+    return 0;
 }
 
 extern void *g_iic_hdl;                            // 外部IIC句柄声明（在app_sc7a20_task.c中定义）

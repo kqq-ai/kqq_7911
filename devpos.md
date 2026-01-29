@@ -41,6 +41,15 @@ Z: && cd
 ### 使用mac共享文件到win ssh编译
 
 
+## 崩溃地址查看方法
+```sh
+cd C:\Users\x\Desktop\kqq_7911\cpu\wl82\tools
+# 支持多个地址
+"0x1c04e34", "0x1c04de6" | ./llvm-symbolizer.exe "-obj=sdk.elf" "-pretty-print"
+```
+
+
+
 出现错误 
 ```sh 
 make[1]: *** INTERNAL: readdir: Invalid argument. Stop.

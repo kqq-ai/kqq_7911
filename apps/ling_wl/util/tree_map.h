@@ -40,6 +40,7 @@ bool map_insert(Map *map, const char *key, void *value);
 void* map_find(Map *map, const char *key);
 bool map_erase(Map *map, const char *key);
 size_t map_size(Map *map);
+void map_clear(Map *map, void (*value_free_cb)(void *));
 
 // 迭代器相关
 MapIterator map_begin(Map *map);

@@ -239,6 +239,10 @@ struct ws_client_handle {
     // 或者直接构建进 RingBuffer? 直接构建比较复杂，还是先构建在 temp buf 然后写入 RB
     u8 *temp_send_buf;
     
+    // IO 线程专用缓冲区
+    u8 *io_resp_buf;               // 用于构建自动响应 (PONG/CLOSE)
+    u8 *io_ssl_tmp_buf;            // SSL 对齐 bounce buffer
+    
     ws_recv_callback_t recv_cb;    // 接收回调
     ws_disconnect_callback_t disconnect_cb; // 断开回调
     
@@ -768,7 +772,9 @@ static int do_tcp_handshake(ws_client_t client, const char *host, int port, cons
     
     // 握手成功后，设置Socket为非阻塞模式
     int flags = fcntl(client->sock_fd, F_GETFL, 0);
-    fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags != -1) {
+        fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
+    }
     
     log_i("🤝 [ws_custom]WebSocket handshake successful (Non-blocking set)");
     return 0;
@@ -861,12 +867,15 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
         }
     }
     
-    log_i("[ws_custom]SSL handshake successful");
-    
+    // 使用 heap 上的 client->temp_send_buf 和 client->recv_buf 替代栈上的大数组，防止 stack overflow
+    char *handshake_req = (char *)client->temp_send_buf;
+    char *response = (char *)client->recv_buf;
+    int handshake_req_size = 1024; // temp_send_buf is 16KB
+    int response_size = 2048;      // recv_buf is 32KB
+
     // 生成WebSocket握手请求
     char ws_key[32];
-    char handshake_req[1024];
-    int req_len = generate_handshake_request(host, port, path, ws_key, handshake_req, sizeof(handshake_req));
+    int req_len = generate_handshake_request(host, port, path, ws_key, handshake_req, handshake_req_size);
     if (req_len < 0) {
         ret = -1;
         goto cleanup;
@@ -896,10 +905,9 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     }
     
     // 读取握手响应
-    char response[2048];
     int resp_len = 0;
-    while (resp_len < (int)sizeof(response) - 1) {
-        int rcap = (int)sizeof(response) - resp_len - 1;
+    while (resp_len < response_size - 1) {
+        int rcap = response_size - resp_len - 1;
         int rlen = rcap;
         if (rlen > (int)WS_SSL_HS_IO_TMP_SIZE) rlen = (int)WS_SSL_HS_IO_TMP_SIZE;
         ret = mbedtls_ssl_read(&client->ssl, hs_io_tmp, rlen);
@@ -934,7 +942,9 @@ static int do_ssl_handshake(ws_client_t client, const char *host, int port, cons
     
     // 握手成功后，设置Socket为非阻塞模式
     int flags = fcntl(client->sock_fd, F_GETFL, 0);
-    fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags != -1) {
+        fcntl(client->sock_fd, F_SETFL, flags | O_NONBLOCK);
+    }
     
     log_i("[ws_custom]WebSocket handshake successful (SSL, Non-blocking set)");
     return 0;
@@ -1081,9 +1091,14 @@ static int build_ws_frame(u8 *buf, int buf_size, const u8 *payload, u32 payload_
     
     // Masking key（客户端必须mask）
     if (mask) {
-        // 关键：确保 payload 写入不会溢出 buf
+        // 提前检查：确保 payload 写入不会溢出 buf
         // pos 此时是“帧头(含扩展长度)已写入后的偏移”，接下来还会写入 4 字节 masking key 和 payload。
-        // 由于下面会先写入 masking key（pos 会自增 4），我们在写 payload 前再次检查一次即可。
+        if ((u32)pos + 4 + payload_len > (u32)buf_size) {
+            log_e("[ws_custom]ERROR: build_ws_frame overflow prevented. buf_size=%d header=%d payload_len=%u opcode=0x%02x",
+                  buf_size, pos, payload_len, opcode);
+            return -1;
+        }
+
         u32 mask_key = random32(0);
         // 保存masking key的位置
         u8 *mask_bytes = buf + pos;
@@ -1092,14 +1107,6 @@ static int build_ws_frame(u8 *buf, int buf_size, const u8 *payload, u32 payload_
         buf[pos++] = (mask_key >> 8) & 0xFF;
         buf[pos++] = (mask_key >> 16) & 0xFF;
         buf[pos++] = (mask_key >> 24) & 0xFF;
-        // 注意：pos已经通过上面的4个pos++增加了4，不需要再加4
-
-        // 再次检查：pos 已包含 masking key；保证 pos + payload_len <= buf_size
-        if ((u32)pos + payload_len > (u32)buf_size) {
-            log_e("[ws_custom]ERROR: build_ws_frame overflow prevented. buf_size=%d header+mask=%d payload_len=%u opcode=0x%02x",
-                  buf_size, pos, payload_len, opcode);
-            return -1;
-        }
         
         // 应用掩码
         if (payload_len > 0 && payload != NULL) {
@@ -1192,33 +1199,20 @@ static int parse_ws_frame(const u8 *data, int data_len, u8 **payload, u32 *paylo
 static void ws_recv_thread(void *param)
 {
     ws_client_t client = (ws_client_t)param;
-    u8 *frame_buf = malloc(WS_RECV_BUF_SIZE);
 
-    // 临时缓冲区用于构建自动响应 (PING/CLOSE)
-    u8 *resp_buf = malloc(1024);
-
-    // SSL/TLS 场景下的对齐 bounce buffer：
-    // WL82(AC791N) 上部分库/优化路径可能做 32-bit 访问，若传入/写入指针非 4 字节对齐会触发 misalign_err。
-    // RingBuffer 的 tail 会导致 peek 指针不对齐；recv_buf_len 也会导致 read 目标地址不对齐。
-    // 因此统一用对齐临时缓冲区做 ssl_read/ssl_write，再 memcpy 到业务缓冲区。
+    // 自动使用 client 中的缓冲区，不再在线程内分配，确保销毁时能可靠释放
+    u8 *resp_buf = client->io_resp_buf;
+    u8 *ssl_io_tmp = (u8 *)(((uintptr_t)client->io_ssl_tmp_buf + 3u) & ~(uintptr_t)3u);
     enum { WS_SSL_IO_TMP_SIZE = 2048 };
-    u8 *ssl_io_tmp_mem = malloc(WS_SSL_IO_TMP_SIZE + 8);
-    u8 *ssl_io_tmp = NULL;
 
     // 退出原因（传给上层，便于判断是服务端 CLOSE / EOF / 错误）
     char exit_reason[96] = "io_thread_exit";
 
-    if (!frame_buf || !resp_buf || !ssl_io_tmp_mem) {
-        log_e("[ws_custom]Failed to allocate buffers");
+    if (!resp_buf || !client->io_ssl_tmp_buf) {
+        log_e("[ws_custom]IO thread buffers are NULL");
         client->thread_running = false;
-        strncpy(exit_reason, "alloc_failed", sizeof(exit_reason) - 1);
-        exit_reason[sizeof(exit_reason) - 1] = '\0';
-        if (frame_buf) free(frame_buf);
-        if (resp_buf) free(resp_buf);
-        if (ssl_io_tmp_mem) free(ssl_io_tmp_mem);
         return;
     }
-    ssl_io_tmp = (u8 *)(((uintptr_t)ssl_io_tmp_mem + 3u) & ~(uintptr_t)3u);
 
     int ssl_read_error_count = 0;
     const int MAX_SSL_READ_RETRIES = 3;
@@ -1236,7 +1230,13 @@ static void ws_recv_thread(void *param)
 
     int send_fatal_err_count = 0;
 
-    while (client->thread_running && (client->state == WS_STATE_CONNECTED || client->state == WS_STATE_CLOSING)) {
+    // 检查状态和标志位
+    os_mutex_pend(&client->mutex, 0);
+    bool running = client->thread_running;
+    ws_state_t state = client->state;
+    os_mutex_post(&client->mutex);
+
+    while (running && (state == WS_STATE_CONNECTED || state == WS_STATE_CLOSING)) {
         fd_set read_fds, write_fds;
         FD_ZERO(&read_fds);
         FD_ZERO(&write_fds);
@@ -1428,24 +1428,20 @@ static void ws_recv_thread(void *param)
                     }
                 }
             } else {
-                if (ret > 0 && FD_ISSET(fd, &read_fds)) {
-                    n = recv(client->sock_fd, client->recv_buf + client->recv_buf_len,
-                            WS_RECV_BUF_SIZE - client->recv_buf_len, 0);
-                    if (n < 0) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
-                        else {
-                            log_e("[ws_custom]TCP recv error: %d", errno);
-                            snprintf(exit_reason, sizeof(exit_reason), "tcp_recv_error errno=%d", errno);
-                            break;
-                        }
-                    } else if (n == 0) {
-                        log_i("[ws_custom]Connection closed by peer");
-                        strncpy(exit_reason, "tcp_eof", sizeof(exit_reason) - 1);
-                        exit_reason[sizeof(exit_reason) - 1] = '\0';
+                // TCP 模式
+                n = recv(client->sock_fd, client->recv_buf + client->recv_buf_len,
+                        WS_RECV_BUF_SIZE - client->recv_buf_len, 0);
+                if (n < 0) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) n = 0;
+                    else {
+                        log_e("[ws_custom]TCP recv error: %d", errno);
+                        snprintf(exit_reason, sizeof(exit_reason), "tcp_recv_error errno=%d", errno);
                         break;
                     }
                 } else if (n == 0) {
                     log_i("[ws_custom]Connection closed by peer");
+                    strncpy(exit_reason, "tcp_eof", sizeof(exit_reason) - 1);
+                    exit_reason[sizeof(exit_reason) - 1] = '\0';
                     break;
                 }
             }
@@ -1547,6 +1543,12 @@ static void ws_recv_thread(void *param)
             ret > 0 && FD_ISSET(fd, &write_fds) && !FD_ISSET(fd, &read_fds)) {
             msleep(5);
         }
+
+        // 更新循环条件变量
+        os_mutex_pend(&client->mutex, 0);
+        running = client->thread_running;
+        state = client->state;
+        os_mutex_post(&client->mutex);
     }
     
     log_i("[ws_custom]IO thread exited");
@@ -1556,9 +1558,6 @@ thread_exit:
           client ? client->sock_fd : -1,
           client ? (int)client->use_ssl : 0,
           exit_reason);
-    free(frame_buf);
-    free(resp_buf);
-    free(ssl_io_tmp_mem);
 
     client->thread_running = false;
 
@@ -1607,15 +1606,22 @@ ws_client_t ws_client_create(void)
     client->recv_buf = malloc(WS_RECV_BUF_SIZE);
     client->send_buf_mem = malloc(WS_SEND_BUF_SIZE);
     client->temp_send_buf = malloc(16 * 1024); // 临时构建缓冲区
+    client->io_resp_buf = malloc(1024);
+    client->io_ssl_tmp_buf = malloc(2048 + 8); // WS_SSL_IO_TMP_SIZE + padding
     
-    if (!client->recv_buf || !client->send_buf_mem || !client->temp_send_buf) {
+    if (!client->recv_buf || !client->send_buf_mem || !client->temp_send_buf || 
+        !client->io_resp_buf || !client->io_ssl_tmp_buf) {
         ws_client_destroy(client);
         return NULL;
     }
     
     rb_init(&client->send_rb, client->send_buf_mem, WS_SEND_BUF_SIZE);
     
-    os_mutex_create(&client->mutex);
+    if (os_mutex_create(&client->mutex) != OS_NO_ERR) {
+        log_e("[ws_custom]Failed to create mutex");
+        ws_client_destroy(client);
+        return NULL;
+    }
     
     return client;
 }
@@ -1900,7 +1906,9 @@ void ws_client_disconnect(ws_client_t client)
     msleep(100);
 
     log_mqtt("【debug】[ws_custom]ws_client_disconnect: request io thread exit (thread_running=false)");
+    os_mutex_pend(&client->mutex, 0);
     client->thread_running = false;
+    os_mutex_post(&client->mutex);
     
     // 等待接收线程退出 (此时不能持有锁)
     if (client->recv_thread_id > 0) {
@@ -1950,6 +1958,12 @@ void ws_client_destroy(ws_client_t client)
     }
     if (client->temp_send_buf) {
         free(client->temp_send_buf);
+    }
+    if (client->io_resp_buf) {
+        free(client->io_resp_buf);
+    }
+    if (client->io_ssl_tmp_buf) {
+        free(client->io_ssl_tmp_buf);
     }
     
     os_mutex_del(&client->mutex, 0);
