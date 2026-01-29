@@ -12,13 +12,13 @@ int led_color = 0;
 int progress = 0;
 
 static void set_led_OTA_0(void){
-    led_breath_start(COLOR_RED, COLOR_BLACK, 0, 400, 50);
+    led_breath_start(COLOR_RED, COLOR_BLACK, 0, 400, 20);
     } /* 控制 led : 正在升级 红色 */
 static void set_led_OTA_10(void){
-    led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 200, 50);
+    led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 200, 20);
     } /* 控制 led : 正在升级 蓝色 */
 static void set_led_OTA_80(void){
-    led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 200, 50);
+    led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 200, 20);
     } /* 控制 led : 正在升级 绿色 */
 static void set_led_connect_error(void)     { set_rgb_color(COLOR_RED); }    /* 控制 led : 网络连接失败 红色 */
 

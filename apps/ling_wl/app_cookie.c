@@ -261,8 +261,8 @@ static void app_cookie_main(void)
 
     lwl_peri_dev_init(); // 按键、LED、触摸、充电等外设初始化
     thread_fork("peri_events", 15, 1024 * 4, 0, 0, peri_events, NULL);
-    // 启动MQTT
-    log_mqtt_start();
+    // 初始化MQTT基础设施（队列、RTC、互斥锁等），与网络状态无关
+    log_mqtt_init();
 
     /* APP_MDOE 开始 */
     thread_fork("lwl_app_task", 15, 1024 * 4, 4, 0, lwl_app_task, NULL); // 创建 LWL 模式主任务，驱动状态机
@@ -442,6 +442,8 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_CONNECTED: {
             log_i("[NET] NET_EVENT_CONNECTED (arg=%s)", event->arg);
+            // WiFi连接成功：启动MQTT上传线程（基础设施已在启动时初始化）
+            log_mqtt_start();
             // 播放联网成功提示音
             // dhcp ready = true
             // TODO: 网络连接成功，可在此时连接后端云服务器
@@ -455,6 +457,8 @@ static int app_music_net_event_handler(struct net_event *event)
         }   break;
         case NET_EVENT_DISCONNECTED:{
             log_i("[NET] NET_EVENT_DISCONNECTED (arg=%s)\n", event->arg);
+            // WiFi断开：停止MQTT上传线程（队列/token/RTC保持）
+            log_mqtt_stop();
             // dhcp ready = false
             // TODO: 可能需要进入回连状态，或者重新进入配网状态
 
@@ -470,6 +474,8 @@ static int app_music_net_event_handler(struct net_event *event)
             break;
         case NET_EVENT_DISCONNECTED_AND_REQ_CONNECT:
             log_i("[NET] NET_EVENT_DISCONNECTED_AND_REQ_CONNECT\n");
+            // 断开并请求重连：确保MQTT线程停止，避免悬挂占用网络资源
+            log_mqtt_stop();
             break;
         case NET_NTP_GET_TIME_SUCC:	//NTP获取成功事件返回 同步网络时间
             lwl_rtc_timer_update();

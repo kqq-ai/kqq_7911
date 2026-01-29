@@ -75,7 +75,7 @@ static void update_charging_led(u16 voltage)
         if (g_charge_led_state != CHARGE_LED_STATE_BREATHING_YELLOW) {
             g_charge_led_state = CHARGE_LED_STATE_BREATHING_YELLOW;
             // 黄色呼吸: 从黄色渐变到黑色再回来, 无限循环, 每次过渡800ms
-            led_breath_start(COLOR_YELLOW, COLOR_BLACK, 0, 800, 50);
+            led_breath_start(COLOR_YELLOW, COLOR_BLACK, 0, 800, 40);
             log_i("[default] Charging LED: Yellow breathing (voltage=%d < 400)", voltage);
         }
     } else {

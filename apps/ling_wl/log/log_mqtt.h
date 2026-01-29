@@ -23,6 +23,7 @@ void log_mqtt_set_battery_level(char *sn_battery, int battery_level);
 int log_mqtt_send_message_sync(const char* topic, const int progress);
 
 /* MQTT连接管理函数 */
+int log_mqtt_init(void);
 int log_mqtt_start(void);
 void log_mqtt_stop(void);
 

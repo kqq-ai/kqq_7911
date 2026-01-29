@@ -41,12 +41,12 @@ bool ble_connected = false; // wifi manager 状态
 
 static void led_show_connecting(void) {
     // led_breath_start 已支持平滑切换，无需手动停止
-    led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 400, 50); 
+    led_breath_start(COLOR_GREEN, COLOR_BLACK, 0, 400, 20); 
 }
 
 static void led_show_ble_connected(void) {
     // led_breath_start 已支持平滑切换，无需手动停止
-    led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 400, 50); 
+    led_breath_start(COLOR_BLUE, COLOR_BLACK, 0, 400, 20); 
 }
 
 static void led_show_net_success(void) {
@@ -114,6 +114,7 @@ static void net_connecting_event_handler_cb(lwl_event_t *e)
 static int net_connecting_init(void)
 {
     init_time = timer_get_ms();
+    remove_entries_by_priority(0);  // 清除遗留的低优先级灯效（如青色错误指示）
     led_show_connecting();
     g_sensor_set_alive_timeout(MOVE_TIMEOUT_MS);
     lwl_event_handler_add(net_connecting_event_handler_cb);
